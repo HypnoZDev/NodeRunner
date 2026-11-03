@@ -34,6 +34,7 @@ internal sealed class PathNodeLayer : IDisposable
     private readonly ColorMesh?[] _points = new ColorMesh?[Categories.Count];
     private readonly int[] _counts = new int[Categories.Count];
     private PathNetwork? _built;
+    private int _builtRevision;
 
     public static string Label(PathCategory category) => category switch
     {
@@ -61,13 +62,16 @@ internal sealed class PathNodeLayer : IDisposable
 
     public int Count(PathCategory category) => _counts[(int)category];
 
-    public void Update(WorldLoader loader, ColorRenderer renderer)
+    // Rebuilding the whole network takes a moment: while a node is being dragged (deferChanges), the old meshes stay
+    // and only the selected node is drawn at its new place.
+    public void Update(WorldLoader loader, ColorRenderer renderer, bool deferChanges)
     {
         var network = loader.PathNetwork;
-        if (network == _built)
+        if (network == _built && (network is null || network.Revision == _builtRevision || deferChanges))
             return;
 
         _built = network;
+        _builtRevision = network?.Revision ?? 0;
         DisposeMeshes();
         if (network is null)
             return;

@@ -164,6 +164,17 @@ internal sealed class AppState
         return GroundSnap.Snap(entity, archetype, collisions);
     }
 
+    // Height of the collision below a point (rays start a little above it), or null when the collisions are not loaded
+    // yet or nothing lies below.
+    public float? GroundHeightAt(System.Numerics.Vector3 point)
+    {
+        if (World.Collisions is null)
+            return null;
+        float from = point.Z + GroundSnap.MaxRise;
+        var collisions = CollisionQuery.CollisionIn(World, point with { Z = -1000f }, point with { Z = from });
+        return GroundSnap.HighestBelow(collisions, new System.Numerics.Vector2(point.X, point.Y), from);
+    }
+
     // Moves each selected object up or down so that it rests on the collision below it.
     public void PutSelectionOnGround()
     {
@@ -400,15 +411,18 @@ internal sealed class AppState
     private readonly EditHistory _history = new();
     private MapLibrary? _historyLibrary;
 
-    public void Undo()
-    {
-        if (History.Undo() is { Selection.Count: > 0 } edit)
-            SelectAll(edit.Selection);
-    }
+    public void Undo() => SelectAfterUndo(History.Undo());
 
-    public void Redo()
+    public void Redo() => SelectAfterUndo(History.Redo());
+
+    private void SelectAfterUndo(IEdit? edit)
     {
-        if (History.Redo() is { Selection.Count: > 0 } edit)
+        if (edit is PathNodeMoveEdit nodeEdit)
+        {
+            Select(null);
+            SelectedPathNode = nodeEdit.Node;
+        }
+        else if (edit is { Selection.Count: > 0 })
             SelectAll(edit.Selection);
     }
 

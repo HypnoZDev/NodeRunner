@@ -7,7 +7,8 @@ public sealed class PathNode
 {
     public required PathNodeId Id { get; init; }
 
-    public required Vector3 Position { get; init; }
+    // Change it through PathNetwork.MoveNode, so that the network's Revision follows.
+    public required Vector3 Position { get; set; }
 
     public uint StreetNameHash { get; init; }
 

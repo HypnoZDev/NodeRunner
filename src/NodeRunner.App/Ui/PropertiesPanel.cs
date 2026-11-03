@@ -472,6 +472,31 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         _ => $"{level.ToString().ToUpperInvariant()} (vue lointaine)",
     };
 
+    private Vector3 _nodeEditStart;
+
+    private void DrawPathNodePosition(PathNode node, PathNetwork network)
+    {
+        Widgets.Property("Position", "Mètres. X = est, Y = nord, Z = haut. Aussi avec les poignées (outil Déplacer, touche 2).");
+        Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
+        var before = node.Position;
+        var position = before;
+        float width = Widgets.SplitWidth(3);
+        for (int i = 0; i < 3; i++)
+        {
+            if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            float value = position[i];
+            if (Widgets.AxisField($"##node_position{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+            {
+                position[i] = value;
+                network.MoveNode(node, position);
+            }
+            if (ImGui.IsItemActivated())
+                _nodeEditStart = before;
+            if (ImGui.IsItemDeactivatedAfterEdit() && node.Position != _nodeEditStart)
+                state.History.Add(new PathNodeMoveEdit(network, node, _nodeEditStart, node.Position, $"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}"));
+        }
+    }
+
     private void DrawPathNode(PathNode node, PathNetwork network)
     {
         var names = state.World.Names ?? new HashNames();
@@ -485,7 +510,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
 
         if (Widgets.Section("Nœud", "path_node") && Widgets.BeginProperties("##path_node"))
         {
-            Widgets.PropertyText("Position", $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}");
+            DrawPathNodePosition(node, network);
             Widgets.PropertyText("Catégorie", PathNodeLayer.CategoryOf(node));
             if (node.StreetNameHash != 0)
                 Widgets.PropertyText("Rue", names.Describe(node.StreetNameHash));

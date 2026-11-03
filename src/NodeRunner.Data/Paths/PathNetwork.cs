@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Text.RegularExpressions;
 using NodeRunner.Data.FileSystem;
 
@@ -14,6 +15,15 @@ public sealed partial class PathNetwork
     public int LinkCount => Areas.Sum(a => a.Links.Count);
 
     public List<string> Errors { get; } = new();
+
+    // Incremented on every change, so that what is drawn from the network can be rebuilt.
+    public int Revision { get; private set; }
+
+    public void MoveNode(PathNode node, Vector3 position)
+    {
+        node.Position = position;
+        Revision++;
+    }
 
     public PathNodeArea? GetArea(int areaId) =>
         areaId is >= 0 and < PathNodeArea.AreaCount ? _areas[areaId] : null;

@@ -1,12 +1,13 @@
 using System.Numerics;
 using ImGuiNET;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Paths;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
 // 3D handles on the selected objects, drawn over the 3D view (behind the panels): arrows and planes to move them,
-// rings to turn them, cubes to scale them.
+// rings to turn them, cubes to scale them. A selected road node can only be moved.
 internal sealed class TransformGizmo(AppState state)
 {
     private const float LengthPixels = 110f;   // Length of an arrow on the screen, whatever the distance.
@@ -25,7 +26,9 @@ internal sealed class TransformGizmo(AppState state)
 
     private sealed class Drag
     {
-        public required MapEntity[] Entities;   // The main one last.
+        public required MapEntity[] Entities;   // The main one last; empty for a road node.
+        public PathNode? Node;
+        public Vector3 NodeStart;
         public required TransformTool Tool;
         public required Handle Handle;
         public required Placement[] Starts;
@@ -67,13 +70,20 @@ internal sealed class TransformGizmo(AppState state)
     {
         _hovered = default;
         var entities = state.EditableSelection;
+        var node = entities.Count == 0 && state.World.PathNetwork is not null ? state.SelectedPathNode : null;
         var tool = state.Tool;
-        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Tool != tool))
-            EndDrag(commit: current.Entities.SequenceEqual(entities));
+        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Tool != tool))
+            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node);
 
-        if (entities.Count == 0 || tool == TransformTool.Select || (tool == TransformTool.Scale && entities.Any(e => e.IsInterior)))
+        if (node is not null)
+        {
+            if (tool != TransformTool.Move || !SetUpFrame(node.Position, null, tool))
+                return;
+        }
+        else if (entities.Count == 0 || tool == TransformTool.Select || (tool == TransformTool.Scale && entities.Any(e => e.IsInterior)))
             return;
-        if (!SetUpFrame(entities, tool))
+        else if (!SetUpFrame(entities.Count == 1 ? entities[0].Position : GroupTransform.Pivot(entities.Select(e => e.Position)),
+                entities.Count == 1 ? entities[0] : null, tool))
             return;
 
         var io = ImGui.GetIO();
@@ -94,7 +104,7 @@ internal sealed class TransformGizmo(AppState state)
         {
             _hovered = FindHovered(tool, mouse);
             if (_hovered.Kind != Kind.None && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-                BeginDrag(entities, tool, _hovered, mouse);
+                BeginDrag(entities, node, tool, _hovered, mouse);
         }
 
         if (_drag is not null || _hovered.Kind != Kind.None)
@@ -103,7 +113,7 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Frame set-up: camera, projection, mouse ray, size of the handles ---
 
-    private bool SetUpFrame(IReadOnlyList<MapEntity> entities, TransformTool tool)
+    private bool SetUpFrame(Vector3 pivot, MapEntity? single, TransformTool tool)
     {
         // Same whole-pixel rectangle as the 3D image (MainForm.SceneViewport).
         var (position, size) = DockLayout.SceneArea;
@@ -114,14 +124,14 @@ internal sealed class TransformGizmo(AppState state)
         _cameraPosition = camera.Position;
         _viewDirection = camera.Forward;
         _viewProjection = camera.ViewProjection(_size.X / _size.Y);
-        _pivot = entities.Count == 1 ? entities[0].Position : GroupTransform.Pivot(entities.Select(e => e.Position));
+        _pivot = pivot;
 
         float depth = Vector3.Dot(_pivot - _cameraPosition, _viewDirection);
         if (depth < camera.NearPlane * 2f || !Matrix4x4.Invert(_viewProjection, out var inverse))
             return false;
         _length = LengthPixels * 2f * depth * MathF.Tan(camera.FieldOfView * 0.5f) / _size.Y;
 
-        if (tool == TransformTool.Scale && entities is [var entity])
+        if (tool == TransformTool.Scale && single is { } entity)
         {
             _axes[0] = Vector3.Transform(Vector3.UnitX, entity.Orientation);
             _axes[1] = Vector3.Transform(Vector3.UnitY, entity.Orientation);
@@ -268,11 +278,13 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Dragging ---
 
-    private void BeginDrag(IReadOnlyList<MapEntity> entities, TransformTool tool, Handle handle, Vector2 mouse)
+    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, TransformTool tool, Handle handle, Vector2 mouse)
     {
         var drag = new Drag
         {
-            Entities = [.. entities],
+            Entities = node is null ? [.. entities] : [],
+            Node = node,
+            NodeStart = node?.Position ?? default,
             Tool = tool,
             Handle = handle,
             Starts = [.. entities.Select(Placement.Of)],
@@ -424,6 +436,13 @@ internal sealed class TransformGizmo(AppState state)
         if (followGround && drag.LastDelta == delta)
             return;
         drag.LastDelta = delta;
+        if (drag.Node is { } node && state.World.PathNetwork is { } network)
+        {
+            var target = drag.NodeStart + delta;
+            if (followGround)
+                target.Z = state.GroundHeightAt(target with { Z = node.Position.Z }) ?? node.Position.Z;
+            network.MoveNode(node, target);
+        }
         for (int i = 0; i < drag.Entities.Length; i++)
         {
             var entity = drag.Entities[i];
@@ -440,11 +459,18 @@ internal sealed class TransformGizmo(AppState state)
         }
     }
 
-    private string GroundFeedback(Drag drag) =>
-        FollowsGround(drag) ? $"    Z  {drag.Main.Position.Z - drag.Starts[^1].Position.Z:+0.00;-0.00;0.00} m (sol)" : "";
-
-    private static void RestoreStart(Drag drag)
+    private string GroundFeedback(Drag drag)
     {
+        if (!FollowsGround(drag))
+            return "";
+        float rise = drag.Node is { } node ? node.Position.Z - drag.NodeStart.Z : drag.Main.Position.Z - drag.Starts[^1].Position.Z;
+        return $"    Z  {rise:+0.00;-0.00;0.00} m (sol)";
+    }
+
+    private void RestoreStart(Drag drag)
+    {
+        if (drag.Node is { } node)
+            state.World.PathNetwork?.MoveNode(node, drag.NodeStart);
         for (int i = 0; i < drag.Entities.Length; i++)
             drag.Starts[i].ApplyTo(drag.Entities[i]);
     }
@@ -456,6 +482,12 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is not { } drag)
             return;
         _drag = null;
+        if (drag.Node is { } node)
+        {
+            if (commit && node.Position != drag.NodeStart && state.World.PathNetwork is { } network)
+                state.History.Add(new PathNodeMoveEdit(network, node, drag.NodeStart, node.Position, $"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}"));
+            return;
+        }
         var ends = drag.Entities.Select(Placement.Of).ToArray();
         if (!commit || ends.SequenceEqual(drag.Starts))
             return;
