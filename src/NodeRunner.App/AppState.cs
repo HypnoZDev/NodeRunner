@@ -45,9 +45,13 @@ internal sealed class AppState
     private readonly List<MapEntity> _selection = [];
     private MapLibrary? _selectionLibrary;
 
+    // A node of the road network selected in the 3D view (an object selection clears it).
+    public Data.Paths.PathNode? SelectedPathNode { get; set; }
+
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
+        SelectedPathNode = null;
         if (entity is not null)
             _selection.Add(entity);
         _selectionLibrary = World.Maps;

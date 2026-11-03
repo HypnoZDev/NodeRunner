@@ -97,6 +97,56 @@ internal sealed class PathNodeLayer : IDisposable
         }
     }
 
+    // The visible node closest to the mouse on screen (within maxPixels), among those near the camera.
+    public static PathNode? PickNode(PathNetwork network, Matrix4x4 viewProjection, Vector3 cameraPosition, Vector2 mouse,
+        Vector2 viewSize, Func<PathCategory, bool> isVisible, float maxPixels = 10f, float maxDistance = 600f)
+    {
+        PathNode? best = null;
+        float bestScore = maxPixels * maxPixels;
+        var camera2D = new Vector2(cameraPosition.X, cameraPosition.Y);
+        foreach (var area in network.Areas)
+        {
+            foreach (var node in area.Nodes)
+            {
+                var p = node.Position + LineOffset;
+                if (Vector2.DistanceSquared(new Vector2(p.X, p.Y), camera2D) > maxDistance * maxDistance || !isVisible(Classify(node, node)))
+                    continue;
+                var clip = Vector4.Transform(new Vector4(p, 1f), viewProjection);
+                if (clip.W <= 0.1f)
+                    continue;
+                var screen = new Vector2((clip.X / clip.W * 0.5f + 0.5f) * viewSize.X, (0.5f - clip.Y / clip.W * 0.5f) * viewSize.Y);
+                float d = Vector2.DistanceSquared(screen, mouse);
+                if (d < bestScore)
+                {
+                    bestScore = d;
+                    best = node;
+                }
+            }
+        }
+        return best;
+    }
+
+    // The selected node and its links, drawn over everything.
+    public static void DrawSelected(ColorRenderer lines, PathNetwork network, PathNode node, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    {
+        var color = new Vector4(1f, 0.75f, 0.1f, 1f);
+        var linkColor = new Vector4(1f, 0.9f, 0.4f, 1f);
+        var p = node.Position + LineOffset;
+        lines.AddBox(p - new Vector3(0.6f), p + new Vector3(0.6f), Matrix4x4.Identity, color);
+        lines.AddLine(p, p + new Vector3(0, 0, 3f), color);
+        if (network.GetArea(node.Id.AreaId) is { } area)
+        {
+            foreach (var link in area.LinksOf(node))
+            {
+                if (network.GetNode(link.Target) is { } target)
+                    lines.AddLine(p, target.Position + LineOffset, linkColor);
+            }
+        }
+        lines.Flush(viewProjection, cameraPosition, onTop: true);
+    }
+
+    public static string CategoryOf(PathNode node) => Label(Classify(node, node));
+
     // Most connections are stored in both directions (A->B and B->A): draw them only once.
     private static bool ShouldDraw(PathNetwork network, PathNode node, PathNode target)
     {

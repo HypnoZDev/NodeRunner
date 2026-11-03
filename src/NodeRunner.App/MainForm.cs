@@ -411,6 +411,8 @@ internal sealed unsafe partial class MainForm : Form
         }
 
         DrawSelectionBox(lines, viewProjection);
+        if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
+            PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
@@ -562,10 +564,21 @@ internal sealed unsafe partial class MainForm : Form
         if (_pickRequest is not var (click, control) || _graphics is null || _modelRenderer is null || _pickBuffer is null)
             return;
         _pickRequest = null;
-        if (!_state.IsLayerVisible(ModelLayer.LayerName) || !scene.Contains(click))
+        if (!scene.Contains(click))
             return;
 
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+        // Road nodes first: a dot on the road is clicked on purpose, the road model is under it.
+        if (!control && _state.World.PathNetwork is { } network
+            && PathNodeLayer.PickNode(network, viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
+                new Vector2(scene.Width, scene.Height), c => _state.IsLayerVisible(PathNodeLayer.LayerName(c))) is { } node)
+        {
+            _state.Select(null);
+            _state.SelectedPathNode = node;
+            return;
+        }
+        if (!_state.IsLayerVisible(ModelLayer.LayerName))
+            return;
         var picked = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);
         // Ctrl+click adds the object to the selection or removes it; Ctrl+click on the sky keeps the selection.
         if (control)

@@ -1,7 +1,9 @@
 using System.Numerics;
 using ImGuiNET;
 using NodeRunner.Data.Hashing;
+using NodeRunner.App.World;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Paths;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
@@ -71,6 +73,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
             if (Widgets.Section("Réglages", "flags", defaultOpen: false))
                 DrawFlags(entity, library);
         }
+        else if (state.SelectedPathNode is { } node && state.World.PathNetwork is { } network)
+            DrawPathNode(node, network);
         else
         {
             ImGui.Dummy(new Vector2(0, 6));
@@ -466,5 +470,76 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         LodLevel.OrphanHd => "détail sans LOD",
         LodLevel.Lod => "LOD (vue moyenne)",
         _ => $"{level.ToString().ToUpperInvariant()} (vue lointaine)",
+    };
+
+    private void DrawPathNode(PathNode node, PathNetwork network)
+    {
+        var names = state.World.Names ?? new HashNames();
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted($"{Icons.Route}  Nœud {node.Id.AreaId}:{node.Id.NodeId}");
+        ImGui.PopFont();
+        Widgets.Hint($"{Icons.File}  nodes{node.Id.AreaId}.ynd");
+        var p = node.Position;
+        if (Widgets.Button($"{Icons.Copy}  Copier la position", state.FormatPosition(p)))
+            ImGui.SetClipboardText(state.FormatPosition(p));
+
+        if (Widgets.Section("Nœud", "path_node") && Widgets.BeginProperties("##path_node"))
+        {
+            Widgets.PropertyText("Position", $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}");
+            Widgets.PropertyText("Catégorie", PathNodeLayer.CategoryOf(node));
+            if (node.StreetNameHash != 0)
+                Widgets.PropertyText("Rue", names.Describe(node.StreetNameHash));
+            Widgets.PropertyText("Vitesse", node.SpeedCategory switch { 0 => "lente", 1 => "normale", 2 => "rapide", _ => "très rapide" });
+            Widgets.PropertyText("Densité de trafic", $"{node.Density} / 15");
+            if (node.Special != PathNodeSpecialType.None)
+                Widgets.PropertyText("Type spécial", SpecialLabel(node.Special));
+            var flags = new List<string>();
+            if (node.IsJunction) flags.Add("carrefour");
+            if (node.IsHighway) flags.Add("autoroute");
+            if (node.IsTunnel) flags.Add("tunnel");
+            if (node.IsOffRoad) flags.Add("hors-piste");
+            if (node.IsSlipRoad) flags.Add("bretelle");
+            if (node.NoBigVehicles) flags.Add("pas de gros véhicules");
+            if (node.NoGps) flags.Add("ignoré par le GPS");
+            if (node.IsSwitchedOff) flags.Add("sans trafic par défaut");
+            Widgets.PropertyText("Particularités", flags.Count == 0 ? "aucune" : string.Join(", ", flags));
+            Widgets.PropertyText("Octets bruts", $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
+                "Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd");
+            Widgets.EndProperties();
+        }
+
+        var area = network.GetArea(node.Id.AreaId);
+        var links = area?.LinksOf(node).ToList() ?? [];
+        if (Widgets.Section($"Liens ({links.Count})", "path_links") && links.Count > 0 && Widgets.BeginProperties("##path_links"))
+        {
+            foreach (var (link, i) in links.Select((l, i) => (l, i)))
+            {
+                var target = network.GetNode(link.Target);
+                Widgets.Property($"Vers {link.Target.AreaId}:{link.Target.NodeId}");
+                string lanes = $"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {link.Length} m";
+                if (link.IsShortcut) lanes += ", raccourci";
+                if (link.IsNarrowRoad) lanes += ", étroite";
+                if (link.DontUseForNavigation) lanes += ", hors navigation";
+                if (target is not null && Widgets.Link($"{lanes}##link{i}", "Sélectionner ce nœud"))
+                    state.SelectedPathNode = target;
+                else if (target is null)
+                    ImGui.TextColored(UiTheme.TextFaint, $"{lanes} (zone non chargée)");
+            }
+            Widgets.EndProperties();
+        }
+    }
+
+    private static string SpecialLabel(PathNodeSpecialType type) => type switch
+    {
+        PathNodeSpecialType.ParkingSpace => "place de parking",
+        PathNodeSpecialType.PedCrossing => "passage piéton",
+        PathNodeSpecialType.PedAssistedMovement => "déplacement piéton guidé",
+        PathNodeSpecialType.TrafficLightStop => "arrêt au feu",
+        PathNodeSpecialType.StopSign => "stop",
+        PathNodeSpecialType.Caution => "prudence",
+        PathNodeSpecialType.PedCrossingNoWait => "passage piéton sans attente",
+        PathNodeSpecialType.EmergencyVehiclesOnly => "véhicules d'urgence seulement",
+        PathNodeSpecialType.OffRoadJunction => "carrefour hors-piste",
+        _ => $"{(int)type}",
     };
 }
