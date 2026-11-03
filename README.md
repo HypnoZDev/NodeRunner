@@ -1,6 +1,18 @@
 # NodeRunner Studio
 
+**Français** · [English](README.en.md)
+
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
+
+<p align="center">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.0.1/NodeRunner-1.0.0-win-x64.zip">
+    <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
+  </a>
+  <br>
+  <sub>Windows 10 / 11 64 bits · ZIP portable, rien à installer · <a href="https://github.com/HypnoZDev/NodeRunner/releases">toutes les versions</a></sub>
+</p>
+
+![NodeRunner Studio : le centre-ville de Los Santos, un objet sélectionné et les pathnodes affichés](docs/images/vue-ville.webp)
 
 Si vous avez déjà fait du mapping pour un serveur FiveM, vous connaissez la routine : chercher le bon YMAP dans
 CodeWalker, ajuster un Z au centimètre pour qu'un objet ne flotte pas, recalculer les extents, monter le dossier `stream`
@@ -27,6 +39,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - Un **explorateur d'archives** : tous les fichiers du jeu (archives RPF, DLC compris) en arborescence, recherche par
   nom, modèle ouvert dans la visionneuse, YMAP retrouvé sur la carte, fichiers texte affichés, extraction sur le disque.
 
+![Les intérieurs (MLO) vus de l'extérieur, avec leurs salles et leur mobilier](docs/images/vue-interieurs.webp)
+
 **Modifier**
 - Cliquez sur un objet, déplacez-le, tournez-le ou changez sa taille avec les poignées 3D (Ctrl pour aller par crans).
 - **Poser au sol** en une touche (Fin) : l'objet se pose sur la vraie collision du jeu, intérieurs compris.
@@ -48,9 +62,10 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-Les versions prêtes à l'emploi sont sur la page **[Releases](https://github.com/HypnoZDev/NodeRunner/releases)**.
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.0.1/NodeRunner-1.0.0-win-x64.zip)**
+· les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
-1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip` de la dernière version.
+1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
 2. Décompressez-le où vous voulez (Bureau, clé USB...). Rien à installer, pas même .NET.
 3. Lancez `NodeRunner.exe`.
 
