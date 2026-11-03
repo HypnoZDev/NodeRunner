@@ -3,24 +3,21 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.Paths;
 
-/// <summary>The whole road and pedestrian network: every nodesN.ynd file of the map.</summary>
+// The whole road and pedestrian network: every nodesN.ynd file of the map.
 public sealed partial class PathNetwork
 {
     private readonly PathNodeArea?[] _areas = new PathNodeArea?[PathNodeArea.AreaCount];
 
-    /// <summary>Loaded areas (empty areas are skipped).</summary>
     public IEnumerable<PathNodeArea> Areas => _areas.OfType<PathNodeArea>();
 
     public int NodeCount => Areas.Sum(a => a.Nodes.Count);
     public int LinkCount => Areas.Sum(a => a.Links.Count);
 
-    /// <summary>Files that could not be read, with the reason (shown to the user, not fatal).</summary>
     public List<string> Errors { get; } = new();
 
     public PathNodeArea? GetArea(int areaId) =>
         areaId is >= 0 and < PathNodeArea.AreaCount ? _areas[areaId] : null;
 
-    /// <summary>Finds a node anywhere on the map, or null if its area is not loaded.</summary>
     public PathNode? GetNode(PathNodeId id)
     {
         var area = GetArea(id.AreaId);
@@ -33,10 +30,7 @@ public sealed partial class PathNetwork
         return area.Nodes.FirstOrDefault(n => n.Id == id);
     }
 
-    /// <summary>
-    /// Reads every nodesN.ynd of the game. When the same file exists in several archives
-    /// (base game and update), the one from update.rpf wins, as in the game.
-    /// </summary>
+    // Reads every nodesN.ynd of the game.
     public static PathNetwork Load(IGameFileSystem files, IPathNodeReader reader, IProgress<string>? progress = null)
     {
         var network = new PathNetwork();

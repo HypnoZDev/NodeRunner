@@ -6,10 +6,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Confirmation of a deletion (Suppr): what goes with the object (its level-of-detail chain), what stays, the map
-/// files changed. The objects that go are framed in red in the 3D view meanwhile (MainForm).
-/// </summary>
+// Confirmation of a deletion (Suppr): what goes with the object (its level-of-detail chain), what stays, the map
+// files changed.
 internal sealed class DeleteWindow(AppState state)
 {
     public const string Title = $"{Icons.Trash}  Supprimer###Delete";
@@ -97,7 +95,6 @@ internal sealed class DeleteWindow(AppState state)
             state.CancelDelete();
     }
 
-    /// <summary>Objects listed as links: a click places the camera in front of one (the window stays open).</summary>
     private void ListRows(string label, string tooltip, IReadOnlyList<MapEntity> entities, HashNames names)
     {
         if (entities.Count == 0)

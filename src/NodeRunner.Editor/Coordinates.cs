@@ -4,14 +4,11 @@ using System.Text.RegularExpressions;
 
 namespace NodeRunner.Editor;
 
-/// <summary>A position pasted by the user: X, Y, optionally Z and a heading (degrees, as in FiveM).</summary>
+// A position pasted by the user: X, Y, optionally Z and a heading (degrees, as in FiveM).
 public readonly partial record struct Coordinates(float X, float Y, float? Z, float? Heading)
 {
-    /// <summary>
-    /// Reads a position as written in FiveM scripts or copied from elsewhere: <c>vector3(1.0, 2.0, 3.0)</c>,
-    /// <c>vector4(1, 2, 3, 90)</c>, <c>vec3(...)</c>, <c>{x = 1.0, y = 2.0, z = 3.0}</c>, <c>1.0, 2.0, 3.0</c>,
-    /// <c>1.0 2.0 3.0</c> or just <c>x, y</c>. Returns null if the text is not only 2 to 4 numbers.
-    /// </summary>
+    // Reads a position as written in FiveM scripts or copied from elsewhere: vector3(1.0, 2.0, 3.0), vector4(1, 2, 3,
+    // 90), vec3(...), {x = 1.0, y = 2.0, z = 3.0}, 1.0, 2.0, 3.0, 1.0 2.0 3.0 or just x, y.
     public static Coordinates? TryParse(string text)
     {
         string cleaned = Wrappers().Replace(text.Trim(), " ");
@@ -31,10 +28,8 @@ public readonly partial record struct Coordinates(float X, float Y, float? Z, fl
             values.Length > 3 ? values[3] : null);
     }
 
-    /// <summary>The position, with <paramref name="fallbackZ"/> as height when none was given.</summary>
     public Vector3 ToVector3(float fallbackZ) => new(X, Y, Z ?? fallbackZ);
 
-    /// <summary>Horizontal direction the heading points to: 0° = north (+Y), counter-clockwise like FiveM.</summary>
     public Vector2? HeadingDirection =>
         Heading is { } h ? new Vector2(-MathF.Sin(h * MathF.PI / 180f), MathF.Cos(h * MathF.PI / 180f)) : null;
 

@@ -4,12 +4,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace NodeRunner.Data.Native.Archives;
 
-/// <summary>A file stored in an RPF archive (directories are not kept).</summary>
-/// <param name="Disk">Index of the archive's file on disk (in <see cref="RpfFileSystem"/>).</param>
-/// <param name="Offset">Absolute position of the stored data in that file.</param>
-/// <param name="StoredSize">Bytes stored in the archive (0 for a binary file stored without compression).</param>
-/// <param name="Size">Binary file: size once decompressed. Resource file: system page flags.</param>
-/// <param name="GraphicsFlags">Resource file: graphics page flags; binary file: 0.</param>
+// A file stored in an RPF archive (directories are not kept).
 internal readonly record struct RpfEntry(
     string Name, int Disk, long Offset, uint StoredSize, uint Size, uint GraphicsFlags,
     bool IsResource, ArchiveEncryption Encryption)
@@ -17,12 +12,7 @@ internal readonly record struct RpfEntry(
     public uint SystemFlags => Size;
 }
 
-/// <summary>
-/// Reads the table of contents of an RPF7 archive. Layout: a 16-byte header ("RPF7", number of entries, length
-/// of the name table, encryption), the entries (16 bytes each), then the names (null-terminated). Entry 0 is the
-/// root directory; a directory lists a range of entries. Data positions are counted in 512-byte blocks from the
-/// start of the archive. An archive can contain other archives (.rpf files stored without compression).
-/// </summary>
+// Reads the table of contents of an RPF7 archive.
 internal static class RpfArchive
 {
     private const uint Magic = 0x52504637;          // "RPF7"
@@ -31,13 +21,6 @@ internal static class RpfArchive
     private const uint DirectoryMarker = 0x7FFFFF00;
     private const long BlockSize = 512;
 
-    /// <param name="handle">The archive file on disk (or the outer archive that contains it).</param>
-    /// <param name="start">Position of the archive in that file.</param>
-    /// <param name="name">File name of the archive (it selects the NG key).</param>
-    /// <param name="length">Length of the archive in bytes (it selects the NG key too).</param>
-    /// <param name="path">Path of the archive, prefix of its files' paths.</param>
-    /// <param name="files">Receives each file, keyed by its full path.</param>
-    /// <param name="archives">Receives the path of this archive and of every archive nested in it.</param>
     public static void Read(SafeFileHandle handle, int disk, long start, string name, uint length, string path,
         ArchiveKeys keys, Dictionary<string, RpfEntry> files, List<string> archives)
     {
@@ -120,7 +103,6 @@ internal static class RpfArchive
         }
     }
 
-    /// <summary>A resource too big for the 24-bit size field stores its size in its own header.</summary>
     private static uint LargeResourceSize(SafeFileHandle handle, long offset)
     {
         Span<byte> h = stackalloc byte[16];

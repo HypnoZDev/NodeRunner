@@ -2,13 +2,10 @@ using System.Numerics;
 
 namespace NodeRunner.Editor;
 
-/// <summary>Geometry used by the 3D handles (gizmo): mouse ray against an axis or a plane, angles, snapping.</summary>
+// Geometry used by the 3D handles (gizmo): mouse ray against an axis or a plane, angles, snapping.
 public static class GizmoMath
 {
-    /// <summary>
-    /// Position along the axis line (origin + t * direction) of the point closest to the ray.
-    /// Null when the ray is (almost) parallel to the axis: dragging along it would jump.
-    /// </summary>
+    // Position along the axis line (origin + t * direction) of the point closest to the ray.
     public static float? ClosestAxisParameter(Vector3 axisOrigin, Vector3 axisDirection, Vector3 rayOrigin, Vector3 rayDirection)
     {
         var d1 = Vector3.Normalize(axisDirection);
@@ -23,7 +20,6 @@ public static class GizmoMath
         return (b * f - c) / denominator;
     }
 
-    /// <summary>Where the ray meets the plane, null if it is parallel to it or the plane is behind the ray.</summary>
     public static Vector3? IntersectPlane(Vector3 rayOrigin, Vector3 rayDirection, Vector3 planePoint, Vector3 planeNormal)
     {
         float denominator = Vector3.Dot(rayDirection, planeNormal);
@@ -33,14 +29,13 @@ public static class GizmoMath
         return t < 0f ? null : rayOrigin + rayDirection * t;
     }
 
-    /// <summary>Angle (radians, counter-clockwise when the axis points at the viewer) of a vector turning around an axis.</summary>
+    // Angle (radians, counter-clockwise when the axis points at the viewer) of a vector turning around an axis.
     public static float AngleAround(Vector3 vector, Vector3 axis)
     {
         var (u, v) = PlaneBasis(axis);
         return MathF.Atan2(Vector3.Dot(vector, v), Vector3.Dot(vector, u));
     }
 
-    /// <summary>Two unit vectors perpendicular to the axis and to each other (u x v = axis).</summary>
     public static (Vector3 U, Vector3 V) PlaneBasis(Vector3 axis)
     {
         var n = Vector3.Normalize(axis);
@@ -49,7 +44,6 @@ public static class GizmoMath
         return (u, Vector3.Cross(n, u));
     }
 
-    /// <summary>Brings an angle back between -pi and pi.</summary>
     public static float WrapAngle(float radians)
     {
         radians %= MathF.Tau;
@@ -58,10 +52,8 @@ public static class GizmoMath
         return radians;
     }
 
-    /// <summary>Nearest multiple of <paramref name="step"/> (the value itself if step is not positive).</summary>
     public static float Snap(float value, float step) => step > 0f ? MathF.Round(value / step) * step : value;
 
-    /// <summary>Distance in pixels from a point to a segment on the screen.</summary>
     public static float DistanceToSegment(Vector2 point, Vector2 a, Vector2 b)
     {
         var ab = b - a;
@@ -70,7 +62,6 @@ public static class GizmoMath
         return Vector2.Distance(point, a + ab * t);
     }
 
-    /// <summary>True if the point is inside the convex quadrilateral (corners in order, either direction).</summary>
     public static bool InsideQuad(Vector2 point, Vector2 a, Vector2 b, Vector2 c, Vector2 d)
     {
         static float Side(Vector2 p, Vector2 from, Vector2 to) => (to.X - from.X) * (p.Y - from.Y) - (to.Y - from.Y) * (p.X - from.X);

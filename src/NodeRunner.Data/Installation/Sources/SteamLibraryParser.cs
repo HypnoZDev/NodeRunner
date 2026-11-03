@@ -2,10 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>
-/// Minimal reader for Steam's libraryfolders.vdf (Valve KeyValues text format).
-/// We only need the "path" entries, so a full parser is not necessary.
-/// </summary>
+// Minimal reader for Steam's libraryfolders.vdf (Valve KeyValues text format). We only need the "path" entries, so a
+// full parser is not necessary.
 public static partial class SteamLibraryParser
 {
     // Matches:  "path"		"D:\\SteamLibrary"

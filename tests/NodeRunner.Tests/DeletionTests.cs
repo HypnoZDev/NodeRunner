@@ -12,10 +12,10 @@ public class DeletionTests
     private const uint ParentMapName = 0x1000, ChildMapName = 0x2000;
     private const uint OtherLod = 0x10, BuildingLod = 0x11, BuildingA = 0x20, BuildingB = 0x21, Bench = 0x30;
 
-    /// <summary>One entity of a test map: model, parent index, level, number of children, flags (8 = parent in the parent map).</summary>
+    // One entity of a test map: model, parent index, level, number of children, flags (8 = parent in the parent map).
     private readonly record struct Item(uint Archetype, int ParentIndex, LodLevel Level, int ChildCount = 0, uint Flags = 0);
 
-    /// <summary>A minimal binary .ymap: the map header (CMapData), the list of entities and the entities (CEntityDef).</summary>
+    // A minimal binary .ymap: the map header (CMapData), the list of entities and the entities (CEntityDef).
     private static byte[] BuildYmap(uint name, uint parent, params Item[] items)
     {
         var document = new MetaDocument { RootBlock = 0 };
@@ -59,10 +59,7 @@ public class DeletionTests
         return new MetaDocument.StructureInfo(info, []);
     }
 
-    /// <summary>
-    /// Parent map: a LOD standing for another district, then the LOD of two buildings. Child map: a bench without
-    /// LOD, then the two buildings (their LOD is n° 1 of the parent map).
-    /// </summary>
+    // Parent map: a LOD standing for another district, then the LOD of two buildings.
     private static (MapLibrary Library, MapData Parent, MapData Child, byte[] ParentFile, byte[] ChildFile) Sample()
     {
         var parentFile = BuildYmap(ParentMapName, 0,

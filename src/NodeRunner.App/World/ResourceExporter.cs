@@ -5,15 +5,13 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Exports the modified map files as a FiveM resource, ready to be copied into a server's "resources" folder:
-/// &lt;folder&gt;\&lt;name&gt;\fxmanifest.lua and &lt;folder&gt;\&lt;name&gt;\stream\*.ymap.
-/// </summary>
+// Exports the modified map files as a FiveM resource, ready to be copied into a server's "resources" folder:
+// &lt;folder&gt;\&lt;name&gt;\fxmanifest.lua and &lt;folder&gt;\&lt;name&gt;\stream\*.ymap.
 internal static class ResourceExporter
 {
     public enum TargetState { New, Ours, Foreign }
 
-    /// <summary>Whether the resource folder can be written: new, a previous NodeRunner export, or someone else's folder.</summary>
+    // Whether the resource folder can be written: new, a previous NodeRunner export, or someone else's folder.
     public static TargetState Inspect(string resourceFolder)
     {
         if (!Directory.Exists(resourceFolder) || !Directory.EnumerateFileSystemEntries(resourceFolder).Any())
@@ -31,8 +29,6 @@ internal static class ResourceExporter
         }
     }
 
-    /// <param name="collisionCuts">Collision files (.ybn) written without the deleted buildings' polygons.</param>
-    /// <param name="occlusionCuts">Occluder map files (.ymap) written without the deleted buildings' occluders.</param>
     public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, string resourceFolder,
         IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts)
     {

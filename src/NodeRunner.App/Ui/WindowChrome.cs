@@ -4,17 +4,13 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// The window's own title bar: the menu bar takes the place of the Windows caption (brand monogram, menus, credit,
-/// minimise / maximise / close buttons). ImGui draws it; the main form answers Windows from what was drawn in the last
-/// frame (<see cref="HitTest"/>): empty parts of the bar drag the window, the maximise button is reported as such so that
-/// Windows 11 shows its snap layouts over it.
-/// </summary>
+// The window's own title bar: the menu bar takes the place of the Windows caption (brand monogram, menus, credit,
+// minimise / maximise / close buttons).
 internal static class WindowChrome
 {
     public const float ButtonWidth = 46f;
 
-    /// <summary>What a point of the window is, for Windows (WM_NCHITTEST).</summary>
+    // What a point of the window is, for Windows (WM_NCHITTEST).
     public enum Part { Client, Caption, MaximizeButton }
 
     private static RectangleF _bar;
@@ -22,19 +18,15 @@ internal static class WindowChrome
     private static readonly List<RectangleF> _interactive = [];
     private static bool _blocked;
 
-    /// <summary>The mouse is over the maximise button (told by the main form: Windows handles the mouse there).</summary>
     public static bool MaximizeHovered { get; set; }
 
-    /// <summary>The maximise button is held down.</summary>
     public static bool MaximizePressed { get; set; }
 
-    /// <summary>The window fills the screen (restore icon on the button).</summary>
     public static bool IsMaximized { get; set; }
 
     public static bool MinimizeRequested { get; set; }
     public static bool CloseRequested { get; set; }
 
-    /// <summary>Starts a frame of the bar: forgets the clickable items of the previous one.</summary>
     public static void Begin(Vector2 position, Vector2 size)
     {
         _bar = new RectangleF(position.X, position.Y, size.X, size.Y);
@@ -43,7 +35,6 @@ internal static class WindowChrome
         _blocked = ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId | ImGuiPopupFlags.AnyPopupLevel);
     }
 
-    /// <summary>The last ImGui item of the bar is clickable (a menu, a button): not a place to drag the window from.</summary>
     public static void TrackItem()
     {
         var min = ImGui.GetItemRectMin();
@@ -60,7 +51,6 @@ internal static class WindowChrome
         return Part.Caption;
     }
 
-    /// <summary>Minimise, maximise / restore and close buttons at the right end of the bar, drawn as thin lines.</summary>
     public static void DrawButtons()
     {
         var drawList = ImGui.GetWindowDrawList();

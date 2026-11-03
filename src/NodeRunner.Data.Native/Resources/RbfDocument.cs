@@ -3,15 +3,10 @@ using System.Text;
 
 namespace NodeRunner.Data.Native.Resources;
 
-/// <summary>
-/// NodeRunner's own reader for RBF files ("RBF0"): a binary form of XML used by some .ymt files (e.g. gtxd.ymt).
-/// Format documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// <para>
-/// The file is a stream of tags. Each tag starts with a descriptor index (a name, declared inline the first
-/// time it is used) and a type: 0 opens an element, 0x10 uint, 0x20/0x30 true/false, 0x40 float,
-/// 0x50 three floats, 0x60 string. 0xFD 0xFF introduces raw bytes (element text), 0xFF 0xFF closes an element.
-/// </para>
-/// </summary>
+// reader for RBF files ("RBF0"): a binary form of XML used by some .ymt files (e.g. gtxd.ymt). Format documented by
+// the GTA V modding community. The file is a stream of tags. Each tag starts with a descriptor index (a name,
+// declared inline the first time it is used) and a type: 0 opens an element, 0x10 uint, 0x20/0x30 true/false, 0x40
+// float, 0x50 three floats, 0x60 string. 0xFD 0xFF introduces raw bytes (element text), 0xFF 0xFF closes an element.
 internal static class RbfDocument
 {
     public const uint Magic = 0x30464252; // "RBF0"
@@ -19,8 +14,7 @@ internal static class RbfDocument
     public static bool IsRbf(ReadOnlySpan<byte> data) =>
         data.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(data) == Magic;
 
-    /// <summary>Reads the whole file and returns its root element.</summary>
-    /// <exception cref="InvalidDataException">Not an RBF file, or damaged.</exception>
+    // Reads the whole file and returns its root element.
     public static RbfElement Parse(ReadOnlySpan<byte> data)
     {
         if (!IsRbf(data))
@@ -133,7 +127,7 @@ internal static class RbfDocument
     }
 }
 
-/// <summary>An element of an RBF file: a name, child elements, and either raw bytes (text) or a typed value.</summary>
+// An element of an RBF file: a name, child elements, and either raw bytes (text) or a typed value.
 internal sealed class RbfElement(string name)
 {
     public string Name { get; } = name;
@@ -141,7 +135,6 @@ internal sealed class RbfElement(string name)
     public byte[]? Bytes { get; set; }
     public object? Value { get; set; }
 
-    /// <summary>The text content: raw bytes as ASCII (without the final zero), or a string value.</summary>
     public string? Text => Bytes is not null ? Encoding.ASCII.GetString(Bytes).TrimEnd('\0') : Value as string;
 
     public RbfElement? Child(string name) =>

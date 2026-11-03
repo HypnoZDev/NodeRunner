@@ -5,13 +5,7 @@ using NodeRunner.Data.Collisions;
 
 namespace NodeRunner.Data.Native.Collisions;
 
-/// <summary>
-/// Reads the map cache files of the game (gta5_cache_y.dat and those of the DLC packs).
-/// Layout: a 100-byte header (version text), then text lines ending with '\n'. Some lines name a module whose
-/// data follows in binary: a 32-bit length, then fixed-size records. The text ends at a zero byte.
-/// Only the "BoundsStore" module is decoded: one 32-byte record per collision file
-/// (name hash, box min, box max, layer).
-/// </summary>
+// Reads the map cache files of the game (gta5_cache_y.dat and those of the DLC packs).
 public sealed class MapCacheReader : IMapCacheReader
 {
     private const int HeaderLength = 100;

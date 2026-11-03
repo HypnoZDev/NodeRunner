@@ -6,15 +6,12 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Writes modified map files (.ymap) to a folder, as loose resource files with their game name: the form a FiveM
-/// resource streams them in (they replace the game's file of the same name). The game's archives are never touched.
-/// </summary>
+// Writes modified map files (.ymap) to a folder, as loose resource files with their game name: the form a FiveM
+// resource streams them in (they replace the game's file of the same name).
 internal static class MapFileSaver
 {
     public sealed record Report(List<string> Saved, List<string> Errors);
 
-    /// <param name="markSaved">Marks the maps as saved versions (false for an export to another folder).</param>
     public static Report Save(WorldLoader world, IEnumerable<MapData> maps, string folder, bool markSaved = true)
     {
         var report = new Report([], []);
@@ -72,10 +69,8 @@ internal static class MapFileSaver
 
     private static (MapLibrary Library, byte[] Content, ResourceHeader Header)? _template;
 
-    /// <summary>
-    /// A game map file with ordinary objects (no interior, no grass), whose descriptions of the structures are used
-    /// for the user's own maps; the same one for a whole map loading.
-    /// </summary>
+    // A game map file with ordinary objects (no interior, no grass), whose descriptions of the structures are used
+    // for the user's own maps; the same one for a whole map loading.
     private static (byte[] Content, ResourceHeader Header) Template(GameContent content, MapLibrary library)
     {
         if (_template is { } cached && cached.Library == library)
@@ -95,7 +90,7 @@ internal static class MapFileSaver
         throw new InvalidDataException("aucun YMAP du jeu utilisable comme modèle");
     }
 
-    /// <summary>Reads the new file back as the game data would be, and checks that every object kept is where it should be.</summary>
+    // Reads the new file back as the game data would be, and checks that every object kept is where it should be.
     private static void Verify(byte[] file, MapData map)
     {
         var (_, content) = ResourceFile.Read(file);

@@ -1,6 +1,6 @@
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>Looks in every Steam library folder listed in Steam's libraryfolders.vdf.</summary>
+// Looks in every Steam library folder listed in Steam's libraryfolders.vdf.
 public sealed class SteamSource : IInstallCandidateSource
 {
     internal static readonly string[] GameFolderNames = ["Grand Theft Auto V", "Grand Theft Auto V Enhanced"];

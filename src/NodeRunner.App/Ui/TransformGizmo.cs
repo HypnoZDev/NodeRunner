@@ -5,14 +5,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// 3D handles on the selected objects, drawn over the 3D view (behind the panels):
-/// arrows and planes to move them, rings to turn them, cubes to scale them. Mouse drag; Ctrl held: steps
-/// (0.5 m, 15°, 0.1); Escape during a drag puts the objects back. One undo step per drag.
-/// Moving and turning follow the world axes (X = east, Y = north, Z = up); scaling one object follows its own
-/// axes (the game stores one horizontal scale, X and Y, and one vertical scale, Z). Several objects selected:
-/// the handles stand at the centre of the group, which moves, turns and scales as a whole (world axes).
-/// </summary>
+// 3D handles on the selected objects, drawn over the 3D view (behind the panels): arrows and planes to move them,
+// rings to turn them, cubes to scale them.
 internal sealed class TransformGizmo(AppState state)
 {
     private const float LengthPixels = 110f;   // Length of an arrow on the screen, whatever the distance.
@@ -26,7 +20,7 @@ internal sealed class TransformGizmo(AppState state)
 
     private enum Kind { None, Axis, Plane, Ring, ScaleAxis, ScaleUniform }
 
-    /// <summary>A handle: its kind and its axis (for a plane, the axis perpendicular to it).</summary>
+    // A handle: its kind and its axis (for a plane, the axis perpendicular to it).
     private readonly record struct Handle(Kind Kind, int Axis = 0);
 
     private sealed class Drag
@@ -64,13 +58,11 @@ internal sealed class TransformGizmo(AppState state)
     private static readonly Vector4[] AxisColors = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
     private static readonly string[] AxisNames = ["X", "Y", "Z"];
 
-    /// <summary>The mouse is over a handle: a click grabs it instead of selecting what is behind.</summary>
     public bool IsHovered => _hovered.Kind != Kind.None;
 
-    /// <summary>A handle is being dragged (Escape cancels the drag instead of deselecting).</summary>
     public bool IsDragging => _drag is not null;
 
-    /// <summary>Handles input and draws the handles. Call each frame after the dock space (the 3D view's area is known).</summary>
+    // Handles input and draws the handles.
     public void Update(bool blocked)
     {
         _hovered = default;
@@ -166,10 +158,9 @@ internal sealed class TransformGizmo(AppState state)
         return true;
     }
 
-    /// <summary>An axis pointing (almost) at the camera is hidden: it would be a dot, and dragging along it would jump.</summary>
+    // An axis pointing (almost) at the camera is hidden: it would be a dot, and dragging along it would jump.
     private bool AxisUsable(int axis) => MathF.Abs(Vector3.Dot(_axes[axis], _viewDirection)) < 0.97f;
 
-    /// <summary>A plane seen (almost) edge-on is hidden.</summary>
     private bool PlaneUsable(int normal) => MathF.Abs(Vector3.Dot(_axes[normal], _viewDirection)) > 0.2f;
 
     private (Vector3 U, Vector3 V) PlaneAxes(int normal) => (_axes[(normal + 1) % 3], _axes[(normal + 2) % 3]);
@@ -187,7 +178,6 @@ internal sealed class TransformGizmo(AppState state)
         return _pivot + (u * MathF.Cos(angle) + v * MathF.Sin(angle)) * (_length * RingRatio);
     }
 
-    /// <summary>Half of the ring facing the camera (the other half is drawn faded and cannot be grabbed).</summary>
     private bool FacesCamera(Vector3 point) => Vector3.Dot(point - _pivot, _cameraPosition - _pivot) > -0.05f * _length;
 
     // --- Hovering ---
@@ -422,15 +412,12 @@ internal sealed class TransformGizmo(AppState state)
         }
     }
 
-    /// <summary>"Follow the ground" applies to horizontal moves: the X and Y arrows and the ground plane (XY).</summary>
     private bool FollowsGround(Drag drag) =>
         state.Settings.FollowGround
         && (drag.Handle.Kind == Kind.Axis && drag.Handle.Axis < 2 || drag.Handle.Kind == Kind.Plane && drag.Handle.Axis == 2);
 
-    /// <summary>
-    /// Moves the dragged objects by <paramref name="delta"/>; following the ground, the height of each is then taken from
-    /// the collision below it. The rays start from its height at the previous frame, so it climbs a slope step by step.
-    /// </summary>
+    // Moves the dragged objects by delta; following the ground, the height of each is then taken from the collision
+    // below it.
     private void MoveBy(Drag drag, Vector3 delta)
     {
         bool followGround = FollowsGround(drag);
@@ -493,11 +480,9 @@ internal sealed class TransformGizmo(AppState state)
 
     private const uint Shadow = 0x80000000; // Black at 50 % (ImGui colors are ABGR).
 
-    /// <summary>Color of a handle: brighter when hovered or dragged.</summary>
     private Vector4 HandleColor(Handle handle, Vector4 baseColor) =>
         handle == _hovered || handle == _drag?.Handle ? Highlight(baseColor) : baseColor;
 
-    /// <summary>During a drag only the grabbed handle is shown.</summary>
     private bool Shown(Handle handle) => _drag is null || _drag.Handle == handle;
 
     private void Draw(TransformTool tool, Vector2 mouse)
@@ -558,7 +543,6 @@ internal sealed class TransformGizmo(AppState state)
         }
     }
 
-    /// <summary>Faint line along the axis being dragged, through the starting position.</summary>
     private void DrawGuide(ImDrawListPtr drawList, Vector3 start, Vector3 axis, Vector4 color)
     {
         float reach = _length * 25f;

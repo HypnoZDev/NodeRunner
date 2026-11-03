@@ -4,11 +4,8 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Dockable panels around the 3D view: the whole window is a dock space whose central area is left empty
-/// (the 3D scene shows through it, clicks reach the scene). The default layout is built the first time
-/// (or on request); after that the user's arrangement is remembered in imgui.ini.
-/// </summary>
+// Dockable panels around the 3D view: the whole window is a dock space whose central area is left empty (the 3D scene
+// shows through it, clicks reach the scene).
 internal static unsafe partial class DockLayout
 {
     // Default layout: share of the width (or height) taken by each side.
@@ -17,13 +14,10 @@ internal static unsafe partial class DockLayout
     private const float RightBottomRatio = 0.42f;
     private const float LeftBottomRatio = 0.48f;
 
-    /// <summary>Area of the window left to the 3D view (pixels, inside the window), the whole work area if unknown.</summary>
     public static (Vector2 Position, Vector2 Size) SceneArea { get; private set; }
 
-    /// <summary>
-    /// Submits the dock space; call each frame before the panels. <paramref name="reset"/> rebuilds the
-    /// default layout: two panels stacked on the left, two on the right.
-    /// </summary>
+    // Submits the dock space; call each frame before the panels. reset rebuilds the default layout: two panels
+    // stacked on the left, two on the right.
     public static void Draw(bool reset, string leftTop, string leftBottom, string rightTop, string rightBottom)
     {
         var viewport = ImGui.GetMainViewport();
@@ -56,11 +50,6 @@ internal static unsafe partial class DockLayout
         igDockBuilderFinish(id);
     }
 
-    /// <summary>
-    /// Rectangle of the central node. ImGui.NET does not expose the dock node structure, so Pos and Size
-    /// are read at their offsets (Dear ImGui 1.91.6), checked against the root node which must cover the
-    /// whole work area: if the layout of the structure ever changes, the 3D view simply uses the whole window.
-    /// </summary>
     private static (Vector2, Vector2) FindSceneArea(uint id, ImGuiViewportPtr viewport)
     {
         var whole = (viewport.WorkPos, viewport.WorkSize);
@@ -82,10 +71,7 @@ internal static unsafe partial class DockLayout
         return (pos, size);
     }
 
-    /// <summary>
-    /// Bar along an edge of the window (toolbar, status bar): the panels and the 3D view are laid out in what is left.
-    /// Call before <see cref="Draw"/>, and always call <c>ImGui.End()</c> afterwards.
-    /// </summary>
+    // Bar along an edge of the window (toolbar, status bar): the panels and the 3D view are laid out in what is left.
     public static bool BeginSideBar(string name, ImGuiDir edge, float size)
     {
         const ImGuiWindowFlags flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;

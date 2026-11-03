@@ -4,31 +4,24 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>
-/// One collision file (.ybn) of the game touched by deleted buildings: the polygons to remove, and the removed triangles
-/// in world positions (for the preview in the 3D view).
-/// </summary>
+// One collision file (.ybn) of the game touched by deleted buildings: the polygons to remove, and the removed
+// triangles in world positions (for the preview in the 3D view).
 public sealed record CollisionFileCut(CollisionFile File, IReadOnlySet<int> Polygons, IReadOnlyList<Vector3> Triangles)
 {
     public string FileName => Path.GetFileName(File.Path);
     public int TriangleCount => Triangles.Count / 3;
 }
 
-/// <summary>
-/// Removes the collision of deleted buildings (see <see cref="CollisionCut"/>): finds the map collision files around
-/// each one (standard, vehicles "hi@" and "ma@" versions) and their polygons inside the building.
-/// </summary>
+// Removes the collision of deleted buildings: finds the map collision files around each one (standard, vehicles "hi@"
+// and "ma@" versions) and their polygons inside the building.
 public static class CollisionRemoval
 {
     private static readonly CollisionKind[] Kinds = Enum.GetValues<CollisionKind>();
 
-    /// <summary>Objects lower than this (ground slabs, decals) keep their collision: it is the ground people walk on.</summary>
+    // Objects lower than this (ground slabs, decals) keep their collision: it is the ground people walk on.
     public const float MinHeight = 3f;
 
-    /// <summary>
-    /// The space of a deleted object, or null without a model box. A flat object (see <see cref="MinHeight"/>) keeps its
-    /// collision (null), unless <paramref name="removeGround"/>: then everything in its box goes.
-    /// </summary>
+    // The space of a deleted object, or null without a model box.
     public static CutVolume? VolumeOf(MapEntity entity, Archetype? archetype, bool removeGround = false)
     {
         if (archetype is null || archetype.BoundsMin == archetype.BoundsMax)
@@ -41,10 +34,7 @@ public static class CollisionRemoval
             : null;
     }
 
-    /// <summary>
-    /// The files to rewrite for these deleted objects, sorted by name. Unreadable files are reported in
-    /// <paramref name="errors"/>. <paramref name="removeGround"/>: the collision of deleted ground slabs goes too.
-    /// </summary>
+    // The files to rewrite for these deleted objects, sorted by name.
     public static List<CollisionFileCut> Plan(CollisionCatalog catalog, IEnumerable<(MapEntity Entity, Archetype? Archetype)> removed,
         List<string> errors, bool removeGround = false)
     {

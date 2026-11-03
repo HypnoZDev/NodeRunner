@@ -2,20 +2,14 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Maps;
 
-/// <summary>
-/// Chooses which entities to draw for a camera position, following the game's level-of-detail tree:
-/// from far away a single simplified model (SLOD) stands for a whole district; closer, it is replaced
-/// by its children (LOD), then by theirs (HD). The draw distance of a top-level entity decides whether its
-/// tree is shown; below it, only the parents' switch distances count (as in the game: a child's own draw
-/// distance is measured from another point and may be a little shorter, which would leave holes).
-/// </summary>
+// Chooses which entities to draw for a camera position, following the game's level-of-detail tree: from far away a
+// single simplified model (SLOD) stands for a whole district; closer, it is replaced by its children (LOD), then by
+// theirs (HD).
 public static class LodSelector
 {
-    /// <summary>What one selection needs: the map, the camera, and the entities chosen so far.</summary>
+    // What one selection needs: the map, the camera, and the entities chosen so far.
     private readonly record struct Pass(MapLibrary Library, Vector3 Camera, float Multiplier, int? Hour, List<MapEntity> Selected);
 
-    /// <param name="distanceMultiplier">1 = the game's distances; larger shows details from further away.</param>
-    /// <param name="hour">Hour of the day (0 to 23) for the objects shown at certain hours only; null = all shown.</param>
     public static List<MapEntity> Select(MapLibrary library, Vector3 camera, float distanceMultiplier, int? hour = null)
     {
         var pass = new Pass(library, camera, distanceMultiplier, hour, new List<MapEntity>());
@@ -80,18 +74,13 @@ public static class LodSelector
             pass.Selected.Add(entity);
     }
 
-    /// <summary>
-    /// A simplified model (LOD, SLOD) whose file declares no children, within its switch distance: a stand-in
-    /// for detailed objects that are gone, never shown up close. A few were left by the DLC packs (e.g. two SLOD2
-    /// of hei_vb_lod.ymap, which would cover the Vespucci beach with a blurry model). Stand-ins whose declared
-    /// children are not loaded (maps loaded by scripts only) are still shown, so as not to leave holes.
-    /// </summary>
+    // A simplified model (LOD, SLOD) whose file declares no children, within its switch distance: a stand-in for
+    // detailed objects that are gone, never shown up close.
     private static bool IsChildlessStandIn(Pass pass, MapEntity entity, float distance) =>
         entity.LodLevel is not (LodLevel.Hd or LodLevel.OrphanHd)
         && entity.ChildCount == 0 && entity.Children.Count == 0
         && entity.ChildLodDistance > 0f && distance < entity.ChildLodDistance * pass.Multiplier;
 
-    /// <summary>False for the stand-ins the game only draws in shadows or reflections.</summary>
     private static bool IsDrawn(Pass pass, MapEntity entity)
     {
         if (!entity.IsDrawnInMainView)
@@ -101,15 +90,8 @@ public static class LodSelector
             || !archetype.IsShadowOrReflectionProxy && (pass.Hour is not { } hour || archetype.IsVisibleAt(hour));
     }
 
-    /// <summary>
-    /// Whether the children replace the entity: within its switch distance, or as soon as a child (or an object
-    /// inside a child interior) is within its own draw distance. The switch distance is measured from the
-    /// entity's origin, which can be far from the area it covers: the sea floor off Vespucci beach hangs from
-    /// vb_lod_rv_slod4, whose origin is 1.9 km away by the port, so its children would never be shown there.
-    /// It is not set at all (0) on the simplified shells of every interior (tunnels, car parks...): metro
-    /// tunnels are chains of short interiors, and measured from the interior's origin, the shell of the next
-    /// section would stay in place and block the tunnel.
-    /// </summary>
+    // Whether the children replace the entity: within its switch distance, or as soon as a child (or an object inside
+    // a child interior) is within its own draw distance.
     private static bool HandsOver(Pass pass, MapEntity entity, float distance)
     {
         if (entity.ChildLodDistance > 0f && distance < entity.ChildLodDistance * pass.Multiplier)

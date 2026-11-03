@@ -1,6 +1,6 @@
 namespace NodeRunner.Tests;
 
-/// <summary>Guards the dependencies: NodeRunner reads the game's files with its own code only.</summary>
+// Guards the dependencies: NodeRunner reads the game's files with its own code only.
 public class ArchitectureTests
 {
     private static string RepoRoot()

@@ -5,10 +5,8 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// The model viewer: one model (vehicle or object) read on a background thread with its textures, drawn alone into
-/// its own image by a camera turning around it. The interface (<c>ViewerPanel</c>) shows the image and moves the camera.
-/// </summary>
+// The model viewer: one model (vehicle or object) read on a background thread with its textures, drawn alone into its
+// own image by a camera turning around it.
 internal sealed class ModelViewer : IDisposable
 {
     private static readonly Vector4 Background = new(0.16f, 0.17f, 0.19f, 1f);
@@ -31,7 +29,6 @@ internal sealed class ModelViewer : IDisposable
     public ViewerItem? Item { get; private set; }
     public bool IsLoading => _loading is not null;
 
-    /// <summary>Why the model could not be shown, null if it is.</summary>
     public string? Error { get; private set; }
 
     public int TriangleCount => _model?.TriangleCount ?? 0;
@@ -39,22 +36,17 @@ internal sealed class ModelViewer : IDisposable
     public int TextureCount { get; private set; }
     public int MissingTextureCount => MissingTextures.Count;
 
-    /// <summary>Names of the colour textures not found in the model, its .ytd or their parents.</summary>
     public IReadOnlyList<string> MissingTextures { get; private set; } = [];
     public Vector3 Size { get; private set; }
 
-    /// <summary>Camera angles (radians) and distance from the model's centre (metres).</summary>
     public float Yaw { get; set; } = DefaultYaw;
     public float Pitch { get => _camera.Pitch; set => _camera.Pitch = value; }
     public float Distance { get; set; } = 10f;
 
-    /// <summary>Size of the image wanted by the interface, in pixels; 0 = not shown (nothing is drawn).</summary>
     public Vector2 RequestedSize { get; set; }
 
-    /// <summary>Id of the image for ImGui.Image (zero until the first image is drawn).</summary>
     public IntPtr ImageId => _imageId;
 
-    /// <summary>Starts reading <paramref name="item"/> (the previous model stays shown until it arrives).</summary>
     public void Open(ViewerItem item, WorldLoader world)
     {
         if (item == Item && Error is null)
@@ -90,7 +82,6 @@ internal sealed class ModelViewer : IDisposable
         }
     }
 
-    /// <summary>Back to the default view, the whole model in the image.</summary>
     public void ResetView()
     {
         Yaw = DefaultYaw;
@@ -103,10 +94,7 @@ internal sealed class ModelViewer : IDisposable
 
     private float FitDistance() => _radius / MathF.Sin(_camera.FieldOfView * 0.5f) * 0.85f;
 
-    /// <summary>
-    /// Takes the model once read, and draws the image if the interface shows it. Call once per frame, before the
-    /// interface is built and before the back buffer is bound (this binds the viewer's image).
-    /// </summary>
+    // Takes the model once read, and draws the image if the interface shows it.
     public void Render(ModelRenderer renderer, ImGuiRenderer imgui, GraphicsDevice graphics)
     {
         if (_loading is { IsCompleted: true } finished)

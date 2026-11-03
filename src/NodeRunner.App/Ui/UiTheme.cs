@@ -4,11 +4,8 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// NodeRunner's look (2026-11-01): graphite greys with a slightly cool tint, soft text, light blue accent,
-/// borderless fields a step lighter than the panels, discreet rounding, sections separated by thin lines.
-/// Fonts (Segoe UI, read from Windows, not shipped) must be loaded before the ImGui renderer builds the font texture.
-/// </summary>
+// NodeRunner's look: graphite greys with a slightly cool tint, soft text, light blue accent, borderless fields a step
+// lighter than the panels, discreet rounding, sections separated by thin lines.
 internal static unsafe class UiTheme
 {
     public const float FontSize = 15f;
@@ -17,21 +14,16 @@ internal static unsafe class UiTheme
 
     // --- Palette ---
 
-    /// <summary>Menu bar, toolbar, status bar, title bar of the window, gaps between the panels.</summary>
     public static readonly Vector4 Chrome = Rgb(0x111214);
 
-    /// <summary>Background of the panels.</summary>
     public static readonly Vector4 Panel = Rgb(0x1A1B1F);
 
-    /// <summary>Faint edge of the floating windows and menus.</summary>
     public static readonly Vector4 Border = new(1f, 1f, 1f, 0.08f);
 
-    /// <summary>Fields, segmented controls, secondary buttons: a step lighter than the panels.</summary>
     public static readonly Vector4 Field = Rgb(0x25262B);
     public static readonly Vector4 FieldHovered = Rgb(0x2C2D33);
     public static readonly Vector4 FieldActive = Rgb(0x32343A);
 
-    /// <summary>Thin lines between the sections of a panel.</summary>
     public static readonly Vector4 Divider = new(1f, 1f, 1f, 0.06f);
 
     public static readonly Vector4 Text = Rgb(0xE4E5E9);
@@ -45,7 +37,6 @@ internal static unsafe class UiTheme
     public static readonly Vector4 Warning = Rgb(0xF2B657);
     public static readonly Vector4 Error = Rgb(0xF27474);
 
-    /// <summary>Marks of the X, Y and Z number fields and of the axes indicator.</summary>
     public static readonly Vector4 AxisX = Rgb(0xE5534B);
     public static readonly Vector4 AxisY = Rgb(0x6CC36C);
     public static readonly Vector4 AxisZ = Rgb(0x4C8DFF);
@@ -53,16 +44,12 @@ internal static unsafe class UiTheme
 
     public const float FrameRounding = 4f;
 
-    /// <summary>Semibold font of the section titles and labels that stand out.</summary>
     public static ImFontPtr SemiboldFont { get; private set; }
 
-    /// <summary>Larger semibold font, e.g. the name of the selected object.</summary>
     public static ImFontPtr TitleFont { get; private set; }
 
-    /// <summary>Unbounded bold, the brand's typeface (logo), for the monogram of the title bar.</summary>
     public static ImFontPtr BrandFont { get; private set; }
 
-    /// <summary>Smaller font for secondary information (status, counts).</summary>
     public static ImFontPtr SmallFont { get; private set; }
 
     // Characters drawn by the interface: Latin-1 and Latin Extended-A (é, œ...), general punctuation
@@ -70,7 +57,6 @@ internal static unsafe class UiTheme
     private static readonly ushort* GlyphRanges = CreateGlyphRanges(
         0x0020, 0x00FF, 0x0100, 0x017F, 0x2000, 0x206F, 0x20AC, 0x20AC, 0x2190, 0x21FF);
 
-    /// <summary>Segoe UI if present (every Windows 10/11 has it), otherwise ImGui's built-in font.</summary>
     public static void LoadFonts(ImGuiIOPtr io)
     {
         string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
@@ -96,7 +82,6 @@ internal static unsafe class UiTheme
     private static ImFontPtr AddFont(ImGuiIOPtr io, string path, float size, ImFontPtr fallback) =>
         File.Exists(path) ? io.Fonts.AddFontFromFileTTF(path, size, null, (IntPtr)GlyphRanges) : fallback;
 
-    /// <summary>Adds the Lucide icons (see <see cref="Icons"/>) to the font loaded just before.</summary>
     private static void MergeIcons(ImGuiIOPtr io, float size, float offsetY)
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "lucide.ttf");
@@ -230,11 +215,10 @@ internal static unsafe class UiTheme
         Set(ImGuiCol.ModalWindowDimBg, black, 0.45f);
     }
 
-    /// <summary>Colour from a hexadecimal 0xRRGGBB value.</summary>
     public static Vector4 Rgb(uint rgb) =>
         new(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
 
-    /// <summary>The same colour as a Windows COLORREF (0x00BBGGRR), e.g. for the title bar.</summary>
+    // The same colour as a Windows COLORREF (0x00BBGGRR), e.g. for the title bar.
     public static int ColorRef(Vector4 color) =>
         (int)(color.X * 255f + 0.5f) | (int)(color.Y * 255f + 0.5f) << 8 | (int)(color.Z * 255f + 0.5f) << 16;
 

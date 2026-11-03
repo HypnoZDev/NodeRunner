@@ -5,11 +5,8 @@ using NodeRunner.Data.Dlc;
 
 namespace NodeRunner.Data.Native.Dlc;
 
-/// <summary>
-/// NodeRunner's own reader for the DLC configuration files: dlclist.xml (SMandatoryPacksData),
-/// setup2.xml (SSetupData) and content.xml (CDataFileMgr__ContentsOfDataFileXml).
-/// Element names are matched without regard to case: the game's files mix "Item" and "item".
-/// </summary>
+// reader for the DLC configuration files: dlclist.xml (SMandatoryPacksData), setup2.xml (SSetupData) and content.xml
+// (CDataFileMgr__ContentsOfDataFileXml).
 public sealed class DlcManifestReader : IDlcManifestReader
 {
     public IReadOnlyList<string> ReadPackList(byte[] data)
@@ -73,7 +70,6 @@ public sealed class DlcManifestReader : IDlcManifestReader
         return new DlcContent { DataFiles = dataFiles, ChangeSets = changeSets };
     }
 
-    /// <summary>"platform:/dlcPacks/mpBeach/" or "dlcpacks:/mpheist/" gives "mpbeach" / "mpheist".</summary>
     private static string PackName(string path) =>
         path.Trim().Replace('\\', '/').TrimEnd('/').Split('/', ':').LastOrDefault()?.ToLowerInvariant() ?? "";
 
@@ -98,7 +94,6 @@ public sealed class DlcManifestReader : IDlcManifestReader
     private static IEnumerable<string> Items(XElement parent, string name) =>
         (Child(parent, name)?.Elements() ?? []).Select(e => e.Value.Trim()).Where(v => v.Length > 0);
 
-    /// <summary>Values are written as attributes (&lt;order value="10" /&gt;).</summary>
     private static int IntValue(XElement parent, string name) =>
         int.TryParse((string?)Child(parent, name)?.Attribute("value"), out int value) ? value : 0;
 

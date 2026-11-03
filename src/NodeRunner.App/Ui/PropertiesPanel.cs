@@ -6,11 +6,9 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Properties panel (docked on the right) of the selected object: name and quick actions, then a label / value grid
-/// in sections: placement (editable, each change can be undone), files, level of detail (parent and children can be
-/// selected in turn), entity sets of an interior (shown or hidden live), render settings.
-/// </summary>
+// Properties panel (docked on the right) of the selected object: name and quick actions, then a label / value grid in
+// sections: placement (editable, each change can be undone), files, level of detail (parent and children can be
+// selected in turn), entity sets of an interior (shown or hidden live), render settings.
 internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
 {
     public const string Title = $"{Icons.SlidersHorizontal}  Propriétés###Propriétés";
@@ -24,10 +22,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
     private int _anglesRevision = -1;
     private Vector3 _angles;
 
-    /// <summary>Placement when the user started dragging or typing in a field (recorded for undo at the end).</summary>
     private Placement _editStart;
 
-    /// <summary>Name typed to name an entity set (the game files only store hashes).</summary>
     private string _setName = "";
     private (bool Ok, string Text)? _setNameResult;
     private MapEntity? _setNameInterior;
@@ -84,7 +80,6 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         ImGui.End();
     }
 
-    /// <summary>Object name and the map that places it, then the actions on the selection.</summary>
     private void DrawHeader(MapEntity entity, HashNames names)
     {
         string name = names.Describe(entity.ArchetypeHash);
@@ -183,10 +178,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
             Widgets.Hint("Objet défini par l'intérieur (.ytyp) : il se déplace avec l'intérieur.", wrap: true);
     }
 
-    /// <summary>
-    /// Fields to move, turn and scale the object: drag with the mouse, or double-click to type a value.
-    /// The object changes live; one undo step is recorded when a field is released.
-    /// </summary>
+    // Fields to move, turn and scale the object: drag with the mouse, or double-click to type a value.
     private void DrawPlacementFields(MapEntity entity, HashNames names)
     {
         if (entity != _anglesEntity || entity.Revision != _anglesRevision)
@@ -251,7 +243,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         _anglesRevision = entity.Revision;
     }
 
-    /// <summary>Called after a field: remembers the placement when it is grabbed, records an undo step when it is released.</summary>
+    // Called after a field: remembers the placement when it is grabbed, records an undo step when it is released.
     private void TrackEdit(MapEntity entity, Placement before, string description)
     {
         if (ImGui.IsItemActivated())
@@ -299,10 +291,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
             ImGui.TextColored(UiTheme.Warning, "Type introuvable dans les fichiers .ytyp.");
     }
 
-    /// <summary>
-    /// The optional groups of objects of an interior: a box per set to show or hide it (not saved: in the game, scripts
-    /// activate them), the script lines that activate the shown sets, and a field to name a set.
-    /// </summary>
+    // The optional groups of objects of an interior: a box per set to show or hide it (not saved: in the game,
+    // scripts activate them), the script lines that activate the shown sets, and a field to name a set.
     private void DrawEntitySets(MapEntity interior, MapLibrary library, HashNames names)
     {
         var sets = interior.EntitySets;
@@ -391,7 +381,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         state.Notify(_setNameResult.Value.Text, warning: !_setNameResult.Value.Ok);
     }
 
-    /// <summary>A point inside the interior, for GetInteriorAtCoords: the centre of its first real room (room 0 is the outside).</summary>
+    // A point inside the interior, for GetInteriorAtCoords: the centre of its first real room (room 0 is the
+    // outside).
     private static Vector3 PointInside(MapEntity interior, MapLibrary library)
     {
         var rooms = library.GetArchetype(interior.ArchetypeHash)?.InteriorRooms;
@@ -466,7 +457,6 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
         Widgets.EndProperties();
     }
 
-    /// <summary>A file name, with its full path in the archives as a tooltip.</summary>
     private static void FileRow(string label, string? path) =>
         Widgets.PropertyText(label, path is null ? "?" : Path.GetFileName(path), path);
 

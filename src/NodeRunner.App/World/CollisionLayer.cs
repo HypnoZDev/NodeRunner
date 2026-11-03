@@ -6,12 +6,9 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Streams the map collision (standard version, .ybn) around the camera: files within the chosen radius are read
-/// and turned into triangles on a background thread (nearest first), sent to the GPU a few per frame, and released
-/// when the camera moves away. Drawn as translucent shaded surfaces, coloured by material family.
-/// Hidden by default (see <see cref="AppState.IsLayerVisible"/>): it is heavy and covers the models.
-/// </summary>
+// Streams the map collision (standard version, .ybn) around the camera: files within the chosen radius are read and
+// turned into triangles on a background thread (nearest first), sent to the GPU a few per frame, and released when
+// the camera moves away.
 internal sealed class CollisionLayer : IDisposable
 {
     public const float MinRadius = 50f;
@@ -71,10 +68,8 @@ internal sealed class CollisionLayer : IDisposable
     public int PendingFileCount => _pending.Count;
     public int TriangleCount => _loaded.Values.Sum(f => f.TriangleCount);
 
-    /// <summary>Files that could not be read (shown in the status panel).</summary>
     public List<string> Errors { get; } = new();
 
-    /// <summary>Requests the files around the camera, uploads the ones that arrived, releases far ones.</summary>
     public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, float radius, bool enabled)
     {
         if (loader.Collisions != _catalog)
@@ -154,7 +149,6 @@ internal sealed class CollisionLayer : IDisposable
         return Vector2.Distance(closest, position);
     }
 
-    /// <summary>Shaded, translucent triangles, one batch per material family (built off the render thread).</summary>
     private static TriangleBatch[] BuildBatches(CollisionMesh mesh, CollisionMaterials materials)
     {
         var batches = Surfaces.Select(_ => new TriangleBatch()).ToArray();

@@ -4,38 +4,29 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.Data.Collisions;
 
-/// <summary>Which version of the collision a file holds (the game keeps several for the same place).</summary>
+// Which version of the collision a file holds (the game keeps several for the same place).
 public enum CollisionKind
 {
-    /// <summary>No prefix: the collision of peds, objects and weapons.</summary>
     Standard,
 
-    /// <summary>"hi@" prefix: more detailed collision used by vehicles.</summary>
     Vehicle,
 
-    /// <summary>"ma@" prefix: extra collision, purpose not documented.</summary>
     Other,
 }
 
-/// <summary>A map collision file and the world box it covers.</summary>
+// A map collision file and the world box it covers.
 public sealed record CollisionFile(string Path, string Name, Vector3 BoundsMin, Vector3 BoundsMax, CollisionKind Kind);
 
-/// <summary>World box of a collision file, as listed by the game's cache files (the file is named by its hash).</summary>
+// World box of a collision file, as listed by the game's cache files (the file is named by its hash).
 public readonly record struct CollisionBox(uint NameHash, Vector3 Min, Vector3 Max);
 
-/// <summary>Reads the list of collision boxes of a map cache file (gta5_cache_y.dat, &lt;pack&gt;_..._cache_y.dat).</summary>
+// Reads the list of collision boxes of a map cache file (gta5_cache_y.dat, &lt;pack&gt;_..._cache_y.dat).
 public interface IMapCacheReader
 {
-    /// <exception cref="InvalidDataException">The data is not a valid cache file.</exception>
     IReadOnlyList<CollisionBox> ReadCollisionBoxes(ReadOnlySpan<byte> data);
 }
 
-/// <summary>
-/// Knows which map collision file (.ybn) covers which part of the map, and reads them on demand.
-/// The game does not compute this at run time: it reads the box of every file from its cache files, which
-/// NodeRunner reads too. Collision files of interiors are relative to the interior: they are kept apart
-/// (<see cref="FindInteriorFile"/>), placed with each instance of the interior.
-/// </summary>
+// Knows which map collision file (.ybn) covers which part of the map, and reads them on demand.
 public sealed class CollisionCatalog
 {
     private const float CellSize = 200f;
@@ -51,18 +42,14 @@ public sealed class CollisionCatalog
         _reader = reader;
     }
 
-    /// <summary>Map collision files (interiors not included).</summary>
     public IReadOnlyList<CollisionFile> Files => _files;
 
-    /// <summary>Collision files the cache files do not place (cannot be shown).</summary>
     public int UnplacedCount { get; private set; }
 
     public int InteriorFileCount => _interiorFiles.Count;
 
-    /// <summary>Problems met while reading the cache files.</summary>
     public List<string> Errors { get; } = new();
 
-    /// <param name="interiorNames">Name hashes of the interior types (MLO): their collision files are relative to them.</param>
     public static CollisionCatalog Create(GameContent content, ICollisionReader reader, IMapCacheReader cacheReader,
         IReadOnlySet<uint> interiorNames)
     {
@@ -110,7 +97,6 @@ public sealed class CollisionCatalog
         return catalog;
     }
 
-    /// <summary>Names of the materials (read from the game's materials.dat), empty if not found.</summary>
     public CollisionMaterials Materials { get; private set; } = CollisionMaterials.Empty;
 
     private static CollisionMaterials ReadMaterials(GameContent content)
@@ -121,10 +107,8 @@ public sealed class CollisionCatalog
         return data is null ? CollisionMaterials.Empty : CollisionMaterials.Parse(System.Text.Encoding.UTF8.GetString(data));
     }
 
-    /// <summary>Collision file of an interior type (relative to the interior), or null.</summary>
     public string? FindInteriorFile(uint interiorNameHash) => _interiorFiles.GetValueOrDefault(interiorNameHash);
 
-    /// <summary>Map collision files of this kind whose box overlaps the given box.</summary>
     public IEnumerable<CollisionFile> FilesIn(Vector3 min, Vector3 max, CollisionKind kind = CollisionKind.Standard)
     {
         var seen = new HashSet<CollisionFile>();
@@ -140,7 +124,6 @@ public sealed class CollisionCatalog
         }
     }
 
-    /// <summary>Map collision files of this kind within <paramref name="radius"/> of a point (on the ground plane), nearest first.</summary>
     public IEnumerable<CollisionFile> FilesAround(Vector2 center, float radius, CollisionKind kind = CollisionKind.Standard)
     {
         var min = new Vector3(center - new Vector2(radius), float.MinValue);
@@ -152,15 +135,11 @@ public sealed class CollisionCatalog
             .Select(f => f.File);
     }
 
-    /// <exception cref="InvalidDataException">The file is damaged.</exception>
     public CollisionMesh? Read(CollisionFile file) => _reader.Read(file.Path);
 
-    /// <exception cref="InvalidDataException">The file is damaged.</exception>
     public CollisionMesh? Read(string path) => _reader.Read(path);
 
-    /// <summary>The file without these polygons (see <see cref="ICollisionWriter"/>).</summary>
-    /// <exception cref="InvalidDataException">The file is damaged.</exception>
-    /// <exception cref="NotSupportedException">The reader cannot write files.</exception>
+    // The file without these polygons.
     public byte[]? RemovePolygons(CollisionFile file, IReadOnlySet<int> polygons) =>
         (_reader as ICollisionWriter ?? throw new NotSupportedException()).RemovePolygons(file.Path, polygons);
 
@@ -170,7 +149,6 @@ public sealed class CollisionCatalog
         return kind;
     }
 
-    /// <summary>Hash of the name without its "hi@" / "ma@" prefix.</summary>
     private static uint StripPrefix(string name, out CollisionKind kind)
     {
         kind = name.StartsWith("hi@", StringComparison.OrdinalIgnoreCase) ? CollisionKind.Vehicle

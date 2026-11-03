@@ -9,11 +9,7 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Draws Dear ImGui's output with Direct3D 11.
-/// Written for NodeRunner, following the general approach of Dear ImGui's official
-/// DirectX 11 backend (dynamic vertex/index buffers, one font texture, scissor per command).
-/// </summary>
+// Draws Dear ImGui's output with Direct3D 11.
 public sealed unsafe class ImGuiRenderer : IDisposable
 {
     // Vertex layout of ImDrawVert: pos (2 floats), uv (2 floats), col (RGBA8).
@@ -71,7 +67,6 @@ float4 PS(PS_INPUT input) : SV_Target
         CreateFontTexture();
     }
 
-    /// <summary>Renders the current ImGui frame. Call after ImGui.Render().</summary>
     public void Render(ImDrawDataPtr drawData)
     {
         // Avoid rendering when minimized.
@@ -116,7 +111,6 @@ float4 PS(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>Registers a texture so it can be shown with ImGui.Image(id, size).</summary>
     public IntPtr RegisterTexture(ID3D11ShaderResourceView view)
     {
         var id = view.NativePointer;

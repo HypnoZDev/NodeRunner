@@ -5,11 +5,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Finds the collision placed in a part of the world, for editing tools ("put on the ground"): map collision files
-/// (standard version) and the collision of the interiors (MLO) placed there. Files are read on the calling thread
-/// (a few hundredths of a second each); the last ones read are kept in memory.
-/// </summary>
+// Finds the collision placed in a part of the world, for editing tools ("put on the ground"): map collision files
+// (standard version) and the collision of the interiors (MLO) placed there.
 internal sealed class CollisionQuery
 {
     private const int CacheSize = 24;
@@ -20,10 +17,8 @@ internal sealed class CollisionQuery
     private readonly LinkedList<(string Path, CollisionMesh? Mesh)> _cache = new();
     private CollisionCatalog? _catalog;
 
-    /// <summary>Files that could not be read during the last query.</summary>
     public List<string> Errors { get; } = new();
 
-    /// <summary>Collision overlapping the box (map files and interiors), placed in the world.</summary>
     public List<PlacedCollision> CollisionIn(WorldLoader loader, Vector3 min, Vector3 max)
     {
         Errors.Clear();

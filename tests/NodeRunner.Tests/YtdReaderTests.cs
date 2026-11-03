@@ -8,7 +8,7 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Tests;
 
-/// <summary>A texture dictionary built in memory: one system page, then the pixels in the graphics segment.</summary>
+// A texture dictionary built in memory: one system page, then the pixels in the graphics segment.
 public class YtdReaderTests
 {
     private const int SystemSize = 0x2000;
@@ -42,10 +42,8 @@ public class YtdReaderTests
         Assert.Throws<InvalidDataException>(() => YtdReader.Read(data, header));
     }
 
-    /// <summary>
-    /// Dictionary at 0, its list of 3 texture pointers at 0x40, textures at 0x100, 0x200 and 0x300 (the last one in an
-    /// unknown format, skipped), names from 0x400; pixels of the first at graphics 0, of the second at graphics 0x100.
-    /// </summary>
+    // Dictionary at 0, its list of 3 texture pointers at 0x40, textures at 0x100, 0x200 and 0x300 (the last one in an
+    // unknown format, skipped), names from 0x400; pixels of the first at graphics 0, of the second at graphics 0x100.
     private static (byte[] Data, ResourceHeader Header) Build()
     {
         var data = new byte[SystemSize + 0x200];

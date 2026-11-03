@@ -6,13 +6,7 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Owns the Direct3D 11 device, the swap chain attached to a window, its back buffer and depth buffer.
-/// </summary>
-/// <remarks>
-/// The depth buffer uses "reversed Z": 1 = near, 0 = far, cleared to 0, compared with Greater.
-/// With a 32-bit float depth buffer this keeps good precision across the whole map (several km).
-/// </remarks>
+// Owns the Direct3D 11 device, the swap chain attached to a window, its back buffer and depth buffer.
 public sealed class GraphicsDevice : IDisposable
 {
     private const Format BackBufferFormat = Format.B8G8R8A8_UNorm;
@@ -29,7 +23,6 @@ public sealed class GraphicsDevice : IDisposable
     private ID3D11Texture2D? _depthCopy;
     private ID3D11ShaderResourceView? _depthCopyView;
 
-    /// <summary>Pixel format of the frame, for textures that receive a copy of it.</summary>
     public static Format ColorFormat => BackBufferFormat;
 
     public ID3D11Device Device { get; }
@@ -37,10 +30,8 @@ public sealed class GraphicsDevice : IDisposable
     public int Width { get; private set; }
     public int Height { get; private set; }
 
-    /// <summary>Feature level actually obtained (11_0 or better).</summary>
     public FeatureLevel FeatureLevel { get; }
 
-    /// <summary>Name of the graphics card, for the status panel.</summary>
     public string AdapterName { get; }
 
     public GraphicsDevice(IntPtr windowHandle, int width, int height)
@@ -98,7 +89,6 @@ public sealed class GraphicsDevice : IDisposable
         CreateDepthBuffer();
     }
 
-    /// <summary>Call when the window size changes.</summary>
     public void Resize(int width, int height)
     {
         width = Math.Max(1, width);
@@ -119,7 +109,6 @@ public sealed class GraphicsDevice : IDisposable
         CreateDepthBuffer();
     }
 
-    /// <summary>Binds the back buffer and depth buffer, and clears them.</summary>
     public void BeginFrame(Vector4 clearColor)
     {
         Context.OMSetRenderTargets(_backBufferView!, _depthView);
@@ -128,27 +117,23 @@ public sealed class GraphicsDevice : IDisposable
         Context.ClearDepthStencilView(_depthView!, DepthStencilClearFlags.Depth, 0f, 0); // Reversed Z: 0 = far.
     }
 
-    /// <summary>Copies the frame drawn so far into <paramref name="destination"/> (same size and <see cref="ColorFormat"/>).</summary>
     public void CopyBackBuffer(ID3D11Texture2D destination)
     {
         using var backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
         Context.CopyResource(destination, backBuffer);
     }
 
-    /// <summary>Draws into the frame again (whole window) after drawing into another texture.</summary>
     public void BindBackBuffer()
     {
         Context.OMSetRenderTargets(_backBufferView!, _depthView);
         Context.RSSetViewport(new Viewport(0, 0, Width, Height));
     }
 
-    /// <summary>Restricts the following drawing to a part of the window (the 3D view between the interface panels).</summary>
     public void SetViewport(int x, int y, int width, int height)
     {
         Context.RSSetViewport(new Viewport(x, y, width, height));
     }
 
-    /// <summary>Shows the frame on screen. VSync on by default.</summary>
     public void Present(bool vsync = true)
     {
         _swapChain.Present(vsync ? 1u : 0u, PresentFlags.None);
@@ -177,10 +162,8 @@ public sealed class GraphicsDevice : IDisposable
             new DepthStencilViewDescription(DepthStencilViewDimension.Texture2D, DepthFormat));
     }
 
-    /// <summary>
-    /// Copies the depth drawn so far into a texture that shaders can read (one float per pixel of the window, reversed Z),
-    /// and returns it. The texture is kept and written again at the next call.
-    /// </summary>
+    // Copies the depth drawn so far into a texture that shaders can read (one float per pixel of the window, reversed
+    // Z), and returns it.
     public ID3D11ShaderResourceView CopyDepth()
     {
         if (_depthCopy is null)

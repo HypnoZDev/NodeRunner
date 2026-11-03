@@ -7,11 +7,9 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// "Export as a FiveM resource" window: resource name, destination folder (a server's "resources" folder),
-/// list of the map files, the check before export (conflicts with other resources and projects, deleted scenery),
-/// then the line to add to server.cfg.
-/// </summary>
+// "Export as a FiveM resource" window: resource name, destination folder (a server's "resources" folder), list of the
+// map files, the check before export (conflicts with other resources and projects, deleted scenery), then the line to
+// add to server.cfg.
 internal sealed class ExportWindow(AppState state, Action chooseFolder)
 {
     public const string Title = $"{Icons.Package}  Exporter en ressource FiveM###Export";

@@ -1,6 +1,6 @@
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>Reads the Epic Games Launcher install manifests (*.item JSON files).</summary>
+// Reads the Epic Games Launcher install manifests (*.item JSON files).
 public sealed class EpicGamesSource : IInstallCandidateSource
 {
     private readonly string _manifestsFolder;

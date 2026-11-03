@@ -3,10 +3,8 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Flat, minimal look of the elements floating over the 3D view (no frosted glass):
-/// solid dark background, faint edge, soft shadow; buttons show only their icon until hovered.
-/// </summary>
+// Flat, minimal look of the elements floating over the 3D view (no frosted glass): solid dark background, faint edge,
+// soft shadow; buttons show only their icon until hovered.
 internal static class OverlayStyle
 {
     public const float MenuRounding = 10f;
@@ -15,7 +13,6 @@ internal static class OverlayStyle
     private static readonly Vector4 Background = new(0.105f, 0.108f, 0.118f, 0.97f);
     private static readonly Vector4 Edge = new(1f, 1f, 1f, 0.07f);
 
-    /// <summary>Draws a floating panel over the given rectangle (screen pixels), behind what is drawn after it.</summary>
     public static void Panel(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding)
     {
         // Soft shadow: a few growing, fading rounded rectangles.
@@ -29,7 +26,6 @@ internal static class OverlayStyle
         drawList.AddRect(min, max, ImGui.GetColorU32(Edge), rounding, ImDrawFlags.None, 1f);
     }
 
-    /// <summary>Panel behind the current window (call right after Begin; uses the size of the previous frame).</summary>
     public static void WindowBackground(float rounding)
     {
         var min = ImGui.GetWindowPos();
@@ -43,7 +39,6 @@ internal static class OverlayStyle
         drawList.PopClipRect();
     }
 
-    /// <summary>Height of the buttons of the floating bar (and width of the icon buttons, which are square).</summary>
     public const float ButtonSize = 30f;
 
     private static readonly Vector4 IconIdle = new(0.80f, 0.81f, 0.84f, 1f);
@@ -51,10 +46,8 @@ internal static class OverlayStyle
     private static readonly Vector4 IconDisabled = new(1f, 1f, 1f, 0.28f);
     private static readonly Vector4 ChevronColor = new(1f, 1f, 1f, 0.45f);
 
-    /// <summary>
-    /// Square icon button of the floating bar: just the icon until hovered (faint light fill);
-    /// the active one (current tool, toggle on) keeps a soft light fill and a white icon.
-    /// </summary>
+    // Square icon button of the floating bar: just the icon until hovered (faint light fill); the active one (current
+    // tool, toggle on) keeps a soft light fill and a white icon.
     public static bool IconButton(string id, string icon, string? tooltip = null, bool active = false, bool enabled = true)
     {
         var size = new Vector2(ButtonSize);
@@ -70,7 +63,6 @@ internal static class OverlayStyle
         return clicked;
     }
 
-    /// <summary>Button of the floating bar that opens a menu: icon, label, then a small dim chevron.</summary>
     public static bool MenuButton(string id, string icon, string label, string? tooltip = null)
     {
         const float padding = 10f, iconGap = 7f, chevronGap = 5f, chevronScale = 0.8f;
@@ -114,7 +106,6 @@ internal static class OverlayStyle
 
     private static Vector2 Snap(Vector2 p) => new(MathF.Floor(p.X), MathF.Floor(p.Y));
 
-    /// <summary>Short, faint vertical line between groups of the floating bar.</summary>
     public static void Divider()
     {
         const float lineHeight = 16f;
@@ -126,10 +117,8 @@ internal static class OverlayStyle
         ImGui.SameLine(0, 7);
     }
 
-    /// <summary>
-    /// Popup opened from the floating bar, in the same style, just under the point <paramref name="anchor"/>
-    /// (bottom left of the button that opens it). Call <see cref="EndPopup"/> if it returns true.
-    /// </summary>
+    // Popup opened from the floating bar, in the same style, just under the point anchor (bottom left of the button
+    // that opens it).
     public static bool BeginPopup(string id, Vector2 anchor)
     {
         ImGui.SetNextWindowPos(anchor + new Vector2(0, 8));

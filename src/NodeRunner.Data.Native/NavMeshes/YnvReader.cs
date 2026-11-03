@@ -4,12 +4,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.NavMeshes;
 
-/// <summary>
-/// NodeRunner's own reader for navmesh files (.ynv).
-/// Layout documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// Reads vertices, indices and polygons. Edges (adjacency), portals and the sector tree are not read yet,
-/// except the tree's root bounds, needed to decode vertex positions.
-/// </summary>
+// reader for navmesh files (.ynv).
 public sealed class YnvReader : INavMeshReader
 {
     private const int HeaderSize = 0x170;
@@ -77,7 +72,6 @@ public sealed class YnvReader : INavMeshReader
 
     private delegate void ItemReader(ResourceData data, int offset);
 
-    /// <summary>Reads every item of a split list whose pointer is stored at <paramref name="pointerOffset"/>.</summary>
     private static void ReadList(ResourceData res, int pointerOffset, int itemSize, string what, ItemReader read)
     {
         ulong listPointer = res.UInt64(pointerOffset);

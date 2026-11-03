@@ -4,16 +4,13 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.Native.Resources;
 
-/// <summary>
-/// Resource files as stored on disk ("RSC7"): a 16-byte header (magic, version, system and graphics page flags)
-/// followed by the content compressed with raw Deflate. This is the form a loose .ymap takes in a FiveM resource.
-/// </summary>
+// Resource files as stored on disk ("RSC7"): a 16-byte header (magic, version, system and graphics page flags)
+// followed by the content compressed with raw Deflate.
 public static class ResourceFile
 {
     private const uint Magic = 0x37435352; // "RSC7"
     private const int HeaderSize = 16;
 
-    /// <summary>Builds a resource file from its uncompressed content (as returned by IGameFileSystem.ReadFile).</summary>
     public static byte[] Write(ResourceHeader header, ReadOnlySpan<byte> content)
     {
         using var output = new MemoryStream();
@@ -28,7 +25,6 @@ public static class ResourceFile
         return output.ToArray();
     }
 
-    /// <summary>Reads a resource file written by <see cref="Write"/> (or by another tool): header and uncompressed content.</summary>
     public static (ResourceHeader Header, byte[] Content) Read(ReadOnlySpan<byte> file)
     {
         if (file.Length < HeaderSize || BinaryPrimitives.ReadUInt32LittleEndian(file) != Magic)

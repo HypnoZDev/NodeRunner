@@ -2,10 +2,8 @@ using System.Numerics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// The volume seen by the camera, used to skip objects that are off screen.
-/// Built from a view-projection matrix (reversed-Z, infinite far plane: only 5 planes matter).
-/// </summary>
+// The volume seen by the camera, used to skip objects that are off screen. Built from a view-projection matrix
+// (reversed-Z, infinite far plane: only 5 planes matter).
 public readonly struct Frustum
 {
     private readonly Plane _left, _right, _bottom, _top, _near;
@@ -26,7 +24,6 @@ public readonly struct Frustum
         _near = Normalize(c4 - c3); // Reversed Z: depth <= w in front of the near plane.
     }
 
-    /// <summary>True if any part of the sphere may be visible.</summary>
     public bool Intersects(Vector3 center, float radius) =>
         Distance(_left, center) >= -radius &&
         Distance(_right, center) >= -radius &&

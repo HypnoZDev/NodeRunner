@@ -4,11 +4,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Maps;
 
-/// <summary>
-/// NodeRunner's own reader for map data files (binary Meta .ymap, root structure CMapData).
-/// Layout documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// Reads the header and the entities (ordinary entities and interior instances).
-/// </summary>
+// reader for map data files (binary Meta .ymap, root structure CMapData).
 public sealed class YmapReader : IMapDataReader
 {
     // Structure name hashes as they appear in the files.
@@ -78,11 +74,10 @@ public sealed class YmapReader : IMapDataReader
         };
     }
 
-    /// <summary>Offsets of the entities (ordinary ones and interior instances) of the CMapData at <paramref name="map"/>, in file order.</summary>
+    // Offsets of the entities (ordinary ones and interior instances) of the CMapData at map, in file order.
     internal static IEnumerable<(int Offset, uint Structure)> EntityOffsets(MetaResource meta, int map) =>
         meta.ReadPointerArray(map + MapEntities).Where(e => e.Structure is EntityStructure or InteriorInstanceStructure);
 
-    /// <summary>Reads a CEntityDef (also used for the objects inside interiors, in .ytyp files).</summary>
     internal static MapEntity ReadEntity(MetaResource meta, int o, bool isInterior, int room = -1, int portal = -1, int sourceIndex = -1)
     {
         var d = meta.Data;

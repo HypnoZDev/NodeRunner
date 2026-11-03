@@ -3,7 +3,7 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>Where an object is, how it is turned (world orientation) and scaled.</summary>
+// Where an object is, how it is turned (world orientation) and scaled.
 public readonly record struct Placement(Vector3 Position, Quaternion Orientation, Vector3 Scale)
 {
     public static Placement Of(MapEntity entity) => new(entity.Position, entity.Orientation, entity.Scale);
@@ -11,7 +11,7 @@ public readonly record struct Placement(Vector3 Position, Quaternion Orientation
     public void ApplyTo(MapEntity entity) => entity.SetPlacement(Position, Orientation, Scale);
 }
 
-/// <summary>An object moved, turned or scaled.</summary>
+// An object moved, turned or scaled.
 public sealed class PlacementEdit(MapEntity entity, Placement before, Placement after, string description) : IEdit
 {
     public string Description { get; } = description;
@@ -23,7 +23,7 @@ public sealed class PlacementEdit(MapEntity entity, Placement before, Placement 
     public void Redo() => After.ApplyTo(entity);
 }
 
-/// <summary>Several objects moved, turned or scaled together (one undo step); the last one is the main one.</summary>
+// Several objects moved, turned or scaled together (one undo step); the last one is the main one.
 public sealed class GroupPlacementEdit(IReadOnlyList<MapEntity> entities, IReadOnlyList<Placement> before, IReadOnlyList<Placement> after, string description) : IEdit
 {
     public string Description { get; } = description;
@@ -41,10 +41,8 @@ public sealed class GroupPlacementEdit(IReadOnlyList<MapEntity> entities, IReadO
     }
 }
 
-/// <summary>
-/// Moving, turning and scaling a group of objects around its centre (the middle of the box around their positions):
-/// each object keeps its place in the group.
-/// </summary>
+// Moving, turning and scaling a group of objects around its centre (the middle of the box around their positions):
+// each object keeps its place in the group.
 public static class GroupTransform
 {
     public static Vector3 Pivot(IEnumerable<Vector3> positions)
@@ -61,16 +59,13 @@ public static class GroupTransform
 
     public static Placement Move(Placement start, Vector3 delta) => start with { Position = start.Position + delta };
 
-    /// <summary>Turns the object by <paramref name="turn"/> (world axes) around <paramref name="pivot"/>.</summary>
     public static Placement Rotate(Placement start, Vector3 pivot, Quaternion turn) => new(
         pivot + Vector3.Transform(start.Position - pivot, turn),
         Quaternion.Normalize(Quaternion.Concatenate(start.Orientation, turn)),
         start.Scale);
 
-    /// <summary>
-    /// Scales the group around <paramref name="pivot"/>: distances along X and Y by <paramref name="horizontal"/>, along Z
-    /// by <paramref name="vertical"/>; each object's own scale likewise (the game stores one horizontal scale, one vertical).
-    /// </summary>
+    // Scales the group around pivot: distances along X and Y by horizontal, along Z by vertical; each object's own
+    // scale likewise (the game stores one horizontal scale, one vertical).
     public static Placement Scale(Placement start, Vector3 pivot, float horizontal, float vertical)
     {
         var factors = new Vector3(horizontal, horizontal, vertical);
@@ -78,7 +73,7 @@ public static class GroupTransform
     }
 }
 
-/// <summary>Rotation angles as shown in the interface: around X, then Y, then Z (world axes), in degrees.</summary>
+// Rotation angles as shown in the interface: around X, then Y, then Z (world axes), in degrees.
 public static class EulerAngles
 {
     private const float ToDegrees = 180f / MathF.PI;

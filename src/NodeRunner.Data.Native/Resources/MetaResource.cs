@@ -1,11 +1,6 @@
 namespace NodeRunner.Data.Native.Resources;
 
-/// <summary>
-/// Reader for "Meta" resources (.ymt, .ymap and .ytyp in their binary form).
-/// A Meta file is a list of data blocks; each block holds items of one structure type, identified by a hash.
-/// Pointers between items are encoded as (block number in the low 12 bits, offset in the block above).
-/// The file also describes its own structures (name hash and size), which is used to validate the layout.
-/// </summary>
+// Reader for "Meta" resources (.ymt, .ymap and .ytyp in their binary form).
 internal readonly ref struct MetaResource
 {
     // Header (after the 16-byte resource file base).
@@ -38,21 +33,18 @@ internal readonly ref struct MetaResource
         _dataBlocksOffset = Data.ResolveArray(Data.UInt64(DataBlocksPointerOffset), _dataBlocksCount, DataBlockInfoSize, "les blocs");
     }
 
-    /// <summary>Index (0-based) of the block holding the root item, or -1.</summary>
     public int RootBlock => (int)Data.UInt32(RootBlockIndexOffset) - 1;
 
     public uint BlockStructure(int block) => Data.UInt32(BlockInfo(block));
 
     public int BlockLength(int block) => (int)Data.UInt32(BlockInfo(block) + 4);
 
-    /// <summary>Offset in the file of the first byte of a block.</summary>
     public int BlockStart(int block)
     {
         int length = BlockLength(block);
         return Data.ResolveArray(Data.UInt64(BlockInfo(block) + 8), Math.Max(length, 1), 1, $"le bloc {block + 1}");
     }
 
-    /// <summary>Size in bytes of a structure as declared by the file, or -1 if not declared.</summary>
     public int StructureSize(uint structureHash)
     {
         for (int i = 0; i < _structureInfosCount; i++)
@@ -64,7 +56,6 @@ internal readonly ref struct MetaResource
         return -1;
     }
 
-    /// <summary>Checks that the file declares <paramref name="structureHash"/> with the expected size.</summary>
     public void RequireStructure(uint structureHash, int expectedSize, string what)
     {
         int size = StructureSize(structureHash);
@@ -72,10 +63,7 @@ internal readonly ref struct MetaResource
             throw new InvalidDataException($"Structure {what} inattendue (taille {size}, attendue {expectedSize}).");
     }
 
-    /// <summary>
-    /// Resolves an array field (16 bytes: pointer, count) located at <paramref name="fieldOffset"/>.
-    /// Returns the file offset of the first item and the item count (offset -1 when empty).
-    /// </summary>
+    // Resolves an array field (16 bytes: pointer, count) located at fieldOffset.
     public (int Offset, int Count) ReadArray(int fieldOffset, int itemSize)
     {
         ulong pointer = Data.UInt64(fieldOffset);
@@ -93,11 +81,8 @@ internal readonly ref struct MetaResource
         return (BlockStart(block) + offsetInBlock, count);
     }
 
-    /// <summary>
-    /// Resolves an array of pointers (16-byte field) at <paramref name="fieldOffset"/>: each item points to a
-    /// structure in another block, possibly of different types. Returns, for each item, the file offset of the
-    /// structure and its structure name hash.
-    /// </summary>
+    // Resolves an array of pointers (16-byte field) at fieldOffset: each item points to a structure in another block,
+    // possibly of different types.
     public List<(int Offset, uint Structure)> ReadPointerArray(int fieldOffset)
     {
         const int pointerSize = 8;
@@ -117,7 +102,6 @@ internal readonly ref struct MetaResource
         return items;
     }
 
-    /// <summary>Text of a character pointer field (16 bytes: pointer, length, like an array), "" when empty.</summary>
     public string String(int fieldOffset)
     {
         var (start, count) = ReadArray(fieldOffset, 1);

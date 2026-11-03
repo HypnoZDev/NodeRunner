@@ -3,21 +3,18 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.Data.Textures;
 
-/// <summary>"Child" texture dictionary that falls back on "Parent" for the textures it does not hold.</summary>
+// "Child" texture dictionary that falls back on "Parent" for the textures it does not hold.
 public readonly record struct TextureParentLink(string Child, string Parent);
 
-/// <summary>Reads the texture dictionary relationships files (gtxd.ymt, gtxd.meta).</summary>
+// Reads the texture dictionary relationships files (gtxd.ymt, gtxd.meta).
 public interface ITextureParentReader
 {
-    /// <exception cref="InvalidDataException">The file is damaged or in an unsupported format.</exception>
     IReadOnlyList<TextureParentLink> ReadParents(byte[] data);
 }
 
-/// <summary>
-/// Index of the texture dictionaries (.ytd) the game uses (base game, update and DLC packs, see
-/// <see cref="GameContent"/>), by name hash, with their parents: a model looks for a texture in its own
-/// dictionary, then in the parent, the grand-parent... (shared textures of a district, of all roads...).
-/// </summary>
+// Index of the texture dictionaries (.ytd) the game uses (base game, update and DLC packs, see GameContent), by name
+// hash, with their parents: a model looks for a texture in its own dictionary, then in the parent, the
+// grand-parent...
 public sealed class TextureCatalog
 {
     private const int MaxChainLength = 16;
@@ -34,7 +31,6 @@ public sealed class TextureCatalog
     public int FileCount => _dictionaries.Count;
     public int ParentLinkCount => _parents.Count;
 
-    /// <summary>Messages about relationships files that could not be read.</summary>
     public List<string> Errors { get; } = new();
 
     public static TextureCatalog Create(GameContent content, ITextureParentReader parentReader)
@@ -66,16 +62,11 @@ public sealed class TextureCatalog
         return catalog;
     }
 
-    /// <summary>Path of the .ytd file of a texture dictionary, or null.</summary>
     public string? Locate(uint dictionaryHash) => _dictionaries.GetValueOrDefault(dictionaryHash);
 
-    /// <summary>The parent of a texture dictionary, 0 if none.</summary>
     public uint GetParent(uint dictionaryHash) => _parents.GetValueOrDefault(dictionaryHash);
 
-    /// <summary>
-    /// Paths of the .ytd files to search for a texture, in order: the dictionary itself, then its parents.
-    /// Dictionaries without a file are skipped (but their parents are not).
-    /// </summary>
+    // Paths of the .ytd files to search for a texture, in order: the dictionary itself, then its parents.
     public List<string> GetSearchChain(uint dictionaryHash)
     {
         var chain = new List<string>();

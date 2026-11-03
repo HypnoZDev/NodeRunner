@@ -2,12 +2,10 @@ using System.Buffers.Binary;
 
 namespace NodeRunner.Data.Native.Resources;
 
-/// <summary>
-/// Bounds-checked little-endian reads in decompressed resource data (the content of a RSC7 file).
-/// Pointers inside a resource are "virtual" addresses: 0x50000000 + offset in the system segment, 0x60000000 +
-/// offset in the graphics segment (pixels, vertices...), which follows the system pages in the decompressed data.
-/// The graphics segment is only reachable when its start is given.
-/// </summary>
+// Bounds-checked little-endian reads in decompressed resource data (the content of a RSC7 file). Pointers inside a
+// resource are "virtual" addresses: 0x50000000 + offset in the system segment, 0x60000000 + offset in the graphics
+// segment (pixels, vertices...), which follows the system pages in the decompressed data. The graphics segment is
+// only reachable when its start is given.
 internal readonly ref struct ResourceData
 {
     private const ulong SystemBase = 0x50000000;
@@ -32,7 +30,6 @@ internal readonly ref struct ResourceData
     public ulong UInt64(int offset) => BinaryPrimitives.ReadUInt64LittleEndian(Slice(offset, 8));
     public ReadOnlySpan<byte> Bytes(int offset, int length) => Slice(offset, length);
 
-    /// <summary>Null-terminated ASCII text at a pointer; null for a null pointer.</summary>
     public string? Text(ulong pointer, string what)
     {
         if (pointer == 0)
@@ -44,10 +41,7 @@ internal readonly ref struct ResourceData
         return System.Text.Encoding.ASCII.GetString(_data.Slice(start, length));
     }
 
-    /// <summary>
-    /// Converts a resource pointer to an offset in the data, checking that <paramref name="count"/> items
-    /// of <paramref name="itemSize"/> bytes fit. Returns -1 for a null pointer with no items.
-    /// </summary>
+    // Converts a resource pointer to an offset in the data, checking that count items of itemSize bytes fit.
     public int ResolveArray(ulong pointer, long count, int itemSize, string what)
     {
         if (count == 0)

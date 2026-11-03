@@ -8,18 +8,8 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Draws the real 3D models of the map, following the game's level-of-detail tree (see <see cref="LodSelector"/>):
-/// detailed objects up close, simplified district models (LOD, SLOD) far away, so the whole map is visible.
-/// <list type="bullet">
-/// <item>the list of objects to show is rebuilt on a background thread when the camera moves;</item>
-/// <item>while the detailed models of an area are loading, its simplified parent model is shown instead;</item>
-/// <item>missing models are read on another background thread, nearest objects first, with their textures;</item>
-/// <item>models are uploaded to the GPU a few per frame and released when unused for a while;</item>
-/// <item>textures are shared between models (a district's textures are uploaded once) and released
-/// when no loaded model uses them anymore.</item>
-/// </list>
-/// </summary>
+// Draws the real 3D models of the map, following the game's level-of-detail tree: detailed objects up close,
+// simplified district models (LOD, SLOD) far away, so the whole map is visible.
 internal sealed class ModelLayer : IDisposable
 {
     public const string LayerName = "Models";
@@ -62,33 +52,28 @@ internal sealed class ModelLayer : IDisposable
         Task.Run(ReadModelsInBackground);
     }
 
-    /// <summary>
-    /// An object to draw: where (computed for <see cref="MapEntity.Revision"/> of the entity), which model,
-    /// its bounding sphere in the world (for culling), and the lower-detail object to show while its model
-    /// is not loaded yet.
-    /// </summary>
+    // An object to draw: where (computed for Revision of the entity), which model, its bounding sphere in the world
+    // (for culling), and the lower-detail object to show while its model is not loaded yet.
     private sealed record VisibleEntity(
         MapEntity Entity, int Revision, Matrix4x4 Transform, ModelLocation Location, Vector3 SphereCenter, float SphereRadius)
     {
         public VisibleEntity? Fallback { get; init; }
 
-        /// <summary>False once the object was moved, turned or scaled in the editor.</summary>
         public bool IsCurrent => Revision == Entity.Revision && (Fallback?.IsCurrent ?? true);
     }
 
-    /// <summary>An object drawn in the last frame (kept to find the one under the mouse).</summary>
+    // An object drawn in the last frame (kept to find the one under the mouse).
     private sealed record DrawnEntity(MapEntity Entity, GpuModel Model, Matrix4x4 Transform, Vector3 Tint);
 
-    /// <summary>The selected object is drawn brighter and warmer.</summary>
     private static readonly Vector3 SelectedTint = new(1.7f, 1.35f, 0.6f);
 
     private readonly List<DrawnEntity> _drawn = new();
 
-    /// <summary>A model read by the background thread (null if the file has none), with the texture of each mesh.</summary>
+    // A model read by the background thread (null if the file has none), with the texture of each mesh.
     private sealed record LoadedModel(
         ModelLocation Location, int Generation, ModelData? Model, ResolvedTexture?[][] Textures, List<string> Errors);
 
-    /// <summary>A texture on the GPU (null if its format is not supported) and the number of loaded models using it.</summary>
+    // A texture on the GPU (null if its format is not supported) and the number of loaded models using it.
     private sealed class SharedTexture(GpuTexture? texture)
     {
         public GpuTexture? Texture { get; } = texture;
@@ -103,10 +88,8 @@ internal sealed class ModelLayer : IDisposable
     public int PendingModelCount => _pending.Count;
     public long GpuBytes => _models.Values.Sum(m => m?.ByteSize ?? 0) + _textures.Values.Sum(t => t.Texture?.ByteSize ?? 0);
 
-    /// <summary>Models and textures that could not be read (shown in the status panel).</summary>
     public List<string> Errors { get; } = new();
 
-    /// <param name="hour">Hour of the day (0 to 23): some objects are only shown at certain hours (lit windows at night).</param>
     public void Update(WorldLoader loader, ModelRenderer renderer, Vector3 cameraPosition, float distanceMultiplier, int hour, bool enabled)
     {
         if (loader.Maps != _library || loader.Models != _catalog)
@@ -151,10 +134,8 @@ internal sealed class ModelLayer : IDisposable
         EvictUnusedModels(enabled);
     }
 
-    /// <summary>
-    /// Share of the models around the camera already on the GPU (0 to 1), while no frame is drawn yet (start-up
-    /// screen): they are marked used, so they are not released before the first frame.
-    /// </summary>
+    // Share of the models around the camera already on the GPU (0 to 1), while no frame is drawn yet (start-up
+    // screen): they are marked used, so they are not released before the first frame.
     public float PreloadProgress()
     {
         if (_library is null || _building is not null || float.IsNaN(_builtCenter.X))
@@ -173,9 +154,6 @@ internal sealed class ModelLayer : IDisposable
         return (float)loaded / _visible.Count;
     }
 
-    /// <param name="selected">Objects drawn brighter (the current selection).</param>
-    /// <param name="maxDistance">Objects entirely beyond this distance from the camera are skipped (hidden by the fog).</param>
-    /// <param name="beforeTranslucent">Drawn between the solid and the translucent meshes (the water).</param>
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
         Action? beforeTranslucent = null)
     {
@@ -224,10 +202,8 @@ internal sealed class ModelLayer : IDisposable
         DrawnTriangleCount = triangles;
     }
 
-    /// <summary>
-    /// Draws the objects around the camera into the sun's shadow images, also those off screen (their shadow may fall
-    /// in view). Objects too small for a slice's texels are skipped in that slice. Call after <see cref="Update"/>.
-    /// </summary>
+    // Draws the objects around the camera into the sun's shadow images, also those off screen (their shadow may fall
+    // in view).
     public void DrawShadows(ModelRenderer renderer, ShadowMaps shadows)
     {
         renderer.BeginShadow();
@@ -261,7 +237,6 @@ internal sealed class ModelLayer : IDisposable
         }
     }
 
-    /// <summary>Draws the water meshes (pools, fountains, streams) of the objects drawn in the last <see cref="Draw"/>.</summary>
     public void DrawWater(WaterRenderer water)
     {
         foreach (var drawn in _drawn)
@@ -271,7 +246,6 @@ internal sealed class ModelLayer : IDisposable
         }
     }
 
-    /// <summary>Same object, placed where it is now (after a change in the editor).</summary>
     private VisibleEntity Refresh(VisibleEntity visible)
     {
         if (_library is null || _catalog is null)
@@ -281,10 +255,8 @@ internal sealed class ModelLayer : IDisposable
         return (placed ?? visible) with { Fallback = fallback };
     }
 
-    /// <summary>
-    /// The object seen at pixel (<paramref name="x"/>, <paramref name="y"/>) of the last frame drawn, null if none:
-    /// the objects are drawn again into <paramref name="buffer"/>, each with its number (back buffer to rebind afterwards).
-    /// </summary>
+    // The object seen at pixel (x, y) of the last frame drawn, null if none: the objects are drawn again into buffer,
+    // each with its number (back buffer to rebind afterwards).
     public MapEntity? Pick(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y)
     {
         buffer.Begin(width, height);
@@ -296,10 +268,7 @@ internal sealed class ModelLayer : IDisposable
         return number >= 1 && number <= _drawn.Count ? _drawn[(int)number - 1].Entity : null;
     }
 
-    /// <summary>
-    /// The 3D point of the drawn models at pixel (<paramref name="x"/>, <paramref name="y"/>) of the view, null if
-    /// none is there (sky).
-    /// </summary>
+    // The 3D point of the drawn models at pixel (x, y) of the view, null if none is there (sky).
     public Vector3? PickPoint(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y)
     {
         if (Pick(renderer, buffer, viewProjection, width, height, x, y) is null)
@@ -312,7 +281,6 @@ internal sealed class ModelLayer : IDisposable
         return Math.Abs(world.W) < 1e-12f ? null : new Vector3(world.X, world.Y, world.Z) / world.W;
     }
 
-    /// <summary>Entities chosen by the level-of-detail tree for this camera position, nearest first.</summary>
     private static List<VisibleEntity> FindVisible(MapLibrary library, ModelCatalog catalog, Vector3 camera, float multiplier, int hour)
     {
         var parents = new Dictionary<MapEntity, VisibleEntity?>();
@@ -422,7 +390,6 @@ internal sealed class ModelLayer : IDisposable
             _drawn.Clear(); // May refer to released models: rebuilt at the next frame drawn.
     }
 
-    /// <summary>Releases a model from the GPU, and the textures no other loaded model uses.</summary>
     private void ReleaseModel(ModelLocation location)
     {
         if (_models.Remove(location, out var model))

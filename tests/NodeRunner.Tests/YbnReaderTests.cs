@@ -4,10 +4,8 @@ using NodeRunner.Data.Native.Collisions;
 
 namespace NodeRunner.Tests;
 
-/// <summary>
-/// A collision file built in memory: a composite holding a geometry with a search tree (3 triangles, placed 100 m
-/// along X) and a lone box. Both transform arrays point to the same data, as in some of the game's files.
-/// </summary>
+// A collision file built in memory: a composite holding a geometry with a search tree (3 triangles, placed 100 m
+// along X) and a lone box.
 public class YbnReaderTests
 {
     private const int Composite = 0x000, ChildPointers = 0x200, Transforms = 0x240, ChildBoxes = 0x2C0, ChildFlags = 0x300;

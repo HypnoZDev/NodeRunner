@@ -1,14 +1,14 @@
 using System.Numerics;
 using ImGuiNET;
 using NodeRunner.App.World;
+using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Models;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Dockable "Visionneuse" panel: list of the vehicles and object types on the left (search), the model alone on
-/// the right, turned with the mouse (left drag: turn, wheel: zoom, double-click: default view).
-/// </summary>
+// Dockable "Visionneuse" panel: list of the vehicles and object types on the left (search), the model alone on the
+// right, turned with the mouse (left drag: turn, wheel: zoom, double-click: default view).
 internal sealed unsafe class ViewerPanel(AppState state)
 {
     public const string Title = $"{Icons.Box}  Visionneuse###Visionneuse";
@@ -27,7 +27,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private (int Filter, string Search, ViewerCatalog? Catalog) _rowsBuiltFor;
     private bool _scrollToItem;
 
-    /// <summary>Opens the model of an object type (from Properties, for instance) and shows it in the list.</summary>
     public void OpenArchetype(uint archetypeHash)
     {
         var world = state.World;
@@ -36,6 +35,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
         string name = world.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
         Viewer.Open(new ViewerItem(name, ViewerKind.Object, location), world);
         _filter = 1;
+        _search = "";
+        _scrollToItem = true;
+    }
+
+    public void OpenFile(string path)
+    {
+        string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+        var kind = ViewerCatalog.IsVehicleFile(path) ? ViewerKind.Vehicle : ViewerKind.Object;
+        Viewer.Open(new ViewerItem(name, kind, new ModelLocation(path, Joaat.Hash(name))), state.World);
+        _filter = kind == ViewerKind.Vehicle ? 0 : 1;
         _search = "";
         _scrollToItem = true;
     }
@@ -63,7 +72,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.End();
     }
 
-    /// <summary>The lists are built on a background thread once per loaded map.</summary>
     private void UpdateCatalog()
     {
         var world = state.World;
@@ -134,7 +142,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.EndChild();
     }
 
-    /// <summary>Rows of the current tab matching the search, recomputed only when one of them changes.</summary>
     private void UpdateRows()
     {
         if (_rowsBuiltFor == (_filter, _search, _catalog))

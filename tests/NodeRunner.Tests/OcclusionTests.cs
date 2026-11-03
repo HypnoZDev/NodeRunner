@@ -106,7 +106,6 @@ public class OcclusionTests
             [model.Vertices[model.Indices[0]], model.Vertices[model.Indices[1]], model.Vertices[model.Indices[2]]]);
     }
 
-    /// <summary>A map file with 3 box occluders and 2 meshes (a quad of 2 triangles, a single triangle).</summary>
     private static byte[] SampleMap()
     {
         var document = new MetaDocument { Name = "sample_occl", RootBlock = 0 };

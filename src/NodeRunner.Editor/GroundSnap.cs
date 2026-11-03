@@ -4,28 +4,18 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>Collision placed in the world: a map file (identity) or the collision of an interior instance.</summary>
+// Collision placed in the world: a map file (identity) or the collision of an interior instance.
 public readonly record struct PlacedCollision(CollisionMesh Mesh, Matrix4x4 Transform);
 
-/// <summary>
-/// "Put on the ground": moves an object up or down so that the bottom of its box rests on the collision below it.
-/// Vertical rays are cast at its centre and under the four bottom corners of its box; the highest surface hit is the
-/// support (on a slope, the object rests on its uphill side, as a real object would). Only the height changes.
-/// Rays start a little above the bottom of the object (<see cref="MaxRise"/>), not at its top: a half-buried object
-/// still comes up, but a building is not lifted onto its own roof (map collision files include the building itself).
-/// </summary>
+// "Put on the ground": moves an object up or down so that the bottom of its box rests on the collision below it.
 public static class GroundSnap
 {
-    /// <summary>Highest a surface can be above the bottom of the object and still count (at most half its height).</summary>
     public const float MaxRise = 2f;
 
-    /// <summary>Corner rays are moved this far towards the centre, so a wall touching the object is not taken for the ground.</summary>
+    // Corner rays are moved this far towards the centre, so a wall touching the object is not taken for the ground.
     private const float CornerInset = 0.9f;
 
-    /// <summary>
-    /// World box of an object (8 corners of its type's box, placed), or null without a type box.
-    /// Interior types (MLO) have an empty box in the game's files: the box around their rooms is used.
-    /// </summary>
+    // World box of an object (8 corners of its type's box, placed), or null without a type box.
     public static (Vector3 Min, Vector3 Max)? WorldBox(MapEntity entity, Archetype? archetype)
     {
         if (archetype is null)
@@ -51,9 +41,7 @@ public static class GroundSnap
         return (min, max);
     }
 
-    /// <summary>
-    /// New position that puts the object on the ground, or null if no collision lies below it.
-    /// </summary>
+    // New position that puts the object on the ground, or null if no collision lies below it.
     public static Vector3? Snap(MapEntity entity, Archetype? archetype, IReadOnlyList<PlacedCollision> collisions)
     {
         var box = WorldBox(entity, archetype) ?? (entity.Position, entity.Position);
@@ -82,10 +70,8 @@ public static class GroundSnap
         return ground is { } g ? entity.Position with { Z = entity.Position.Z + (g - box.Min.Z) } : null;
     }
 
-    /// <summary>Height from which the rays are cast, for an object whose box goes from <paramref name="bottom"/> to <paramref name="top"/>.</summary>
     public static float StartHeight(float bottom, float top) => bottom + MathF.Min((top - bottom) * 0.5f, MaxRise);
 
-    /// <summary>Height of the highest collision surface at (x, y) below <paramref name="fromZ"/>, or null.</summary>
     public static float? HighestBelow(IReadOnlyList<PlacedCollision> collisions, Vector2 point, float fromZ)
     {
         float? best = null;
@@ -112,7 +98,7 @@ public static class GroundSnap
         return best;
     }
 
-    /// <summary>Height of a triangle above (x, y), or null if the vertical line misses it (or the triangle is vertical).</summary>
+    // Height of a triangle above (x, y), or null if the vertical line misses it (or the triangle is vertical).
     public static float? HeightAt(Vector3 a, Vector3 b, Vector3 c, Vector2 p)
     {
         // Quick rejection on the triangle's 2D box.

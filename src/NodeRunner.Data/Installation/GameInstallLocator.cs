@@ -2,7 +2,7 @@ using NodeRunner.Data.Installation.Sources;
 
 namespace NodeRunner.Data.Installation;
 
-/// <summary>Finds game installations on this computer by asking several candidate sources.</summary>
+// Finds game installations on this computer by asking several candidate sources.
 public sealed class GameInstallLocator
 {
     private readonly IReadOnlyList<IInstallCandidateSource> _sources;
@@ -12,7 +12,6 @@ public sealed class GameInstallLocator
         _sources = sources.ToList();
     }
 
-    /// <summary>Locator with every built-in source (Rockstar Launcher, Steam, Epic Games, default folders).</summary>
     public static GameInstallLocator CreateDefault() => new(
     [
         new RockstarLauncherSource(),
@@ -21,7 +20,6 @@ public sealed class GameInstallLocator
         new DefaultFoldersSource(),
     ]);
 
-    /// <summary>Every valid installation found, without duplicates, in source priority order.</summary>
     public IReadOnlyList<GameInstallation> FindAll()
     {
         var results = new List<GameInstallation>();
@@ -50,10 +48,7 @@ public sealed class GameInstallLocator
         return results;
     }
 
-    /// <summary>
-    /// The installation to use by default: Legacy first (best supported by the data readers for now),
-    /// then Enhanced. Null if nothing was found.
-    /// </summary>
+    // The installation to use by default.
     public GameInstallation? FindPreferred()
     {
         var all = FindAll();

@@ -4,17 +4,14 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Draws scenario points as small markers: a vertical post (about a person's height)
-/// and a short line showing the direction the ped or vehicle faces. One GPU mesh per category.
-/// </summary>
+// Draws scenario points as small markers: a vertical post (about a person's height) and a short line showing the
+// direction the ped or vehicle faces.
 internal sealed class ScenarioLayer : IDisposable
 {
     private const float PostHeight = 1.8f;
     private const float ArrowHeight = 1.2f;
     private const float ArrowLength = 0.8f;
 
-    /// <summary>Markers fade out with distance so the view stays readable from high up.</summary>
     private const float FadeDistance = 2000f;
 
     public static readonly IReadOnlyList<ScenarioCategory> Categories = Enum.GetValues<ScenarioCategory>();
@@ -43,13 +40,10 @@ internal sealed class ScenarioLayer : IDisposable
         _ => Vector4.One,
     };
 
-    /// <summary>Key used to remember the visibility of a category in the settings.</summary>
     public static string LayerName(ScenarioCategory category) => "Scenario." + category;
 
-    /// <summary>Number of points drawn for a category.</summary>
     public int Count(ScenarioCategory category) => _counts[(int)category];
 
-    /// <summary>Rebuilds the meshes when the loader has new data.</summary>
     public void Update(WorldLoader loader, ColorRenderer renderer)
     {
         var scenarios = loader.Scenarios;

@@ -4,10 +4,8 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Bar under the menu: project (with its menu), game folder, save, undo / redo, map version (multiplayer or story mode) and "map after this DLC",
-/// ground grid, global search (Ctrl+K).
-/// </summary>
+// Bar under the menu: project (with its menu), game folder, save, undo / redo, map version (multiplayer or story
+// mode) and "map after this DLC", ground grid, global search (Ctrl+K).
 internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action browseGameFolder, Action openSearch, Action save, Action export)
 {
     private const float PaddingY = 5f;
@@ -72,7 +70,6 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
             openSearch();
     }
 
-    /// <summary>Name of the open project; a click opens the project menu (new, open, recent, close).</summary>
     private void DrawProject()
     {
         var project = state.Project;
@@ -90,7 +87,6 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         }
     }
 
-    /// <summary>Story mode or multiplayer map: changing it reloads the map.</summary>
     private void DrawMapVersion()
     {
         var current = state.Settings.MapVersion;
@@ -114,10 +110,8 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
     public static string VersionName(MapVersion version) =>
         version == MapVersion.Multiplayer ? "Multijoueur / FiveM" : "Solo";
 
-    /// <summary>
-    /// Map as it was after a given DLC pack: previous / next buttons and the list of the packs, in the order
-    /// the game applies them. Changing it reloads the map objects (a few seconds).
-    /// </summary>
+    // Map as it was after a given DLC pack: previous / next buttons and the list of the packs, in the order the game
+    // applies them.
     private void DrawDlcChoice()
     {
         if (state.World.Content is { AllPacks.Count: > 0 } content)

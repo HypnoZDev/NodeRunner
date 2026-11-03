@@ -6,11 +6,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Collisions;
 
-/// <summary>
-/// Reads collision files (.ybn) and removes polygons from them. A file holds one "bounds": usually a composite
-/// whose children are geometries (vertices stored as 16-bit integers times a quantum, polygons of 16 bytes: triangles,
-/// boxes, spheres, capsules, cylinders) with a search tree (BVH), sometimes lone boxes or spheres.
-/// </summary>
+// Reads collision files (.ybn) and removes polygons from them.
 public sealed class YbnReader : ICollisionReader, ICollisionWriter
 {
     private readonly IGameFileSystem _files;
@@ -27,7 +23,6 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return Read(data);
     }
 
-    /// <summary>The triangles of a decompressed .ybn; each remembers the number of the polygon it comes from.</summary>
     public static CollisionMesh? Read(byte[] data)
     {
         var file = new BoundsFile(data);
@@ -45,11 +40,7 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return ResourceFile.Write(header, RemovePolygons(data, polygons));
     }
 
-    /// <summary>
-    /// The decompressed file without these polygons (numbered as <see cref="Read(byte[])"/> does). The file is changed
-    /// in place: kept polygons are packed at the start of their array, search trees rebuilt in their own space,
-    /// a geometry left empty is taken out of its composite. Nothing else moves.
-    /// </summary>
+    // The decompressed file without these polygons (numbered as Read does).
     public static byte[] RemovePolygons(byte[] data, IReadOnlySet<int> polygons)
     {
         var copy = (byte[])data.Clone();
@@ -60,7 +51,7 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     }
 }
 
-/// <summary>Offsets of the bounds structures (64-bit PC version) and the walk shared by reading and editing.</summary>
+// Offsets of the bounds structures (64-bit PC version) and the walk shared by reading and editing.
 internal sealed partial class BoundsFile(byte[] data)
 {
     // Bounds (every type), 0x70 bytes.
@@ -116,7 +107,6 @@ internal sealed partial class BoundsFile(byte[] data)
     private void W16(int o, short v) => BinaryPrimitives.WriteInt16LittleEndian(At(o, 2), v);
     private void W32(int o, uint v) => BinaryPrimitives.WriteUInt32LittleEndian(At(o, 4), v);
 
-    /// <summary>Offset of a pointer to <paramref name="count"/> items of <paramref name="size"/> bytes; -1 if null.</summary>
     private int Resolve(ulong pointer, long count, int size)
     {
         if (pointer == 0 || count == 0)
@@ -129,16 +119,13 @@ internal sealed partial class BoundsFile(byte[] data)
         return (int)offset;
     }
 
-    /// <summary>
-    /// A composite child's placement (4 rows of 3 floats + 1 unused word each: row vectors, translation last).
-    /// </summary>
+    // A composite child's placement (4 rows of 3 floats + 1 unused word each: row vectors, translation last).
     private Matrix4x4 Transform(int o) => new(
         F32(o), F32(o + 4), F32(o + 8), 0,
         F32(o + 16), F32(o + 20), F32(o + 24), 0,
         F32(o + 32), F32(o + 36), F32(o + 40), 0,
         F32(o + 48), F32(o + 52), F32(o + 56), 1);
 
-    /// <summary>Adds the triangles of the bounds at <paramref name="o"/>, placed by its composite's transform.</summary>
     public void Add(CollisionMeshBuilder builder, int o, Matrix4x4 transform, ref int polygon)
     {
         builder.Polygon = -1;
@@ -230,7 +217,6 @@ internal sealed partial class BoundsFile(byte[] data)
         return new Vector3(I16(v), I16(v + 2), I16(v + 4));
     }
 
-    /// <summary>Material type of each polygon: polygon -> material slot -> low byte of the material.</summary>
     private Func<int, byte> Materials(int o, int polygonCount)
     {
         int materialCount = U8(o + MaterialsCount);

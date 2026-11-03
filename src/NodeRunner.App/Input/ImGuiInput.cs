@@ -3,7 +3,7 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Input;
 
-/// <summary>Forwards Windows Forms mouse and keyboard events to Dear ImGui.</summary>
+// Forwards Windows Forms mouse and keyboard events to Dear ImGui.
 internal sealed class ImGuiInput
 {
     private Control? _control;
@@ -24,10 +24,8 @@ internal sealed class ImGuiInput
         control.GotFocus += (_, _) => Send(io => io.AddFocusEvent(true));
     }
 
-    /// <summary>
-    /// Shows the mouse cursor ImGui asks for: text beam over the fields, arrows on the edge of a panel that can be
-    /// resized. Call after <c>ImGui.Render</c>.
-    /// </summary>
+    // Shows the mouse cursor ImGui asks for: text beam over the fields, arrows on the edge of a panel that can be
+    // resized.
     public void UpdateCursor()
     {
         var cursor = ImGui.GetMouseCursor();
@@ -48,10 +46,7 @@ internal sealed class ImGuiInput
         };
     }
 
-    /// <summary>
-    /// Forwards an event only while an ImGui context exists. Windows keeps sending events
-    /// (focus lost, mouse leave...) while the window is closing, after the context is destroyed.
-    /// </summary>
+    // Forwards an event only while an ImGui context exists.
     private static void Send(Action<ImGuiIOPtr> action)
     {
         if (ImGui.GetCurrentContext() == IntPtr.Zero)

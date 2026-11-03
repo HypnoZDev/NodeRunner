@@ -6,11 +6,8 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Streams the navmesh around the camera: tiles within the chosen radius are read on a background thread
-/// (nearest first), turned into GPU meshes a few per frame, and released when the camera moves away.
-/// Each tile is drawn as translucent, slightly shaded surfaces plus polygon outlines, coloured by surface kind.
-/// </summary>
+// Streams the navmesh around the camera: tiles within the chosen radius are read on a background thread (nearest
+// first), turned into GPU meshes a few per frame, and released when the camera moves away.
 internal sealed class NavMeshLayer : IDisposable
 {
     public const float MinRadius = 150f;
@@ -72,10 +69,8 @@ internal sealed class NavMeshLayer : IDisposable
     public int AvailableTileCount => _catalog?.TileCount ?? 0;
     public int TriangleCount => _tiles.Values.Sum(t => t.TriangleCount);
 
-    /// <summary>Tiles that could not be read (shown in the status panel).</summary>
     public List<string> Errors { get; } = new();
 
-    /// <summary>Requests the tiles around the camera, builds the ones that arrived, releases far ones.</summary>
     public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, float radius, bool enabled)
     {
         if (loader.NavMeshes != _catalog)
@@ -200,7 +195,6 @@ internal sealed class NavMeshLayer : IDisposable
             surfaces.Sum(b => b.TriangleCount));
     }
 
-    /// <summary>Polygon normal (Newell's method, robust for any number of corners).</summary>
     private static Vector3 Normal(List<Vector3> corners)
     {
         var n = Vector3.Zero;

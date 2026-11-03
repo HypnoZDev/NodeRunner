@@ -1,9 +1,7 @@
 namespace NodeRunner.App;
 
-/// <summary>
-/// The control DirectX draws into. Windows Forms must not paint it itself (no flicker),
-/// and arrow keys / Tab must reach ImGui instead of moving the focus between controls.
-/// </summary>
+// The control DirectX draws into. Windows Forms must not paint it itself (no flicker), and arrow keys / Tab must
+// reach ImGui instead of moving the focus between controls.
 internal sealed class RenderSurface : Control
 {
     public RenderSurface()
@@ -15,10 +13,8 @@ internal sealed class RenderSurface : Control
 
     protected override bool IsInputKey(Keys keyData) => true;
 
-    /// <summary>
-    /// True for the points that belong to the window frame drawn by the interface (title bar, top edge): the mouse there
-    /// goes to the main form, which tells Windows to drag, resize or show the snap layouts.
-    /// </summary>
+    // True for the points that belong to the window frame drawn by the interface (title bar, top edge): the mouse
+    // there goes to the main form, which tells Windows to drag, resize or show the snap layouts.
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Func<Point, bool>? IsWindowFrame { get; set; }
 

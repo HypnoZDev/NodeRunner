@@ -2,11 +2,8 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Native.Collisions;
 
-/// <summary>
-/// Builds the game's collision search tree (BVH): boxes split in two along their longest spread until a node holds
-/// few enough items. Nodes are stored depth first; an inner node gives the number of nodes of its subtree (to skip
-/// it), a leaf gives its first item and item count. The tree is also cut into "trees" of at most 127 nodes.
-/// </summary>
+// Builds the game's collision search tree (BVH): boxes split in two along their longest spread until a node holds few
+// enough items.
 internal static class BvhBuilder
 {
     public const int MaxTreeNodes = 127;
@@ -15,14 +12,8 @@ internal static class BvhBuilder
 
     public readonly record struct Tree(Vector3 Min, Vector3 Max, int FirstNode, int EndNode);
 
-    /// <param name="Order">Item of each position: items are grouped by leaf, leaves in node order.</param>
     public sealed record Result(int[] Order, List<Node> Nodes, List<Tree> Trees);
 
-    /// <param name="threshold">Most items in a leaf (4 for geometries, 1 for composites).</param>
-    /// <param name="reorder">
-    /// Whether leaves point into the reordered list (<see cref="Result.Order"/>); otherwise a leaf holds exactly
-    /// one item and points to its original index (composites keep their children in place).
-    /// </param>
     public static Result Build(IReadOnlyList<(Vector3 Min, Vector3 Max)> items, int threshold, bool reorder)
     {
         var root = BuildNode(Enumerable.Range(0, items.Count).ToList(), items, threshold);

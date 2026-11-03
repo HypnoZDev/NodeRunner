@@ -6,12 +6,9 @@ using NodeRunner.App.World;
 
 namespace NodeRunner.App;
 
-/// <summary>
-/// Start-up screen, shown while the game data and the map load in the background (see <see cref="WorldLoader"/>):
-/// artwork drawn here (night-blue gradient, glow, a network of nodes crossed by a moving light, no text inside it),
-/// the name, a loading bar following the real loading steps, and the credits. Closes itself once the map is loaded,
-/// then the main window opens on a loaded map.
-/// </summary>
+// Start-up screen, shown while the game data and the map load in the background: artwork drawn here (night-blue
+// gradient, glow, a network of nodes crossed by a moving light, no text inside it), the name, a loading bar following
+// the real loading steps, and the credits.
 internal sealed partial class SplashForm : Form
 {
     private static readonly Color Accent = Color.FromArgb(0x4C, 0x8D, 0xFF);
@@ -21,7 +18,6 @@ internal sealed partial class SplashForm : Form
     private const float MapShare = 0.85f; // Share of the bar for the map, the rest for the 3D models.
     private const float ModelsEnough = 0.90f; // The last few models arrive in the main window, a moment later.
 
-    /// <summary>Loading steps (start of the status text) and the share of the bar where each one starts and ends.</summary>
     private static readonly (string Prefix, float From, float To)[] Steps =
     [
         ("Lecture des pathnodes", 0.12f, 0.25f),
@@ -50,7 +46,6 @@ internal sealed partial class SplashForm : Form
     private Func<float>? _preloadModels;
     private double? _modelsStart;
 
-    /// <param name="preloadModels">Loads the 3D models around the camera a step further, returns the share loaded.</param>
     public SplashForm(WorldLoader world, Func<float>? preloadModels)
     {
         _world = world;
@@ -127,7 +122,8 @@ internal sealed partial class SplashForm : Form
         }
     }
 
-    /// <summary>Share of the loading done, from the status text of the loader ("Lecture des objets de la carte : 120 / 5080 fichiers").</summary>
+    // Share of the loading done, from the status text of the loader ("Lecture des objets de la carte : 120 / 5080
+    // fichiers").
     private static float Progress(string status)
     {
         foreach (var (prefix, from, to) in Steps)
@@ -202,7 +198,6 @@ internal sealed partial class SplashForm : Form
         g.FillPath(brush, path);
     }
 
-    /// <summary>A light running along the route of the network, with a fading trail.</summary>
     private void DrawRunner(Graphics g)
     {
         float t = (float)(_clock.Elapsed.TotalSeconds * 0.22 % 1.0);
@@ -228,10 +223,8 @@ internal sealed partial class SplashForm : Form
         return new PointF(_route[i].X + (_route[i + 1].X - _route[i].X) * f, _route[i].Y + (_route[i + 1].Y - _route[i].Y) * f);
     }
 
-    /// <summary>
-    /// The still part of the artwork, drawn once: gradient, glows, then a network of nodes (always the same) towards the
-    /// right, fading behind the text on the left. Returns the route followed by the moving light.
-    /// </summary>
+    // The still part of the artwork, drawn once: gradient, glows, then a network of nodes (always the same) towards
+    // the right, fading behind the text on the left.
     private static (Bitmap, PointF[]) DrawArtwork(Size size)
     {
         var bitmap = new Bitmap(size.Width, size.Height);

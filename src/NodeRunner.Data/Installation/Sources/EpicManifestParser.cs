@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>Extracts the install folder from an Epic Games Launcher manifest, if it is the game we want.</summary>
+// Extracts the install folder from an Epic Games Launcher manifest, if it is the game we want.
 public static class EpicManifestParser
 {
     private const string GameDisplayName = "Grand Theft Auto V";

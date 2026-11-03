@@ -1,9 +1,7 @@
 namespace NodeRunner.Data.Hashing;
 
-/// <summary>
-/// Jenkins "one-at-a-time" hash, used by the game to identify names (models, scenario types, files...).
-/// The game lower-cases names before hashing.
-/// </summary>
+// Jenkins "one-at-a-time" hash, used by the game to identify names (models, scenario types, files...). The game
+// lower-cases names before hashing.
 public static class Joaat
 {
     public static uint Hash(string text)

@@ -5,10 +5,8 @@ using NodeRunner.App.World;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Everything drawn with ImGui: menu bar, toolbar, status bar, dockable panels and floating buttons around
-/// the 3D view, "About" window.
-/// </summary>
+// Everything drawn with ImGui: menu bar, toolbar, status bar, dockable panels and floating buttons around the 3D
+// view, "About" window.
 internal sealed class MainUi
 {
     // Window titles: icon and name; the part after ### is the window's identity (kept in imgui.ini).
@@ -23,6 +21,7 @@ internal sealed class MainUi
     private bool _showProperties = true;
     private bool _showScene = true;
     private bool _showViewer;
+    private bool _showArchives;
     private bool _showImGuiDemo;
     private bool _resetLayout;
 
@@ -35,6 +34,7 @@ internal sealed class MainUi
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
+        _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open);
@@ -46,7 +46,6 @@ internal sealed class MainUi
         _settingsWindow = new SettingsWindow(state);
     }
 
-    /// <summary>Shows an object type in the viewer panel (opened and brought to front).</summary>
     private void OpenInViewer(uint archetypeHash)
     {
         _viewerPanel.OpenArchetype(archetypeHash);
@@ -54,6 +53,14 @@ internal sealed class MainUi
         ImGui.SetWindowFocus(ViewerPanel.Title);
     }
 
+    private void OpenFileInViewer(string path)
+    {
+        _viewerPanel.OpenFile(path);
+        _showViewer = true;
+        ImGui.SetWindowFocus(ViewerPanel.Title);
+    }
+
+    private readonly ArchivePanel _archivePanel;
     private readonly PropertiesPanel _propertiesPanel;
     private readonly ScenePanel _scenePanel;
     private readonly SearchPalette _searchPalette;
@@ -69,39 +76,39 @@ internal sealed class MainUi
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
 
-    /// <summary>Set by the UI when the user asks to pick a game folder; handled by the main form.</summary>
     public bool BrowseGameFolderRequested { get; set; }
 
     public bool ExitRequested { get; set; }
 
-    /// <summary>Set by the UI to save the modified map files (asks for a folder first if none is set); handled by the main form.</summary>
+    // Set by the UI to save the modified map files (asks for a folder first if none is set); handled by the main
+    // form.
     public bool SaveRequested { get; set; }
 
-    /// <summary>"New project" window; the project it asks for is created by the main form.</summary>
     public ProjectWindow ProjectWindow { get; }
 
-    /// <summary>Set by the UI to pick a project folder and open it; handled by the main form.</summary>
     public bool OpenProjectRequested { get; set; }
 
-    /// <summary>Recent project chosen in the menu, opened by the main form.</summary>
     public string? RecentProjectRequested { get; set; }
 
-    /// <summary>Set by the UI to close the project; handled by the main form (unsaved changes).</summary>
     public bool CloseProjectRequested { get; set; }
 
-    /// <summary>Set by the "New project" window to pick the folder of the projects; handled by the main form.</summary>
     public bool ChooseProjectsFolderRequested { get; set; }
 
-    /// <summary>Set by the export window when the user asks to pick the export folder; handled by the main form.</summary>
     public bool ChooseExportFolderRequested { get; set; }
 
-    /// <summary>The global search (Ctrl+K) is open: a click in the 3D view closes it instead of selecting.</summary>
+    // File or folder of the archive explorer to extract: the main form asks where, then calls ExtractArchiveItem.
+    public ArchiveTree.Node? ArchiveExtractRequested
+    {
+        get => _archivePanel.ExtractRequested;
+        set => _archivePanel.ExtractRequested = value;
+    }
+
+    public void ExtractArchiveItem(ArchiveTree.Node node, string target) => _archivePanel.Extract(node, target);
+
     public bool IsSearchOpen => _searchPalette.IsOpen;
 
-    /// <summary>The mouse is over a 3D handle: a click grabs it instead of selecting.</summary>
     public bool IsGizmoHovered => _gizmo.IsHovered;
 
-    /// <summary>A 3D handle is being dragged: Escape puts the object back instead of deselecting.</summary>
     public bool IsGizmoDragging => _gizmo.IsDragging;
 
     public void Draw()
@@ -120,6 +127,7 @@ internal sealed class MainUi
         if (_showScene) _scenePanel.Draw(ref _showScene);
         if (_showProperties) _propertiesPanel.Draw(ref _showProperties);
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
+        if (_showArchives) _archivePanel.Draw(ref _showArchives);
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
         else _state.Viewer.RequestedSize = Vector2.Zero;
         if (_showAbout) DrawAboutWindow();
@@ -131,10 +139,6 @@ internal sealed class MainUi
         _searchPalette.Draw(); // Last: above the panels.
     }
 
-    /// <summary>
-    /// Ctrl+K: global search; Ctrl+S: save; Ctrl+Z: undo; Ctrl+Y or Ctrl+Shift+Z: redo; G: ground grid;
-    /// 1 to 4: tools of the 3D view (not while typing in a field, which has its own undo, nor while dragging a handle).
-    /// </summary>
     private void HandleShortcuts()
     {
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.K) && !_searchPalette.IsOpen)
@@ -173,7 +177,6 @@ internal sealed class MainUi
     private static bool ToolKeyPressed(ImGuiKey digit, ImGuiKey keypad) =>
         ImGui.IsKeyPressed(digit, false) || ImGui.IsKeyPressed(keypad, false);
 
-    /// <summary>Height of the menu bar, which is also the window's title bar (see <see cref="WindowChrome"/>).</summary>
     private const float MenuBarPaddingY = 9f;
 
     private static bool Menu(string label)
@@ -275,6 +278,7 @@ internal sealed class MainUi
             ImGui.MenuItem(PropertiesPanel.Title, null, ref _showProperties);
             ImGui.MenuItem(StatusPanel.Title, null, ref _showStatus);
             ImGui.MenuItem(ViewerPanel.Title, null, ref _showViewer);
+            ImGui.MenuItem(ArchivePanel.Title, null, ref _showArchives);
             if (ImGui.MenuItem("Réinitialiser la disposition des panneaux"))
             {
                 _showLayers = _showScene = _showProperties = _showStatus = true;
@@ -314,7 +318,6 @@ internal sealed class MainUi
         ImGui.EndMainMenuBar();
     }
 
-    /// <summary>New, open, recent projects, close: in the File menu and under the project button of the toolbar.</summary>
     private void DrawProjectMenuItems()
     {
         if (ImGui.MenuItem($"{Icons.FolderOpen}  Nouveau projet..."))

@@ -4,17 +4,13 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.NavMeshes;
 
-/// <summary>Position of a navmesh tile on the map grid (one tile = one navmesh[X][Y].ynv file).</summary>
+// Position of a navmesh tile on the map grid (one tile = one navmesh[X][Y].ynv file).
 public readonly record struct NavMeshTileKey(int X, int Y)
 {
     public string FileName => $"navmesh[{X}][{Y}].ynv";
 }
 
-/// <summary>
-/// Knows which navmesh file covers which part of the map, and reads tiles on demand.
-/// Tiles are 150 x 150 m squares. File indices go in steps of 3 (one step = 50 m) and index 120 is
-/// at coordinate 0, so navmesh[X][Y] covers x from (X - 120) * 50 to that + 150 (same for y).
-/// </summary>
+// Knows which navmesh file covers which part of the map, and reads tiles on demand.
 public sealed partial class NavMeshCatalog
 {
     public const float TileSize = 150f;
@@ -33,10 +29,7 @@ public sealed partial class NavMeshCatalog
 
     public int TileCount => _paths.Count;
 
-    /// <summary>
-    /// Lists the map navmeshes of the base game and update.rpf (DLC packs are not handled yet).
-    /// Files of the update win over the base game, as in the game.
-    /// </summary>
+    // Lists the map navmeshes of the base game and update.rpf (DLC packs are not handled yet).
     public static NavMeshCatalog Create(IGameFileSystem files, INavMeshReader reader)
     {
         var catalog = new NavMeshCatalog(files, reader);
@@ -57,8 +50,7 @@ public sealed partial class NavMeshCatalog
 
     public bool Contains(NavMeshTileKey key) => _paths.ContainsKey(key);
 
-    /// <summary>Reads a tile, or returns null if no file covers this square.</summary>
-    /// <exception cref="InvalidDataException">The file is damaged.</exception>
+    // Reads a tile, or returns null if no file covers this square.
     public NavMeshTile? ReadTile(NavMeshTileKey key)
     {
         if (!_paths.TryGetValue(key, out var path))
@@ -67,17 +59,14 @@ public sealed partial class NavMeshCatalog
         return data is null || data.Length == 0 ? null : _reader.Read(data);
     }
 
-    /// <summary>The tile containing a world position.</summary>
     public static NavMeshTileKey TileAt(Vector2 position) => new(
         (int)MathF.Floor(position.X / TileSize) * IndexStep + IndexAtOrigin,
         (int)MathF.Floor(position.Y / TileSize) * IndexStep + IndexAtOrigin);
 
-    /// <summary>Centre of a tile in world coordinates.</summary>
     public static Vector2 TileCenter(NavMeshTileKey key) => new(
         ((key.X - IndexAtOrigin) / IndexStep + 0.5f) * TileSize,
         ((key.Y - IndexAtOrigin) / IndexStep + 0.5f) * TileSize);
 
-    /// <summary>Existing tiles whose centre is within <paramref name="radius"/> of a position, nearest first.</summary>
     public IEnumerable<NavMeshTileKey> TilesAround(Vector2 position, float radius)
     {
         int range = (int)MathF.Ceiling(radius / TileSize) + 1;

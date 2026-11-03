@@ -9,10 +9,8 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Tests;
 
-/// <summary>
-/// A model (.ydr) built in memory: one level of detail, one geometry of one triangle (position, normal, texture
-/// coordinates) drawn with a cut-out shader whose colour texture is "Wall_Brick".
-/// </summary>
+// A model (.ydr) built in memory: one level of detail, one geometry of one triangle (position, normal, texture
+// coordinates) drawn with a cut-out shader whose colour texture is "Wall_Brick".
 public class DrawableReaderTests
 {
     private const int SystemSize = 0x2000;

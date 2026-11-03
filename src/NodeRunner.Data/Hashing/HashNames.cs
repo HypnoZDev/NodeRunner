@@ -2,11 +2,7 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.Hashing;
 
-/// <summary>
-/// Finds the readable name behind a hash. The game files only store hashes (see <see cref="Joaat"/>);
-/// names are recovered from known strings, here the names of the game's files: an object type usually has
-/// the name of its model file (prop_bin_05a.yft), a map file its own name.
-/// </summary>
+// Finds the readable name behind a hash.
 public sealed class HashNames
 {
     private static readonly string[] NamedExtensions = [".ydr", ".yft", ".ydd", ".ytd", ".ymap", ".ytyp", ".ybn"];
@@ -29,10 +25,8 @@ public sealed class HashNames
             _names.TryAdd(Joaat.Hash(name), name.ToLowerInvariant());
     }
 
-    /// <summary>
-    /// Adds the names of a text file written by the user (one name per line; empty lines and lines starting with
-    /// // or # are skipped). Returns the number of names read.
-    /// </summary>
+    // Adds the names of a text file written by the user (one name per line; empty lines and lines starting with // or
+    // # are skipped).
     public int AddLines(IEnumerable<string> lines)
     {
         int count = 0;
@@ -53,17 +47,10 @@ public sealed class HashNames
             return _names.GetValueOrDefault(hash);
     }
 
-    /// <summary>The name if known, otherwise the hash in hexadecimal.</summary>
     public string Describe(uint hash) => TryGet(hash) ?? $"0x{hash:X8}";
 
-    /// <summary>
-    /// Names of every model, texture dictionary, map and collision file of the game, plus the names of
-    /// simplified models, which are stored in dictionaries (.ydd) keeping only hashes. They follow two patterns:
-    /// the detailed model's name plus "_lod" (or "_loda", "_lodb": id2_00_a_build14_lod), and for groups of props, the dictionary's
-    /// name followed by a number (cs6_08_props_combo06_slod_children.ydd holds cs6_08_props_combo06_09_lod).
-    /// Those guesses are only kept when they match one of <paramref name="wanted"/> (the object types).
-    /// The game's .nametable files hold audio names only (measured: 8 more map types named out of 126 486): not read.
-    /// </summary>
+    // Names of every model, texture dictionary, map and collision file of the game, plus the names of simplified
+    // models, which are stored in dictionaries (.ydd) keeping only hashes.
     public static HashNames FromFileNames(GameContent content, IReadOnlySet<uint> wanted)
     {
         var names = new HashNames();

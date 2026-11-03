@@ -4,10 +4,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// "New project" window: name and location; the project is created by the main form (it may first ask about
-/// unsaved changes). Also opened by a save without a project (then the changes are saved into the new one).
-/// </summary>
+// "New project" window: name and location; the project is created by the main form (it may first ask about unsaved
+// changes).
 internal sealed class ProjectWindow(AppState state, Action chooseLocation)
 {
     public const string Title = $"{Icons.FolderOpen}  Nouveau projet###NouveauProjet";
@@ -18,14 +16,10 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
     private bool _saveAfter;
     private bool _exitAfter;
 
-    /// <summary>Project asked for by the "Créer" button, handled (then cleared) by the main form.</summary>
     public (string Folder, string Name, bool SaveAfter, bool ExitAfter)? Requested { get; set; }
 
-    /// <summary>Existing project asked for by the "Ouvrir" button (the folder already holds one).</summary>
     public string? OpenRequested { get; set; }
 
-    /// <param name="saveAfter">Save the changes into the project once created (Ctrl+S without a project).</param>
-    /// <param name="exitAfter">Then close NodeRunner (closing the window without a project).</param>
     public void Open(bool saveAfter = false, bool exitAfter = false)
     {
         _open = true;

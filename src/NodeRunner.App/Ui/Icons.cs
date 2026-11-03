@@ -2,11 +2,8 @@ using System.Reflection;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Lucide icons (https://lucide.dev, ISC licence, see Assets/Fonts/LICENSE-lucide.txt), drawn as characters of
-/// lucide.ttf merged into the interface font. Only the icons listed here are loaded: add a constant to use another
-/// one (code points from font/codepoints.json of the lucide-static package, version 1.66.0).
-/// </summary>
+// Lucide icons (https://lucide.dev, ISC licence, see Assets/Fonts/LICENSE-lucide.txt), drawn as characters of
+// lucide.ttf merged into the interface font.
 internal static class Icons
 {
     public const string Activity = "\ue038";
@@ -73,7 +70,6 @@ internal static class Icons
     public const string Waves = "";
     public const string X ="\ue1b2";
 
-    /// <summary>Code points of all the icons above, for the font atlas.</summary>
     public static IEnumerable<char> All() =>
         typeof(Icons).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.IsLiteral && f.FieldType == typeof(string))

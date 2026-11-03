@@ -4,18 +4,13 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.App.World;
 
-/// <summary>Identifies a texture: the file it comes from (.ytd, or the model file for embedded ones) and its name.</summary>
+// Identifies a texture: the file it comes from (.ytd, or the model file for embedded ones) and its name.
 internal readonly record struct TextureKey(string Source, uint NameHash);
 
-/// <summary>A texture found for a mesh.</summary>
 internal sealed record ResolvedTexture(TextureKey Key, TextureData Data);
 
-/// <summary>
-/// Finds the colour texture of each mesh of a model, as the game does: first in the model file itself,
-/// then in the archetype's texture dictionary (.ytd), then in its parent dictionaries.
-/// Used on the background loading thread only (not thread-safe). Keeps the last .ytd files read,
-/// since neighbouring objects share the same dictionaries.
-/// </summary>
+// Finds the colour texture of each mesh of a model, as the game does: first in the model file itself, then in the
+// archetype's texture dictionary (.ytd), then in its parent dictionaries.
 internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader reader)
 {
     private const int RecentFileCacheSize = 32;
@@ -23,12 +18,8 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
     private readonly Dictionary<string, IReadOnlyDictionary<uint, TextureData>> _recentFiles = new();
     private readonly Queue<string> _recentOrder = new();
 
-    /// <summary>
-    /// The textures of each mesh of <paramref name="model"/> (same order; for each mesh, same order as
-    /// <see cref="ModelMesh.TextureNames"/>), null when it has none or it was not found.
-    /// Messages about unreadable .ytd files are added to <paramref name="errors"/>.
-    /// <paramref name="fallbackDictionaries"/> (.ytd paths) are searched last (e.g. the textures shared by all vehicles).
-    /// </summary>
+    // The textures of each mesh of model (same order; for each mesh, same order as TextureNames), null when it has
+    // none or it was not found.
     public ResolvedTexture?[][] Resolve(ModelLocation location, ModelData model, List<string> errors, IReadOnlyList<string>? fallbackDictionaries = null)
     {
         var result = new ResolvedTexture?[model.Meshes.Count][];

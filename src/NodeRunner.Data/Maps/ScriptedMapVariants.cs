@@ -2,11 +2,9 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Maps;
 
-/// <summary>
-/// Among the maps only loaded by scripts, finds the alternative versions of a same place, so that only one is
-/// shown by default: decoration styles of an apartment or office (different interiors at the same spot), and
-/// states named in the file names (open / closed door, intact / destroyed, original house / new mansion...).
-/// </summary>
+// Among the maps only loaded by scripts, finds the alternative versions of a same place, so that only one is shown by
+// default: decoration styles of an apartment or office (different interiors at the same spot), and states named in
+// the file names (open / closed door, intact / destroyed, original house / new mansion...).
 public static class ScriptedMapVariants
 {
     // State word of an alternative version -> name of the default version, with that word replaced (empty: removed).
@@ -28,20 +26,14 @@ public static class ScriptedMapVariants
         ["generic"] = ["private"],
     };
 
-    /// <summary>Only used during a cutscene or a replay.</summary>
     private static readonly HashSet<string> SceneOnlyWords = ["cutscene", "replay"];
 
-    /// <summary>
-    /// DLC pack that put the mansions in use ("A Safehouse in the Hills", 2025). Their maps were shipped long
-    /// before (Heists, Executives), unused: on a map before this pack, the original houses stand there.
-    /// </summary>
+    // DLC pack that put the mansions in use ("A Safehouse in the Hills", 2025).
     public const string MansionsPack = "mp2025_02";
 
-    /// <summary>
-    /// Names (as given) of the <paramref name="maps"/> to hide by default. <paramref name="regularMaps"/> are the
-    /// maps always loaded: a scripted interior at the same spot as one of theirs is an alternative version too.
-    /// <paramref name="withMansions"/>: the new mansions replace the original houses (<see cref="MansionsPack"/> applied).
-    /// </summary>
+    // Names (as given) of the maps to hide by default. regularMaps are the maps always loaded: a scripted interior at
+    // the same spot as one of theirs is an alternative version too. withMansions: the new mansions replace the
+    // original houses (MansionsPack applied).
     public static HashSet<string> DefaultHidden(IReadOnlyList<(string Name, MapData Map)> maps, IEnumerable<MapData> regularMaps,
         bool withMansions = true)
     {
@@ -78,10 +70,9 @@ public static class ScriptedMapVariants
     private static readonly Dictionary<string, string[]> OriginalHouses =
         Alternatives.Where(a => a.Key is not ("original" or "generic")).ToDictionary();
 
-    /// <summary>
-    /// A part of a new mansion ("x_mansion_shared", "x_roads_mansion"...): the word "mansion" after a place
-    /// ("hei_ch1_06e") that also has an original version ("hei_ch1_06e_mansion_original", "hei_ch1_06e_props_original").
-    /// </summary>
+    // A part of a new mansion ("x_mansion_shared", "x_roads_mansion"...): the word "mansion" after a place
+    // ("hei_ch1_06e") that also has an original version ("hei_ch1_06e_mansion_original",
+    // "hei_ch1_06e_props_original").
     private static bool IsNewMansion(string name, HashSet<string> names)
     {
         var words = name.Split('_');

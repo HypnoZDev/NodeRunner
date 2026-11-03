@@ -5,10 +5,8 @@ using NodeRunner.Data.Installation;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Bar at the bottom of the window: map version and DLC, loading progress or errors on the left;
-/// camera position, game edition and frames per second on the right.
-/// </summary>
+// Bar at the bottom of the window: map version and DLC, loading progress or errors on the left; camera position, game
+// edition and frames per second on the right.
 internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
 {
     private const float PaddingY = 3f;
@@ -106,7 +104,6 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
         ImGui.TextUnformatted(fps);
     }
 
-    /// <summary>Icon and text; items after the first one are preceded by <see cref="Separator"/>, which keeps them on the line.</summary>
     private static void Item(string icon, string text, Vector4? color = null)
     {
         if (color is { } c)

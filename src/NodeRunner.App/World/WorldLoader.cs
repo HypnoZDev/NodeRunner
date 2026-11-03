@@ -22,87 +22,60 @@ using NodeRunner.Data.Water;
 
 namespace NodeRunner.App.World;
 
-/// <summary>
-/// Opens the game archives and reads the map data on a background thread, so the window stays responsive.
-/// Each kind of data is published as soon as it is read (roads first, objects last), and the layers
-/// rebuild their GPU data when the object they display changes.
-/// </summary>
+// Opens the game archives and reads the map data on a background thread, so the window stays responsive.
 internal sealed class WorldLoader : IDisposable
 {
     private readonly object _lock = new();
     private int _generation;
     private RpfFileSystem? _files;
 
-    /// <summary>The installation being loaded or loaded, null if none.</summary>
     public GameInstallation? Game { get; private set; }
 
     public bool IsBusy { get; private set; }
 
-    /// <summary>What is happening right now, in French, for the status panel.</summary>
     public string Status { get; private set; } = "Aucune donnée chargée.";
 
-    /// <summary>Set when loading failed.</summary>
     public string? Error { get; private set; }
 
-    /// <summary>Road and pedestrian network, null until loaded.</summary>
     public PathNetwork? PathNetwork { get; private set; }
 
-    /// <summary>Scenario points, null until loaded.</summary>
     public ScenarioSet? Scenarios { get; private set; }
 
-    /// <summary>Index of the navmesh tiles (read on demand around the camera), null until loaded.</summary>
     public NavMeshCatalog? NavMeshes { get; private set; }
 
-    /// <summary>Water surfaces (sea, lakes, rivers), null until loaded.</summary>
     public WaterMap? Water { get; private set; }
 
-    /// <summary>Placed objects (.ymap) and object types (.ytyp), null until loaded.</summary>
     public MapLibrary? Maps { get; private set; }
 
-    /// <summary>Index of the map collision files (read on demand around the camera), null until loaded.</summary>
     public CollisionCatalog? Collisions { get; private set; }
 
-    /// <summary>Index of the 3D model files, null until loaded.</summary>
     public ModelCatalog? Models { get; private set; }
 
-    /// <summary>Reads 3D models on demand, null until the archives are open.</summary>
     public IModelReader? ModelReader { get; private set; }
 
-    /// <summary>Index of the texture dictionaries and their parents, null until loaded.</summary>
     public TextureCatalog? Textures { get; private set; }
 
-    /// <summary>Reads texture dictionaries on demand, null until the archives are open.</summary>
     public ITextureReader? TextureReader { get; private set; }
 
-    /// <summary>Readable names behind the hashes of the game files (null until the map is loaded).</summary>
     public HashNames? Names { get; private set; }
 
-    /// <summary>
-    /// Text file of names written by the user (one per line), added to those found in the game files; read with the map.
-    /// The file is optional.
-    /// </summary>
+    // Text file of names written by the user (one per line), added to those found in the game files; read with the
+    // map.
     public string? UserNamesFile { get; init; }
 
-    /// <summary>Names read from <see cref="UserNamesFile"/> at the last load (0 if none), and the reading error if any.</summary>
     public (int Count, string? Error) UserNames { get; private set; }
 
-    /// <summary>Which archives of the base game, update and DLC packs are used (null until the archives are open).</summary>
     public GameContent? Content { get; private set; }
 
-    /// <summary>The map version and DLC packs being loaded or loaded.</summary>
+    public RpfFileSystem? Files => _files;
+
     public MapSelection Selection { get; private set; }
 
-    /// <summary>The maps loaded by scripts hidden (see <see cref="MapLibrary.Load"/>; null = default), being loaded or loaded.</summary>
     private HashSet<string>? _hiddenScriptedMaps;
 
     public TimeSpan LoadDuration { get; private set; }
 
-    /// <summary>
-    /// Starts loading <paramref name="game"/> with this map selection (or clears everything if null).
-    /// Ignored if already loaded. When only the selection or the <paramref name="hiddenScriptedMaps"/> change, the archives,
-    /// roads, scenarios and navmeshes are kept: only the map objects, models and textures are read again.
-    /// </summary>
-    /// <param name="saveFolder">Folder of the maps saved by the user: they replace the game's version when they match it.</param>
+    // Starts loading game with this map selection (or clears everything if null).
     public void Load(GameInstallation? game, MapSelection selection, IReadOnlySet<string>? hiddenScriptedMaps, string? saveFolder)
     {
         _saveFolder = saveFolder;
@@ -224,16 +197,14 @@ internal sealed class WorldLoader : IDisposable
         LoadMaps(files, selection, hiddenScriptedMaps, generation, clock);
     }
 
-    /// <summary>Reads the DLC configuration, then the map objects, models and textures of this selection.</summary>
-    /// <summary>Folder of the saved maps, read when the map is loaded (changing it does not reload the map).</summary>
+    // Reads the DLC configuration, then the map objects, models and textures of this selection.
     private volatile string? _saveFolder;
 
     private bool _reloadRequested;
 
-    /// <summary>The next <see cref="Load"/> reads the map objects again (another project: other saved maps).</summary>
     public void RequestMapReload() => _reloadRequested = true;
 
-    /// <summary>The .ymap files of the save folder, uncompressed, by file name; unreadable ones are reported in <paramref name="errors"/>.</summary>
+    // The .ymap files of the save folder, uncompressed, by file name; unreadable ones are reported in errors.
     private static Dictionary<string, byte[]> ReadSavedMaps(string? folder, List<string> errors)
     {
         var maps = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -316,7 +287,6 @@ internal sealed class WorldLoader : IDisposable
         }
     }
 
-    /// <summary>Makes freshly read data visible, unless another installation was selected meanwhile.</summary>
     private bool Publish(int generation, Action apply)
     {
         lock (_lock)
@@ -341,7 +311,7 @@ internal sealed class WorldLoader : IDisposable
         }
     }
 
-    /// <summary>Forwards progress messages, ignoring those of an outdated load.</summary>
+    // Forwards progress messages, ignoring those of an outdated load.
     private sealed class Progress(WorldLoader owner, int generation) : IProgress<string>
     {
         public void Report(string value)

@@ -4,10 +4,6 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.Input;
 
-/// <summary>
-/// Free camera controls: WASD / ZQSD (both layouts) to move, Space/E and C to go up and down,
-/// right mouse button held to look around, Shift to go faster, mouse wheel to change the base speed.
-/// </summary>
 internal sealed class CameraController
 {
     public const float MinSpeed = 1f;
@@ -21,10 +17,8 @@ internal sealed class CameraController
     private Point _lastMouse;
     private Vector2 _pendingLook;
 
-    /// <summary>Base movement speed in metres per second (without Shift).</summary>
     public float Speed { get; set; } = 50f;
 
-    /// <summary>True while the right mouse button is held to rotate the view.</summary>
     public bool IsLooking => _looking;
 
     public void Attach(Control control)
@@ -62,7 +56,6 @@ internal sealed class CameraController
         };
     }
 
-    /// <summary>Applies the input received since the last frame to <paramref name="camera"/>.</summary>
     public void Update(Camera camera, float deltaTime)
     {
         camera.Yaw -= _pendingLook.X * MouseSensitivity;

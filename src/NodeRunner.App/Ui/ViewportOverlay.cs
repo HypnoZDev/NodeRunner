@@ -5,11 +5,8 @@ using NodeRunner.App.World;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Elements floating over the 3D view: a bar centred at the top (tools, grid, layers menu, camera menu)
-/// and an orientation indicator in the bottom left corner (world axes as seen from the camera).
-/// Move, rotate and scale come with the 3D handles of step 5.3.
-/// </summary>
+// Elements floating over the 3D view: a bar centred at the top (tools, grid, layers menu, camera menu) and an
+// orientation indicator in the bottom left corner (world axes as seen from the camera).
 internal sealed class ViewportOverlay(AppState state, CameraController cameraController)
 {
     private const float Margin = 12f;
@@ -19,7 +16,6 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoBackground
         | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoMove;
 
-    /// <summary>Groups of layers that the layers menu turns on or off together.</summary>
     private static readonly (string Label, string Icon, string[] Layers)[] LayerGroups =
     [
         ("Modèles 3D", Icons.Box, [ModelLayer.LayerName]),
@@ -158,7 +154,6 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         return $"{minutes / 60:00}:{minutes % 60:00}";
     }
 
-    /// <summary>Time of day: slider, four quick moments, sky and fog switches.</summary>
     private void DrawTimeMenu()
     {
         var settings = state.Settings;
@@ -228,11 +223,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         ImGui.TextDisabled("Bouton empreintes : suivre le sol en déplaçant");
     }
 
-    /// <summary>
-    /// The three world axes as the camera sees them: thin lines with a colored letter at the tip, no background.
-    /// A soft dark outline keeps them readable over bright scenes; farther axes drawn first and dimmer.
-    /// X = east, Y = north, Z = up.
-    /// </summary>
+    // The three world axes as the camera sees them: thin lines with a colored letter at the tip, no background.
     private void DrawAxes()
     {
         float diameter = AxesRadius * 2f;

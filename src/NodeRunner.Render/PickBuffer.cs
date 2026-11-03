@@ -4,12 +4,8 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Off-screen image in which each object is drawn with its number instead of its colour (0 = nothing),
-/// to find the object under the mouse exactly as it is seen: through the holes of foliage, never behind a wall.
-/// Only used when the user clicks: <see cref="Begin"/>, draw the objects
-/// (<see cref="ModelRenderer.BeginPick"/>), then <see cref="Read"/> the number under the mouse.
-/// </summary>
+// Off-screen image in which each object is drawn with its number instead of its colour (0 = nothing), to find the
+// object under the mouse exactly as it is seen: through the holes of foliage, never behind a wall.
 public sealed unsafe class PickBuffer : IDisposable
 {
     private readonly ID3D11Device _device;
@@ -41,7 +37,6 @@ public sealed unsafe class PickBuffer : IDisposable
         });
     }
 
-    /// <summary>Binds the number image (same size as the view) and clears it. Rebind the back buffer afterwards.</summary>
     public void Begin(int width, int height)
     {
         if (width != _width || height != _height || _target is null)
@@ -53,7 +48,6 @@ public sealed unsafe class PickBuffer : IDisposable
         _context.ClearDepthStencilView(_depthView!, DepthStencilClearFlags.Depth, 0f, 0); // Reversed Z: 0 = far.
     }
 
-    /// <summary>The number drawn at pixel (<paramref name="x"/>, <paramref name="y"/>), 0 if none. Waits for the GPU.</summary>
     public uint Read(int x, int y)
     {
         if (_target is null || x < 0 || y < 0 || x >= _width || y >= _height)
@@ -66,11 +60,8 @@ public sealed unsafe class PickBuffer : IDisposable
         return value;
     }
 
-    /// <summary>
-    /// Depth drawn at pixel (<paramref name="x"/>, <paramref name="y"/>) by the last pick drawing (reversed Z: 0 = nothing,
-    /// up to 1 = nearest), to find the 3D point under a pixel. Waits for the GPU; copies the whole depth image
-    /// (depth images can only be copied whole), so only call it on demand.
-    /// </summary>
+    // Depth drawn at pixel (x, y) by the last pick drawing (reversed Z: 0 = nothing, up to 1 = nearest), to find the
+    // 3D point under a pixel.
     public float ReadDepth(int x, int y)
     {
         if (_depth is null || x < 0 || y < 0 || x >= _width || y >= _height)

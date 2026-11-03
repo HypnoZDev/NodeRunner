@@ -4,15 +4,9 @@ using NodeRunner.Data.Paths;
 
 namespace NodeRunner.Data.Native.Paths;
 
-/// <summary>
-/// NodeRunner's own reader for path node files (.ynd).
-/// Layout documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// </summary>
-/// <remarks>
-/// Header (after the 16-byte resource file base):
-/// 0x10 nodes pointer, 0x18 node count, 0x1C vehicle node count, 0x20 pedestrian node count,
-/// 0x28 links pointer, 0x30 link count. Junction data that follows is not read yet.
-/// </remarks>
+// reader for path node files (.ynd). Layout documented by the GTA V modding community. Header (after the 16-byte
+// resource file base): 0x10 nodes pointer, 0x18 node count, 0x1C vehicle node count, 0x20 pedestrian node count, 0x28
+// links pointer, 0x30 link count. Junction data that follows is not read yet.
 public sealed class YndReader : IPathNodeReader
 {
     private const int HeaderSize = 0x70;

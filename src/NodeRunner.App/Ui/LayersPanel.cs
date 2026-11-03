@@ -4,10 +4,8 @@ using NodeRunner.App.World;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
-/// (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-/// </summary>
+// Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
+// (click: show or hide), the related settings, and the list of the maps loaded by scripts.
 internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer)
 {
     private const int MaxScriptedMapsListed = 300;
@@ -78,7 +76,6 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             DrawScriptedMaps();
     }
 
-    /// <summary>Section of the layer list, with an eye before its chevron that shows or hides the whole group.</summary>
     private bool LayerSection(string title, string id, IEnumerable<string> layers, bool defaultOpen = true)
     {
         var all = layers.ToList();
@@ -90,7 +87,6 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         return open;
     }
 
-    /// <summary>One layer: colour, name, number of items and eye; a click shows or hides it.</summary>
     private void LayerRow(string layer, Vector4 color, string label, string? count = null)
     {
         bool visible = state.IsLayerVisible(layer);
@@ -98,7 +94,6 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             state.SetLayerVisible(layer, !visible);
     }
 
-    /// <summary>Label / slider row for a setting saved in settings.json when released.</summary>
     private void SettingSlider(string label, string id, float value, float min, float max, string format, Action<float> set,
         string? tooltip = null, ImGuiSliderFlags flags = ImGuiSliderFlags.None)
     {
@@ -113,11 +108,8 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         Widgets.EndProperties();
     }
 
-    /// <summary>
-    /// Maps the game only loads for missions or on a script's request (tunnel under the construction site,
-    /// DLC offices, apartments...): all shown by default except alternative versions of a same place.
-    /// Searchable list, the unchecked ones are hidden. Changing it reloads the map.
-    /// </summary>
+    // Maps the game only loads for missions or on a script's request (tunnel under the construction site, DLC
+    // offices, apartments...): all shown by default except alternative versions of a same place.
     private void DrawScriptedMaps()
     {
         if (state.World.Maps is { ScriptedMapNames.Count: > 0 } maps)

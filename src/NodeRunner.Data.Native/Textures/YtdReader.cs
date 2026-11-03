@@ -6,11 +6,7 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Textures;
 
-/// <summary>
-/// Reads texture dictionaries (.ytd). The dictionary (system segment) lists its textures; each texture gives its
-/// name, size, format and mip count, and points to its pixels in the graphics segment, mip levels one after the
-/// other, largest first, already in the format the GPU reads.
-/// </summary>
+// Reads texture dictionaries (.ytd).
 public sealed class YtdReader : ITextureReader
 {
     private readonly IGameFileSystem _files;
@@ -28,7 +24,6 @@ public sealed class YtdReader : ITextureReader
         return Read(data, header);
     }
 
-    /// <summary>Every texture of a decompressed .ytd that has pixels in a known format, keyed by name hash.</summary>
     public static Dictionary<uint, TextureData> Read(ReadOnlySpan<byte> data, ResourceHeader header)
     {
         var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
@@ -49,7 +44,6 @@ public sealed class YtdReader : ITextureReader
     private const int DataPointer = 0x70;
     private const int TextureLength = 0x90;
 
-    /// <summary>Reads the dictionary at <paramref name="offset"/> (also used for dictionaries embedded in models).</summary>
     internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset)
     {
         var textures = new Dictionary<uint, TextureData>();
@@ -93,11 +87,9 @@ public sealed class YtdReader : ITextureReader
         };
     }
 
-    /// <summary>
-    /// Bytes of all the mip levels: the first is stride x height (for block formats, the stride is a row of blocks
-    /// and the height counts pixels, so this is 4 times the level: the game rounds the same way), each next level
-    /// a quarter of the previous.
-    /// </summary>
+    // Bytes of all the mip levels: the first is stride x height (for block formats, the stride is a row of blocks and
+    // the height counts pixels, so this is 4 times the level: the game rounds the same way), each next level a
+    // quarter of the previous.
     private static int PixelsLength(int stride, int height, int levels)
     {
         long level = (long)stride * height;
@@ -110,7 +102,6 @@ public sealed class YtdReader : ITextureReader
         return (int)total;
     }
 
-    /// <summary>Direct3D 9 format codes stored by the game (FourCC for the compressed ones).</summary>
     private static TextureFormat Format(uint code) => code switch
     {
         0x31545844 => TextureFormat.Bc1, // DXT1

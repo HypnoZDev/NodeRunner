@@ -6,37 +6,26 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Sun shadows ("cascaded shadow maps"): the scene is drawn seen from the sun into <see cref="CascadeCount"/> depth
-/// images, each covering a slice of the camera's view (near: sharp, far: coarse). A pixel is in the shade when
-/// something closer to the sun covers it in the image of its slice (see the model shader).
-/// Each image covers a sphere around its slice, moved by whole texels only, so the shadow edges don't shimmer
-/// when the camera turns or moves.
-/// </summary>
+// Sun shadows ("cascaded shadow maps"): the scene is drawn seen from the sun into CascadeCount depth images, each
+// covering a slice of the camera's view (near: sharp, far: coarse).
 public sealed class ShadowMaps : IDisposable
 {
     public const int CascadeCount = 3;
 
-    /// <summary>Size of each depth image, in pixels.</summary>
     public const int Size = 2048;
 
-    /// <summary>Far end of each slice, as a share of the shadow distance.</summary>
     private static readonly float[] SplitShares = [0.07f, 0.27f, 1f];
 
     private readonly ID3D11DeviceContext _context;
     private readonly ID3D11Texture2D _texture;
     private readonly ID3D11DepthStencilView[] _depthViews = new ID3D11DepthStencilView[CascadeCount];
 
-    /// <summary>Light view and projection of each slice (world to shadow image, depth 0 towards the sun).</summary>
     public Matrix4x4[] Cascades { get; } = new Matrix4x4[CascadeCount];
 
-    /// <summary>Far end of each slice (m, along the camera's view direction).</summary>
     public float[] Splits { get; } = new float[CascadeCount];
 
-    /// <summary>Size of a texel of each slice's image, in metres.</summary>
     public float[] TexelSizes { get; } = new float[CascadeCount];
 
-    /// <summary>Camera direction used to choose the slice of a pixel.</summary>
     public Vector3 CameraForward { get; private set; }
 
     internal ID3D11ShaderResourceView View { get; }
@@ -77,10 +66,8 @@ public sealed class ShadowMaps : IDisposable
         });
     }
 
-    /// <summary>
-    /// Places the slices for this camera (aspect ratio of the 3D view), the sun in <paramref name="sunDirection"/>
-    /// (towards the sun) and shadows up to <paramref name="distance"/> metres.
-    /// </summary>
+    // Places the slices for this camera (aspect ratio of the 3D view), the sun in sunDirection (towards the sun) and
+    // shadows up to distance metres.
     public void Update(Camera camera, float aspectRatio, Vector3 sunDirection, float distance)
     {
         var forward = Vector3.Normalize(camera.Forward);
@@ -127,7 +114,6 @@ public sealed class ShadowMaps : IDisposable
         }
     }
 
-    /// <summary>Draws into the image of slice <paramref name="cascade"/> from now on (cleared).</summary>
     public void BeginCascade(int cascade)
     {
         _context.OMSetRenderTargets([], _depthViews[cascade]);

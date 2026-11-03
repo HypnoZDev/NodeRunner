@@ -2,14 +2,12 @@ using Microsoft.Win32;
 
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>Safe, read-only registry access. Returns null on any failure or on non-Windows systems.</summary>
+// Safe, read-only registry access. Returns null on any failure or on non-Windows systems.
 internal static class RegistryHelper
 {
-    /// <summary>Reads a string under HKEY_LOCAL_MACHINE.</summary>
     public static string? ReadMachineString(string subKey, string valueName)
         => OperatingSystem.IsWindows() ? ReadString(RegistryHive.LocalMachine, subKey, valueName) : null;
 
-    /// <summary>Reads a string under HKEY_CURRENT_USER.</summary>
     public static string? ReadUserString(string subKey, string valueName)
         => OperatingSystem.IsWindows() ? ReadString(RegistryHive.CurrentUser, subKey, valueName) : null;
 

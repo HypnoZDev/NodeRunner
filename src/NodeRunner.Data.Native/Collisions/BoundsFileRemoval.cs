@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Native.Collisions;
 
-/// <summary>Removing polygons from a collision file, in place (see <see cref="YbnReader.RemovePolygons(byte[], IReadOnlySet{int})"/>).</summary>
+// Removing polygons from a collision file, in place.
 internal sealed partial class BoundsFile
 {
     // Search tree block (128 bytes): nodes list (pointer, count, capacity), boxes, then the trees list.
@@ -15,10 +15,7 @@ internal sealed partial class BoundsFile
     private const int BvhTreesCount = 0x78;
     private const int BvhTreesCapacity = 0x7A;
 
-    /// <summary>
-    /// Removes the polygons numbered in <paramref name="removed"/> from the bounds at <paramref name="o"/>.
-    /// Returns true for a geometry left without polygons, which its composite then drops.
-    /// </summary>
+    // Removes the polygons numbered in removed from the bounds at o.
     public bool Remove(int o, IReadOnlySet<int> removed, ref int polygon) => U8(o + TypeOffset) switch
     {
         Composite => RemoveFromComposite(o, removed, ref polygon),
@@ -135,7 +132,6 @@ internal sealed partial class BoundsFile
         return order.Length == 0;
     }
 
-    /// <summary>Box of a polygon in the geometry's space (vertices plus the geometry centre), as the tree stores it.</summary>
     private (Vector3 Min, Vector3 Max) PolygonBox(int o, int p)
     {
         int vertexCount = (int)U32(o + VerticesCount);
@@ -177,10 +173,8 @@ internal sealed partial class BoundsFile
         return points.Count == 0 ? (Vector3.Zero, Vector3.Zero) : (min - new Vector3(radius), max + new Vector3(radius));
     }
 
-    /// <summary>
-    /// Rebuilds a search tree in its own arrays (the kept items need fewer nodes than before; a coarser tree is built
-    /// if not). Boxes are quantized with the tree's existing centre and scale. Returns the item order.
-    /// </summary>
+    // Rebuilds a search tree in its own arrays (the kept items need fewer nodes than before; a coarser tree is built
+    // if not).
     private int[] WriteTree(int bvh, List<(Vector3 Min, Vector3 Max)> items, int threshold, bool reorder)
     {
         int nodeCapacity = (int)U32(bvh + BvhNodesCapacity);

@@ -4,15 +4,13 @@ using NodeRunner.App.World;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// "Display settings" window: quality presets for smaller PCs (view distance, fog, texture filtering, shadows), sky and
-/// time of day, VSync. Every change applies at once and is saved in settings.json.
-/// </summary>
+// "Display settings" window: quality presets for smaller PCs (view distance, fog, texture filtering, shadows), sky
+// and time of day, VSync.
 internal sealed class SettingsWindow(AppState state)
 {
     public const string Title = $"{Icons.Settings}  Paramètres d'affichage###Settings";
 
-    /// <summary>A quality preset: the values it sets.</summary>
+    // A quality preset: the values it sets.
     private sealed record Preset(string Name, string Tooltip, float ViewDistance, float FogDistance, int Anisotropy, bool Shadows, float ShadowDistance);
 
     private static readonly Preset[] Presets =

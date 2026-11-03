@@ -16,7 +16,6 @@ public class GroundSnapTests
 
     private static MapEntity At(Vector3 position) => new() { ArchetypeHash = 1, Position = position };
 
-    /// <summary>A flat square from (-50, -50) to (50, 50) at height <paramref name="z"/>.</summary>
     private static PlacedCollision Floor(float z, Matrix4x4? transform = null)
     {
         var builder = new CollisionMeshBuilder();

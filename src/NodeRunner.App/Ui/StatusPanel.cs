@@ -6,10 +6,8 @@ using NodeRunner.Data.Installation;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// "État" panel (docked at the bottom right): game installation, what is loaded, rendering figures, camera,
-/// files that could not be read and settings files, as label / value grids.
-/// </summary>
+// "État" panel (docked at the bottom right): game installation, what is loaded, rendering figures, camera, files that
+// could not be read and settings files, as label / value grids.
 internal sealed class StatusPanel(AppState state, MainUi ui, CameraController cameraController, NavMeshLayer navMeshLayer,
     CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, ModelLayer modelLayer)
 {
@@ -161,7 +159,6 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
         Widgets.EndProperties();
     }
 
-    /// <summary>Files that could not be read, one foldable list per kind; nothing at all when everything was read.</summary>
     private void DrawProblems()
     {
         var world = state.World;

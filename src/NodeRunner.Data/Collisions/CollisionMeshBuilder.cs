@@ -2,10 +2,8 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Collisions;
 
-/// <summary>
-/// Builds a <see cref="CollisionMesh"/>: triangles are added as they are, the game's collision primitives
-/// (boxes, spheres, capsules, cylinders) are turned into a few triangles each.
-/// </summary>
+// Builds a CollisionMesh: triangles are added as they are, the game's collision primitives (boxes, spheres, capsules,
+// cylinders) are turned into a few triangles each.
 public sealed class CollisionMeshBuilder
 {
     // Round primitives are only approximated: enough to see them and to put objects on them.
@@ -18,7 +16,6 @@ public sealed class CollisionMeshBuilder
 
     public int TriangleCount => _materials.Count;
 
-    /// <summary>Number of the file's polygon the next triangles come from (-1: not a polygon, e.g. a lone box).</summary>
     public int Polygon { get; set; } = -1;
 
     public void AddTriangle(Vector3 a, Vector3 b, Vector3 c, byte material)
@@ -34,10 +31,7 @@ public sealed class CollisionMeshBuilder
         _polygons.Add(Polygon);
     }
 
-    /// <summary>
-    /// A box stored as the game does: four of its corners, each pair on the diagonal of a face (every other
-    /// corner). The other four corners are the opposites through the centre.
-    /// </summary>
+    // A box stored as the game does: four of its corners, each pair on the diagonal of a face (every other corner).
     public void AddBoxFromCorners(Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4, byte material)
     {
         var center = (v1 + v2 + v3 + v4) * 0.25f;
@@ -48,7 +42,6 @@ public sealed class CollisionMeshBuilder
         AddOrientedBox(center, axisX, axisY, axisZ, material);
     }
 
-    /// <summary>An axis-aligned box, optionally transformed.</summary>
     public void AddBox(Vector3 min, Vector3 max, Matrix4x4 transform, byte material)
     {
         var center = Vector3.Transform((min + max) * 0.5f, transform);
@@ -60,7 +53,6 @@ public sealed class CollisionMeshBuilder
             material);
     }
 
-    /// <summary>A box from its centre and three half edges.</summary>
     public void AddOrientedBox(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, byte material)
     {
         Span<Vector3> c = stackalloc Vector3[8];
@@ -82,7 +74,6 @@ public sealed class CollisionMeshBuilder
     public void AddSphere(Vector3 center, float radius, byte material) =>
         AddCapsule(center, center, radius, material);
 
-    /// <summary>A cylinder between two points, closed at both ends.</summary>
     public void AddCylinder(Vector3 a, Vector3 b, float radius, byte material)
     {
         var (u, v) = Perpendiculars(b - a);
@@ -96,7 +87,6 @@ public sealed class CollisionMeshBuilder
         }
     }
 
-    /// <summary>A capsule (cylinder with round ends) between two points; a sphere when both points are the same.</summary>
     public void AddCapsule(Vector3 a, Vector3 b, float radius, byte material)
     {
         var axis = b - a;
@@ -170,7 +160,6 @@ public sealed class CollisionMeshBuilder
     private static Vector3 Point(Vector3 u, Vector3 v, Vector3 w, float radius, float latitude, int step) =>
         Ring(u, v, radius * MathF.Cos(latitude), step) + w * (radius * MathF.Sin(latitude));
 
-    /// <summary>Two unit vectors perpendicular to <paramref name="axis"/> and to each other.</summary>
     private static (Vector3 U, Vector3 V) Perpendiculars(Vector3 axis)
     {
         var w = axis.LengthSquared() > 1e-8f ? Vector3.Normalize(axis) : Vector3.UnitZ;

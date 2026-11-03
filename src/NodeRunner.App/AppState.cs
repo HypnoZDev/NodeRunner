@@ -8,34 +8,25 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App;
 
-/// <summary>Application-wide state shared by the window and the UI.</summary>
+// Application-wide state shared by the window and the UI.
 internal sealed class AppState
 {
     public AppPaths Paths { get; }
     public AppSettings Settings { get; }
 
-    /// <summary>The installation in use, or null if none was found.</summary>
     public GameInstallation? Game { get; private set; }
 
-    /// <summary>Other valid installations found on this PC (e.g. both Legacy and Enhanced).</summary>
     public IReadOnlyList<GameInstallation> OtherInstallations { get; private set; } = [];
 
     public string AdapterName { get; set; } = "?";
 
-    /// <summary>The 3D view's camera.</summary>
     public Camera Camera { get; } = new();
 
-    /// <summary>Game data read in the background.</summary>
     public WorldLoader World { get; }
 
-    /// <summary>
-    /// The main selected object (the last one clicked), null if none: Properties and the handles show it.
-    /// Forgotten when the map is loaded again (another version or DLC): it belongs to the previous one; deleted
-    /// objects leave the selection.
-    /// </summary>
+    // The main selected object (the last one clicked), null if none.
     public MapEntity? Selection => SelectedEntities is [.., var last] ? last : null;
 
-    /// <summary>All the selected objects (Ctrl+click adds or removes one), the main one last.</summary>
     public IReadOnlyList<MapEntity> SelectedEntities
     {
         get
@@ -47,13 +38,11 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>Deleted, or inside a deleted interior.</summary>
     private static bool IsGone(MapEntity entity) => entity is { IsDeleted: true } or { Interior.IsDeleted: true };
 
     private readonly List<MapEntity> _selection = [];
     private MapLibrary? _selectionLibrary;
 
-    /// <summary>Selects only this object (null: nothing).</summary>
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
@@ -62,17 +51,16 @@ internal sealed class AppState
         _selectionLibrary = World.Maps;
     }
 
-    /// <summary>Selects these objects, the main one last.</summary>
     public void SelectAll(IReadOnlyList<MapEntity> entities)
     {
         Select(null);
         _selection.AddRange(entities.Distinct());
     }
 
-    /// <summary>The selected objects that can be moved or deleted (not those defined by an interior's archetype), the main one last.</summary>
+    // The selected objects that can be moved or deleted (not those defined by an interior's archetype), the main one
+    // last.
     public IReadOnlyList<MapEntity> EditableSelection => SelectedEntities.Where(e => e.CanEdit).ToList();
 
-    /// <summary>Ctrl+click: adds the object to the selection (it becomes the main one), or removes it if already in.</summary>
     public void ToggleSelect(MapEntity entity)
     {
         if (_selectionLibrary != World.Maps)
@@ -83,7 +71,6 @@ internal sealed class AppState
 
     public bool IsSelected(MapEntity entity) => SelectedEntities.Contains(entity);
 
-    /// <summary>Tool of the 3D view: selection only, or handles to move, turn or scale the selected object.</summary>
     public TransformTool Tool
     {
         get => Settings.Tool;
@@ -96,25 +83,19 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>
-    /// Collision pieces the export will remove (deleted buildings), drawn in red in the 3D view while the export window
-    /// shows them; null otherwise. A new list is set at each change.
-    /// </summary>
+    // Collision pieces the export will remove (deleted buildings), drawn in red in the 3D view while the export
+    // window shows them; null otherwise.
     public IReadOnlyList<CollisionFileCut>? CollisionPreview { get; set; }
 
-    /// <summary>File of <see cref="CollisionPreview"/> under the mouse in the export window (lit, the others fade), or null.</summary>
     public CollisionFileCut? CollisionPreviewHovered { get; set; }
 
-    /// <summary>Occluders the export will remove (deleted buildings), drawn in blue like <see cref="CollisionPreview"/>; null otherwise.</summary>
+    // Occluders the export will remove (deleted buildings), drawn in blue like CollisionPreview; null otherwise.
     public IReadOnlyList<OccluderFileCut>? OcclusionPreview { get; set; }
 
-    /// <summary>File of <see cref="OcclusionPreview"/> under the mouse in the export window, or null.</summary>
     public OccluderFileCut? OcclusionPreviewHovered { get; set; }
 
-    /// <summary>Deletion asked for and waiting for confirmation (the window shows what goes), null if none.</summary>
     public DeletionPlan? PendingDeletion { get; private set; }
 
-    /// <summary>Asks to delete the selected objects: shows what goes with them before anything is deleted.</summary>
     public void RequestDelete()
     {
         if (EditableSelection is { Count: > 0 } targets)
@@ -123,7 +104,6 @@ internal sealed class AppState
 
     public void CancelDelete() => PendingDeletion = null;
 
-    /// <summary>Deletes what <see cref="PendingDeletion"/> lists (one undo step).</summary>
     public void ConfirmDelete()
     {
         if (PendingDeletion is not { } plan || World.Maps is not { } library)
@@ -135,18 +115,17 @@ internal sealed class AppState
         Select(null);
     }
 
-    /// <summary>Object type to add, waiting for the main form to find the ground at the centre of the 3D view; 0 if none.</summary>
+    // Object type to add, waiting for the main form to find the ground at the centre of the 3D view; 0 if none.
     public uint PlaceRequest { get; set; }
 
-    /// <summary>Result of the last editing command (add an object, put it on the ground...), shown a few seconds in the status bar.</summary>
+    // Result of the last editing command (add an object, put it on the ground...), shown a few seconds in the status
+    // bar.
     public (string Text, bool IsWarning, DateTime Time)? Notice { get; private set; }
 
     public void Notify(string text, bool warning = false) => Notice = (text, warning, DateTime.Now);
 
-    /// <summary>
-    /// Adds an object of type <paramref name="archetypeHash"/> standing on <paramref name="ground"/>, in the project's
-    /// own map (see <see cref="MapProject.AddedMapFile"/>), selects it and takes the "move" tool. One undo step.
-    /// </summary>
+    // Adds an object of type archetypeHash standing on ground, in the project's own map, selects it and takes the
+    // "move" tool.
     public void Place(uint archetypeHash, System.Numerics.Vector3 ground)
     {
         Notice = null;
@@ -164,13 +143,10 @@ internal sealed class AppState
             Tool = TransformTool.Move;
     }
 
-    /// <summary>Finds the collision under the objects being edited.</summary>
     public CollisionQuery CollisionQuery { get; } = new();
 
-    /// <summary>
-    /// Position that puts the object on the collision below it (see <see cref="GroundSnap"/>), or null when the
-    /// collisions are not loaded yet or nothing lies below.
-    /// </summary>
+    // Position that puts the object on the collision below it, or null when the collisions are not loaded yet or
+    // nothing lies below.
     public System.Numerics.Vector3? GroundPosition(MapEntity entity, Archetype? archetype)
     {
         if (World.Collisions is null)
@@ -182,10 +158,7 @@ internal sealed class AppState
         return GroundSnap.Snap(entity, archetype, collisions);
     }
 
-    /// <summary>
-    /// Moves each selected object up or down so that it rests on the collision below it (see <see cref="GroundSnap"/>).
-    /// One undo step.
-    /// </summary>
+    // Moves each selected object up or down so that it rests on the collision below it.
     public void PutSelectionOnGround()
     {
         if (EditableSelection is not { Count: > 0 } entities || World.Maps is not { } library)
@@ -238,7 +211,6 @@ internal sealed class AppState
         Notify($"{moved.Count} objet{(moved.Count > 1 ? "s posés" : " posé")} au sol sur {entities.Count}.{missing}", withoutGround > 0);
     }
 
-    /// <summary>Language of the copied positions (Lua, JSON, C#), remembered in the settings.</summary>
     public CopyFormat CopyFormat
     {
         get => Settings.CopyFormat;
@@ -251,22 +223,16 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>A position written in the chosen <see cref="CopyFormat"/>, with the heading if given.</summary>
     public string FormatPosition(System.Numerics.Vector3 position, float? heading = null) =>
         PositionText.Position(position, heading, CopyFormat);
 
-    /// <summary>The selected objects (type name, position, heading) as a list in the chosen <see cref="CopyFormat"/>.</summary>
     public string FormatSelection() => PositionText.List(
         SelectedEntities.Select(e => new PositionItem(World.Names?.Describe(e.ArchetypeHash) ?? $"0x{e.ArchetypeHash:X8}", e.Position, Ui.FiveMFormat.Heading(e))),
         CopyFormat);
 
-    /// <summary>Objects copied by Ctrl+C (see <see cref="ObjectCopy"/>), empty if none.</summary>
     public IReadOnlyList<CopiedObject> Copied { get; private set; } = [];
 
-    /// <summary>
-    /// Ctrl+C: remembers the selected objects (interiors excepted: they cannot be added yet). Objects of an interior
-    /// can be copied: the copies are ordinary objects of the project.
-    /// </summary>
+    // Ctrl+C: remembers the selected objects (interiors excepted: they cannot be added yet).
     public void CopySelection()
     {
         if (World.Maps is not { } library || SelectedEntities is not { Count: > 0 } selected)
@@ -284,13 +250,10 @@ internal sealed class AppState
             : $"{copied.Count} objets copiés{skipped}. Ctrl+V pour les coller au centre de la vue.");
     }
 
-    /// <summary>Ctrl+V asked: waiting for the main form to find the ground at the centre of the 3D view.</summary>
     public bool PasteRequest { get; set; }
 
-    /// <summary>
-    /// Adds the copied objects to the project's own map, the base of the group on <paramref name="ground"/>; selects them
-    /// and takes the "move" tool. One undo step.
-    /// </summary>
+    // Adds the copied objects to the project's own map, the base of the group on ground; selects them and takes the
+    // "move" tool.
     public void Paste(System.Numerics.Vector3 ground)
     {
         Notice = null;
@@ -304,7 +267,7 @@ internal sealed class AppState
             Tool = TransformTool.Move;
     }
 
-    /// <summary>The project's own map, where added objects go (created if needed); null, with a message, without a project.</summary>
+    // The project's own map, where added objects go (created if needed); null, with a message, without a project.
     private MapData? ProjectMap(MapLibrary library)
     {
         if (Project is not { } project)
@@ -319,7 +282,7 @@ internal sealed class AppState
         return library.FindCustomMap(file) ?? library.CreateCustomMap(file);
     }
 
-    /// <summary>Moves the camera in front of an object, at a distance suited to its size, keeping the viewing direction.</summary>
+    // Moves the camera in front of an object, at a distance suited to its size, keeping the viewing direction.
     public void FocusOn(MapEntity entity)
     {
         var center = entity.Position;
@@ -332,7 +295,6 @@ internal sealed class AppState
         FocusOn(center, radius);
     }
 
-    /// <summary>Moves the camera so that a sphere fills the view, keeping the viewing direction.</summary>
     public void FocusOn(System.Numerics.Vector3 center, float radius)
     {
         float distance = Math.Clamp(radius * 2.5f, 6f, 3000f);
@@ -340,13 +302,10 @@ internal sealed class AppState
         Camera.LookAt(center);
     }
 
-    /// <summary>Point marked in the 3D view (a position reached by the global search), with its heading if any.</summary>
     public (System.Numerics.Vector3 Position, System.Numerics.Vector2? Facing)? Marker { get; set; }
 
-    /// <summary>
-    /// Moves the camera above and behind a point (e.g. a position pasted from a FiveM script), looking down at it:
-    /// from behind <paramref name="facing"/> if given (the heading of a vector4), otherwise in the current direction.
-    /// </summary>
+    // Moves the camera above and behind a point (e.g. a position pasted from a FiveM script), looking down at it:
+    // from behind facing if given (the heading of a vector4), otherwise in the current direction.
     public void LookFromAbove(System.Numerics.Vector3 target, System.Numerics.Vector2? facing = null)
     {
         var forward = Camera.Forward;
@@ -356,10 +315,7 @@ internal sealed class AppState
         Camera.LookAt(target);
     }
 
-    /// <summary>
-    /// Changes made to the map, for undo / redo. Emptied when the map is loaded again (another version or DLC):
-    /// the changes were made to the previous one, and are lost.
-    /// </summary>
+    // Changes made to the map, for undo / redo.
     public EditHistory History
     {
         get
@@ -376,24 +332,20 @@ internal sealed class AppState
     private readonly EditHistory _history = new();
     private MapLibrary? _historyLibrary;
 
-    /// <summary>Undoes the last change and selects the objects it concerned (those still on the map).</summary>
     public void Undo()
     {
         if (History.Undo() is { Selection.Count: > 0 } edit)
             SelectAll(edit.Selection);
     }
 
-    /// <summary>Does the last undone change again and selects the objects it concerned (those still on the map).</summary>
     public void Redo()
     {
         if (History.Redo() is { Selection.Count: > 0 } edit)
             SelectAll(edit.Selection);
     }
 
-    /// <summary>
-    /// Map files to write when saving: those changed in this session (even if the change was undone since,
-    /// so that a file saved earlier is put back) and those saved before. Empty when nothing was changed.
-    /// </summary>
+    // Map files to write when saving: those changed in this session (even if the change was undone since, so that a
+    // file saved earlier is put back) and those saved before.
     public IReadOnlyList<MapData> MapsToSave
     {
         get
@@ -434,23 +386,18 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>The model viewer (vehicles, object types), drawn by the main form, shown by the "Visionneuse" panel.</summary>
     public ModelViewer Viewer { get; } = new();
 
-    /// <summary>
-    /// Map files of a FiveM export: those to save, plus the saved versions taken back when the map was loaded
-    /// (modified in an earlier session).
-    /// </summary>
+    // Map files of a FiveM export: those to save, plus the saved versions taken back when the map was loaded
+    // (modified in an earlier session).
     public IReadOnlyList<MapData> MapsToExport =>
         MapsToSave.Concat(World.Maps?.Maps.Where(m => m.IsSaved) ?? []).Distinct().ToList();
 
     private readonly HashSet<MapData> _savedMaps = [];
     private MapLibrary? _savedMapsLibrary;
 
-    /// <summary>Result of the last save, for the status bar: text, success, time.</summary>
     public (string Text, bool Success, DateTime Time)? LastSave { get; private set; }
 
-    /// <summary>Writes the modified map files to the open project's "stream" folder (nothing without a project).</summary>
     public void SaveMaps()
     {
         if (SaveFolder is not { } folder)
@@ -470,22 +417,17 @@ internal sealed class AppState
             LastSave = ($"Échec de l'enregistrement : {string.Join(" ; ", report.Errors)}", false, DateTime.Now);
     }
 
-    /// <summary>The open project, null if none: changes can then be made, but saving asks for a project first.</summary>
     public MapProject? Project { get; private set; }
 
-    /// <summary>Folder of the saved map files: the open project's "stream" folder.</summary>
     public string? SaveFolder => Project?.StreamFolder;
 
-    /// <summary>Why the last project could not be opened (shown in the status panel), null if it was.</summary>
     public string? ProjectError { get; private set; }
 
     private const int MaxRecentProjects = 8;
 
-    /// <summary>Folder proposed for new projects.</summary>
     public string ProjectsFolder => Settings.ProjectsFolder
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NodeRunner");
 
-    /// <summary>At start-up: turns the save folder of earlier versions into a project, then opens the last project.</summary>
     public void RestoreProject()
     {
         MigrateSaveFolder();
@@ -504,7 +446,7 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>The save folder of the versions before projects becomes the first project (its .ymap files go to "stream").</summary>
+    // The save folder of the versions before projects becomes the first project (its .ymap files go to "stream").
     private void MigrateSaveFolder()
     {
         if (Settings.SaveFolder is not { } folder)
@@ -536,7 +478,7 @@ internal sealed class AppState
         SaveSettings();
     }
 
-    /// <summary>Opens the project of a folder (holding projet.json) and loads its map. Returns the error, null if opened.</summary>
+    // Opens the project of a folder (holding projet.json) and loads its map.
     public string? OpenProject(string folder)
     {
         MapProject project;
@@ -552,11 +494,7 @@ internal sealed class AppState
         return null;
     }
 
-    /// <summary>
-    /// Creates a project in a folder and opens it. Without an open project, the changes in progress are kept and go
-    /// into the new project; otherwise, or when the folder already holds map files, the map is loaded again
-    /// (without the previous project's files, with the folder's ones).
-    /// </summary>
+    // Creates a project in a folder and opens it.
     public string? CreateProject(string folder, string name)
     {
         bool reload = Project is not null || MapProject.HasMapFiles(folder);
@@ -575,7 +513,6 @@ internal sealed class AppState
         return null;
     }
 
-    /// <summary>Closes the project: the game's map, without any saved file.</summary>
     public void CloseProject()
     {
         if (Project is null)
@@ -600,7 +537,6 @@ internal sealed class AppState
             World.RequestMapReload();
     }
 
-    /// <summary>The project's map version and DLC become the ones shown.</summary>
     private void ApplyProjectMap(MapProject project)
     {
         Settings.MapVersion = project.MapVersion;
@@ -621,7 +557,7 @@ internal sealed class AppState
             SaveSettings();
     }
 
-    /// <summary>Map version and "map after this DLC" (toolbar): changing them reloads the map; kept by the open project.</summary>
+    // Map version and "map after this DLC" (toolbar): changing them reloads the map; kept by the open project.
     public void SetMapSelection(MapVersion version, string? lastPack)
     {
         if (Settings.MapVersion == version && Settings.LastDlcPack == lastPack)
@@ -637,7 +573,6 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>Name of the FiveM resource exported: the project's.</summary>
     public string ExportResourceName
     {
         get => Project?.ResourceName ?? Settings.ExportResourceName ?? FiveMResource.DefaultName;
@@ -653,7 +588,6 @@ internal sealed class AppState
         }
     }
 
-    /// <summary>Folder where the FiveM resource is exported: the project's, else the last one used.</summary>
     public string? ExportFolder
     {
         get => Project?.ExportFolder ?? Settings.ExportFolder;
@@ -684,7 +618,6 @@ internal sealed class AppState
     public bool IsLayerVisible(string layer) =>
         IsHiddenByDefault(layer) ? Settings.ShownLayers.Contains(layer) : !Settings.HiddenLayers.Contains(layer);
 
-    /// <summary>Layers that are off until the user turns them on (heavy, or covering the map).</summary>
     private static bool IsHiddenByDefault(string layer) =>
         layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal);
 
@@ -704,10 +637,9 @@ internal sealed class AppState
         World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName) };
     }
 
-    /// <summary>Optional names file of the user, in the data folder (one name per line, as CodeWalker's strings.txt).</summary>
+    // Optional names file of the user, in the data folder (one name per line, as CodeWalker's strings.txt).
     public const string UserNamesFileName = "strings.txt";
 
-    /// <summary>Uses the manual folder from settings if valid, otherwise automatic detection.</summary>
     public void RedetectGame(bool clearManualChoice = false)
     {
         if (clearManualChoice && Settings.GameFolder is not null)
@@ -728,7 +660,6 @@ internal sealed class AppState
             .ToList();
     }
 
-    /// <summary>Validates a folder picked by the user. Returns false if it is not a game folder.</summary>
     public bool TrySetManualGameFolder(string folder)
     {
         var install = GameFolderValidator.TryCreate(folder, "Choix manuel");
@@ -756,7 +687,7 @@ internal sealed class AppState
     }
 }
 
-/// <summary>Tools of the 3D view (floating bar, keys 1 to 4).</summary>
+// Tools of the 3D view (floating bar, keys 1 to 4).
 public enum TransformTool
 {
     Select,

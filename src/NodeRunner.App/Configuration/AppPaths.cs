@@ -1,18 +1,13 @@
 namespace NodeRunner.App.Configuration;
 
-/// <summary>
-/// Where NodeRunner stores its files. Portable first: next to the exe.
-/// If that folder is read-only (e.g. inside Program Files), falls back to %LOCALAPPDATA%\NodeRunner.
-/// </summary>
+// Where NodeRunner stores its files. Portable first: next to the exe. If that folder is read-only (e.g. inside
+// Program Files), falls back to %LOCALAPPDATA%\NodeRunner.
 public sealed class AppPaths
 {
-    /// <summary>Folder that holds settings.json.</summary>
     public string ConfigDirectory { get; }
 
-    /// <summary>Folder for extracted data and cache (the "data" folder).</summary>
     public string DataDirectory { get; }
 
-    /// <summary>True when we had to fall back to %LOCALAPPDATA%.</summary>
     public bool UsesLocalAppData { get; }
 
     public string SettingsFile => Path.Combine(ConfigDirectory, "settings.json");

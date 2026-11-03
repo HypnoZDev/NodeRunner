@@ -5,11 +5,8 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// While the "Rooms and portals" layer is shown: the room or portal under the mouse in the 3D view is outlined, with its
-/// details next to the mouse. A portal under the mouse wins (a small target, aimed at on purpose); otherwise the room
-/// holding the camera, or else the first one the mouse ray enters.
-/// </summary>
+// While the "Rooms and portals" layer is shown: the room or portal under the mouse in the 3D view is outlined, with
+// its details next to the mouse.
 internal sealed class RoomHover(AppState state, RoomLayer layer)
 {
     private static readonly int[] BoxEdges = [0, 1, 1, 3, 3, 2, 2, 0, 4, 5, 5, 7, 7, 6, 6, 4, 0, 4, 1, 5, 2, 6, 3, 7];
@@ -17,7 +14,6 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
     private Vector2 _origin, _size;
     private Matrix4x4 _viewProjection;
 
-    /// <param name="blocked">Another element of the 3D view (handles, a popup...) has the mouse.</param>
     public void Update(bool blocked)
     {
         bool showRooms = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms));
@@ -81,7 +77,6 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
             Show(best);
     }
 
-    /// <summary>Distance along the ray to the flat polygon <paramref name="corners"/> (a portal), null if it misses.</summary>
     private static float? Hit(Vector3[] corners, Vector3 origin, Vector3 direction)
     {
         for (int c = 1; c + 1 < corners.Length; c++)
@@ -138,7 +133,7 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
 
     private static string Side(int room, string name) => room == 0 ? "l'extérieur" : $"la salle {name}";
 
-    /// <summary>Distance along the ray at which it enters the room's box (0 when the camera is inside), null if it misses.</summary>
+    // Distance along the ray at which it enters the room's box (0 when the camera is inside), null if it misses.
     private static float? Entry(RoomBox room, Vector3 origin, Vector3 direction)
     {
         if (!Matrix4x4.Invert(room.Transform, out var toRoom))

@@ -5,13 +5,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Maps;
 
-/// <summary>
-/// Reads the occluders of a map file and removes some of them. Box occluders are 16 bytes of shorts (centre and size in
-/// quarters of a metre, direction of the box's X axis as sine and cosine); occluder meshes are 64 bytes (bounds, then a
-/// pointer to a data block holding the vertices, 3 floats each, followed by one byte per corner of each triangle).
-/// Removal happens in place: kept items move to the front of their list, a shortened mesh is written over its old
-/// data, so every other pointer of the file stays valid.
-/// </summary>
+// Reads the occluders of a map file and removes some of them.
 public sealed class OccluderFile : IOccluderReader, IOccluderWriter
 {
     private const int MapBoxOccluders = 128;
@@ -27,7 +21,6 @@ public sealed class OccluderFile : IOccluderReader, IOccluderWriter
     private const int ModelVertexBytes = 48;
     private const int ModelTriangleCount = 50;
 
-    /// <summary>Set in the triangle count of every mesh of the game (meaning unknown), kept when writing.</summary>
     private const int TriangleCountFlag = 0x8000;
 
     public MapOccluders ReadOccluders(ReadOnlySpan<byte> map)
@@ -134,7 +127,6 @@ public sealed class OccluderFile : IOccluderReader, IOccluderWriter
         return (vertices, indices);
     }
 
-    /// <summary>Rewrites a mesh without the <paramref name="removed"/> triangles, over its old data. False if none is left.</summary>
     private static bool Shorten(MetaDocument document, Span<byte> item, IReadOnlySet<int> removed)
     {
         var (vertices, indices) = ReadModel(document, item);
@@ -189,7 +181,6 @@ public sealed class OccluderFile : IOccluderReader, IOccluderWriter
         return true;
     }
 
-    /// <summary>An array field of CMapData: block and offset of its first item, number of items.</summary>
     private static (int Block, int Offset, int Count) Array(byte[] mapData, int field)
     {
         var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(mapData.AsSpan(field)));

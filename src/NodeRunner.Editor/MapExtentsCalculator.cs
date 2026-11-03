@@ -3,14 +3,9 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>
-/// Boxes of a map file after some of its objects were moved. The game only loads a map when the camera is inside
-/// its streaming box, so a moved object must stay inside it. The boxes only grow: Rockstar's own values are kept
-/// as long as the objects fit, which never makes a map load later than in the game.
-/// </summary>
+// Boxes of a map file after some of its objects were moved.
 public static class MapExtentsCalculator
 {
-    /// <param name="archetypes">Finds an object type (for its size and draw distance), null if unknown.</param>
     public static MapExtents Compute(MapData map, Func<uint, Archetype?> archetypes)
     {
         if (map.IsCustom)
@@ -25,10 +20,8 @@ public static class MapExtentsCalculator
         return extents;
     }
 
-    /// <summary>
-    /// Boxes computed from the objects only (a map made by the user has no values of Rockstar to keep): exactly
-    /// around them, as "Calculate extents" of the map tools. All zero for an empty map.
-    /// </summary>
+    // Boxes computed from the objects only (a map made by the user has no values of Rockstar to keep): exactly around
+    // them, as "Calculate extents" of the map tools.
     private static MapExtents ComputeExact(MapData map, Func<uint, Archetype?> archetypes)
     {
         var empty = new MapExtents(new Vector3(float.MaxValue), new Vector3(float.MinValue), new Vector3(float.MaxValue), new Vector3(float.MinValue));
@@ -53,7 +46,6 @@ public static class MapExtentsCalculator
             Vector3.Max(extents.EntitiesMax, max));
     }
 
-    /// <summary>Axis-aligned box around a model box placed in the world.</summary>
     private static (Vector3 Min, Vector3 Max) WorldBox(Vector3 boxMin, Vector3 boxMax, Matrix4x4 transform)
     {
         var min = new Vector3(float.MaxValue);

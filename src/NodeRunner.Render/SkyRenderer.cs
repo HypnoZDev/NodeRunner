@@ -8,11 +8,8 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// The sky behind the scene: a gradient from the horizon colour to the zenith colour (darker below the horizon),
-/// with the sun disc and its glow (see <see cref="SceneLighting"/>). One triangle covering the viewport, drawn
-/// first, without depth.
-/// </summary>
+// The sky behind the scene: a gradient from the horizon colour to the zenith colour (darker below the horizon), with
+// the sun disc and its glow.
 public sealed unsafe class SkyRenderer : IDisposable
 {
     private const string ShaderSource = @"
@@ -91,7 +88,6 @@ float4 PS(PS_INPUT input) : SV_Target
         _blendState = device.CreateBlendState(BlendDescription.Opaque);
     }
 
-    /// <summary>Fills the current viewport with the sky seen through <paramref name="viewProjection"/>.</summary>
     public void Draw(Matrix4x4 viewProjection, SceneLighting lighting)
     {
         if (!Matrix4x4.Invert(viewProjection, out var inverse))

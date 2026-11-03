@@ -3,13 +3,8 @@ using System.Text;
 
 namespace NodeRunner.Data.Native.Resources;
 
-/// <summary>
-/// Editable form of a "Meta" resource (.ymap, .ytyp, .ymt): its structure and enum descriptions, kept as they are,
-/// and its data blocks, which can be changed, grown or added. <see cref="Write"/> lays the whole resource out again.
-/// <para>Pointers between items of the data blocks are (block number, offset in the block): they stay valid when the
-/// blocks move, so only the pointers to the blocks themselves are rewritten. Items may be appended to a block
-/// without breaking the pointers to the existing ones.</para>
-/// </summary>
+// Editable form of a "Meta" resource (.ymap, .ytyp, .ymt): its structure and enum descriptions, kept as they are, and
+// its data blocks, which can be changed, grown or added.
 public sealed class MetaDocument
 {
     // Resource file base (first 16 bytes) and Meta header.
@@ -35,7 +30,6 @@ public sealed class MetaDocument
 
     private const ulong SystemBase = 0x50000000;
 
-    /// <summary>Largest data block the game writes (items beyond go to another block of the same structure).</summary>
     public const int MaxBlockLength = 0x4000;
 
     // Page layout, as the game files are commonly rebuilt: one page size, chosen to fit the largest item.
@@ -44,17 +38,17 @@ public sealed class MetaDocument
     private const int Alignment = 16;
     private const int PageMargin = 16;
 
-    /// <summary>A structure as the file describes it: description (32 bytes) and its fields (16 bytes each).</summary>
+    // A structure as the file describes it: description (32 bytes) and its fields (16 bytes each).
     public sealed record StructureInfo(byte[] Info, byte[] Entries)
     {
         public uint NameHash => BinaryPrimitives.ReadUInt32LittleEndian(Info);
         public int Size => BinaryPrimitives.ReadInt32LittleEndian(Info.AsSpan(0x18));
     }
 
-    /// <summary>An enum as the file describes it: description (24 bytes) and its values (8 bytes each).</summary>
+    // An enum as the file describes it: description (24 bytes) and its values (8 bytes each).
     public sealed record EnumInfo(byte[] Info, byte[] Entries);
 
-    /// <summary>A data block: items of one structure, back to back.</summary>
+    // A data block: items of one structure, back to back.
     public sealed class Block(uint structure, byte[] data)
     {
         public uint Structure { get; } = structure;
@@ -68,14 +62,12 @@ public sealed class MetaDocument
     public List<Block> Blocks { get; } = new();
     public string? Name { get; set; }
 
-    /// <summary>Index (0-based) of the block holding the root item.</summary>
     public int RootBlock
     {
         get => BinaryPrimitives.ReadInt32LittleEndian(_header.AsSpan(RootBlockOffset)) - 1;
         set => BinaryPrimitives.WriteInt32LittleEndian(_header.AsSpan(RootBlockOffset), value + 1);
     }
 
-    /// <summary>Reads the decompressed content of a Meta resource.</summary>
     public static MetaDocument Read(ReadOnlySpan<byte> data)
     {
         var d = new ResourceData(data);
@@ -130,18 +122,12 @@ public sealed class MetaDocument
 
     public StructureInfo? FindStructure(uint nameHash) => Structures.Find(s => s.NameHash == nameHash);
 
-    /// <summary>Encodes a pointer to an item of a block, as stored in the data: block number (1-based) and offset.</summary>
     public static ulong Pointer(int block, int offset) => (ulong)(uint)(block + 1) | ((ulong)(uint)offset << 12);
 
-    /// <summary>Decodes a pointer to an item of a block (block -1 for a null pointer).</summary>
     public static (int Block, int Offset) DecodePointer(ulong pointer) => ((int)(pointer & 0xFFF) - 1, (int)((pointer >> 12) & 0xFFFFF));
 
-    /// <summary>
-    /// Lays the resource out again and returns its decompressed content, with the system page flags to put in the
-    /// resource header (see <see cref="ResourceFile"/>).
-    /// <para>The pointer to the "useless data" of the original files (unused by the game) is not kept, as in the
-    /// files rebuilt by other map tools.</para>
-    /// </summary>
+    // Lays the resource out again and returns its decompressed content, with the system page flags to put in the
+    // resource header.
     public (byte[] Content, uint SystemPageFlags) Write()
     {
         // Pieces of the file, in order: header, descriptions, data blocks, name; the page list comes last because
@@ -233,10 +219,8 @@ public sealed class MetaDocument
         return (output, PageFlags(pageCount, pageSize));
     }
 
-    /// <summary>
-    /// Positions of the pieces: back to back (aligned to 16 bytes) in pages of one size, an item never crossing the
-    /// end of a page. The page size is the smallest that fits the largest piece and keeps under 128 pages.
-    /// </summary>
+    // Positions of the pieces: back to back (aligned to 16 bytes) in pages of one size, an item never crossing the
+    // end of a page.
     private static (int[] Positions, int PageSize, int PageCount) Layout(List<int> pieces)
     {
         int pageSize = MinPageSize;
@@ -265,10 +249,8 @@ public sealed class MetaDocument
         }
     }
 
-    /// <summary>
-    /// System page flags of the resource header for <paramref name="pageCount"/> pages of <paramref name="pageSize"/>
-    /// bytes: the base size (0x200 shifted), then the count written as pages of 16, 8, 4, 2 and 1 times that size.
-    /// </summary>
+    // System page flags of the resource header for pageCount pages of pageSize bytes: the base size (0x200 shifted),
+    // then the count written as pages of 16, 8, 4, 2 and 1 times that size.
     public static uint PageFlags(int pageCount, int pageSize)
     {
         uint shift = 0;

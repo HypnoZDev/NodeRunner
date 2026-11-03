@@ -1,9 +1,7 @@
 namespace NodeRunner.Data.Native.Archives;
 
-/// <summary>
-/// Keys needed to read the game's RPF archives: one AES-256 key, and the "NG" cipher's 101 keys with its
-/// 17 rounds of 16 lookup tables. They belong to the user's game: NodeRunner never ships them in clear.
-/// </summary>
+// Keys needed to read the game's RPF archives: one AES-256 key, and the "NG" cipher's 101 keys with its 17 rounds of
+// 16 lookup tables.
 public sealed class ArchiveKeys
 {
     public const int AesKeyLength = 32;
@@ -11,10 +9,8 @@ public sealed class ArchiveKeys
     public const int NgRounds = 17;
     public const int NgTablesPerRound = 16;
 
-    /// <summary>Length of one NG key in bytes: one 16-byte subkey per round.</summary>
     public const int NgKeyLength = NgRounds * 16;
 
-    /// <summary>Length of all the NG tables in bytes (17 x 16 tables of 256 uints).</summary>
     public const int NgTablesLength = NgRounds * NgTablesPerRound * 256 * 4;
 
     private readonly uint[] _ngKeys;   // 101 keys of 68 uints
@@ -36,7 +32,6 @@ public sealed class ArchiveKeys
 
     public byte[] AesKey { get; }
 
-    /// <summary>The 68 uints (17 subkeys of 4) of one NG key.</summary>
     internal ReadOnlySpan<uint> NgKey(int index) => _ngKeys.AsSpan(index * (NgKeyLength / 4), NgKeyLength / 4);
 
     internal ReadOnlySpan<uint> NgTables => _ngTables;

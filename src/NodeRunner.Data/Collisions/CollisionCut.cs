@@ -2,50 +2,30 @@ using System.Numerics;
 
 namespace NodeRunner.Data.Collisions;
 
-/// <summary>
-/// The space of a deleted building: its model's box, in the building's own axes. <paramref name="ToLocal"/> takes world
-/// positions into those axes (inverse of the object's placement). <paramref name="IncludesGround"/>: everything in the box
-/// goes, the ground too (a deleted ground slab whose collision the user wants removed).
-/// </summary>
+// The space of a deleted building: its model's box, in the building's own axes.
 public readonly record struct CutVolume(Matrix4x4 ToLocal, Vector3 Min, Vector3 Max, bool IncludesGround = false);
 
-/// <summary>Writes collision files (.ybn) back.</summary>
+// Writes collision files (.ybn) back.
 public interface ICollisionWriter
 {
-    /// <summary>
-    /// The game's file <paramref name="path"/> without the given polygons (numbered as in <see cref="CollisionMesh.Polygons"/>),
-    /// as a complete .ybn file ready to be streamed; null if the file does not exist.
-    /// </summary>
-    /// <exception cref="InvalidDataException">The file is damaged or in an unsupported format.</exception>
+    // The game's file path without the given polygons (numbered as in Polygons), as a complete .ybn file ready to be
+    // streamed; null if the file does not exist.
     byte[]? RemovePolygons(string path, IReadOnlySet<int> polygons);
 }
 
-/// <summary>
-/// Chooses the collision polygons of deleted buildings. The game does not say which polygons belong to which building:
-/// a .ybn covers a whole block, split by kind of collision. A polygon goes when all its triangles lie in the box of a
-/// deleted building (a little margin added), except the ground: a flat surface with no other flat surface under it (the
-/// pavement, the road, the parking lot, a ground floor slab), so that no hole opens in the ground. Roofs and upper floors
-/// have something under them and go. (The bottom of the box is not the ground: models often go several metres below it,
-/// basements and foundations; and a lot is rarely level.)
-/// </summary>
+// Chooses the collision polygons of deleted buildings.
 public static class CollisionCut
 {
-    /// <summary>Added around the building's box: collision is often a little larger than the visible model.</summary>
     public const float Margin = 0.3f;
 
-    /// <summary>A flat surface is kept as ground unless another one lies more than this below it.</summary>
     public const float FloorGap = 1f;
 
-    /// <summary>Without surfaces to compare with: flat surfaces this close to the bottom of the box are kept.</summary>
     public const float GroundHeight = 1.5f;
 
-    /// <summary>A surface is flat when its normal is this close to vertical (about 37° of slope at most).</summary>
     private const float FlatNormal = 0.8f;
 
-    /// <summary>
-    /// Polygons of <paramref name="mesh"/> (placed by <paramref name="meshToWorld"/>) to remove for <paramref name="volumes"/>.
-    /// <paramref name="ground"/>: flat surfaces of the area (all its files of the same kind), to tell the ground from floors.
-    /// </summary>
+    // Polygons of mesh (placed by meshToWorld) to remove for volumes. ground: flat surfaces of the area (all its
+    // files of the same kind), to tell the ground from floors.
     public static HashSet<int> Select(CollisionMesh mesh, Matrix4x4 meshToWorld, IReadOnlyList<CutVolume> volumes, FlatSurfaces? ground = null)
     {
         var removed = new HashSet<int>();
@@ -82,7 +62,6 @@ public static class CollisionCut
         return removed;
     }
 
-    /// <summary>Whether a world triangle lies in the volume and is not the ground (see <see cref="CollisionCut"/>).</summary>
     public static bool IsInside(CutVolume volume, Vector3 a, Vector3 b, Vector3 c, FlatSurfaces? ground = null)
     {
         var la = Vector3.Transform(a, volume.ToLocal);
@@ -118,7 +97,7 @@ public static class CollisionCut
         p.X >= min.X && p.Y >= min.Y && p.Z >= min.Z && p.X <= max.X && p.Y <= max.Y && p.Z <= max.Z;
 }
 
-/// <summary>The flat collision surfaces of an area (world positions), sorted in cells to find what lies under a point.</summary>
+// The flat collision surfaces of an area (world positions), sorted in cells to find what lies under a point.
 public sealed class FlatSurfaces
 {
     private const float CellSize = 4f;
@@ -127,7 +106,6 @@ public sealed class FlatSurfaces
 
     public int TriangleCount => _triangles.Count / 3;
 
-    /// <summary>Adds the flat triangles of <paramref name="mesh"/> (placed by <paramref name="meshToWorld"/>) that touch the area.</summary>
     public void Add(CollisionMesh mesh, Matrix4x4 meshToWorld, Vector2 areaMin, Vector2 areaMax)
     {
         for (int t = 0; t < mesh.TriangleCount; t++)
@@ -155,7 +133,6 @@ public sealed class FlatSurfaces
         }
     }
 
-    /// <summary>Whether a flat surface lies under <paramref name="point"/>, more than <paramref name="gap"/> below it.</summary>
     public bool HasSurfaceBelow(Vector3 point, float gap)
     {
         if (!_cells.TryGetValue((Cell(point.X), Cell(point.Y)), out var list))
@@ -169,7 +146,6 @@ public sealed class FlatSurfaces
         return false;
     }
 
-    /// <summary>Height of the triangle's plane at a ground position inside the triangle, or null outside it.</summary>
     private static float? HeightAt(Vector3 a, Vector3 b, Vector3 c, Vector2 p)
     {
         var v0 = Flat(b) - Flat(a);

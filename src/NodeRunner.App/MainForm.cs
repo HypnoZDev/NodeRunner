@@ -10,7 +10,7 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App;
 
-/// <summary>Main window: hosts the DirectX surface and runs the render loop.</summary>
+// Main window: hosts the DirectX surface and runs the render loop.
 internal sealed unsafe partial class MainForm : Form
 {
     private static readonly Vector4 BackgroundColor = new(0.10f, 0.11f, 0.13f, 1f);
@@ -136,7 +136,6 @@ internal sealed unsafe partial class MainForm : Form
             WindowChrome.MaximizePressed = false;
     }
 
-    /// <summary>For a point of the client area: top edge (resize), title bar (drag), maximise button, or client.</summary>
     private IntPtr FrameHitTest(Point screen)
     {
         var p = PointToClient(screen);
@@ -151,7 +150,6 @@ internal sealed unsafe partial class MainForm : Form
         };
     }
 
-    /// <summary>True where the render surface must let the form answer (frame and title bar parts).</summary>
     private bool IsFramePoint(Point screen) => (int)FrameHitTest(screen) != HtClient;
 
     private static Point PointFromLParam(IntPtr lParam) =>
@@ -201,11 +199,8 @@ internal sealed unsafe partial class MainForm : Form
         Application.Idle += OnApplicationIdle;
     }
 
-    /// <summary>
-    /// Called by the start-up screen once the map is loaded, before this window is shown: prepares the GPU and loads
-    /// the 3D models around the camera, so the window opens on a finished view. Returns the share of these models
-    /// loaded (1 when there is nothing to wait for).
-    /// </summary>
+    // Called by the start-up screen once the map is loaded, before this window is shown: prepares the GPU and loads
+    // the 3D models around the camera, so the window opens on a finished view.
     public float PreloadModels()
     {
         if (_state.World.Maps is null || !_state.IsLayerVisible(ModelLayer.LayerName))
@@ -217,7 +212,6 @@ internal sealed unsafe partial class MainForm : Form
         return _modelLayer.PreloadProgress();
     }
 
-    /// <summary>ImGui, the GPU device and the renderers (once: before the window is shown, or when it opens).</summary>
     private void InitializeGraphics()
     {
         if (_graphics is not null)
@@ -285,7 +279,6 @@ internal sealed unsafe partial class MainForm : Form
         base.OnFormClosed(e);
     }
 
-    /// <summary>Renders frames continuously while no Windows message is waiting.</summary>
     private void OnApplicationIdle(object? sender, EventArgs e)
     {
         while (_graphics is not null && !IsDisposed && IsApplicationIdle())
@@ -334,7 +327,6 @@ internal sealed unsafe partial class MainForm : Form
         UpdateTitle();
     }
 
-    /// <summary>Window title: the open project's name, then NodeRunner.</summary>
     private void UpdateTitle()
     {
         string title = _state.Project is { } project ? $"{project.Name} — {Program.Name}" : Program.Name;
@@ -342,7 +334,6 @@ internal sealed unsafe partial class MainForm : Form
             Text = title;
     }
 
-    /// <summary>Pixels of the window left to the 3D view by the docked panels (whole pixels, at least 1 x 1).</summary>
     private Rectangle SceneViewport()
     {
         var (position, size) = DockLayout.SceneArea;
@@ -353,7 +344,6 @@ internal sealed unsafe partial class MainForm : Form
         return new Rectangle(x, y, width, height);
     }
 
-    /// <summary>3D scene, drawn before the interface, in the area between the panels.</summary>
     private void DrawWorld(ColorRenderer lines, Rectangle scene)
     {
         var camera = _state.Camera;
@@ -425,10 +415,8 @@ internal sealed unsafe partial class MainForm : Form
         DrawMarker(lines, viewProjection);
     }
 
-    /// <summary>
-    /// Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose depth
-    /// tells how much water is crossed).
-    /// </summary>
+    // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose
+    // depth tells how much water is crossed).
     private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting)
     {
         var water = _state.World.Water;
@@ -452,10 +440,8 @@ internal sealed unsafe partial class MainForm : Form
     private readonly CutPreview _collisionPreview = new(new Vector3(1f, 0.15f, 0.1f), new Vector3(1f, 0.35f, 0.25f));
     private readonly CutPreview _occlusionPreview = new(new Vector3(0.2f, 0.55f, 1f), new Vector3(0.45f, 0.75f, 1f));
 
-    /// <summary>
-    /// While the export window lists them: the collision pieces and occluders that will be removed, translucent with their
-    /// outlines. The file hovered in the list stays lit, the others fade.
-    /// </summary>
+    // While the export window lists them: the collision pieces and occluders that will be removed, translucent with
+    // their outlines.
     private void DrawCollisionPreview(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         var camera = _state.Camera.Position;
@@ -471,7 +457,8 @@ internal sealed unsafe partial class MainForm : Form
         _occlusionPreview.Dispose();
     }
 
-    /// <summary>Removed pieces of a list of files, as translucent surfaces (lit or faint) and outlines, rebuilt when the list changes.</summary>
+    // Removed pieces of a list of files, as translucent surfaces (lit or faint) and outlines, rebuilt when the list
+    // changes.
     private sealed class CutPreview(Vector3 color, Vector3 edgeColor) : IDisposable
     {
         private readonly Vector4 _surfaceColor = new(color, 0.4f);
@@ -480,7 +467,6 @@ internal sealed unsafe partial class MainForm : Form
         private object? _source;
         private readonly List<(object Cut, ColorMesh? Surface, ColorMesh? Faint, ColorMesh? Edges)> _meshes = new();
 
-        /// <param name="otherHovered">A file of another preview is hovered: all of this one fades.</param>
         public void Draw<T>(ColorRenderer lines, Matrix4x4 viewProjection, Vector3 camera, IReadOnlyList<T>? cuts, T? hovered,
             bool otherHovered, Func<T, IReadOnlyList<Vector3>> triangles) where T : class
         {
@@ -531,7 +517,8 @@ internal sealed unsafe partial class MainForm : Form
 
     private static readonly Vector4 DeletionColor = new(1f, 0.25f, 0.2f, 1f);
 
-    /// <summary>While a deletion waits for confirmation: the boxes of every object that would go, in red, visible through walls.</summary>
+    // While a deletion waits for confirmation: the boxes of every object that would go, in red, visible through
+    // walls.
     private void DrawDeletionPreview(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         if (_state.PendingDeletion is not { } plan || _state.World.Maps is not { } library)
@@ -569,7 +556,6 @@ internal sealed unsafe partial class MainForm : Form
         };
     }
 
-    /// <summary>Selects the object under the last click (or nothing if the click was on the sky or the ground grid).</summary>
     private void PickClickedObject(Rectangle scene)
     {
         if (_pickRequest is not var (click, control) || _graphics is null || _modelRenderer is null || _pickBuffer is null)
@@ -590,10 +576,8 @@ internal sealed unsafe partial class MainForm : Form
             _state.Select(picked);
     }
 
-    /// <summary>
-    /// An object asked to be added (viewer "Placer"), or copied objects to paste (Ctrl+V): put on the ground at the
-    /// centre of the 3D view, or 15 m in front of the camera when nothing is there (sky, models hidden).
-    /// </summary>
+    // An object asked to be added (viewer "Placer"), or copied objects to paste (Ctrl+V): put on the ground at the
+    // centre of the 3D view, or 15 m in front of the camera when nothing is there (sky, models hidden).
     private void PlaceRequestedObject(Rectangle scene)
     {
         if (_state.PlaceRequest is 0 && !_state.PasteRequest || _modelRenderer is null || _pickBuffer is null)
@@ -617,7 +601,6 @@ internal sealed unsafe partial class MainForm : Form
             _state.Place(archetype, point);
     }
 
-    /// <summary>The boxes of the selected objects, visible through walls (the main one brighter).</summary>
     private void DrawSelectionBox(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         var selected = _state.SelectedEntities;
@@ -635,7 +618,6 @@ internal sealed unsafe partial class MainForm : Form
 
     private static readonly Vector4 MarkerColor = new(0.30f, 0.55f, 1f, 1f);
 
-    /// <summary>Position reached by the global search: a mast, a cross on the ground and an arrow for the heading.</summary>
     private void DrawMarker(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         if (_state.Marker is not var (p, facing))
@@ -711,6 +693,12 @@ internal sealed unsafe partial class MainForm : Form
 
         HandleProjectRequests();
 
+        if (_ui.ArchiveExtractRequested is { } extract)
+        {
+            _ui.ArchiveExtractRequested = null;
+            ExtractArchiveItem(extract);
+        }
+
         if (_ui.ChooseExportFolderRequested)
         {
             _ui.ChooseExportFolderRequested = false;
@@ -730,10 +718,7 @@ internal sealed unsafe partial class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Saves the modified map files into the project. Without a project, opens the "New project" window instead
-    /// (which saves once the project is created) and returns false.
-    /// </summary>
+    // Saves the modified map files into the project.
     private bool SaveMaps()
     {
         if (_state.MapsToSave.Count == 0)
@@ -832,7 +817,7 @@ internal sealed unsafe partial class MainForm : Form
         }
     }
 
-    /// <summary>Picks a project folder; a folder without projet.json can become a project (its .ymap files go to "stream").</summary>
+    // Picks a project folder; a folder without projet.json can become a project (its .ymap files go to "stream").
     private void BrowseForProject()
     {
         using var dialog = new FolderBrowserDialog
@@ -856,10 +841,8 @@ internal sealed unsafe partial class MainForm : Form
             CreateProject(folder, Path.GetFileName(folder), saveAfter: false, exitAfter: false);
     }
 
-    /// <summary>
-    /// Before leaving the map shown (other project, closing it): unsaved changes are saved, left, or the action is
-    /// cancelled. Returns true if the action can go on.
-    /// </summary>
+    // Before leaving the map shown (other project, closing it): unsaved changes are saved, left, or the action is
+    // cancelled.
     private bool ConfirmLeaveChanges()
     {
         if (!_state.History.HasUnsavedChanges || _state.MapsToSave.Count == 0)
@@ -877,6 +860,32 @@ internal sealed unsafe partial class MainForm : Form
         return answer == DialogResult.No || (answer == DialogResult.Yes && SaveMaps());
     }
 
+    private void ExtractArchiveItem(ArchiveTree.Node node)
+    {
+        if (node.IsFile)
+        {
+            using var save = new SaveFileDialog
+            {
+                Title = $"Extraire {node.Name}",
+                FileName = node.Name,
+                Filter = "Tous les fichiers (*.*)|*.*",
+                OverwritePrompt = true,
+            };
+            if (save.ShowDialog(this) == DialogResult.OK)
+                _ui.ExtractArchiveItem(node, save.FileName);
+            return;
+        }
+
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = $"Dossier où extraire « {node.Name} » ({node.FileCount} fichiers, un dossier de ce nom y sera créé).",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = true,
+        };
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            _ui.ExtractArchiveItem(node, dialog.SelectedPath);
+    }
+
     private void ChooseExportFolder()
     {
         using var dialog = new FolderBrowserDialog
@@ -891,7 +900,6 @@ internal sealed unsafe partial class MainForm : Form
         _state.ExportFolder = dialog.SelectedPath;
     }
 
-    /// <summary>Unsaved changes when the window is closed: save them, leave them, or stay.</summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);

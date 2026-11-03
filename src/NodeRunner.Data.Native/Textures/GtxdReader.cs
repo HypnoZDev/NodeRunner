@@ -6,11 +6,8 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Textures;
 
-/// <summary>
-/// NodeRunner's own reader for the texture dictionary relationships (root element CMapParentTxds):
-/// gtxd.ymt in the base game is binary (RBF), gtxd.meta files are XML. Both hold a list of
-/// txdRelationships / Item with a "parent" and a "child" dictionary name.
-/// </summary>
+// reader for the texture dictionary relationships (root element CMapParentTxds): gtxd.ymt in the base game is binary
+// (RBF), gtxd.meta files are XML.
 public sealed class GtxdReader : ITextureParentReader
 {
     public IReadOnlyList<TextureParentLink> ReadParents(byte[] data)

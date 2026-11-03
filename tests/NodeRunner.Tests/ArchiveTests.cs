@@ -9,7 +9,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Tests;
 
-/// <summary>RPF archives built in memory (no game file): layout, compression, nested archives, AES encryption.</summary>
+// RPF archives built in memory (no game file): layout, compression, nested archives, AES encryption.
 public class ArchiveTests : IDisposable
 {
     private static readonly byte[] AesKey = RandomNumberGenerator.GetBytes(32);
@@ -129,9 +129,7 @@ public class ArchiveTests : IDisposable
             new(AesKey, new byte[ArchiveKeys.NgKeyCount * ArchiveKeys.NgKeyLength], new byte[ArchiveKeys.NgTablesLength]);
     }
 
-    /// <summary>
-    /// Root: a.txt (stored), b.xml (compressed), c.ymap (resource), sub\d.txt, inner.rpf (an archive with e.txt).
-    /// </summary>
+    // Root: a.txt (stored), b.xml (compressed), c.ymap (resource), sub\d.txt, inner.rpf (an archive with e.txt).
     private static byte[] BuildArchive(bool encrypted)
     {
         var inner = new ArchiveWriter();
@@ -150,10 +148,9 @@ public class ArchiveTests : IDisposable
         return outer.Build(encrypted);
     }
 
-    /// <summary>Writes an RPF7 archive: entries are listed in the order of the calls.</summary>
+    // Writes an RPF7 archive: entries are listed in the order of the calls.
     private sealed class ArchiveWriter
     {
-        /// <summary>Writes one 16-byte entry, given its name's position and the block of its data.</summary>
         private delegate void EntryWriter(Span<byte> entry, int nameOffset, long block);
 
         private readonly List<(string Name, EntryWriter Write, byte[]? Data)> _entries = [];

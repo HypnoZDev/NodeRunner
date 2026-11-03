@@ -4,7 +4,7 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>Groups of entities shown as boxes, by level of detail.</summary>
+// Groups of entities shown as boxes, by level of detail.
 internal enum EntityBoxCategory
 {
     Hd,
@@ -14,10 +14,7 @@ internal enum EntityBoxCategory
     Interior,
 }
 
-/// <summary>
-/// Draws every placed object near the camera as the bounding box of its archetype, turned and scaled
-/// like the object. Boxes are rebuilt on a background thread when the camera has moved enough.
-/// </summary>
+// Draws every placed object near the camera as the bounding box of its archetype, turned and scaled like the object.
 internal sealed class EntityBoxLayer : IDisposable
 {
     public const float MinRadius = 100f;
@@ -58,10 +55,8 @@ internal sealed class EntityBoxLayer : IDisposable
 
     public static string LayerName(EntityBoxCategory category) => "Entity." + category;
 
-    /// <summary>Number of boxes currently shown for a category.</summary>
     public int Count(EntityBoxCategory category) => _counts[(int)category];
 
-    /// <summary>Objects near the camera whose archetype was not found (drawn as small crosses).</summary>
     public int MissingArchetypeCount { get; private set; }
 
     public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, float radius, bool enabled)

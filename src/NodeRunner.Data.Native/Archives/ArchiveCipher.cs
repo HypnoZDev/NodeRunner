@@ -4,7 +4,7 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.Data.Native.Archives;
 
-/// <summary>How an archive (its tables, and the files flagged as encrypted) is encrypted.</summary>
+// How an archive (its tables, and the files flagged as encrypted) is encrypted.
 public enum ArchiveEncryption
 {
     None,
@@ -12,10 +12,8 @@ public enum ArchiveEncryption
     Ng,
 }
 
-/// <summary>
-/// Decryption of archive data. Both ciphers work on 16-byte blocks; trailing bytes that do not fill a block
-/// are stored in clear.
-/// </summary>
+// Decryption of archive data. Both ciphers work on 16-byte blocks; trailing bytes that do not fill a block are stored
+// in clear.
 public static class ArchiveCipher
 {
     public static void Decrypt(ArchiveEncryption encryption, ArchiveKeys keys, Span<byte> data, string name, uint length)
@@ -31,7 +29,6 @@ public static class ArchiveCipher
         }
     }
 
-    /// <summary>AES-256 in ECB mode, whole blocks only.</summary>
     public static void DecryptAes(byte[] key, Span<byte> data)
     {
         int length = data.Length & ~15;
@@ -43,10 +40,8 @@ public static class ArchiveCipher
         plain.CopyTo(data);
     }
 
-    /// <summary>
-    /// The NG cipher: the key is chosen from the name (file or archive name) and its length, then each block
-    /// goes through 17 rounds of table lookups.
-    /// </summary>
+    // The NG cipher: the key is chosen from the name (file or archive name) and its length, then each block goes
+    // through 17 rounds of table lookups.
     public static void DecryptNg(ArchiveKeys keys, Span<byte> data, string name, uint length)
     {
         var key = keys.NgKey((int)((Joaat.Hash(name) + length) % ArchiveKeys.NgKeyCount));

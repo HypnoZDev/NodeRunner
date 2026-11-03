@@ -11,12 +11,8 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Draws 3D models (<see cref="ModelData"/> uploaded once as a <see cref="GpuModel"/>) with their colour texture
-/// and simple lighting (see <see cref="SceneLighting"/>): a sun-like directional light, a sky/ground ambient term and fog.
-/// Two passes (see <see cref="Begin"/>): solid meshes first (with the transparent pixels of cutout meshes,
-/// like foliage and fences, cut out), then translucent meshes (decals, glass) blended over them.
-/// </summary>
+// Draws 3D models (ModelData uploaded once as a GpuModel) with their colour texture and simple lighting: a sun-like
+// directional light, a sky/ground ambient term and fog.
 public sealed unsafe class ModelRenderer : IDisposable
 {
     private const string ShaderSource = @"
@@ -232,11 +228,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public readonly Vector2 TexCoord = texCoord;
         public readonly uint Color = Pack(color);
 
-        /// <summary>Ground layer weights (second vertex colour, see <see cref="TerrainBlend"/>).</summary>
         public readonly uint Weights = Pack(weights);
         public readonly Vector2 MaskTexCoord = maskTexCoord;
 
-        /// <summary>RGBA, one byte per channel, red in the lowest byte (R8G8B8A8_UNorm).</summary>
         private static uint Pack(Vector4 c)
         {
             static uint Byte(float v) => (uint)Math.Clamp(MathF.Round(v * 255f), 0f, 255f);
@@ -244,16 +238,12 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>Size of a model vertex in the vertex buffers of <see cref="GpuModel"/> (position first, then the normal).</summary>
     internal static int VertexSize => sizeof(ModelVertex);
 
-    /// <summary>Light, ambient and fog for the next models drawn (<see cref="SceneLighting.Neutral"/> by default).</summary>
     public SceneLighting Lighting { get; set; } = SceneLighting.Neutral;
 
-    /// <summary>Camera position for the next models drawn (fog distance).</summary>
     public Vector3 CameraPosition { get; set; }
 
-    /// <summary>Sun shadows for the next models drawn (from the next <see cref="Begin"/>), null for none.</summary>
     public ShadowMaps? Shadows { get; set; }
 
     private readonly ID3D11Device _device;
@@ -396,9 +386,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _untexturedTranslucent = GpuTexture.CreateSolid(device, 190, 200, 210, 64);
     }
 
-    /// <summary>
-    /// Texture filtering at grazing angles: 1 = plain (fastest), up to 16 (ground textures stay sharp in the distance).
-    /// </summary>
+    // Texture filtering at grazing angles: 1 = plain (fastest), up to 16 (ground textures stay sharp in the
+    // distance).
     public int Anisotropy
     {
         get => _anisotropy;
@@ -425,15 +414,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             MaxLOD = float.MaxValue,
         });
 
-    /// <summary>Copies a texture to the GPU. Null if its format is not supported.</summary>
     public GpuTexture? UploadTexture(TextureData texture) => GpuTexture.Create(_device, texture);
 
-    /// <summary>
-    /// Copies a model to the GPU (all its meshes in one vertex and one index buffer). Null if empty.
-    /// <paramref name="meshTextures"/> gives the textures of each mesh (same order as <see cref="ModelData.Meshes"/>,
-    /// then as <see cref="ModelMesh.TextureNames"/>; null for none). Textures are not owned by the model: the caller
-    /// releases them.
-    /// </summary>
+    // Copies a model to the GPU (all its meshes in one vertex and one index buffer).
     public GpuModel? Upload(ModelData model, IReadOnlyList<GpuTexture?[]> meshTextures)
     {
         var vertices = new List<ModelVertex>();
@@ -472,11 +455,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         return new GpuModel(vertexBuffer, indexBuffer, parts.ToArray(), indices.Count / 3, vertices.Count * sizeof(ModelVertex) + indices.Count * 2);
     }
 
-    /// <summary>
-    /// Sets the shaders and states shared by every model. Call once before a series of <see cref="Draw"/>,
-    /// which then draws only the meshes of this <paramref name="pass"/>. Draw every model in the
-    /// <see cref="ModelPass.Solid"/> pass first, then in the <see cref="ModelPass.Translucent"/> pass.
-    /// </summary>
+    // Sets the shaders and states shared by every model.
     public void Begin(ModelPass pass)
     {
         _pass = pass;
@@ -494,7 +473,6 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         SetShadows(Shadows);
     }
 
-    /// <summary>Sends the sun shadows to the shader (or turns them off).</summary>
     private void SetShadows(ShadowMaps? shadows)
     {
         var constants = new ShadowConstants();
@@ -522,10 +500,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>
-    /// Sets the shaders and states for drawing into the shadow image bound by <see cref="ShadowMaps.BeginCascade"/>,
-    /// before a series of <see cref="DrawShadow"/>.
-    /// </summary>
+    // Sets the shaders and states for drawing into the shadow image bound by BeginCascade, before a series of
+    // DrawShadow.
     public void BeginShadow()
     {
         _context.PSUnsetShaderResource(5); // The shadow images are being drawn.
@@ -541,7 +517,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.RSSetState(_shadowRasterizerState);
     }
 
-    /// <summary>Draws the solid and cut-out meshes of a placed model into the shadow image seen through <paramref name="lightViewProjection"/>.</summary>
+    // Draws the solid and cut-out meshes of a placed model into the shadow image seen through lightViewProjection.
     public void DrawShadow(GpuModel model, Matrix4x4 world, Matrix4x4 lightViewProjection)
     {
         SetModel(model, world, lightViewProjection, Vector3.One, pickId: 0);
@@ -562,7 +538,6 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>Draws the meshes of the current pass of one placed copy of a model. <see cref="Begin"/> must have been called.</summary>
     public void Draw(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, Vector3 tint)
     {
         if (_pass == ModelPass.Translucent && !model.HasTranslucentParts)
@@ -608,17 +583,14 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>
-    /// Sets the shaders and states for drawing object numbers into a <see cref="PickBuffer"/> (already bound),
-    /// before a series of <see cref="DrawPick"/>.
-    /// </summary>
+    // Sets the shaders and states for drawing object numbers into a PickBuffer (already bound), before a series of
+    // DrawPick.
     public void BeginPick()
     {
         Begin(ModelPass.Solid);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue); // No blending on numbers.
     }
 
-    /// <summary>Draws every mesh of a placed model with the number <paramref name="pickId"/> (not 0). See <see cref="BeginPick"/>.</summary>
     public void DrawPick(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, uint pickId)
     {
         SetModel(model, world, viewProjection, Vector3.One, pickId);
@@ -658,7 +630,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.IASetIndexBuffer(model.IndexBuffer, Format.R16_UInt, 0);
     }
 
-    /// <summary>Constants of the model being drawn: only the emission and the terrain settings change from one mesh to the next.</summary>
+    // Constants of the model being drawn: only the emission and the terrain settings change from one mesh to the
+    // next.
     private Constants _constants;
 
     private void SetMesh(float emission, Vector4 terrain)
@@ -706,20 +679,17 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     }
 }
 
-/// <summary>The two passes of <see cref="ModelRenderer"/>, in drawing order.</summary>
+// The two passes of ModelRenderer, in drawing order.
 public enum ModelPass
 {
-    /// <summary>Opaque and cutout meshes.</summary>
     Solid,
 
-    /// <summary>Translucent meshes, blended over the solid ones.</summary>
     Translucent,
 }
 
-/// <summary>A model stored on the GPU (see <see cref="ModelRenderer.Upload"/>).</summary>
 public sealed class GpuModel : IDisposable
 {
-    /// <summary><paramref name="Layers"/>: ground layers 1 to 3, then the blend mask (terrain only, else null).</summary>
+    // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored);
 
@@ -739,12 +709,10 @@ public sealed class GpuModel : IDisposable
     internal Part[] Parts { get; }
     internal bool HasTranslucentParts { get; }
 
-    /// <summary>True if some meshes are water (see <see cref="WaterRenderer.DrawMesh"/>).</summary>
     public bool HasWaterParts { get; }
 
     public int TriangleCount { get; }
 
-    /// <summary>GPU memory used, in bytes.</summary>
     public long ByteSize { get; }
 
     public void Dispose()

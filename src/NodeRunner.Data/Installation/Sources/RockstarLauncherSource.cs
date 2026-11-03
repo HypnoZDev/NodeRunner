@@ -1,9 +1,6 @@
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>
-/// Rockstar Games writes the install folder in the registry, whichever launcher installed the game.
-/// The key also often holds the Steam / Epic folders, which makes it the most reliable source.
-/// </summary>
+// Rockstar Games writes the install folder in the registry, whichever launcher installed the game.
 public sealed class RockstarLauncherSource : IInstallCandidateSource
 {
     // Key names used by the Legacy and Enhanced editions. The Enhanced ones are best-effort:

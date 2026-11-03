@@ -2,51 +2,32 @@ using NodeRunner.Data.Dlc;
 
 namespace NodeRunner.Data.FileSystem;
 
-/// <summary>Which state of the map to show.</summary>
 public enum MapVersion
 {
-    /// <summary>Story mode: base game, title update and the DLC packs' startup changes.</summary>
     SinglePlayer,
 
-    /// <summary>
-    /// Multiplayer map, as used by FiveM: story mode plus the map changes of the DLC packs (GROUP_MAP),
-    /// e.g. the rebuilt downtown of the Heists update.
-    /// </summary>
+    // Multiplayer map, as used by FiveM: story mode plus the map changes of the DLC packs (GROUP_MAP), e.g. the
+    // rebuilt downtown of the Heists update.
     Multiplayer,
 }
 
-/// <summary>
-/// Which map to show: the version, and the last DLC pack applied (null for all of them). Packs are applied in
-/// mounting order; choosing one shows the map as it was after it (later packs are left out).
-/// </summary>
+// Which map to show: the version, and the last DLC pack applied (null for all of them).
 public readonly record struct MapSelection(MapVersion Version, string? LastPack = null);
 
-/// <summary>A DLC pack found in the installation: folder name (e.g. "mpheist") and name given by the pack.</summary>
+// A DLC pack found in the installation: folder name (e.g. "mpheist") and name given by the pack.
 public sealed record DlcPackInfo(string Name, string DisplayName);
 
-/// <summary>
-/// Decides, like the game, which archives (.rpf) are in use, and so which version of each file counts.
-/// <list type="number">
-/// <item>Base layer: every archive nested in the base archives (x64*.rpf, common.rpf), then those of update.rpf,
-/// which replace the base ones of the same path (e.g. "x64/levels/gta5/_citye/downtown_01/dt1_lod.rpf").</item>
-/// <item>DLC packs, listed by update.rpf\common\data\dlclist.xml and mounted by order (setup2.xml): each declares
-/// archives (content.xml). Archives not marked "disabled" are used at once; the others when a change set enables
-/// them. Change sets run by group, all packs for one group then the next: startup groups, then GROUP_MAP for the
-/// multiplayer map. A change set can invalidate archives (the base one and the versions added by earlier packs:
-/// the pack replaces them) and enable or disable archives. An archive enabled without invalidating the base one
-/// is added over it: its files win, the other files of the base archive stay (e.g. patchday2ng's gtxd.rpf adds
-/// texture dictionaries but not the gtxd.ymt of the base one).</item>
-/// <item>update.rpf\dlc_patch\&lt;pack&gt;\ holds fixed versions of files of a pack: they replace the pack's own.</item>
-/// </list>
-/// When several active archives hold a file of the same name, the one activated last wins.
-/// </summary>
+// Decides, like the game, which archives (.rpf) are in use, and so which version of each file counts. <list
+// type="number"> <item>Base layer: every archive nested in the base archives (x64*.rpf, common.rpf), then those of
+// update.rpf, which replace the base ones of the same path (e.g.
+// "x64/levels/gta5/_citye/downtown_01/dt1_lod.rpf").</item> <item>DLC packs, listed by
+// update.rpf\common\data\dlclist.xml and mounted by order (setup2.xml): each declares archives (content.xml).
 public sealed class GameContent
 {
     private const string DlcListPath = @"update\update.rpf\common\data\dlclist.xml";
     private const string UpdateRoot = @"update\update.rpf";
     private const string DlcPatchFolder = @"update\update.rpf\dlc_patch\";
 
-    /// <summary>Groups run at startup, in this order. GROUP_ON_DEMAND is only run by scripts: never applied.</summary>
     private static readonly string[] StartupGroups =
     [
         "GROUP_EARLY_ON", "GROUP_TITLEUPDATE_STARTUP", "GROUP_UPDATE_STREAMING", "GROUP_UPDATE_TEXT",
@@ -80,18 +61,14 @@ public sealed class GameContent
     public MapSelection Selection { get; private init; }
     public MapVersion Version => Selection.Version;
 
-    /// <summary>Every DLC pack found in the installation, in mounting order.</summary>
     public IReadOnlyList<DlcPackInfo> AllPacks { get; private set; } = [];
 
-    /// <summary>DLC packs applied (all, or up to <see cref="MapSelection.LastPack"/>), in mounting order.</summary>
     public IReadOnlyList<string> Packs { get; private set; } = [];
 
     public int ActiveArchiveCount => _active.Count;
 
-    /// <summary>Problems met while reading the DLC configuration (shown in the status panel).</summary>
     public List<string> Errors { get; } = new();
 
-    /// <summary>Archives that a pack enables but that are not in the installation.</summary>
     public List<string> MissingArchives { get; } = new();
 
     public static GameContent Load(IGameFileSystem files, IDlcManifestReader reader, MapSelection selection)
@@ -102,15 +79,8 @@ public sealed class GameContent
         return content;
     }
 
-    /// <summary>
-    /// The path of every file with this extension that the game uses, one per file name
-    /// (the version from the archive activated last).
-    /// </summary>
-    /// <param name="withInactiveFallback">
-    /// Also return the files found only in archives that are not active (replaced by a DLC, or of a DLC map
-    /// change not applied). For definitions looked up by name (object types, models, textures): a placed object
-    /// may refer to one that only exists there. The active version of a file always wins.
-    /// </param>
+    // The path of every file with this extension that the game uses, one per file name (the version from the archive
+    // activated last).
     public List<string> EnumerateFiles(string extension, bool withInactiveFallback = false)
     {
         var chosen = new Dictionary<string, (string Path, long Sequence)>(StringComparer.OrdinalIgnoreCase);
@@ -130,10 +100,8 @@ public sealed class GameContent
 
     private static bool IsInUserMods(string path) => path.StartsWith(@"mods", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Every version of the files with this extension found in active archives, oldest activation first
-    /// (for files that add up rather than replace each other, like the gtxd texture relationships).
-    /// </summary>
+    // Every version of the files with this extension found in active archives, oldest activation first (for files
+    // that add up rather than replace each other, like the gtxd texture relationships).
     public List<string> EnumerateAllVersions(string extension) =>
         ActiveFiles(extension).OrderBy(f => f.Sequence).Select(f => f.Path).ToList();
 
@@ -151,7 +119,6 @@ public sealed class GameContent
         }
     }
 
-    /// <summary>Activation order of the archive holding <paramref name="path"/>, or null if it is not used.</summary>
     private long? SequenceOf(string path, Dictionary<string, long> activePhysical)
     {
         int end = path.LastIndexOf(".rpf\\", StringComparison.OrdinalIgnoreCase);
@@ -291,7 +258,6 @@ public sealed class GameContent
         }
     }
 
-    /// <summary>Reads a loose file of a pack, preferring its fixed version in update.rpf\dlc_patch.</summary>
     private byte[]? ReadPackFile(string packName, string root, string relativePath)
     {
         string patched = $@"{DlcPatchFolder}{packName}\{relativePath}";
@@ -325,10 +291,8 @@ public sealed class GameContent
         _active[$"{device}:/{relative}"] = (physical, _sequence++);
     }
 
-    /// <summary>
-    /// Removes every active version of an archive: the base one and those that packs added over it
-    /// (e.g. the Heists version of downtown replaces the base one and the patchday27ng additions).
-    /// </summary>
+    // Removes every active version of an archive: the base one and those that packs added over it (e.g. the Heists
+    // version of downtown replaces the base one and the patchday27ng additions).
     private void Invalidate(string fileName, Pack currentPack)
     {
         var (_, relative) = Split(fileName);
@@ -350,7 +314,7 @@ public sealed class GameContent
             _active.Remove(relative);
     }
 
-    /// <summary>Physical path of an archive of a pack: its fixed version in dlc_patch, else dlc.rpf, else a sub-pack.</summary>
+    // Physical path of an archive of a pack: its fixed version in dlc_patch, else dlc.rpf, else a sub-pack.
     private string? ResolveArchive(Pack pack, string relative)
     {
         string inner = relative.Replace('/', '\\');
@@ -366,10 +330,7 @@ public sealed class GameContent
         return null;
     }
 
-    /// <summary>
-    /// "dlcMPHeist:/%PLATFORM%/levels/x.rpf" gives ("dlcmpheist", "x64/levels/x.rpf");
-    /// "platform:/levels/x.rpf" gives ("platform", "x64/levels/x.rpf").
-    /// </summary>
+    // "dlcMPHeist:/%PLATFORM%/levels/x.rpf" gives ("dlcmpheist", "x64/levels/x.rpf").
     internal static (string Device, string Relative) Split(string fileName)
     {
         string path = fileName.Trim().Replace('\\', '/').ToLowerInvariant().Replace("%platform%", "x64");
@@ -385,7 +346,7 @@ public sealed class GameContent
         return (device, relative);
     }
 
-    /// <summary>"x64i.rpf\levels\gta5\a.rpf" or "update\update.rpf\x64\levels\gta5\a.rpf" gives "x64/levels/gta5/a.rpf".</summary>
+    // "x64i.rpf\levels\gta5\a.rpf" or "update\update.rpf\x64\levels\gta5\a.rpf" gives "x64/levels/gta5/a.rpf".
     internal static string PlatformPath(string archive)
     {
         string path = archive.Replace('\\', '/').ToLowerInvariant();
@@ -397,7 +358,6 @@ public sealed class GameContent
         return first.StartsWith("x64", StringComparison.Ordinal) ? "x64/" + rest : first.Replace(".rpf", "") + "/" + rest;
     }
 
-    /// <summary>A nested archive of the base game or of update.rpf (not of a DLC pack, nor a DLC fix).</summary>
     private static bool IsBaseArchive(string archive) =>
         archive.Contains('\\')
         && !archive.Equals(UpdateRoot, StringComparison.OrdinalIgnoreCase)
@@ -410,7 +370,6 @@ public sealed class GameContent
 
     private sealed record Pack(string Name, string Root, DlcSetup Setup, DlcContent Content)
     {
-        /// <summary>dlc.rpf, then the sub-packs dlc1.rpf, dlc2.rpf...</summary>
         public IEnumerable<string> Roots(GameContent content)
         {
             yield return Root;

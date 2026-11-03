@@ -5,17 +5,13 @@ using NodeRunner.Data.Installation;
 
 namespace NodeRunner.Data.Native.Archives;
 
-/// <summary>Gives the keys of the user's game installation (read from their own game files).</summary>
+// Gives the keys of the user's game installation (read from their own game files).
 public interface IArchiveKeySource
 {
     ArchiveKeys Load(GameInstallation installation, IProgress<string>? progress);
 }
 
-/// <summary>
-/// <see cref="IGameFileSystem"/> over the RPF archives of the user's installation. Every archive is indexed at
-/// <see cref="Open"/> (nested archives included); files are read on demand, from any thread.
-/// Archives of the "mods" folder are left out: NodeRunner shows the unmodified game.
-/// </summary>
+// IGameFileSystem over the RPF archives of the user's installation.
 public sealed class RpfFileSystem : IGameFileSystem
 {
     private readonly IArchiveKeySource _keySource;
@@ -31,7 +27,6 @@ public sealed class RpfFileSystem : IGameFileSystem
 
     public GameInstallation? Installation { get; private set; }
 
-    /// <summary>Archives that could not be read (path and reason), skipped.</summary>
     public IReadOnlyList<string> Errors => _errors;
     private readonly List<string> _errors = [];
 
@@ -141,6 +136,21 @@ public sealed class RpfFileSystem : IGameFileSystem
 
     public IEnumerable<string> EnumerateArchives() => _archives.ToList();
 
+    public IReadOnlyCollection<string> AllFiles => _files.Keys;
+
+    public ArchiveFileInfo? GetInfo(string path)
+    {
+        if (!_files.TryGetValue(path, out var e))
+            return null;
+        if (e.IsResource)
+        {
+            long size = (long)ResourcePages.Size(e.SystemFlags) + ResourcePages.Size(e.GraphicsFlags);
+            return new ArchiveFileInfo(e.StoredSize, size, true, ResourcePages.Version(e.SystemFlags, e.GraphicsFlags),
+                e.Encryption != ArchiveEncryption.None);
+        }
+        return new ArchiveFileInfo(e.StoredSize == 0 ? e.Size : e.StoredSize, e.Size, false, 0, e.Encryption != ArchiveEncryption.None);
+    }
+
     public void Dispose()
     {
         foreach (var handle in _disks)
@@ -164,19 +174,18 @@ public sealed class RpfFileSystem : IGameFileSystem
     }
 }
 
-/// <summary>
-/// Page flags of a resource: the content is split into pages of a few sizes; each flag word counts them.
-/// The high 4 bits of each word hold half of the format version.
-/// </summary>
+// A file of an archive: bytes stored in the archive, size once decompressed, resource version, encryption.
+public readonly record struct ArchiveFileInfo(long StoredSize, long Size, bool IsResource, int ResourceVersion, bool IsEncrypted);
+
+// Page flags of a resource: the content is split into pages of a few sizes; each flag word counts them. The high 4
+// bits of each word hold half of the format version.
 internal static class ResourcePages
 {
     public static int Version(uint systemFlags, uint graphicsFlags) =>
         (int)(((systemFlags >> 28) & 0xF) << 4 | ((graphicsFlags >> 28) & 0xF));
 
-    /// <summary>
-    /// Total size of the pages described by one flag word: base size 0x200 shifted by the low 4 bits, then page
-    /// counts of 256, 128, 64, 32, 16, 8, 4, 2 and 1 times that size (the layout <c>MetaDocument.PageFlags</c> writes).
-    /// </summary>
+    // Total size of the pages described by one flag word: base size 0x200 shifted by the low 4 bits, then page counts
+    // of 256, 128, 64, 32, 16, 8, 4, 2 and 1 times that size (the layout MetaDocument.PageFlags writes).
     public static int Size(uint flags)
     {
         long baseSize = 0x200L << (int)(flags & 0xF);

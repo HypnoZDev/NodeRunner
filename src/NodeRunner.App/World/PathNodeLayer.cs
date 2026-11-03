@@ -4,7 +4,7 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>Kinds of path segments, each drawn in its own colour and shown/hidden separately.</summary>
+// Kinds of path segments, each drawn in its own colour and shown/hidden separately.
 internal enum PathCategory
 {
     Road,
@@ -15,7 +15,7 @@ internal enum PathCategory
     Pedestrian,
 }
 
-/// <summary>Draws the road and pedestrian network as coloured lines, one GPU mesh per category.</summary>
+// Draws the road and pedestrian network as coloured lines, one GPU mesh per category.
 internal sealed class PathNodeLayer : IDisposable
 {
     // Lines are lifted slightly so they stay visible above road surfaces (once models are drawn).
@@ -49,13 +49,10 @@ internal sealed class PathNodeLayer : IDisposable
         _ => Vector4.One,
     };
 
-    /// <summary>Key used to remember the visibility of a category in the settings.</summary>
     public static string LayerName(PathCategory category) => "Path." + category;
 
-    /// <summary>Number of segments drawn for a category.</summary>
     public int Count(PathCategory category) => _counts[(int)category];
 
-    /// <summary>Rebuilds the meshes when the loader has new data.</summary>
     public void Update(WorldLoader loader, ColorRenderer renderer)
     {
         var network = loader.PathNetwork;
@@ -100,9 +97,7 @@ internal sealed class PathNodeLayer : IDisposable
         }
     }
 
-    /// <summary>
-    /// Most connections are stored in both directions (A->B and B->A): draw them only once.
-    /// </summary>
+    // Most connections are stored in both directions (A->B and B->A): draw them only once.
     private static bool ShouldDraw(PathNetwork network, PathNode node, PathNode target)
     {
         if (Compare(node.Id, target.Id) < 0)

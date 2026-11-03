@@ -4,7 +4,7 @@ using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
-/// <summary>What the "Rooms and portals" layer shows.</summary>
+// What the "Rooms and portals" layer shows.
 internal enum RoomLayerPart
 {
     Rooms,
@@ -12,7 +12,7 @@ internal enum RoomLayerPart
     OutsidePortals,
 }
 
-/// <summary>A room of an interior instance near the camera, with what is needed to find it under the mouse.</summary>
+// A room of an interior instance near the camera, with what is needed to find it under the mouse.
 internal sealed record RoomBox(MapEntity Interior, int Index, InteriorRoom Room, Matrix4x4 Transform, int PortalCount, int ObjectCount)
 {
     public float Volume
@@ -25,17 +25,15 @@ internal sealed record RoomBox(MapEntity Interior, int Index, InteriorRoom Room,
     }
 }
 
-/// <summary>A portal of an interior instance near the camera: its corners in the world and the rooms it joins.</summary>
+// A portal of an interior instance near the camera: its corners in the world and the rooms it joins.
 internal sealed record PortalBox(MapEntity Interior, int Index, InteriorPortal Portal, Vector3[] Corners, string RoomFrom, string RoomTo, int ObjectCount)
 {
     public bool LeadsOutside => Portal.RoomFrom == 0 || Portal.RoomTo == 0;
 }
 
-/// <summary>
-/// Rooms and portals of the interiors (MLO) near the camera: the box of each room (room 0, "limbo", stands for the
-/// outside and is not drawn) and each opening, between two rooms or to the outside, as a translucent surface with its
-/// outline. Rebuilt on a background thread when the camera has moved enough. Hidden by default.
-/// </summary>
+// Rooms and portals of the interiors (MLO) near the camera: the box of each room (room 0, "limbo", stands for the
+// outside and is not drawn) and each opening, between two rooms or to the outside, as a translucent surface with its
+// outline.
 internal sealed class RoomLayer : IDisposable
 {
     public const string LayerPrefix = "Room.";
@@ -70,10 +68,8 @@ internal sealed class RoomLayer : IDisposable
 
     public static string LayerName(RoomLayerPart part) => LayerPrefix + part;
 
-    /// <summary>Rooms of the interiors near the camera (not limbo), for the hover in the 3D view.</summary>
     public IReadOnlyList<RoomBox> Rooms { get; private set; } = [];
 
-    /// <summary>Portals of the interiors near the camera, for the hover in the 3D view.</summary>
     public IReadOnlyList<PortalBox> Portals { get; private set; } = [];
 
     public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, bool enabled)

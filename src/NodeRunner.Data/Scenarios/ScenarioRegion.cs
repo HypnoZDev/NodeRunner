@@ -1,6 +1,6 @@
 namespace NodeRunner.Data.Scenarios;
 
-/// <summary>The content of one scenario region file (e.g. vinewood.ymt).</summary>
+// The content of one scenario region file (e.g. vinewood.ymt).
 public sealed class ScenarioRegion
 {
     public required string Name { get; init; }
@@ -8,10 +8,9 @@ public sealed class ScenarioRegion
     public required IReadOnlyList<ScenarioPoint> Points { get; init; }
 }
 
-/// <summary>Decodes a scenario region file (.ymt in levels\gta5\scenario).</summary>
+// Decodes a scenario region file (.ymt in levels\gta5\scenario).
 public interface IScenarioRegionReader
 {
-    /// <summary>Parses the decompressed content of the file (as returned by IGameFileSystem.ReadFile).</summary>
-    /// <exception cref="InvalidDataException">The data is not a valid scenario region.</exception>
+    // Parses the decompressed content of the file (as returned by IGameFileSystem.ReadFile).
     ScenarioRegion Read(ReadOnlySpan<byte> data, string name);
 }

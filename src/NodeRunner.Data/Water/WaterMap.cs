@@ -5,31 +5,24 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.Water;
 
-/// <summary>
-/// Shape of a <see cref="WaterQuad"/>: the whole rectangle, or the half of it left when one corner is cut off
-/// along the diagonal (value of the "Type" field of water.xml).
-/// </summary>
+// Shape of a WaterQuad: the whole rectangle, or the half of it left when one corner is cut off along the diagonal
+// (value of the "Type" field of water.xml).
 public enum WaterQuadShape
 {
     Rectangle = 0,
 
-    /// <summary>Triangle without the (max X, max Y) corner.</summary>
     WithoutNorthEast = 1,
 
-    /// <summary>Triangle without the (max X, min Y) corner.</summary>
     WithoutSouthEast = 2,
 
-    /// <summary>Triangle without the (min X, min Y) corner.</summary>
     WithoutSouthWest = 3,
 
-    /// <summary>Triangle without the (min X, max Y) corner.</summary>
     WithoutNorthWest = 4,
 }
 
-/// <summary>A flat piece of water surface at height <paramref name="Z"/> (sea at 0, lakes and rivers higher).</summary>
+// A flat piece of water surface at height Z (sea at 0, lakes and rivers higher).
 public readonly record struct WaterQuad(float MinX, float MaxX, float MinY, float MaxY, float Z, WaterQuadShape Shape)
 {
-    /// <summary>Corners of the surface, three per triangle (one or two triangles).</summary>
     public IEnumerable<Vector3> Triangles()
     {
         var southWest = new Vector3(MinX, MinY, Z);
@@ -48,13 +41,9 @@ public readonly record struct WaterQuad(float MinX, float MaxX, float MinY, floa
     }
 }
 
-/// <summary>
-/// Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles.
-/// The game also draws the ocean beyond these surfaces, up to the horizon (see <see cref="OceanBounds"/>).
-/// </summary>
+// Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles.
 public sealed class WaterMap
 {
-    /// <summary>Water of the main map, then of Cayo Perico (present in update.rpf whatever the DLC packs).</summary>
     public static readonly string[] WaterFiles =
     [
         @"common.rpf\data\levels\gta5\water.xml",
@@ -63,10 +52,9 @@ public sealed class WaterMap
 
     public List<WaterQuad> Quads { get; } = [];
 
-    /// <summary>Rectangle covered by the main map's water file (min X, min Y, max X, max Y); the open ocean is outside.</summary>
+    // Rectangle covered by the main map's water file (min X, min Y, max X, max Y); the open ocean is outside.
     public Vector4 OceanBounds { get; private set; }
 
-    /// <summary>Files that could not be read, with the reason.</summary>
     public List<string> Errors { get; } = [];
 
     public static WaterMap Load(IGameFileSystem files)
@@ -97,7 +85,6 @@ public sealed class WaterMap
         return map;
     }
 
-    /// <summary>The water surfaces of a water.xml file (the "WaterQuads" list; calming and wave areas are ignored).</summary>
     public static List<WaterQuad> Parse(Stream xml)
     {
         var quads = new List<WaterQuad>();

@@ -4,10 +4,8 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>
-/// One occluder map file of the game (*_occl_*.ymap) touched by deleted buildings: the boxes and mesh triangles to
-/// remove, and the removed shapes as triangles in world positions (for the preview in the 3D view).
-/// </summary>
+// One occluder map file of the game (*_occl_*.ymap) touched by deleted buildings: the boxes and mesh triangles to
+// remove, and the removed shapes as triangles in world positions (for the preview in the 3D view).
 public sealed record OccluderFileCut(string GamePath, IReadOnlySet<int> Boxes, IReadOnlyDictionary<int, IReadOnlySet<int>> Triangles,
     IReadOnlyList<Vector3> Preview)
 {
@@ -15,18 +13,13 @@ public sealed record OccluderFileCut(string GamePath, IReadOnlySet<int> Boxes, I
     public int TriangleCount => Triangles.Values.Sum(t => t.Count);
 }
 
-/// <summary>
-/// Removes the occluders of deleted buildings. The game skips drawing what an occluder hides: one left where a building
-/// was makes holes in the scenery behind it. Occluders are kept in map files of their own, one mesh standing for a
-/// whole block, so the choice is made triangle by triangle: a triangle or a box goes as soon as it touches the box of a
-/// deleted building. Removing one too many only costs a little drawing time; keeping one too many shows.
-/// </summary>
+// Removes the occluders of deleted buildings.
 public static class OcclusionRemoval
 {
-    /// <summary>Taken off each side of the building's box, so that an occluder of a neighbour merely touching it stays.</summary>
+    // Taken off each side of the building's box, so that an occluder of a neighbour merely touching it stays.
     public const float Tolerance = 0.3f;
 
-    /// <summary>The space of a deleted object whose occluders go, or null (no model box, or a flat object: see <see cref="CollisionRemoval.MinHeight"/>).</summary>
+    // The space of a deleted object whose occluders go, or null (no model box, or a flat object: see MinHeight).
     public static CutVolume? VolumeOf(MapEntity entity, Archetype? archetype)
     {
         if (CollisionRemoval.VolumeOf(entity, archetype) is not { } volume)
@@ -35,10 +28,8 @@ public static class OcclusionRemoval
         return volume with { Min = volume.Min + shrink, Max = volume.Max - shrink };
     }
 
-    /// <summary>
-    /// What to remove from <paramref name="files"/> (game path and occluders of each candidate map file) for these deleted
-    /// objects; files with nothing to remove are left out. Sorted by file name.
-    /// </summary>
+    // What to remove from files (game path and occluders of each candidate map file) for these deleted objects; files
+    // with nothing to remove are left out.
     public static List<OccluderFileCut> Plan(IEnumerable<(string GamePath, MapOccluders Occluders)> files,
         IEnumerable<(MapEntity Entity, Archetype? Archetype)> removed)
     {
@@ -89,7 +80,6 @@ public static class OcclusionRemoval
         return cuts;
     }
 
-    /// <summary>Whether any of the triangles (3 world positions each) touches the volume's box.</summary>
     public static bool Touches(CutVolume volume, IReadOnlyList<Vector3> triangles)
     {
         var center = (volume.Min + volume.Max) * 0.5f;
@@ -105,7 +95,6 @@ public static class OcclusionRemoval
         return false;
     }
 
-    /// <summary>A building entirely inside a large box occluder: none of the box's faces touches it.</summary>
     private static bool Contains(OccluderBox box, CutVolume volume)
     {
         if (!Matrix4x4.Invert(volume.ToLocal, out var toWorld))
@@ -116,7 +105,6 @@ public static class OcclusionRemoval
         return MathF.Abs(x) <= box.Size.X / 2 && MathF.Abs(y) <= box.Size.Y / 2 && MathF.Abs(p.Z) <= box.Size.Z / 2;
     }
 
-    /// <summary>Quick rejection by the world boxes.</summary>
     private static bool Near((CutVolume Volume, Vector3 Min, Vector3 Max) v, Vector3[] shape)
     {
         var min = shape[0];
@@ -129,10 +117,8 @@ public static class OcclusionRemoval
         return min.X <= v.Max.X && max.X >= v.Min.X && min.Y <= v.Max.Y && max.Y >= v.Min.Y && min.Z <= v.Max.Z && max.Z >= v.Min.Z;
     }
 
-    /// <summary>
-    /// Separating axis test between a triangle and a box centred on the origin with half sizes <paramref name="h"/>:
-    /// the box's 3 axes, the triangle's normal, and the 9 cross products of the box axes with the triangle's edges.
-    /// </summary>
+    // Separating axis test between a triangle and a box centred on the origin with half sizes h: the box's 3 axes,
+    // the triangle's normal, and the 9 cross products of the box axes with the triangle's edges.
     public static bool TriangleTouchesBox(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 h)
     {
         // Box axes.

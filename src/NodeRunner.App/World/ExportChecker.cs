@@ -6,19 +6,17 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
-/// <summary>One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.</summary>
+// One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null);
 
-/// <summary>
-/// Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
-/// another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
-/// still seen from far away. Runs on a background thread (reads the game's map files and scans the resources folder).
-/// </summary>
+// Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
+// another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
+// still seen from far away.
 internal static class ExportChecker
 {
     private const int MaxDetails = 12;
 
-    /// <summary>What the check needs, taken on the interface thread (the maps can change while the check runs).</summary>
+    // What the check needs, taken on the interface thread (the maps can change while the check runs).
     public sealed record Input(
         List<(string FileName, string? GamePath, bool IsCustom, List<MapEntity> Kept)> Maps,
         List<string> StillSeenFromFar,
@@ -27,8 +25,6 @@ internal static class ExportChecker
         List<(string Name, string StreamFolder)> OtherProjects,
         bool RemoveGround = false);
 
-    /// <param name="CollisionCuts">Collision files to rewrite without the deleted buildings (see <see cref="CollisionRemoval"/>).</param>
-    /// <param name="OcclusionCuts">Occluder map files to rewrite without the deleted buildings' occluders (see <see cref="OcclusionRemoval"/>).</param>
     public sealed record Result(List<ExportCheckItem> Items, string Summary, List<CollisionFileCut> CollisionCuts, List<OccluderFileCut> OcclusionCuts);
 
     public static Input Prepare(AppState state)
@@ -238,10 +234,8 @@ internal static class ExportChecker
     private static readonly object OccluderLock = new();
     private static (MapLibrary Library, List<(string GamePath, MapOccluders Occluders)> Files)? _occluderMaps;
 
-    /// <summary>
-    /// The occluders of the loaded map, by file: map files without objects (the game keeps occluders apart, *_occl_*.ymap).
-    /// All of them are read (their streaming boxes do not always cover their occluders), once per map loading (~0.4 s).
-    /// </summary>
+    // The occluders of the loaded map, by file: map files without objects (the game keeps occluders apart,
+    // *_occl_*.ymap).
     private static List<(string GamePath, MapOccluders Occluders)> OccluderMaps(WorldLoader world)
     {
         if (world.Maps is not { } library || world.Content is not { } content)

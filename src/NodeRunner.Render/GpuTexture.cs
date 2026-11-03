@@ -6,7 +6,6 @@ using TextureLayout = NodeRunner.Data.Textures.TextureLayout;
 
 namespace NodeRunner.Render;
 
-/// <summary>A texture stored on the GPU (see <see cref="Create"/>).</summary>
 public sealed class GpuTexture : IDisposable
 {
     private GpuTexture(ID3D11ShaderResourceView view, long byteSize)
@@ -17,13 +16,9 @@ public sealed class GpuTexture : IDisposable
 
     internal ID3D11ShaderResourceView View { get; }
 
-    /// <summary>GPU memory used, in bytes.</summary>
     public long ByteSize { get; }
 
-    /// <summary>
-    /// Copies a texture to the GPU as is (compressed formats stay compressed).
-    /// Null if its format is not supported or its data is unusable.
-    /// </summary>
+    // Copies a texture to the GPU as is (compressed formats stay compressed).
     public static unsafe GpuTexture? Create(ID3D11Device device, TextureData texture)
     {
         var format = ToDxgi(texture.Format);
@@ -62,7 +57,6 @@ public sealed class GpuTexture : IDisposable
         }
     }
 
-    /// <summary>A 1x1 texture of one colour (used for models without texture).</summary>
     public static GpuTexture CreateSolid(ID3D11Device device, byte r, byte g, byte b, byte a)
     {
         var pixel = new TextureData

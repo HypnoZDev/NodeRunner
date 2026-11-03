@@ -2,33 +2,23 @@ using System.Numerics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Light and atmosphere of the 3D scene: sun (or moon), ambient light from the sky and the ground, sky colours and
-/// distance fog. Built for an hour of the day by <see cref="ForHour"/>; <see cref="Neutral"/> is plain daylight
-/// without fog (the model viewer).
-/// </summary>
+// Light and atmosphere of the 3D scene: sun (or moon), ambient light from the sky and the ground, sky colours and
+// distance fog.
 public readonly record struct SceneLighting
 {
-    /// <summary>Direction towards the sun, or the moon at night (world space, normalized).</summary>
     public Vector3 SunDirection { get; init; }
     public Vector3 SunColor { get; init; }
-    /// <summary>Ambient light on surfaces facing up (sky) and down (ground).</summary>
     public Vector3 SkyAmbient { get; init; }
     public Vector3 GroundAmbient { get; init; }
 
-    /// <summary>Sky colours: straight up, and at the horizon (also the fog colour).</summary>
     public Vector3 Zenith { get; init; }
     public Vector3 Horizon { get; init; }
-    /// <summary>Visibility of the sun disc in the sky (0 at night).</summary>
     public float SunDisc { get; init; }
 
-    /// <summary>How much night-only lights (windows, street lamps) are on: 0 by day, 1 at night.</summary>
     public float NightLights { get; init; }
 
-    /// <summary>Distance (m) at which the fog hides everything; 0 = no fog.</summary>
     public float FogDistance { get; init; }
 
-    /// <summary>Plain daylight without fog: the lighting NodeRunner had before the sky.</summary>
     public static SceneLighting Neutral { get; } = new()
     {
         SunDirection = Vector3.Normalize(new Vector3(0.35f, 0.25f, 0.9f)),
@@ -70,10 +60,8 @@ public readonly record struct SceneLighting
         NightLights = 1f,
     };
 
-    /// <summary>
-    /// Lighting at <paramref name="hour"/> (0 to 24): the sun rises in the east (+X) at 6:00, is high in the south
-    /// (-Y) at noon and sets in the west at 18:00; at night the moon lights the scene faintly, opposite the sun.
-    /// </summary>
+    // Lighting at hour (0 to 24): the sun rises in the east (+X) at 6:00, is high in the south (-Y) at noon and sets
+    // in the west at 18:00; at night the moon lights the scene faintly, opposite the sun.
     public static SceneLighting ForHour(float hour, float fogDistance)
     {
         float angle = (hour - 6f) / 12f * MathF.PI;

@@ -6,11 +6,7 @@ using NodeRunner.Data.Installation;
 
 namespace NodeRunner.Data.Native.Archives;
 
-/// <summary>
-/// Loads the archive keys of the user's game. The AES key is found in the user's own executable; the NG keys and
-/// tables, which today's executables only build in memory, come from NodeRunner's key file, itself encrypted with
-/// that AES key: it is useless without the game.
-/// </summary>
+// Loads the archive keys of the user's game.
 public sealed class GameArchiveKeys : IArchiveKeySource
 {
     private const string KeyFileResource = "NodeRunner.ArchiveKeys";
@@ -30,10 +26,8 @@ public sealed class GameArchiveKeys : IArchiveKeySource
     }
 }
 
-/// <summary>
-/// Finds the game's AES key in its executable by fingerprint: a fast 64-bit hash tried at every position, then
-/// confirmed with SHA-256. Only the fingerprints are stored in NodeRunner, never the key.
-/// </summary>
+// Finds the game's AES key in its executable by fingerprint: a fast 64-bit hash tried at every position, then
+// confirmed with SHA-256.
 public static class AesKeyFinder
 {
     private const ulong QuickFingerprint = 0x33FA04D4B6B0E91C;
@@ -57,7 +51,6 @@ public static class AesKeyFinder
         return null;
     }
 
-    /// <summary>Fast 64-bit hash of a 32-byte block.</summary>
     public static ulong Fingerprint(ReadOnlySpan<byte> block)
     {
         ulong h = 0x9E3779B97F4A7C15;
@@ -70,11 +63,6 @@ public static class AesKeyFinder
     }
 }
 
-/// <summary>
-/// NodeRunner's key file: "NRAK", format version, 16-byte IV, SHA-256 of the content, then the content
-/// (the 101 NG keys in the game's order followed by the NG tables) compressed and encrypted with AES-256-CBC
-/// using the game's AES key.
-/// </summary>
 public static class ArchiveKeyFile
 {
     private const uint Magic = 0x4B41524E; // "NRAK"

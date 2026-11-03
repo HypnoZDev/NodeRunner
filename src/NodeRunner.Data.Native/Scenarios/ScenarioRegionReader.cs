@@ -4,12 +4,7 @@ using NodeRunner.Data.Scenarios;
 
 namespace NodeRunner.Data.Native.Scenarios;
 
-/// <summary>
-/// NodeRunner's own reader for scenario region files (binary Meta .ymt, root structure CScenarioPointRegion).
-/// Layout documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// Reads the points of the region and of its clusters. Chaining graph, entity overrides and the
-/// acceleration grid are not read yet.
-/// </summary>
+// reader for scenario region files (binary Meta .ymt, root structure CScenarioPointRegion).
 public sealed class ScenarioRegionReader : IScenarioRegionReader
 {
     // Structure name hashes as they appear in the files.
@@ -63,7 +58,6 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
         return new ScenarioRegion { Name = name, Points = points };
     }
 
-    /// <summary>Points store an index into this table rather than the type hash itself.</summary>
     private static uint[] ReadTypeNames(MetaResource meta, int fieldOffset)
     {
         var (offset, count) = meta.ReadArray(fieldOffset, sizeof(uint));

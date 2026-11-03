@@ -4,12 +4,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Maps;
 
-/// <summary>
-/// NodeRunner's own reader for archetype definition files (binary Meta .ytyp, root structure CMapTypes).
-/// Layout documented by the GTA V modding community (CodeWalker was used as a reference to understand it).
-/// Reads the common part of every archetype (time and interior archetypes start with the same fields)
-/// and the content of interiors (objects, rooms, portals, entity sets).
-/// </summary>
+// reader for archetype definition files (binary Meta .ytyp, root structure CMapTypes).
 public sealed class YtypReader : IMapTypesReader
 {
     // Structure name hashes as they appear in the files.
@@ -107,7 +102,6 @@ public sealed class YtypReader : IMapTypesReader
         public static readonly InteriorContent None = new([], [], [], []);
     }
 
-    /// <summary>The objects of an interior, each with the room or portal it belongs to, and the rooms and portals.</summary>
     private static InteriorContent ReadInterior(MetaResource meta, int o)
     {
         meta.RequireStructure(InteriorArchetypeStructure, InteriorArchetypeSize, "CMloArchetypeDef");
@@ -166,10 +160,7 @@ public sealed class YtypReader : IMapTypesReader
         return new InteriorContent(entities, rooms, portals, ReadEntitySets(meta, o));
     }
 
-    /// <summary>
-    /// Optional groups of objects of an interior (furniture styles, upgrades...), shown when a script activates them.
-    /// Each object comes with the index of its room.
-    /// </summary>
+    // Optional groups of objects of an interior (furniture styles, upgrades...), shown when a script activates them.
     private static List<InteriorEntitySet> ReadEntitySets(MetaResource meta, int o)
     {
         var sets = new List<InteriorEntitySet>();

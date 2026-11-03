@@ -6,16 +6,15 @@ namespace NodeRunner.App.World;
 
 internal enum ViewerKind { Vehicle, Object }
 
-/// <summary>A model the viewer can open: its name (spawn name for a vehicle, archetype for an object) and where it is.</summary>
+// A model the viewer can open: its name (spawn name for a vehicle, archetype for an object) and where it is.
 internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Location)
 {
-    /// <summary>Hash of the object type (its name, or the "0x..." of a type without known name).</summary>
     public uint ArchetypeHash => Name.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                                  && uint.TryParse(Name.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint hash)
         ? hash : Joaat.Hash(Name);
 }
 
-/// <summary>Everything the model viewer lists: the vehicles of the game (DLC included) and the object types of the map.</summary>
+// Everything the model viewer lists: the vehicles of the game (DLC included) and the object types of the map.
 internal sealed partial class ViewerCatalog
 {
     public required IReadOnlyList<ViewerItem> Vehicles { get; init; }
@@ -26,7 +25,8 @@ internal sealed partial class ViewerCatalog
     [GeneratedRegex(@"[\\/]vehicles(\.rpf)?[\\/]|[\\/][^\\/]*vehicles\.rpf[\\/]", RegexOptions.IgnoreCase)]
     private static partial Regex VehicleArchive();
 
-    /// <summary>Built on a background thread from a loaded map (a few hundred milliseconds).</summary>
+    public static bool IsVehicleFile(string path) => VehicleArchive().IsMatch(path);
+
     public static ViewerCatalog Build(WorldLoader world)
     {
         var vehicles = new List<ViewerItem>();

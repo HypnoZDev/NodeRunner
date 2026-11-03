@@ -3,13 +3,10 @@ using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.Data.Maps;
 
-/// <summary>
-/// Every placed object of the map (.ymap) and every object type (.ytyp), with a grid index to quickly
-/// find the entities near a position.
-/// </summary>
+// Every placed object of the map (.ymap) and every object type (.ytyp), with a grid index to quickly find the
+// entities near a position.
 public sealed class MapLibrary
 {
-    /// <summary>Size of the cells of the spatial index, in metres.</summary>
     public const float CellSize = 100f;
 
     private readonly Dictionary<uint, Archetype> _archetypes = new();
@@ -19,42 +16,32 @@ public sealed class MapLibrary
     public IReadOnlyList<MapData> Maps => _maps;
     public int ArchetypeCount => _archetypes.Count;
 
-    /// <summary>Name hashes of every object type (a new set at each call).</summary>
     public HashSet<uint> GetArchetypeHashes() => _archetypes.Keys.ToHashSet();
 
-    /// <summary>Name hashes of the interior types (MLO).</summary>
     public HashSet<uint> GetInteriorArchetypeHashes() =>
         _archetypes.Values.Where(a => a.Kind == ArchetypeKind.Interior).Select(a => a.NameHash).ToHashSet();
     public int EntityCount { get; private set; }
 
-    /// <summary>Files in another format (XML, PSO) or damaged, skipped with the reason.</summary>
     public List<string> Errors { get; } = new();
 
     public Archetype? GetArchetype(uint nameHash) => _archetypes.GetValueOrDefault(nameHash);
 
-    /// <summary>The interior types (MLO) that have an entity set of this name hash.</summary>
     public List<uint> FindEntitySetInteriors(uint setHash) =>
         _archetypes.Values.Where(a => a.InteriorEntitySets.Any(s => s.NameHash == setHash)).Select(a => a.NameHash).ToList();
 
-    /// <summary>Path of the .ytyp file defining an object type, null if unknown.</summary>
     public string? GetArchetypeFile(uint nameHash) => _archetypeFiles.GetValueOrDefault(nameHash);
     private readonly Dictionary<uint, string> _archetypeFiles = new();
 
-    /// <summary>
-    /// Top-level entities (no parent) seen from further than <see cref="NearRootDistance"/>: big LOD/SLOD
-    /// models covering whole districts. They are always checked; smaller roots are found with the grid.
-    /// </summary>
+    // Top-level entities (no parent) seen from further than NearRootDistance: big LOD/SLOD models covering whole
+    // districts.
     public IReadOnlyList<MapEntity> FarRoots => _farRoots;
     private readonly List<MapEntity> _farRoots = new();
 
-    /// <summary>Top-level entities with a draw distance up to this value are only looked up near the camera.</summary>
     public const float NearRootDistance = 1000f;
 
-    /// <summary>Distance up to which an entity is drawn: its own value, or its archetype's if not set.</summary>
     public float DrawDistance(MapEntity entity) =>
         entity.LodDistance > 0f ? entity.LodDistance : GetArchetype(entity.ArchetypeHash)?.LodDistance ?? 0f;
 
-    /// <summary>Entities whose position is within <paramref name="radius"/> of <paramref name="center"/> (horizontally).</summary>
     public IEnumerable<MapEntity> EntitiesAround(Vector2 center, float radius)
     {
         var min = CellOf(center - new Vector2(radius));
@@ -75,16 +62,12 @@ public sealed class MapLibrary
         }
     }
 
-    /// <summary>
-    /// Incremented when entities are deleted or brought back (<see cref="SetDeleted"/>): what was computed from the
-    /// list of entities (objects to draw, search index...) must be computed again.
-    /// </summary>
+    // Incremented when entities are deleted or brought back (SetDeleted): what was computed from the list of entities
+    // (objects to draw, search index...) must be computed again.
     public int StructureVersion { get; private set; }
 
-    /// <summary>Entities deleted in the editor (not counting the ones of saved files, already left out).</summary>
     public int DeletedCount { get; private set; }
 
-    /// <summary>Deletes entities (or brings them back): they stay in memory, so that the deletion can be undone.</summary>
     public void SetDeleted(IEnumerable<MapEntity> entities, bool deleted)
     {
         foreach (var entity in entities)
@@ -96,7 +79,6 @@ public sealed class MapLibrary
         StructureVersion++;
     }
 
-    /// <summary>Shows or hides an entity set of an interior instance (as a script would activate it in the game).</summary>
     public void SetEntitySetActive(PlacedEntitySet set, bool active)
     {
         if (set.IsActive == active)
@@ -105,10 +87,8 @@ public sealed class MapLibrary
         StructureVersion++;
     }
 
-    /// <summary>
-    /// A new map made by the user (see <see cref="MapData.IsCustom"/>), empty, named after its file
-    /// (<paramref name="fileName"/>, e.g. "hopital_props.ymap"): the internal name is the hash of the name without extension.
-    /// </summary>
+    // A new map made by the user, empty, named after its file (fileName, e.g. "hopital_props.ymap"): the internal
+    // name is the hash of the name without extension.
     public MapData CreateCustomMap(string fileName)
     {
         var map = new MapData
@@ -123,11 +103,9 @@ public sealed class MapLibrary
         return map;
     }
 
-    /// <summary>The custom map saved or made under this file name, null if none.</summary>
     public MapData? FindCustomMap(string fileName) =>
         _maps.Find(m => m.IsCustom && string.Equals(m.FilePath, fileName, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Adds an object to a map (an object added in the editor: <see cref="MapEntity.SourceIndex"/> -1).</summary>
     public void AddEntity(MapData map, MapEntity entity)
     {
         map.AddEntity(entity);
@@ -137,46 +115,29 @@ public sealed class MapLibrary
         StructureVersion++;
     }
 
-    /// <summary>
-    /// Maps whose entities may have their lower-detail parent in <paramref name="map"/> (their parent map): the parent
-    /// indices they store change when entities of <paramref name="map"/> are deleted.
-    /// </summary>
+    // Maps whose entities may have their lower-detail parent in map (their parent map): the parent indices they store
+    // change when entities of map are deleted.
     public IEnumerable<MapData> ChildMaps(MapData map) => _maps.Where(m => m.ParentHash == map.NameHash && m != map);
 
-    /// <summary>The map holding the lower-detail parents of <paramref name="map"/>'s entities, or null.</summary>
     public MapData? ParentMap(MapData map) =>
         map.ParentHash != 0 ? _maps.FirstOrDefault(m => m.NameHash == map.ParentHash && m != map) : null;
 
-    /// <summary>
-    /// Whether an entity of <paramref name="map"/> has fewer children left than its file declares (children deleted now,
-    /// or missing from a saved child map): the file must be rewritten with the new count, otherwise the game keeps
-    /// showing the simplified model even up close (it waits for every declared child).
-    /// </summary>
+    // Whether an entity of map has fewer children left than its file declares (children deleted now, or missing from
+    // a saved child map): the file must be rewritten with the new count, otherwise the game keeps showing the
+    // simplified model even up close (it waits for every declared child).
     public static bool HasLostChildren(MapData map) => map.Entities.Any(HasLostChildren);
 
-    /// <inheritdoc cref="HasLostChildren(MapData)"/>
     public static bool HasLostChildren(MapEntity entity) =>
         !entity.IsDeleted && entity.Children.Count > 0 && entity.Children.Count(c => !c.IsDeleted) < entity.ChildCount;
 
-    /// <summary>
-    /// File names (without extension) of the maps only loaded by scripts and missions (see <see cref="MapData.IsScripted"/>)
-    /// that can be switched on or off, sorted. Their simplified versions (parent maps, also loaded by scripts) are not
-    /// listed: they come with them.
-    /// </summary>
+    // File names (without extension) of the maps only loaded by scripts and missions that can be switched on or off,
+    // sorted.
     public IReadOnlyList<string> ScriptedMapNames { get; private set; } = [];
 
-    /// <summary>
-    /// The <see cref="ScriptedMapNames"/> hidden when the user has not chosen: alternative versions of a place
-    /// shown by another map (see <see cref="ScriptedMapVariants"/>).
-    /// </summary>
+    // The ScriptedMapNames hidden when the user has not chosen: alternative versions of a place shown by another map.
     public IReadOnlySet<string> DefaultHiddenScriptedMaps { get; private set; } = new HashSet<string>();
 
-    /// <summary>
-    /// Reads every .ytyp and .ymap the game uses: base game, update and DLC packs (see <see cref="GameContent"/>).
-    /// Maps loaded by scripts only are added too, as CodeWalker does, except <paramref name="hiddenScriptedMaps"/>
-    /// (file names without extension; null = <see cref="DefaultHiddenScriptedMaps"/>). Each one comes with its
-    /// parent maps and replaces a map with the same internal name.
-    /// </summary>
+    // Reads every .ytyp and .ymap the game uses: base game, update and DLC packs.
     public static MapLibrary Load(GameContent content, IMapTypesReader typesReader, IMapDataReader mapReader,
         IProgress<string>? progress = null, IReadOnlySet<string>? hiddenScriptedMaps = null,
         IReadOnlyDictionary<string, byte[]>? savedMaps = null)
@@ -264,7 +225,6 @@ public sealed class MapLibrary
         return library;
     }
 
-    /// <summary>A library of the given maps (no object types), with the level-of-detail tree linked: for tests.</summary>
     internal static MapLibrary Create(params (MapData Map, string Path)[] maps)
     {
         var library = new MapLibrary();
@@ -277,13 +237,11 @@ public sealed class MapLibrary
         return library;
     }
 
-    /// <summary>Problems with the maps of the user's save folder (files left unused, the game's file is shown instead).</summary>
+    // Problems with the maps of the user's save folder (files left unused, the game's file is shown instead).
     public List<string> SavedMapErrors { get; } = new();
 
-    /// <summary>
-    /// The version of a map saved by the user, if it was made from this game file: same internal name and same parent
-    /// map (objects may have been moved, deleted or added). Otherwise the game's version, and a note.
-    /// </summary>
+    // The version of a map saved by the user, if it was made from this game file: same internal name and same parent
+    // map (objects may have been moved, deleted or added).
     private MapData UseSaved(MapData original, byte[] saved, IMapDataReader reader, string name)
     {
         try
@@ -304,10 +262,8 @@ public sealed class MapLibrary
         return original;
     }
 
-    /// <summary>
-    /// Lists the maps loaded by scripts, and adds the ones not hidden to <paramref name="byName"/>, followed by
-    /// their parent maps (simplified versions) when those are loaded by scripts too.
-    /// </summary>
+    // Lists the maps loaded by scripts, and adds the ones not hidden to byName, followed by their parent maps
+    // (simplified versions) when those are loaded by scripts too.
     private void AddScriptedMaps(List<(MapData Map, string Path)> scripted, Dictionary<uint, (MapData Map, string Path)> byName,
         IReadOnlySet<string>? hidden, bool withMansions)
     {
@@ -337,15 +293,11 @@ public sealed class MapLibrary
         }
     }
 
-    /// <summary>Distance beyond the openings of an interior from which an object of it is a view through the windows.</summary>
+    // Distance beyond the openings of an interior from which an object of it is a view through the windows.
     private const float WindowViewMargin = 100f;
 
-    /// <summary>
-    /// Finds the simplified views of the surroundings held by some interiors (<see cref="MapEntity.IsWindowView"/>):
-    /// objects of a room that hides the real outside (<see cref="InteriorRoom.HidesExterior"/>) lying far beyond every
-    /// opening (portal) of the interior. In the game they are only seen through the windows from inside; drawn from
-    /// outside, they would cover the real map (the psychiatrist's office covers the Del Perro beach, 400 m away).
-    /// </summary>
+    // Finds the simplified views of the surroundings held by some interiors (IsWindowView): objects of a room that
+    // hides the real outside (HidesExterior) lying far beyond every opening (portal) of the interior.
     private void MarkWindowViews()
     {
         foreach (var archetype in _archetypes.Values)
@@ -370,10 +322,7 @@ public sealed class MapLibrary
         }
     }
 
-    /// <summary>
-    /// Gives each interior instance its objects, moved into the world. An interior archetype can be placed
-    /// several times (identical apartments...): each instance gets its own copies.
-    /// </summary>
+    // Gives each interior instance its objects, moved into the world.
     private void PlaceInteriorContents()
     {
         foreach (var map in _maps)
@@ -402,11 +351,7 @@ public sealed class MapLibrary
         return placed;
     }
 
-    /// <summary>
-    /// Connects each entity to its lower-detail parent. Each entity gives the index of its parent entity:
-    /// in the parent ymap (named by the ymap) when flagged so, otherwise in its own ymap (e.g. the district
-    /// models of dt1_rd1.ymap and their own simplified versions, in the same file).
-    /// </summary>
+    // Connects each entity to its lower-detail parent.
     private void LinkLodTree()
     {
         var byName = new Dictionary<uint, MapData>();

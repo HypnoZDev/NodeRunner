@@ -10,12 +10,8 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Models;
 
-/// <summary>
-/// Reads the game's models: .ydr (one drawable), .ydd (a dictionary of drawables) and .yft (fragments: vehicles and
-/// breakable objects, whose wheels are separate drawables). A drawable has a shader group (shaders with their
-/// parameters, sometimes its own textures) and up to four levels of detail, each a list of models made of geometries
-/// (vertex buffer, index buffer, shader number). Only the most detailed level is kept.
-/// </summary>
+// Reads the game's models: .ydr (one drawable), .ydd (a dictionary of drawables) and .yft (fragments: vehicles and
+// breakable objects, whose wheels are separate drawables).
 public sealed class DrawableReader : IModelReader
 {
     private readonly IGameFileSystem _files;
@@ -40,7 +36,6 @@ public sealed class DrawableReader : IModelReader
         }
     }
 
-    /// <summary>Models of a decompressed file, keyed by name hash.</summary>
     public static Dictionary<uint, ModelData> Read(ReadOnlySpan<byte> data, ResourceHeader header, string name, string extension)
     {
         var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
@@ -80,7 +75,6 @@ public sealed class DrawableReader : IModelReader
         return models;
     }
 
-    /// <summary>Offset of a block, or -1 for a null pointer.</summary>
     private static int Block(ResourceData res, ulong pointer, int length) =>
         pointer == 0 ? -1 : res.ResolveArray(pointer, 1, length, "bloc");
 
@@ -102,7 +96,6 @@ public sealed class DrawableReader : IModelReader
     private const int GeometriesCount = 0x10;
     private const int ShaderMappingPointer = 0x20;
 
-    /// <summary>A drawable's most detailed level, or null when it has none.</summary>
     private static ModelData? Convert(ResourceData res, uint hash, int d)
     {
         if (d < 0 || Models(res, d) is not { } models)
@@ -141,10 +134,8 @@ public sealed class DrawableReader : IModelReader
         };
     }
 
-    /// <summary>
-    /// The models of the first level of detail present (high, medium, low, very low): a list header (pointer, count,
-    /// capacity) whose every slot is read. Null when the drawable has none.
-    /// </summary>
+    // The models of the first level of detail present (high, medium, low, very low): a list header (pointer, count,
+    // capacity) whose every slot is read.
     private static List<int>? Models(ResourceData res, int d)
     {
         // The level lists are stored together; without that block there is nothing to draw.
@@ -174,7 +165,6 @@ public sealed class DrawableReader : IModelReader
         return models;
     }
 
-    /// <summary>Count of models in every level, as a check that a drawable has something (wheels).</summary>
     private static int AllModelsCount(ResourceData res, int d)
     {
         if (res.UInt64(d + ModelsPointer) == 0 && res.UInt64(d + ModelsHigh) == 0)
@@ -191,7 +181,7 @@ public sealed class DrawableReader : IModelReader
 
     // ---- Shaders ----
 
-    /// <summary>What the meshes need from a shader.</summary>
+    // What the meshes need from a shader.
     private sealed record Shader(uint Name, uint FileName, byte RenderBucket, Dictionary<uint, string> Textures);
 
     private static List<Shader?> Shaders(ResourceData res, int d)
@@ -212,11 +202,9 @@ public sealed class DrawableReader : IModelReader
         return shaders;
     }
 
-    /// <summary>
-    /// Shader (grmShaderFx): 0x00 parameters, 0x08 name hash, 0x10 parameter count, 0x11 render bucket, 0x18 hash of
-    /// its preset file (e.g. "trees_normal_spec.sps"). Parameters: 16 bytes each (type, pointer: type 0 = texture,
-    /// N = N vectors), then the vectors, then the name hash of each parameter.
-    /// </summary>
+    // Shader (grmShaderFx): 0x00 parameters, 0x08 name hash, 0x10 parameter count, 0x11 render bucket, 0x18 hash of
+    // its preset file (e.g. "trees_normal_spec.sps"). Parameters: 16 bytes each (type, pointer: type 0 = texture, N =
+    // N vectors), then the vectors, then the name hash of each parameter.
     private static Shader ReadShader(ResourceData res, int s)
     {
         var textures = new Dictionary<uint, string>();
@@ -397,10 +385,8 @@ public sealed class DrawableReader : IModelReader
         };
     }
 
-    /// <summary>
-    /// The ground layers of a terrain shader (several TextureSampler_layerN), with their weights read from the
-    /// vertices; null for other shaders. Without a second vertex colour the weights are neutral grey, as in the game.
-    /// </summary>
+    // The ground layers of a terrain shader (several TextureSampler_layerN), with their weights read from the
+    // vertices; null for other shaders.
     private static TerrainBlend? Terrain(Shader? shader, VertexDeclaration declaration, ReadOnlySpan<byte> bytes, int count)
     {
         if (shader is null)
@@ -436,10 +422,8 @@ public sealed class DrawableReader : IModelReader
         return new TerrainBlend { LayerNames = layers, MaskName = mask, Mode = mode, Weights = weights, MaskTexCoords = maskCoords };
     }
 
-    /// <summary>
-    /// Vertex layout: one flag bit per component present, 4 bits of storage type per component; components follow
-    /// one another in bit order.
-    /// </summary>
+    // Vertex layout: one flag bit per component present, 4 bits of storage type per component; components follow one
+    // another in bit order.
     private readonly record struct VertexDeclaration(uint Flags, int Stride, ulong Types)
     {
         public bool Has(int component) => ((Flags >> component) & 1) != 0;
@@ -464,7 +448,6 @@ public sealed class DrawableReader : IModelReader
             return offset;
         }
 
-        /// <summary>One component of a vertex, whatever its storage (floats, half floats or bytes).</summary>
         public Vector4 Read(ReadOnlySpan<byte> bytes, int vertexStart, int component)
         {
             if (!Has(component))
@@ -499,12 +482,7 @@ public sealed class DrawableReader : IModelReader
     private static readonly HashSet<ushort> RearWheelBones = [29921, 29922, 29923, 27902, 5857, 5858, 5859, 26398];
     private static readonly HashSet<ushort> RightWheelBones = [26418, 5857, 5858, 5859, 26398];
 
-    /// <summary>
-    /// Adds the wheels of a vehicle to its body. They are separate drawables, one per wheel bone (children of the first
-    /// physics level), placed by the level's transforms plus its position offset; often only one front and one rear
-    /// wheel are modelled, and the game copies them to the other wheels, turned half a turn for the right-hand side.
-    /// Fragments without wheels are returned unchanged.
-    /// </summary>
+    // Adds the wheels of a vehicle to its body.
     private static ModelData AddWheels(ResourceData res, ModelData body)
     {
         int group = Block(res, res.UInt64(FragPhysicsPointer), 0x30);
@@ -608,7 +586,6 @@ public sealed class DrawableReader : IModelReader
 
     private static Vector3 Vec3(ResourceData res, int o) => new(F32(res, o), F32(res, o + 4), F32(res, o + 8));
 
-    /// <summary>A 4x4 matrix of 16 floats, rows first (translation in the 4th row).</summary>
     private static Matrix4x4 Matrix(ResourceData res, int o) => new(
         F32(res, o), F32(res, o + 4), F32(res, o + 8), F32(res, o + 12),
         F32(res, o + 16), F32(res, o + 20), F32(res, o + 24), F32(res, o + 28),

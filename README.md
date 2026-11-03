@@ -24,6 +24,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   depuis un script (`vector3(...)`, `vector4(...)`).
 - Des calques pour voir ce qui est normalement invisible : pathnodes (trafic), navmesh (piétons), points de scénario,
   collisions, salles et portails des intérieurs.
+- Un **explorateur d'archives** : tous les fichiers du jeu (archives RPF, DLC compris) en arborescence, recherche par
+  nom, modèle ouvert dans la visionneuse, YMAP retrouvé sur la carte, fichiers texte affichés, extraction sur le disque.
 
 **Modifier**
 - Cliquez sur un objet, déplacez-le, tournez-le ou changez sa taille avec les poignées 3D (Ctrl pour aller par crans).

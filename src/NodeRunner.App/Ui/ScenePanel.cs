@@ -7,11 +7,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Scene explorer (docked on the left): the map files (.ymap) and their objects as a tree table, near the camera
-/// or for the whole map, with a search by name. Click: select; double-click: go to the object; right click: copy its
-/// name or position in the format of FiveM scripts. Selecting an object in the 3D view reveals it here.
-/// </summary>
+// Scene explorer (docked on the left): the map files (.ymap) and their objects as a tree table, near the camera or
+// for the whole map, with a search by name.
 internal sealed unsafe class ScenePanel(AppState state)
 {
     public const string Title = $"{Icons.ListTree}  Scène###Scène";
@@ -26,7 +23,6 @@ internal sealed unsafe class ScenePanel(AppState state)
     private readonly HashSet<MapEntity> _expandedInteriors = [];
     private readonly Dictionary<MapData, string> _mapNames = [];
 
-    /// <summary>File name of a map without extension (kept: maps made by the user can appear at any time).</summary>
     private string MapName(MapData map)
     {
         if (!_mapNames.TryGetValue(map, out var name))
@@ -40,7 +36,6 @@ internal sealed unsafe class ScenePanel(AppState state)
     private bool _dirty = true;
     private Vector3 _builtAt;
 
-    /// <summary>Search results: the objects whose name matches, by map (null: the map name itself matches).</summary>
     private Dictionary<MapData, List<MapEntity>?>? _matches;
     private int _matchCount;
 
@@ -58,7 +53,6 @@ internal sealed unsafe class ScenePanel(AppState state)
         ImGui.End();
     }
 
-    /// <summary>Filters, search, the tree table filling the rest of the panel, and a count at the bottom.</summary>
     private void DrawContent()
     {
         if (state.World.Maps is not { } library)
@@ -110,7 +104,6 @@ internal sealed unsafe class ScenePanel(AppState state)
         }
     }
 
-    /// <summary>Maps whose name matches (all their objects listed), and objects whose type name matches.</summary>
     private Dictionary<MapData, List<MapEntity>?> Search(MapLibrary library, HashNames names, string query)
     {
         var result = new Dictionary<MapData, List<MapEntity>?>();
@@ -139,7 +132,6 @@ internal sealed unsafe class ScenePanel(AppState state)
         return result;
     }
 
-    /// <summary>Opens a map in the list (e.g. found by the global search) and scrolls to it.</summary>
     public void RevealMap(MapData map)
     {
         _expandedMaps.Add(map);
@@ -149,7 +141,6 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private MapData? _revealMap;
 
-    /// <summary>When the selection changes (e.g. a click in the 3D view), opens its map and scrolls to it.</summary>
     private void RevealSelection()
     {
         var selection = state.Selection;
@@ -308,7 +299,6 @@ internal sealed unsafe class ScenePanel(AppState state)
         _dirty = true;
     }
 
-    /// <summary>Right click on a row: go to it, copy its name or its position as written in FiveM scripts.</summary>
     private void DrawContextMenu(Row row, HashNames names)
     {
         if (!ImGui.BeginPopupContextItem("##row_menu"))
@@ -389,7 +379,6 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private static void CopyText(string text) => ImGui.SetClipboardText(text);
 
-    /// <summary>Horizontal distance from a point to the box of a map's objects (0 inside).</summary>
     private static float DistanceToExtents(MapData map, Vector2 point)
     {
         var min = Flat(map.EntitiesExtentsMin);
@@ -400,10 +389,9 @@ internal sealed unsafe class ScenePanel(AppState state)
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Y);
 }
 
-/// <summary>Heading of an object as FiveM scripts use it (the positions themselves: <see cref="PositionText"/>).</summary>
+// Heading of an object as FiveM scripts use it (the positions themselves: PositionText).
 internal static class FiveMFormat
 {
-    /// <summary>Heading in degrees (0 to 360) as FiveM uses it: rotation around the vertical axis.</summary>
     public static float Heading(MapEntity entity)
     {
         float z = EulerAngles.FromQuaternion(entity.Orientation).Z % 360f;

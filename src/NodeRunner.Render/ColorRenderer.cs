@@ -9,16 +9,8 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Draws untextured, vertex-coloured 3D lines and triangles (grid, path nodes, navmesh, debug shapes...):
-/// <list type="bullet">
-/// <item>lines that change every frame: <see cref="AddLine"/> as many times as needed, then <see cref="Flush"/>;</item>
-/// <item>large sets of lines or triangles that rarely change: fill a <see cref="LineBatch"/> or
-/// <see cref="TriangleBatch"/> once, turn it into a <see cref="ColorMesh"/> with <c>CreateMesh</c>
-/// (stored on the GPU), then <see cref="Draw"/> it every frame.</item>
-/// </list>
-/// Triangles are treated as translucent surfaces: they are depth-tested but do not hide what is drawn after them.
-/// </summary>
+// Draws untextured, vertex-coloured 3D lines and triangles (grid, path nodes, navmesh, debug shapes...): <list
+// type="bullet"> <item>lines that change every frame.
 public sealed unsafe class ColorRenderer : IDisposable
 {
     private const string ShaderSource = @"
@@ -141,19 +133,14 @@ float4 PS(PS_INPUT input) : SV_Target
         });
     }
 
-    /// <summary>Number of segments waiting to be drawn by <see cref="Flush"/>.</summary>
     public int PendingLineCount => _batch.LineCount;
 
     public void AddLine(Vector3 from, Vector3 to, Vector4 color) => _batch.AddLine(from, to, color);
 
-    /// <inheritdoc cref="LineBatch.AddBox"/>
     public void AddBox(Vector3 min, Vector3 max, Matrix4x4 transform, Vector4 color) => _batch.AddBox(min, max, transform, color);
 
-    /// <summary>
-    /// Draws every pending segment, then empties the batch.
-    /// <paramref name="fadeDistance"/> &gt; 0 makes lines fade out with distance from the camera.
-    /// <paramref name="onTop"/> draws them over everything, even behind walls.
-    /// </summary>
+    // Draws every pending segment, then empties the batch. fadeDistance &gt; 0 makes lines fade out with distance
+    // from the camera. onTop draws them over everything, even behind walls.
     public void Flush(Matrix4x4 viewProjection, Vector3 cameraPosition, float fadeDistance = 0f, bool onTop = false)
     {
         var vertices = _batch.Vertices;
@@ -172,10 +159,8 @@ float4 PS(PS_INPUT input) : SV_Target
         _batch.Clear();
     }
 
-    /// <summary>Copies the lines of <paramref name="batch"/> to the GPU. Returns null if the batch is empty.</summary>
     public ColorMesh? CreateMesh(LineBatch batch) => CreateMesh(batch.Vertices, triangles: false);
 
-    /// <summary>Copies the triangles of <paramref name="batch"/> to the GPU. Returns null if the batch is empty.</summary>
     public ColorMesh? CreateMesh(TriangleBatch batch) => CreateMesh(batch.Vertices, triangles: true);
 
     private ColorMesh? CreateMesh(List<ColorVertex> vertices, bool triangles)
@@ -189,7 +174,6 @@ float4 PS(PS_INPUT input) : SV_Target
         return new ColorMesh(buffer, vertices.Count, triangles);
     }
 
-    /// <summary>Draws a mesh created by <see cref="CreateMesh"/>.</summary>
     public void Draw(ColorMesh mesh, Matrix4x4 viewProjection, Vector3 cameraPosition, float fadeDistance = 0f)
     {
         DrawVertexBuffer(mesh.Buffer, mesh.VertexCount, mesh.IsTriangles, viewProjection, cameraPosition, fadeDistance);
@@ -252,14 +236,13 @@ float4 PS(PS_INPUT input) : SV_Target
     }
 }
 
-/// <summary>Vertex: position + RGBA8 colour (R in the lowest byte).</summary>
+// Vertex: position + RGBA8 colour (R in the lowest byte).
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct ColorVertex(Vector3 position, uint color)
 {
     public readonly Vector3 Position = position;
     public readonly uint Color = color;
 
-    /// <summary>RGBA floats (0..1) -> R8G8B8A8 as laid out in memory (R in the lowest byte).</summary>
     public static uint Pack(Vector4 c)
     {
         uint r = (uint)(Math.Clamp(c.X, 0f, 1f) * 255f + 0.5f);
@@ -270,7 +253,7 @@ internal readonly struct ColorVertex(Vector3 position, uint color)
     }
 }
 
-/// <summary>A list of coloured segments being built on the CPU.</summary>
+// A list of coloured segments being built on the CPU.
 public sealed class LineBatch
 {
     internal List<ColorVertex> Vertices { get; } = new();
@@ -284,7 +267,6 @@ public sealed class LineBatch
         Vertices.Add(new ColorVertex(to, packed));
     }
 
-    /// <summary>The 12 edges of a box given in model space (<paramref name="min"/>, <paramref name="max"/>), placed by <paramref name="transform"/>.</summary>
     public void AddBox(Vector3 min, Vector3 max, Matrix4x4 transform, Vector4 color)
     {
         Span<Vector3> corners = stackalloc Vector3[8];
@@ -308,7 +290,7 @@ public sealed class LineBatch
     public void Clear() => Vertices.Clear();
 }
 
-/// <summary>A list of coloured triangles being built on the CPU.</summary>
+// A list of coloured triangles being built on the CPU.
 public sealed class TriangleBatch
 {
     internal List<ColorVertex> Vertices { get; } = new();
@@ -326,7 +308,7 @@ public sealed class TriangleBatch
     public void Clear() => Vertices.Clear();
 }
 
-/// <summary>Lines or triangles stored on the GPU (see <c>ColorRenderer.CreateMesh</c>).</summary>
+// Lines or triangles stored on the GPU.
 public sealed class ColorMesh : IDisposable
 {
     internal ColorMesh(ID3D11Buffer buffer, int vertexCount, bool isTriangles)

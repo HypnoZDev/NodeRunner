@@ -10,7 +10,6 @@ public sealed class GameInstallLocatorTests : IDisposable
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    /// <summary>Creates a fake game folder containing an empty executable (no real game file involved).</summary>
     private string FakeGameFolder(string name, string exe)
     {
         var folder = Path.Combine(_root, name);

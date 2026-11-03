@@ -4,7 +4,7 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.Data.Scenarios;
 
-/// <summary>Every scenario region of the map.</summary>
+// Every scenario region of the map.
 public sealed class ScenarioSet
 {
     private const string RegionFolder = @"\levels\gta5\scenario\";
@@ -20,15 +20,11 @@ public sealed class ScenarioSet
 
     public int PointCount => Regions.Sum(r => r.Points.Count);
 
-    /// <summary>Files that could not be read, with the reason (shown to the user, not fatal).</summary>
     public List<string> Errors { get; } = new();
 
     public IEnumerable<ScenarioPoint> AllPoints => Regions.SelectMany(r => r.Points);
 
-    /// <summary>
-    /// Reads every scenario region of the base game. When a region exists in both the base archives
-    /// and update.rpf, the update version wins, as in the game.
-    /// </summary>
+    // Reads every scenario region of the base game.
     public static ScenarioSet Load(IGameFileSystem files, IScenarioRegionReader reader, IProgress<string>? progress = null)
     {
         var set = new ScenarioSet();
@@ -75,7 +71,6 @@ public sealed class ScenarioSet
         return set;
     }
 
-    /// <summary>Hash -> name of every scenario type, read from the game's scenarios.meta (plain XML).</summary>
     private static Dictionary<uint, string> LoadTypeNames(IGameFileSystem files, List<string> errors)
     {
         var names = new Dictionary<uint, string>();

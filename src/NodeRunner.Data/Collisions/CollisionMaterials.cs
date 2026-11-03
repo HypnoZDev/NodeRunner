@@ -1,28 +1,22 @@
 namespace NodeRunner.Data.Collisions;
 
-/// <summary>Families of collision materials, used for colours and layers.</summary>
+// Families of collision materials, used for colours and layers.
 public enum CollisionSurface
 {
-    /// <summary>Tarmac, concrete, paving.</summary>
     Road,
 
-    /// <summary>Earth, sand, gravel, rock, snow.</summary>
     Terrain,
 
-    /// <summary>Grass, bushes, leaves.</summary>
     Vegetation,
 
     Water,
     Glass,
 
-    /// <summary>Everything else: walls, metal, wood, plastic...</summary>
     Building,
 }
 
-/// <summary>
-/// Names of the game's collision materials, in the order of the game's list (the index stored with each
-/// triangle), read from the game's materials.dat.
-/// </summary>
+// Names of the game's collision materials, in the order of the game's list (the index stored with each triangle),
+// read from the game's materials.dat.
 public sealed class CollisionMaterials
 {
     public const string FileName = "materials.dat";
@@ -40,10 +34,8 @@ public sealed class CollisionMaterials
 
     public int Count => _names.Length;
 
-    /// <summary>
-    /// Reads materials.dat: one material per line starting with its name; lines starting with '#' are comments,
-    /// the first line is the version number.
-    /// </summary>
+    // Reads materials.dat: one material per line starting with its name; lines starting with '#' are comments, the
+    // first line is the version number.
     public static CollisionMaterials Parse(string text)
     {
         var names = new List<string>();
@@ -57,7 +49,6 @@ public sealed class CollisionMaterials
         return new CollisionMaterials(names.ToArray());
     }
 
-    /// <summary>Name of a material (e.g. "TARMAC"), or its number if unknown.</summary>
     public string Name(byte index) => index < _names.Length ? _names[index] : $"#{index}";
 
     public CollisionSurface Surface(byte index) => index < _surfaces.Length ? _surfaces[index] : CollisionSurface.Building;

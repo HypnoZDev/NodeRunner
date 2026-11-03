@@ -3,16 +3,12 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Data.Models;
 
-/// <summary>
-/// Where to find the model of an archetype: a file, the model's name inside it,
-/// and the texture dictionary (.ytd) the model takes its textures from (0 if none).
-/// </summary>
+// Where to find the model of an archetype: a file, the model's name inside it, and the texture dictionary (.ytd) the
+// model takes its textures from (0 if none).
 public readonly record struct ModelLocation(string Path, uint ModelHash, uint TextureDictionaryHash = 0);
 
-/// <summary>
-/// Index of the model files (.ydr, .ydd, .yft) the game uses (base game, update and DLC packs, see
-/// <see cref="GameContent"/>), by name hash.
-/// </summary>
+// Index of the model files (.ydr, .ydd, .yft) the game uses (base game, update and DLC packs, see GameContent), by
+// name hash.
 public sealed class ModelCatalog
 {
     private Dictionary<uint, string> _drawables = new();
@@ -21,7 +17,6 @@ public sealed class ModelCatalog
 
     public int FileCount => _drawables.Count + _dictionaries.Count + _fragments.Count;
 
-    /// <summary>Paths of the fragment files (.yft): vehicles, breakable props...</summary>
     public IEnumerable<string> FragmentFiles => _fragments.Values;
 
     public static ModelCatalog Create(GameContent content) => new()
@@ -31,7 +26,6 @@ public sealed class ModelCatalog
         _fragments = GameFileIndex.Build(content, ".yft"),
     };
 
-    /// <summary>Finds the file holding the model of <paramref name="archetype"/>, or null if it has none.</summary>
     public ModelLocation? Locate(Archetype archetype)
     {
         uint asset = archetype.AssetNameHash;

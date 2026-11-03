@@ -1,26 +1,20 @@
 namespace NodeRunner.Data.Textures;
 
-/// <summary>Pixel formats of the game textures (names follow DXGI, which the GPU reads directly).</summary>
+// Pixel formats of the game textures (names follow DXGI, which the GPU reads directly).
 public enum TextureFormat
 {
     Unknown,
 
-    /// <summary>DXT1: 4x4 blocks of 8 bytes, colour + 1-bit alpha.</summary>
     Bc1,
 
-    /// <summary>DXT3: 4x4 blocks of 16 bytes, colour + sharp alpha.</summary>
     Bc2,
 
-    /// <summary>DXT5: 4x4 blocks of 16 bytes, colour + smooth alpha.</summary>
     Bc3,
 
-    /// <summary>ATI1: 4x4 blocks of 8 bytes, one channel.</summary>
     Bc4,
 
-    /// <summary>ATI2: 4x4 blocks of 16 bytes, two channels (normal maps).</summary>
     Bc5,
 
-    /// <summary>4x4 blocks of 16 bytes, high quality colour + alpha.</summary>
     Bc7,
 
     B8G8R8A8,
@@ -31,13 +25,10 @@ public enum TextureFormat
     L8,
 }
 
-/// <summary>
-/// A texture of the game (from a .ytd dictionary or embedded in a model file), in its GPU format:
-/// <see cref="Data"/> holds every mip level, largest first, one after the other.
-/// </summary>
+// A texture of the game (from a .ytd dictionary or embedded in a model file), in its GPU format: Data holds every mip
+// level, largest first, one after the other.
 public sealed class TextureData
 {
-    /// <summary>Hash of the lower case name.</summary>
     public required uint NameHash { get; init; }
 
     public required string Name { get; init; }
@@ -50,28 +41,22 @@ public sealed class TextureData
     public required byte[] Data { get; init; }
 }
 
-/// <summary>Reads texture dictionaries (.ytd) from the game files.</summary>
+// Reads texture dictionaries (.ytd) from the game files.
 public interface ITextureReader
 {
-    /// <summary>
-    /// Reads every texture of a .ytd file, keyed by name hash.
-    /// Returns an empty dictionary if the file does not exist.
-    /// </summary>
-    /// <exception cref="InvalidDataException">The file is damaged or in an unsupported format.</exception>
+    // Reads every texture of a .ytd file, keyed by name hash.
     IReadOnlyDictionary<uint, TextureData> ReadTextures(string path);
 }
 
-/// <summary>Memory layout of the mip levels of a <see cref="TextureData"/>.</summary>
+// Memory layout of the mip levels of a TextureData.
 public static class TextureLayout
 {
     public static bool IsBlockCompressed(TextureFormat format) =>
         format is TextureFormat.Bc1 or TextureFormat.Bc2 or TextureFormat.Bc3
             or TextureFormat.Bc4 or TextureFormat.Bc5 or TextureFormat.Bc7;
 
-    /// <summary>
-    /// Bytes per row (of pixels, or of 4x4 blocks for compressed formats) and bytes of a whole mip level
-    /// of the given size. Zero for <see cref="TextureFormat.Unknown"/>.
-    /// </summary>
+    // Bytes per row (of pixels, or of 4x4 blocks for compressed formats) and bytes of a whole mip level of the given
+    // size.
     public static (int RowPitch, int SlicePitch) Pitch(TextureFormat format, int width, int height)
     {
         width = Math.Max(1, width);
@@ -93,10 +78,7 @@ public static class TextureLayout
         return (width * pixelBytes, width * pixelBytes * height);
     }
 
-    /// <summary>
-    /// The mip levels actually present in <see cref="TextureData.Data"/>: offset, size and pitches of each,
-    /// largest first. Levels cut off by a too short data block are left out.
-    /// </summary>
+    // The mip levels actually present in Data: offset, size and pitches of each, largest first.
     public static List<MipLevel> GetMipLevels(TextureData texture)
     {
         var levels = new List<MipLevel>();
@@ -115,5 +97,4 @@ public static class TextureLayout
     }
 }
 
-/// <summary>One mip level inside <see cref="TextureData.Data"/>.</summary>
 public readonly record struct MipLevel(int Width, int Height, int Offset, int RowPitch, int SlicePitch);

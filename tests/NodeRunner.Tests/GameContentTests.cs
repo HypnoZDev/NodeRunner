@@ -232,7 +232,6 @@ public class GameContentTests
         Assert.Throws<InvalidOperationException>(() => chair.SetPlacement(Vector3.Zero, Quaternion.Identity, Vector3.One));
     }
 
-    /// <summary>A tunnel: a simplified shell (no switch distance) whose child is an interior holding one object.</summary>
     private static (MapLibrary Library, MapEntity Shell, MapEntity Instance) LoadTunnel()
     {
         var quarter = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
@@ -267,7 +266,6 @@ public class GameContentTests
         return files;
     }
 
-    /// <summary>A pack (by default "pk") whose archive levels/a/meta.rpf holds <paramref name="ymap"/>.</summary>
     private static void AddPack(
         FakeGameFiles files, string name = "pk", int order = 1, string ymap = "y.ymap", string group = "GROUP_MAP", bool invalidate = true)
     {
@@ -319,13 +317,12 @@ public class GameContentTests
 
     private static byte[] Utf8(string text) => Encoding.UTF8.GetBytes(text);
 
-    /// <summary>In-memory game files: archive paths and file contents.</summary>
+    // In-memory game files: archive paths and file contents.
     private sealed class FakeGameFiles : IGameFileSystem
     {
         private readonly HashSet<string> _archives = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Folder names of the packs listed in dlclist.xml.</summary>
         public List<string> Packs { get; } = new();
 
         public GameInstallation? Installation => null;
@@ -360,7 +357,7 @@ public class GameContentTests
         public MapTypes Read(ReadOnlySpan<byte> data) => new() { NameHash = 0, Archetypes = archetypes };
     }
 
-    /// <summary>Returns the map whose key is the file content.</summary>
+    // Returns the map whose key is the file content.
     private sealed class NamedMaps(Dictionary<string, MapData> maps) : IMapDataReader
     {
         public MapData Read(ReadOnlySpan<byte> data) => maps[Encoding.UTF8.GetString(data)];

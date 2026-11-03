@@ -9,15 +9,7 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Water surfaces: flat triangles whose look is computed per pixel. Small waves travelling in several directions
-/// (no geometry: only the normal changes), sky reflected more at grazing angles (Fresnel), the sun or moon glinting,
-/// and the water's own colour, see-through where it is shallow (thickness read from a copy of the depth buffer,
-/// see <see cref="GraphicsDevice.CopyDepth"/>) with a little foam along the shore. Same fog as the models.
-/// Also draws the water meshes of the models (<see cref="MeshBlendMode.Water"/>: pools, fountains, streams).
-/// Drawn after the solid models and before the translucent ones; writes its depth, so overlapping surfaces at the
-/// same height are drawn once.
-/// </summary>
+// Water surfaces: flat triangles whose look is computed per pixel.
 public sealed unsafe class WaterRenderer : IDisposable
 {
     private const string ShaderSource = @"
@@ -186,13 +178,10 @@ float4 PS(PS_INPUT input) : SV_Target
         public readonly float Waves = waves;
     }
 
-    /// <summary>How far the open ocean goes beyond the map's water (m): beyond the farthest fog setting.</summary>
     private const float OceanReach = 40_000f;
 
-    /// <summary>Wave strength on lakes and rivers (1 on the sea).</summary>
     private const float InlandWaves = 0.35f;
 
-    /// <summary>Wave strength on the water meshes of the models (pools, fountains, streams).</summary>
     public const float MeshWaves = 0.2f;
 
     private readonly ID3D11Device _device;
@@ -267,13 +256,10 @@ float4 PS(PS_INPUT input) : SV_Target
         _blendState = device.CreateBlendState(blend);
     }
 
-    /// <summary>True once <see cref="SetSurfaces"/> has been given some water.</summary>
     public bool HasSurfaces => _vertexCount > 0;
 
-    /// <summary>
-    /// Replaces the water drawn: <paramref name="triangles"/> (three corners each) and the open ocean at height 0 all
-    /// around <paramref name="oceanBounds"/> (min X, min Y, max X, max Y; nothing if empty).
-    /// </summary>
+    // Replaces the water drawn: triangles (three corners each) and the open ocean at height 0 all around oceanBounds
+    // (min X, min Y, max X, max Y; nothing if empty).
     public void SetSurfaces(IEnumerable<Vector3> triangles, Vector4 oceanBounds)
     {
         var vertices = new List<WaterVertex>();
@@ -309,11 +295,8 @@ float4 PS(PS_INPUT input) : SV_Target
         vertices.AddRange([a, b, c, c, b, d]);
     }
 
-    /// <summary>
-    /// Starts drawing water over the frame, before <see cref="DrawSurfaces"/> and <see cref="DrawMesh"/>, then <see cref="End"/>.
-    /// <paramref name="sceneDepth"/>: copy of the depth buffer after the solid models (null: the water is opaque
-    /// everywhere). <paramref name="time"/> moves the waves (seconds).
-    /// </summary>
+    // Starts drawing water over the frame, before DrawSurfaces and DrawMesh, then End. sceneDepth: copy of the depth
+    // buffer after the solid models (null: the water is opaque everywhere). time moves the waves (seconds).
     public void Begin(Matrix4x4 viewProjection, Camera camera, SceneLighting lighting, float time, ID3D11ShaderResourceView? sceneDepth)
     {
         var constants = new Constants
@@ -346,7 +329,6 @@ float4 PS(PS_INPUT input) : SV_Target
         _context.RSSetState(_rasterizerState);
     }
 
-    /// <summary>Draws the sea, lakes and rivers (see <see cref="SetSurfaces"/>).</summary>
     public void DrawSurfaces()
     {
         if (_vertexBuffer is null)
@@ -357,7 +339,6 @@ float4 PS(PS_INPUT input) : SV_Target
         _context.Draw((uint)_vertexCount, 0);
     }
 
-    /// <summary>Draws the water meshes of a placed model (nothing if it has none).</summary>
     public void DrawMesh(GpuModel model, Matrix4x4 world, float waves = MeshWaves)
     {
         if (!model.HasWaterParts)
@@ -378,7 +359,6 @@ float4 PS(PS_INPUT input) : SV_Target
         }
     }
 
-    /// <summary>Ends the drawing started by <see cref="Begin"/>.</summary>
     public void End() => _context.PSUnsetShaderResource(0); // The depth copy is written again next frame.
 
     public void Dispose()

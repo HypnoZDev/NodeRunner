@@ -2,10 +2,8 @@ using System.Numerics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Reference grid on the sea-level plane (Z = 0) that follows the camera, plus the world axes at the origin.
-/// The grid gets larger and coarser as the camera goes up.
-/// </summary>
+// Reference grid on the sea-level plane (Z = 0) that follows the camera, plus the world axes at the origin. The grid
+// gets larger and coarser as the camera goes up.
 public static class WorldGrid
 {
     private static readonly Vector4 MinorColor = new(0.35f, 0.38f, 0.42f, 0.35f);
@@ -14,7 +12,6 @@ public static class WorldGrid
     private static readonly Vector4 AxisYColor = new(0.25f, 0.85f, 0.3f, 1f);
     private static readonly Vector4 AxisZColor = new(0.3f, 0.5f, 1f, 1f);
 
-    /// <summary>Adds the grid lines to <paramref name="lines"/> and returns the distance at which they should fade out.</summary>
     public static float AddTo(ColorRenderer lines, Vector3 cameraPosition)
     {
         float altitude = MathF.Abs(cameraPosition.Z);

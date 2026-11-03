@@ -5,13 +5,7 @@ using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Maps;
 
-/// <summary>
-/// Writes an edited map back to a map file (.ymap). Starts from the file the map was read from and keeps every item
-/// of it as Rockstar made it (flags, extensions, occluders, car generators...); only changes, for each entity, its
-/// placement and its links to its lower-detail parent (index, number of children), leaves out the deleted entities
-/// and updates the boxes of the map. Pointers between the file's items survive (see <see cref="MetaDocument"/>):
-/// the items of a deleted entity simply stay unused.
-/// </summary>
+// Writes an edited map back to a map file (.ymap).
 public sealed class YmapWriter : IMapDataWriter
 {
     private const int PointerSize = 8;
@@ -64,13 +58,8 @@ public sealed class YmapWriter : IMapDataWriter
         ("tintValue", EntityTint),
     ];
 
-    /// <summary>
-    /// Builds a whole map file for a map made by the user (<see cref="MapData.IsCustom"/>), which can hold added objects:
-    /// the descriptions of the structures are taken from <paramref name="template"/> (any game map file with ordinary
-    /// objects), the rest is new. Objects already in the map's saved file (<see cref="MapData.SavedContent"/>) keep their
-    /// data (except extensions); added ones are new entities without a lower-detail parent ("orphan HD"), as map tools
-    /// make them. Interiors are not supported in such a map.
-    /// </summary>
+    // Builds a whole map file for a map made by the user (IsCustom), which can hold added objects: the descriptions
+    // of the structures are taken from template (any game map file with ordinary objects), the rest is new.
     public MapFileContent Build(ReadOnlySpan<byte> template, MapData map, string name, MapExtents extents)
     {
         var document = MetaDocument.Read(template);
@@ -164,7 +153,6 @@ public sealed class YmapWriter : IMapDataWriter
         return new MapFileContent(bytes, pageFlags);
     }
 
-    /// <summary>The fields of a new entity that are not its placement: as map tools set them for an added object.</summary>
     private static void WriteNewEntityFields(byte[] data, int o, MapEntity entity)
     {
         var item = data.AsSpan(o, YmapReader.EntitySize);
@@ -183,7 +171,6 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt32LittleEndian(item[EntityTint..], 0);
     }
 
-    /// <summary>The map's flags from its entities, as map tools compute them (only levels of detail matter here).</summary>
     private static (uint Flags, uint ContentFlags) MapFlags(IEnumerable<MapEntity> entities)
     {
         uint flags = 0, contentFlags = 0;
@@ -211,7 +198,7 @@ public sealed class YmapWriter : IMapDataWriter
         return (flags, contentFlags);
     }
 
-    /// <summary>Checks that the file describes CEntityDef with the field offsets written here (fields found by name).</summary>
+    // Checks that the file describes CEntityDef with the field offsets written here (fields found by name).
     private static void CheckEntityLayout(MetaDocument document)
     {
         var structure = document.FindStructure(YmapReader.EntityStructure)
@@ -228,7 +215,7 @@ public sealed class YmapWriter : IMapDataWriter
         }
     }
 
-    /// <summary>Where each entity of the file is (block, offset), in the order the reader numbers them (<see cref="MapEntity.SourceIndex"/>).</summary>
+    // Where each entity of the file is (block, offset), in the order the reader numbers them (SourceIndex).
     private static List<(int Block, int Offset)> EntityItems(MetaDocument document, byte[] mapData)
     {
         var items = new List<(int, int)>();
@@ -269,7 +256,6 @@ public sealed class YmapWriter : IMapDataWriter
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.EntityChildCount), entity.Children.Count(c => !c.IsDeleted));
     }
 
-    /// <summary>Replaces the list of entities of the map (array of pointers) by <paramref name="items"/>, in place.</summary>
     private static void WriteEntityPointers(MetaDocument document, byte[] mapData, List<(int Block, int Offset)> items)
     {
         var field = mapData.AsSpan(YmapReader.MapEntities);

@@ -5,10 +5,8 @@ using Vortice.Mathematics;
 
 namespace NodeRunner.Render;
 
-/// <summary>
-/// Off-screen colour image with its depth buffer, drawn into like the screen and then shown in the interface
-/// (ImGui.Image with the id from <see cref="ImGuiRenderer.RegisterTexture"/> of <see cref="View"/>).
-/// </summary>
+// Off-screen colour image with its depth buffer, drawn into like the screen and then shown in the interface
+// (ImGui.Image with the id from RegisterTexture of View).
 public sealed class RenderTarget : IDisposable
 {
     private readonly ID3D11Device _device;
@@ -27,13 +25,9 @@ public sealed class RenderTarget : IDisposable
     public int Width { get; private set; }
     public int Height { get; private set; }
 
-    /// <summary>The image, for the interface. Changes when the size changes (see <see cref="Begin"/>).</summary>
     public ID3D11ShaderResourceView? View { get; private set; }
 
-    /// <summary>
-    /// Resizes the image if needed (returns true then: <see cref="View"/> is a new object), binds it and clears it.
-    /// Rebind the back buffer afterwards.
-    /// </summary>
+    // Resizes the image if needed (returns true then: View is a new object), binds it and clears it.
     public bool Begin(int width, int height, Vector4 clearColor)
     {
         width = Math.Max(1, width);

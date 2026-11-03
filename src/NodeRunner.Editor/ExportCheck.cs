@@ -2,23 +2,16 @@ using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Editor;
 
-/// <summary>
-/// A map file of the export also shipped by another FiveM resource of the server, or modified by another project:
-/// FiveM only loads one version of a map file, the changes of the other are lost without warning.
-/// </summary>
-/// <param name="Owner">Name of the other resource or project.</param>
-/// <param name="Path">The other file.</param>
+// A map file of the export also shipped by another FiveM resource of the server, or modified by another project.
 public sealed record MapConflict(string FileName, string Owner, bool IsProject, string Path);
 
-/// <summary>Finds the map and collision files (.ymap, .ybn) that other resources or projects also ship.</summary>
+// Finds the map and collision files (.ymap, .ybn) that other resources or projects also ship.
 public static class ConflictScanner
 {
     private static readonly string[] ManifestNames = [FiveMResource.ManifestFileName, "__resource.lua"];
 
-    /// <summary>
-    /// Folder to scan for other resources: the server's "resources" folder holding <paramref name="exportFolder"/>
-    /// (resources are often sorted in sub-folders such as [maps]), otherwise the export folder itself.
-    /// </summary>
+    // Folder to scan for other resources: the server's "resources" folder holding exportFolder (resources are often
+    // sorted in sub-folders such as [maps]), otherwise the export folder itself.
     public static string ScanRoot(string exportFolder)
     {
         for (var dir = new DirectoryInfo(exportFolder); dir is not null; dir = dir.Parent)
@@ -29,11 +22,9 @@ public static class ConflictScanner
         return Path.GetFullPath(exportFolder);
     }
 
-    /// <summary>
-    /// The folders between <paramref name="root"/> and <paramref name="exportFolder"/> that FiveM does not look into:
-    /// under "resources", only folders named in brackets ([maps]) are categories; any other folder is taken as a resource
-    /// itself, so a resource exported inside it is never started. Empty when the export folder is fine.
-    /// </summary>
+    // The folders between root and exportFolder that FiveM does not look into: under "resources", only folders named
+    // in brackets ([maps]) are categories; any other folder is taken as a resource itself, so a resource exported
+    // inside it is never started.
     public static List<string> NonCategoryFolders(string root, string exportFolder)
     {
         var folders = new List<string>();
@@ -48,11 +39,8 @@ public static class ConflictScanner
         return []; // Not under the root: nothing known about the server's layout.
     }
 
-    /// <summary>
-    /// Other resources named <paramref name="resourceName"/> made by NodeRunner under <paramref name="root"/>: earlier
-    /// exports of the same project to another folder. Their files are not conflicts with another project, but the server
-    /// would have two resources of the same name.
-    /// </summary>
+    // Other resources named resourceName made by NodeRunner under root: earlier exports of the same project to
+    // another folder.
     public static List<string> FindOtherCopies(string root, string ownResourceFolder, string resourceName)
     {
         var copies = new List<string>();
@@ -78,11 +66,8 @@ public static class ConflictScanner
         return copies;
     }
 
-    /// <summary>
-    /// Every file under <paramref name="root"/> named like one of <paramref name="fileNames"/>, except those of
-    /// <paramref name="ownResourceFolders"/> (the previous exports of this project). The owner is the nearest folder with a
-    /// resource manifest (fxmanifest.lua or __resource.lua), otherwise the folder just under the root.
-    /// </summary>
+    // Every file under root named like one of fileNames, except those of ownResourceFolders (the previous exports of
+    // this project).
     public static List<MapConflict> ScanResources(string root, IReadOnlyCollection<string> ownResourceFolders, IReadOnlyCollection<string> fileNames)
     {
         var wanted = new HashSet<string>(fileNames, StringComparer.OrdinalIgnoreCase);
@@ -102,7 +87,6 @@ public static class ConflictScanner
         return conflicts;
     }
 
-    /// <summary>The files of other projects ("stream" folders) named like one of <paramref name="fileNames"/>.</summary>
     public static List<MapConflict> ScanProjects(IEnumerable<(string Name, string StreamFolder)> projects, IReadOnlyCollection<string> fileNames)
     {
         var wanted = new HashSet<string>(fileNames, StringComparer.OrdinalIgnoreCase);
@@ -134,14 +118,11 @@ public static class ConflictScanner
     }
 }
 
-/// <summary>Objects of a game map file that the exported version no longer has (deleted now or in an earlier session).</summary>
+// Objects of a game map file that the exported version no longer has (deleted now or in an earlier session).
 public static class RemovedEntities
 {
-    /// <summary>
-    /// The entities of <paramref name="original"/> missing from <paramref name="current"/>, compared type by type (a moved
-    /// object keeps its type, so only the number of objects of each type counts). For a type with fewer objects, the last
-    /// ones of the original file are returned.
-    /// </summary>
+    // The entities of original missing from current, compared type by type (a moved object keeps its type, so only
+    // the number of objects of each type counts).
     public static List<MapEntity> Find(IReadOnlyList<MapEntity> original, IEnumerable<MapEntity> current)
     {
         var remaining = new Dictionary<uint, int>();
@@ -160,11 +141,10 @@ public static class RemovedEntities
         return removed;
     }
 
-    /// <summary>
-    /// Part of the scenery: a detailed object of the level-of-detail tree whose collision is in the area's .ybn files, so
-    /// it stays in the game when the object is deleted. Props carry their own collision and are left out: archetype flag
-    /// 0x20000000 (set on every prop of the props archives), breakable model (fragment) or own physics dictionary.
-    /// </summary>
+    // Part of the scenery: a detailed object of the level-of-detail tree whose collision is in the area's .ybn files,
+    // so it stays in the game when the object is deleted. Props carry their own collision and are left out: archetype
+    // flag 0x20000000 (set on every prop of the props archives), breakable model (fragment) or own physics
+    // dictionary.
     public static bool IsScenery(MapEntity entity, Archetype? archetype) =>
         entity.LodLevel == LodLevel.Hd && entity.ParentIndex >= 0
         && (archetype is null || (archetype.Flags & 0x20000000) == 0 && archetype.AssetType != ArchetypeAssetType.Fragment

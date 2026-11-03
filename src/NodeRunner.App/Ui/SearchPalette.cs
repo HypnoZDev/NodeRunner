@@ -7,12 +7,10 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-/// <summary>
-/// Global search (Ctrl+K): a small window at the top of the screen with a field and a list of results:
-/// a position pasted from a FiveM script, a hash (0x3073333B, or decimal), the nearest objects whose type matches,
-/// map files (.ymap) and types (archetypes). Arrows choose, Enter goes there (camera, selection), Escape or a click
-/// elsewhere closes it. A typed name whose hash is that of a type without a known name becomes its name everywhere.
-/// </summary>
+// Global search (Ctrl+K): a small window at the top of the screen with a field and a list of results: a position
+// pasted from a FiveM script, a hash (0x3073333B, or decimal), the nearest objects whose type matches, map files
+// (.ymap) and types (archetypes). Arrows choose, Enter goes there (camera, selection), Escape or a click elsewhere
+// closes it. A typed name whose hash is that of a type without a known name becomes its name everywhere.
 internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, Action<uint> openInViewer)
 {
     private const float Width = 640f;
@@ -225,10 +223,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
 
     private float _choiceWidth;
 
-    /// <summary>
-    /// On the chosen object or type: "Monde" (go to it in the 3D view) and "Visionneuse" buttons, at the right of the row.
-    /// Returns true if one was clicked (the palette is then closed).
-    /// </summary>
     private bool DrawChoice(Result result, Vector2 min, Vector2 max)
     {
         bool placed = result.Kind == Kind.Object || IsPlaced(result.Type);
@@ -262,7 +256,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         return clicked;
     }
 
-    /// <summary>Objects and types have a model that the viewer can show.</summary>
     private static bool HasModel(Result result) => result.Kind is Kind.Object or Kind.Type;
 
     private bool IsPlaced(uint type) => _objectsByType.TryGetValue(type, out var list) && list.Count > 0;
@@ -333,7 +326,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         return new Result(Kind.Position, Icons.MapPinned, $"Aller à {text}", detail, 0) { Position = c };
     }
 
-    /// <summary>Lists every object by type, all type names and map names, once per loaded map.</summary>
     private void BuildIndex(MapLibrary library, HashNames names)
     {
         if (_indexLibrary == library && _indexStructure == library.StructureVersion)
@@ -363,7 +355,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         }
     }
 
-    /// <summary>Objects whose type matches: the best matches first, then the nearest.</summary>
     private List<Result> FindObjects(string query, HashNames names)
     {
         var best = new List<(int Score, float Distance, MapEntity Entity)>();
@@ -417,7 +408,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
 
     private bool IsType(uint hash, MapLibrary library) => library.GetArchetype(hash) is not null || _objectsByType.ContainsKey(hash);
 
-    /// <summary>The type and the map files whose name has this hash (shown first: the hash was typed on purpose).</summary>
     private List<Result> FindHash(uint hash, MapLibrary library, HashNames names)
     {
         var results = new List<Result>();
@@ -428,10 +418,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         return results;
     }
 
-    /// <summary>
-    /// A typed name whose hash is that of a type without a known name (often a simplified model, SLOD...): it becomes
-    /// its name, here and everywhere else (Properties, Scene...), until the map is loaded again.
-    /// </summary>
+    // A typed name whose hash is that of a type without a known name (often a simplified model, SLOD...): it becomes
+    // its name, here and everywhere else (Properties, Scene...), until the map is loaded again.
     private void LearnTypedName(string query, MapLibrary library, HashNames names)
     {
         if (!HashText.IsName(query))
@@ -445,7 +433,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             _types[at] = (hash, names.Describe(hash));
     }
 
-    /// <summary>0 = same name, 1 = starts with the query, 2 = a part of the name (after _) does, 3 = contains it, -1 = no match.</summary>
+    // 0 = same name, 1 = starts with the query, 2 = a part of the name (after _) does, 3 = contains it, -1 = no
+    // match.
     private static int Score(string name, string query)
     {
         int at = name.IndexOf(query, StringComparison.OrdinalIgnoreCase);
@@ -494,7 +483,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         state.FocusOn(entity);
     }
 
-    /// <summary>Height for a position given without Z: that of the nearest object outside interiors, else the camera's.</summary>
+    // Height for a position given without Z: that of the nearest object outside interiors, else the camera's.
     private float GroundEstimate(Coordinates c)
     {
         if (c.Z is { } z)

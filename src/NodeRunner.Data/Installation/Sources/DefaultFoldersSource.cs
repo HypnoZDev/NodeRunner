@@ -1,6 +1,6 @@
 namespace NodeRunner.Data.Installation.Sources;
 
-/// <summary>Last resort: the default install folders of each launcher.</summary>
+// Last resort: the default install folders of each launcher.
 public sealed class DefaultFoldersSource : IInstallCandidateSource
 {
     public string Name => "Dossier par défaut";

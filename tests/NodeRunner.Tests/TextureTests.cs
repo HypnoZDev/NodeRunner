@@ -98,7 +98,7 @@ public class TextureTests
         Data = new byte[dataLength],
     };
 
-    /// <summary>Writes a small RBF file. Descriptor indices must be given in order of first use.</summary>
+    // Writes a small RBF file. Descriptor indices must be given in order of first use.
     private sealed class RbfBuilder
     {
         private readonly MemoryStream _stream = new();

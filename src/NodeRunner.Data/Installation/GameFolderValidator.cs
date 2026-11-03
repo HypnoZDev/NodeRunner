@@ -1,15 +1,12 @@
 namespace NodeRunner.Data.Installation;
 
-/// <summary>Checks whether a folder is a usable game installation.</summary>
+// Checks whether a folder is a usable game installation.
 public static class GameFolderValidator
 {
     public const string LegacyExecutable = "GTA5.exe";
     public const string EnhancedExecutable = "GTA5_Enhanced.exe";
 
-    /// <summary>
-    /// Returns the edition found in <paramref name="folderPath"/>, or null if the folder
-    /// does not look like a game installation.
-    /// </summary>
+    // Returns the edition found in folderPath, or null if the folder does not look like a game installation.
     public static GameEdition? DetectEdition(string? folderPath)
     {
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
@@ -24,7 +21,6 @@ public static class GameFolderValidator
         return null;
     }
 
-    /// <summary>Builds a <see cref="GameInstallation"/> if the folder is valid, otherwise null.</summary>
     public static GameInstallation? TryCreate(string? folderPath, string source)
     {
         if (string.IsNullOrWhiteSpace(folderPath))

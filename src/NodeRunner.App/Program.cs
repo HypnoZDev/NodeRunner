@@ -7,10 +7,8 @@ internal static class Program
     public static string Version =>
         typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    /// <summary>Name shown to the user (window title, About screen, file metadata).</summary>
     public const string Name = "NodeRunner Studio";
 
-    /// <summary>Identity under which NodeRunner is credited (window title, About screen, file metadata).</summary>
     public const string Author = "Inside Rockstar";
 
     [STAThread]
