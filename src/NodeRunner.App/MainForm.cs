@@ -48,6 +48,7 @@ internal sealed unsafe partial class MainForm : Form
         _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _modelLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         ClientSize = new Size(1600, 900);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(640, 360);

@@ -55,6 +55,7 @@ internal sealed partial class SplashForm : Form
         ClientSize = new Size(720, 405);
         ShowInTaskbar = true;
         Text = Program.Name;
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         DoubleBuffered = true;
         BackColor = Color.FromArgb(0x0B, 0x0F, 0x1A);
 
