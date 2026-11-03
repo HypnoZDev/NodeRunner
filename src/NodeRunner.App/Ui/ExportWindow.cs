@@ -213,6 +213,23 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                     ImGui.SetTooltip(detail);
             }
+            foreach (var (conflict, n) in (item.Merge ?? []).Select((c, n) => (c, n)))
+            {
+                if (Widgets.Button($"{Icons.ArrowDownToLine}  Reprendre les changements de « {conflict.Owner} »##merge{index}_{n}",
+                    $"Applique à ta carte ce que « {conflict.Owner} » a changé dans {conflict.FileName} (déplacements, suppressions, "
+                    + "ajouts). Un objet modifié des deux côtés garde ta version. Annulable (Ctrl+Z)."))
+                    _merges[conflict.Path] = state.TakeChangesFrom(conflict.Path, conflict.Owner);
+                if (_merges.TryGetValue(conflict.Path, out var merged))
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, merged.Success ? UiTheme.Success : UiTheme.Error);
+                    ImGui.TextWrapped(merged.Text);
+                    ImGui.PopStyleColor();
+                    foreach (string line in merged.Conflicts.Take(12))
+                        ImGui.TextColored(UiTheme.Warning, Widgets.Fit(line, ImGui.GetContentRegionAvail().X));
+                    if (merged.Conflicts.Count > 12)
+                        ImGui.TextColored(UiTheme.Warning, $"... et {merged.Conflicts.Count - 12} autres");
+                }
+            }
             ImGui.TreePop();
         }
         if (check.Summary.Length > 0)
@@ -222,6 +239,9 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         if (check.OcclusionCuts.Count > 0)
             DrawOcclusionCuts(check.OcclusionCuts, showPreviewOption: check.CollisionCuts.Count == 0);
     }
+
+    // Result of "take the changes" by other file.
+    private readonly Dictionary<string, (string Text, bool Success, List<string> Conflicts)> _merges = new(StringComparer.OrdinalIgnoreCase);
 
     // Collision and occluder files the user unticked (by name), and whether the removed pieces are shown in the 3D view.
     private readonly HashSet<string> _excludedCollisions = new(StringComparer.OrdinalIgnoreCase);

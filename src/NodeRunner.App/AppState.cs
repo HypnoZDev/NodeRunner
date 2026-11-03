@@ -3,6 +3,8 @@ using NodeRunner.App.World;
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Installation;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Maps;
+using NodeRunner.Data.Native.Resources;
 using NodeRunner.Editor;
 using NodeRunner.Render;
 
@@ -265,6 +267,68 @@ internal sealed class AppState
         SelectAll(pasted);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
+    }
+
+    // Takes the changes of otherFile (the same map file saved by another project or shipped by another resource) into
+    // the loaded map, in one undo step: what only the other version changed is applied, conflicts keep ours.
+    // Returns the result and the conflicts, described for the interface.
+    public (string Text, bool Success, List<string> Conflicts) TakeChangesFrom(string otherFile, string owner)
+    {
+        string fileName = Path.GetFileName(otherFile);
+        if (World.Maps is not { } library || World.Content is not { } content)
+            return ("La carte n'est pas chargée.", false, []);
+        var map = library.Maps.FirstOrDefault(m => !m.IsCustom && m.FilePath is { } p
+            && string.Equals(Path.GetFileName(p), fileName, StringComparison.OrdinalIgnoreCase));
+        if (map?.FilePath is not { } gamePath || content.ReadFile(gamePath) is not { } gameBytes)
+            return ($"{fileName} n'est pas un YMAP de la carte chargée.", false, []);
+
+        MergePlan plan;
+        try
+        {
+            var reader = new YmapReader();
+            var game = reader.Read(gameBytes);
+            var theirs = reader.Read(ResourceFile.Read(File.ReadAllBytes(otherFile)).Content);
+            plan = MapMerge.Plan(game.Entities, map.Entities, theirs.Entities);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return ($"Lecture impossible de {otherFile} : {ex.Message}", false, []);
+        }
+
+        var names = World.Names;
+        var conflicts = plan.Conflicts
+            .Select(c => $"{names?.Describe(c.ArchetypeHash) ?? $"0x{c.ArchetypeHash:X8}"} ({c.Position.X:0.0}, {c.Position.Y:0.0}, {c.Position.Z:0.0}) : {c.Reason}")
+            .ToList();
+        if (plan.IsEmpty)
+            return (plan.Conflicts.Count == 0 ? $"Rien à reprendre : {fileName} a déjà tous les changements de « {owner} »."
+                : $"Rien à reprendre de « {owner} » sans conflit.", plan.Conflicts.Count == 0, conflicts);
+
+        MapData? addTo = null;
+        var added = new List<MapEntity>();
+        if (plan.Additions.Count > 0)
+        {
+            if ((addTo = ProjectMap(library)) is null)
+                return ("Ouvre ou crée d'abord un projet : les objets ajoutés par l'autre version vont dans le YMAP du projet.", false, conflicts);
+            foreach (var (hash, placement) in plan.Additions)
+            {
+                var entity = Adding.NewEntity(hash, library.GetArchetype(hash), placement.Position, placement.Orientation);
+                entity.SetPlacement(placement.Position, placement.Orientation, placement.Scale);
+                added.Add(entity);
+            }
+        }
+        History.Add(MergeEdit.Apply(library, plan, addTo, added, $"Reprendre les changements de « {owner} » ({fileName})"));
+
+        var parts = new List<string>();
+        if (plan.Moves.Count > 0)
+            parts.Add($"{plan.Moves.Count} déplacé(s)");
+        if (plan.Deletions.Count > 0)
+            parts.Add($"{plan.Deletions.Count} supprimé(s)");
+        if (plan.Additions.Count > 0)
+            parts.Add($"{plan.Additions.Count} ajouté(s) au YMAP du projet");
+        string text = $"Changements de « {owner} » repris dans {fileName} : {string.Join(", ", parts)}."
+            + (conflicts.Count > 0 ? $" {conflicts.Count} conflit(s) : ta version est gardée." : "");
+        Notify(text, conflicts.Count > 0);
+        return (text, true, conflicts);
     }
 
     // The project's own map, where added objects go (created if needed); null, with a message, without a project.

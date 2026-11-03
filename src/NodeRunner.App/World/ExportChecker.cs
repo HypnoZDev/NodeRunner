@@ -7,7 +7,9 @@ using NodeRunner.Editor;
 namespace NodeRunner.App.World;
 
 // One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.
-internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null);
+// Merge: the other versions of the same map file whose changes can be taken into ours.
+internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
+    IReadOnlyList<MapConflict>? Merge = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
@@ -109,7 +111,8 @@ internal static class ExportChecker
                     $"{group.Key} est aussi livré par {Owners(group, "la ressource", "les ressources")}",
                     group.Select(c => c.Path).ToList(),
                     "FiveM ne charge qu'une version d'un même YMAP : les changements de l'une des deux ressources seront perdus "
-                    + "(objets en double, suppression annulée...). Regroupez ces changements dans une seule ressource."));
+                    + "(objets en double, suppression annulée...). Reprenez ses changements dans ce projet, puis retirez le "
+                    + "fichier de l'autre ressource.", group.ToList()));
             }
             scanned = conflicts.Count;
             summary = $"Dossier analysé : {root}";
@@ -125,7 +128,7 @@ internal static class ExportChecker
                 $"{group.Key} est aussi modifié par {Owners(group, "le projet", "les projets")}",
                 group.Select(c => c.Path).ToList(),
                 "Si les deux projets sont installés sur le même serveur, un seul des deux fichiers sera chargé. "
-                + "Faites ces changements dans un seul projet."));
+                + "Reprenez ses changements dans ce projet, puis retirez le fichier de l'autre projet.", group.ToList()));
         }
 
         // Deleted scenery (now or in an earlier session): compared with the game's file.
