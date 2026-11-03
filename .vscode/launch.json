@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NodeRunner",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/NodeRunner.App/bin/Debug/net10.0-windows/win-x64/NodeRunner.exe",
+      "cwd": "${workspaceFolder}/src/NodeRunner.App/bin/Debug/net10.0-windows/win-x64",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ]
+}

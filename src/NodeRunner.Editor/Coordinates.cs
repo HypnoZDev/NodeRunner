@@ -1,0 +1,44 @@
+using System.Globalization;
+using System.Numerics;
+using System.Text.RegularExpressions;
+
+namespace NodeRunner.Editor;
+
+/// <summary>A position pasted by the user: X, Y, optionally Z and a heading (degrees, as in FiveM).</summary>
+public readonly partial record struct Coordinates(float X, float Y, float? Z, float? Heading)
+{
+    /// <summary>
+    /// Reads a position as written in FiveM scripts or copied from elsewhere: <c>vector3(1.0, 2.0, 3.0)</c>,
+    /// <c>vector4(1, 2, 3, 90)</c>, <c>vec3(...)</c>, <c>{x = 1.0, y = 2.0, z = 3.0}</c>, <c>1.0, 2.0, 3.0</c>,
+    /// <c>1.0 2.0 3.0</c> or just <c>x, y</c>. Returns null if the text is not only 2 to 4 numbers.
+    /// </summary>
+    public static Coordinates? TryParse(string text)
+    {
+        string cleaned = Wrappers().Replace(text.Trim(), " ");
+        var parts = cleaned.Split([',', ';', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length is < 2 or > 4)
+            return null;
+
+        var values = new float[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string part = parts[i].EndsWith('f') ? parts[i][..^1] : parts[i];
+            if (!float.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]) || !float.IsFinite(values[i]))
+                return null;
+        }
+        return new Coordinates(values[0], values[1],
+            values.Length > 2 ? values[2] : null,
+            values.Length > 3 ? values[3] : null);
+    }
+
+    /// <summary>The position, with <paramref name="fallbackZ"/> as height when none was given.</summary>
+    public Vector3 ToVector3(float fallbackZ) => new(X, Y, Z ?? fallbackZ);
+
+    /// <summary>Horizontal direction the heading points to: 0° = north (+Y), counter-clockwise like FiveM.</summary>
+    public Vector2? HeadingDirection =>
+        Heading is { } h ? new Vector2(-MathF.Sin(h * MathF.PI / 180f), MathF.Cos(h * MathF.PI / 180f)) : null;
+
+    // Function names (vector3, vec4...), component names (x =, y:, heading =), brackets and the '=' or ':' left.
+    [GeneratedRegex(@"\b(?:vector[234]|vec[234]?)\b|\b(?:[xyzhw]|heading)\s*[=:]|[(){}\[\]=:]", RegexOptions.IgnoreCase)]
+    private static partial Regex Wrappers();
+}

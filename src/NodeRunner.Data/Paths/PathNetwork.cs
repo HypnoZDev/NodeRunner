@@ -1,0 +1,88 @@
+using System.Text.RegularExpressions;
+using NodeRunner.Data.FileSystem;
+
+namespace NodeRunner.Data.Paths;
+
+/// <summary>The whole road and pedestrian network: every nodesN.ynd file of the map.</summary>
+public sealed partial class PathNetwork
+{
+    private readonly PathNodeArea?[] _areas = new PathNodeArea?[PathNodeArea.AreaCount];
+
+    /// <summary>Loaded areas (empty areas are skipped).</summary>
+    public IEnumerable<PathNodeArea> Areas => _areas.OfType<PathNodeArea>();
+
+    public int NodeCount => Areas.Sum(a => a.Nodes.Count);
+    public int LinkCount => Areas.Sum(a => a.Links.Count);
+
+    /// <summary>Files that could not be read, with the reason (shown to the user, not fatal).</summary>
+    public List<string> Errors { get; } = new();
+
+    public PathNodeArea? GetArea(int areaId) =>
+        areaId is >= 0 and < PathNodeArea.AreaCount ? _areas[areaId] : null;
+
+    /// <summary>Finds a node anywhere on the map, or null if its area is not loaded.</summary>
+    public PathNode? GetNode(PathNodeId id)
+    {
+        var area = GetArea(id.AreaId);
+        if (area is null)
+            return null;
+
+        // Node numbers normally match their position in the file; fall back to a search otherwise.
+        if (id.NodeId < area.Nodes.Count && area.Nodes[id.NodeId].Id == id)
+            return area.Nodes[id.NodeId];
+        return area.Nodes.FirstOrDefault(n => n.Id == id);
+    }
+
+    /// <summary>
+    /// Reads every nodesN.ynd of the game. When the same file exists in several archives
+    /// (base game and update), the one from update.rpf wins, as in the game.
+    /// </summary>
+    public static PathNetwork Load(IGameFileSystem files, IPathNodeReader reader, IProgress<string>? progress = null)
+    {
+        var network = new PathNetwork();
+
+        var chosen = new Dictionary<int, string>();
+        foreach (var path in files.EnumerateFiles(".ynd"))
+        {
+            var match = NodesFileName().Match(Path.GetFileName(path));
+            if (!match.Success)
+                continue;
+
+            int areaId = int.Parse(match.Groups[1].Value);
+            if (areaId >= PathNodeArea.AreaCount)
+                continue;
+
+            if (!chosen.TryGetValue(areaId, out var existing) || IsUpdatePath(path) && !IsUpdatePath(existing))
+                chosen[areaId] = path;
+        }
+
+        int done = 0;
+        foreach (var (areaId, path) in chosen)
+        {
+            if (++done % 50 == 0)
+                progress?.Report($"Lecture des pathnodes : {done} / {chosen.Count} fichiers");
+
+            try
+            {
+                var data = files.ReadFile(path);
+                if (data is null || data.Length == 0)
+                    continue;
+                var area = reader.Read(data, areaId);
+                if (area.Nodes.Count > 0)
+                    network._areas[areaId] = area;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
+            {
+                network.Errors.Add($"{path} : {ex.Message}");
+            }
+        }
+
+        return network;
+    }
+
+    private static bool IsUpdatePath(string path) =>
+        path.StartsWith("update", StringComparison.OrdinalIgnoreCase);
+
+    [GeneratedRegex(@"^nodes(\d+)\.ynd$", RegexOptions.IgnoreCase)]
+    private static partial Regex NodesFileName();
+}

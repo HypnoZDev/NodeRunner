@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Abstraction layer: our own interfaces and data models.
+    MUST NOT reference any rendering library: the game's file formats are read by NodeRunner.Data.Native.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NodeRunner.Tests" />
+  </ItemGroup>
+
+</Project>

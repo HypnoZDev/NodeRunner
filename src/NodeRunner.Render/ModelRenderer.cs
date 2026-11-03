@@ -1,0 +1,755 @@
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using NodeRunner.Data.Models;
+using NodeRunner.Data.Textures;
+using Vortice.D3DCompiler;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
+using Vortice.Mathematics;
+
+namespace NodeRunner.Render;
+
+/// <summary>
+/// Draws 3D models (<see cref="ModelData"/> uploaded once as a <see cref="GpuModel"/>) with their colour texture
+/// and simple lighting (see <see cref="SceneLighting"/>): a sun-like directional light, a sky/ground ambient term and fog.
+/// Two passes (see <see cref="Begin"/>): solid meshes first (with the transparent pixels of cutout meshes,
+/// like foliage and fences, cut out), then translucent meshes (decals, glass) blended over them.
+/// </summary>
+public sealed unsafe class ModelRenderer : IDisposable
+{
+    private const string ShaderSource = @"
+cbuffer Constants : register(b0)
+{
+    float4x4 ViewProjection;
+    float4x4 World;
+    float4 Tint;
+    float4 LightDirection;
+    uint4 PickId; // x: number of the object, for picking.
+    float4 SunColor;
+    float4 SkyAmbient;
+    float4 GroundAmbient;
+    float4 FogColor;   // a: 1 = fog on.
+    float4 CameraFog;  // xyz: camera position, w: distance at which the fog hides everything.
+    float4 Emission;   // x: how much the mesh gives off its own light (0 = only lit by the sun).
+    float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
+                       // z = 1: the colour is the vertex colour (no texture).
+};
+Texture2D ColorTexture : register(t0);
+Texture2D Layer1 : register(t1);
+Texture2D Layer2 : register(t2);
+Texture2D Layer3 : register(t3);
+Texture2D BlendMask : register(t4);
+SamplerState ColorSampler : register(s0);
+
+// Sun shadows (see ShadowMaps): one depth image per slice of the view, seen from the sun.
+cbuffer Shadows : register(b1)
+{
+    float4x4 ShadowMatrix[3];
+    float4 ShadowSplits;   // xyz: far end of each slice (m along the view direction), w: 1 = shadows on.
+    float4 ShadowTexels;   // xyz: size of a texel of each slice (m), w: 1 / image size.
+    float4 ShadowForward;  // xyz: view direction of the camera.
+};
+Texture2DArray<float> ShadowMap : register(t5);
+SamplerComparisonState ShadowSampler : register(s1);
+struct VS_INPUT
+{
+    float3 pos : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 color : COLOR0;
+    float4 weights : COLOR1; float2 maskUv : TEXCOORD1;
+};
+struct PS_INPUT
+{
+    float4 pos : SV_POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 color : COLOR0; float3 world : TEXCOORD1;
+    float4 weights : COLOR1; float2 maskUv : TEXCOORD2;
+};
+
+PS_INPUT VS(VS_INPUT input)
+{
+    PS_INPUT output;
+    float4 world = mul(World, float4(input.pos, 1.0f));
+    output.pos = mul(ViewProjection, world);
+    output.world = world.xyz;
+    output.normal = mul((float3x3)World, input.normal);
+    output.uv = input.uv;
+    output.color = input.color;
+    output.weights = input.weights;
+    output.maskUv = input.maskUv;
+    return output;
+}
+
+// 1 in the sun, 0 in the shade of something closer to the sun; 1 beyond the shadow distance (faded in).
+float SunShadow(float3 world, float3 n)
+{
+    float depth = dot(world - CameraFog.xyz, ShadowForward.xyz);
+    if (ShadowSplits.w < 0.5f || depth >= ShadowSplits.z)
+        return 1.0f;
+    int c = depth < ShadowSplits.x ? 0 : depth < ShadowSplits.y ? 1 : 2;
+    float texel = c == 0 ? ShadowTexels.x : c == 1 ? ShadowTexels.y : ShadowTexels.z;
+
+    // Moved off the surface along its normal (and towards the sun), so it doesn't shade itself.
+    float4 p = mul(ShadowMatrix[c], float4(world + n * (1.5f * texel), 1.0f));
+    float2 uv = p.xy * float2(0.5f, -0.5f) + 0.5f;
+    float reference = p.z - 1.5f * ShadowTexels.w;
+
+    // 3 x 3 filtered samples: soft edges.
+    float lit = 0.0f;
+    [unroll] for (int y = -1; y <= 1; y++)
+        [unroll] for (int x = -1; x <= 1; x++)
+            lit += ShadowMap.SampleCmpLevelZero(ShadowSampler, float3(uv + float2(x, y) * ShadowTexels.w, c), reference);
+    lit /= 9.0f;
+
+    float fade = saturate((ShadowSplits.z - depth) / (0.15f * ShadowSplits.z));
+    return lerp(1.0f, lit, fade);
+}
+
+// Lit colour; alpha straight from the colour.
+float4 Shade(PS_INPUT input, float4 color)
+{
+    float3 n = input.normal;
+    float len = length(n);
+    n = len > 0.0001f ? n / len : float3(0, 0, 1);
+    float sun = saturate(dot(n, LightDirection.xyz));
+    if (sun > 0.0f)
+        sun *= SunShadow(input.world, n);
+    float sky = 0.5f + 0.5f * n.z;
+    float3 light = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky) + SunColor.rgb * sun;
+    // Own light: at least the texture colour, brighter than the surroundings at night.
+    float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * 1.4f);
+
+    // Distance fog, thicker towards the horizon colour; none on the first quarter of the distance.
+    float distance = length(input.world - CameraFog.xyz);
+    float fog = FogColor.a * saturate((distance - 0.25f * CameraFog.w) / (0.75f * CameraFog.w));
+    fog = fog * fog * (3.0f - 2.0f * fog);
+    return float4(lerp(lit, FogColor.rgb, fog), color.a);
+}
+
+float4 Shade(PS_INPUT input)
+{
+    float4 color = ColorTexture.Sample(ColorSampler, input.uv);
+    if (Terrain.z > 0.5f)
+        color.rgb *= input.color.rgb;
+    return Shade(input, color);
+}
+
+// Solid: the texture alpha may be something else than transparency (e.g. a tint mask), ignore it.
+float4 PSOpaque(PS_INPUT input) : SV_Target
+{
+    return float4(Shade(input).rgb, 1.0f);
+}
+
+// Ground: four layers blended by weights from the second vertex colour and / or the mask texture
+// (blue: layer 0 to 1 and 2 to 3, green: layers 0-1 to 2-3). The first vertex colour's alpha chooses
+// between the mask (0) and the vertex colour (1).
+float4 PSTerrain(PS_INPUT input) : SV_Target
+{
+    float4 w = input.weights;
+    if (Terrain.x > 0.5f)
+    {
+        float4 m = BlendMask.Sample(ColorSampler, input.maskUv);
+        w = Terrain.y > 0.5f ? m : lerp(m, w, input.color.a);
+    }
+    float4 c0 = ColorTexture.Sample(ColorSampler, input.uv);
+    float4 c1 = Layer1.Sample(ColorSampler, input.uv);
+    float4 c2 = Layer2.Sample(ColorSampler, input.uv);
+    float4 c3 = Layer3.Sample(ColorSampler, input.uv);
+    float4 color = lerp(lerp(c0, c1, w.b), lerp(c2, c3, w.b), w.g);
+    return float4(Shade(input, color).rgb, 1.0f);
+}
+
+float4 PSCutout(PS_INPUT input) : SV_Target
+{
+    float4 color = Shade(input);
+    clip(color.a - 0.33f);
+    return float4(color.rgb, 1.0f);
+}
+
+// The vertex alpha fades decals in and out (e.g. grime fading towards the top of a wall).
+float4 PSTranslucent(PS_INPUT input) : SV_Target
+{
+    float4 color = Shade(input);
+    color.a *= input.color.a;
+    clip(color.a - 0.01f);
+    return color;
+}
+
+// Shadow images: depth only, with the holes of foliage and fences.
+void PSShadowCutout(PS_INPUT input)
+{
+    clip(ColorTexture.Sample(ColorSampler, input.uv).a - 0.33f);
+}
+
+// Picking: the object's number instead of its colour, with the same holes as on screen.
+uint PSPickOpaque(PS_INPUT input) : SV_Target
+{
+    return PickId.x;
+}
+
+uint PSPickCutout(PS_INPUT input) : SV_Target
+{
+    clip(ColorTexture.Sample(ColorSampler, input.uv).a - 0.33f);
+    return PickId.x;
+}
+
+uint PSPickTranslucent(PS_INPUT input) : SV_Target
+{
+    clip(ColorTexture.Sample(ColorSampler, input.uv).a * input.color.a - 0.1f);
+    return PickId.x;
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Constants
+    {
+        public Matrix4x4 ViewProjection;
+        public Matrix4x4 World;
+        public Vector4 Tint;
+        public Vector4 LightDirection;
+        public uint PickId;
+        private readonly uint _padding1, _padding2, _padding3;
+        public Vector4 SunColor;
+        public Vector4 SkyAmbient;
+        public Vector4 GroundAmbient;
+        public Vector4 FogColor;
+        public Vector4 CameraFog;
+        public Vector4 Emission;
+        public Vector4 Terrain;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ShadowConstants
+    {
+        public Matrix4x4 Cascade0, Cascade1, Cascade2;
+        public Vector4 Splits;
+        public Vector4 Texels;
+        public Vector4 Forward;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct ModelVertex(Vector3 position, Vector3 normal, Vector2 texCoord, Vector4 color, Vector4 weights, Vector2 maskTexCoord)
+    {
+        public readonly Vector3 Position = position;
+        public readonly Vector3 Normal = normal;
+        public readonly Vector2 TexCoord = texCoord;
+        public readonly uint Color = Pack(color);
+
+        /// <summary>Ground layer weights (second vertex colour, see <see cref="TerrainBlend"/>).</summary>
+        public readonly uint Weights = Pack(weights);
+        public readonly Vector2 MaskTexCoord = maskTexCoord;
+
+        /// <summary>RGBA, one byte per channel, red in the lowest byte (R8G8B8A8_UNorm).</summary>
+        private static uint Pack(Vector4 c)
+        {
+            static uint Byte(float v) => (uint)Math.Clamp(MathF.Round(v * 255f), 0f, 255f);
+            return Byte(c.X) | Byte(c.Y) << 8 | Byte(c.Z) << 16 | Byte(c.W) << 24;
+        }
+    }
+
+    /// <summary>Size of a model vertex in the vertex buffers of <see cref="GpuModel"/> (position first, then the normal).</summary>
+    internal static int VertexSize => sizeof(ModelVertex);
+
+    /// <summary>Light, ambient and fog for the next models drawn (<see cref="SceneLighting.Neutral"/> by default).</summary>
+    public SceneLighting Lighting { get; set; } = SceneLighting.Neutral;
+
+    /// <summary>Camera position for the next models drawn (fog distance).</summary>
+    public Vector3 CameraPosition { get; set; }
+
+    /// <summary>Sun shadows for the next models drawn (from the next <see cref="Begin"/>), null for none.</summary>
+    public ShadowMaps? Shadows { get; set; }
+
+    private readonly ID3D11Device _device;
+    private readonly ID3D11DeviceContext _context;
+    private readonly ID3D11VertexShader _vertexShader;
+    private readonly ID3D11PixelShader _opaquePixelShader;
+    private readonly ID3D11PixelShader _terrainPixelShader;
+    private readonly ID3D11PixelShader _cutoutPixelShader;
+    private readonly ID3D11PixelShader _translucentPixelShader;
+    private readonly ID3D11PixelShader _shadowCutoutPixelShader;
+    private readonly ID3D11PixelShader _pickOpaquePixelShader;
+    private readonly ID3D11PixelShader _pickCutoutPixelShader;
+    private readonly ID3D11PixelShader _pickTranslucentPixelShader;
+    private readonly ID3D11InputLayout _inputLayout;
+    private readonly ID3D11Buffer _constantBuffer;
+    private readonly ID3D11Buffer _shadowConstantBuffer;
+    private readonly ID3D11RasterizerState _rasterizerState;
+    private readonly ID3D11RasterizerState _shadowRasterizerState;
+    private readonly ID3D11DepthStencilState _shadowDepthStencilState;
+    private readonly ID3D11RasterizerState _doubleSidedRasterizerState;
+    private readonly ID3D11DepthStencilState _depthStencilState;
+    private readonly ID3D11DepthStencilState _translucentDepthStencilState;
+    private readonly ID3D11BlendState _blendState;
+    private readonly ID3D11BlendState _translucentBlendState;
+    private ID3D11SamplerState _samplerState;
+    private int _anisotropy = 8;
+    private readonly GpuTexture _untextured;
+    private readonly GpuTexture _white;
+    private readonly GpuTexture _untexturedTranslucent;
+    private ModelPass _pass;
+
+    public ModelRenderer(ID3D11Device device, ID3D11DeviceContext context)
+    {
+        _device = device;
+        _context = context;
+
+        ReadOnlyMemory<byte> vsBytecode = Compiler.Compile(ShaderSource, "VS", "models", "vs_5_0");
+        _vertexShader = device.CreateVertexShader(vsBytecode.Span);
+        _opaquePixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSOpaque", "models", "ps_5_0").Span);
+        _terrainPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTerrain", "models", "ps_5_0").Span);
+        _cutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSCutout", "models", "ps_5_0").Span);
+        _translucentPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTranslucent", "models", "ps_5_0").Span);
+        _shadowCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSShadowCutout", "models", "ps_5_0").Span);
+        _pickOpaquePixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickOpaque", "models", "ps_5_0").Span);
+        _pickCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickCutout", "models", "ps_5_0").Span);
+        _pickTranslucentPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickTranslucent", "models", "ps_5_0").Span);
+
+        InputElementDescription[] layout =
+        [
+            new("POSITION", 0, Format.R32G32B32_Float, 0, 0),
+            new("NORMAL", 0, Format.R32G32B32_Float, 12, 0),
+            new("TEXCOORD", 0, Format.R32G32_Float, 24, 0),
+            new("COLOR", 0, Format.R8G8B8A8_UNorm, 32, 0),
+            new("COLOR", 1, Format.R8G8B8A8_UNorm, 36, 0),
+            new("TEXCOORD", 1, Format.R32G32_Float, 40, 0),
+        ];
+        _inputLayout = device.CreateInputLayout(layout, vsBytecode.Span);
+
+        _constantBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(Constants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        _shadowConstantBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(ShadowConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+
+        // Solid meshes only show their front faces, as in the game: some are only meant to be seen from one
+        // side (e.g. the fake outside view above an opening of a metro tunnel, seen from below).
+        // Cut-out and translucent meshes (foliage, fences, glass) are single planes seen from both sides.
+        _rasterizerState = device.CreateRasterizerState(new RasterizerDescription
+        {
+            FillMode = FillMode.Solid,
+            CullMode = CullMode.Back,
+            FrontCounterClockwise = true,
+            DepthClipEnable = true,
+        });
+        _doubleSidedRasterizerState = device.CreateRasterizerState(new RasterizerDescription
+        {
+            FillMode = FillMode.Solid,
+            CullMode = CullMode.None,
+            DepthClipEnable = true,
+        });
+
+        // Shadow images: both faces (a wall seen from behind by the sun still casts its shadow), pushed away from the
+        // sun on slopes so surfaces don't shade themselves; things between the sun and the image are flattened onto
+        // it instead of being cut off.
+        _shadowRasterizerState = device.CreateRasterizerState(new RasterizerDescription
+        {
+            FillMode = FillMode.Solid,
+            CullMode = CullMode.None,
+            DepthClipEnable = false,
+            DepthBias = 16,
+            SlopeScaledDepthBias = 2f,
+            DepthBiasClamp = 0.01f,
+        });
+
+        // Shadow images use ordinary depth: 0 towards the sun, cleared to 1.
+        _shadowDepthStencilState = device.CreateDepthStencilState(new DepthStencilDescription
+        {
+            DepthEnable = true,
+            DepthWriteMask = DepthWriteMask.All,
+            DepthFunc = ComparisonFunction.LessEqual,
+        });
+
+        // Reversed Z (see GraphicsDevice).
+        _depthStencilState = device.CreateDepthStencilState(new DepthStencilDescription
+        {
+            DepthEnable = true,
+            DepthWriteMask = DepthWriteMask.All,
+            DepthFunc = ComparisonFunction.GreaterEqual,
+        });
+
+        // Translucent meshes are tested against the depth of the solid ones but don't hide each other.
+        _translucentDepthStencilState = device.CreateDepthStencilState(new DepthStencilDescription
+        {
+            DepthEnable = true,
+            DepthWriteMask = DepthWriteMask.Zero,
+            DepthFunc = ComparisonFunction.GreaterEqual,
+        });
+
+        // Opaque: an empty description would also disable colour writes.
+        _blendState = device.CreateBlendState(BlendDescription.Opaque);
+
+        var translucentBlend = new BlendDescription();
+        translucentBlend.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            BlendEnable = true,
+            SourceBlend = Blend.SourceAlpha,
+            DestinationBlend = Blend.InverseSourceAlpha,
+            BlendOperation = BlendOperation.Add,
+            SourceBlendAlpha = Blend.One,
+            DestinationBlendAlpha = Blend.InverseSourceAlpha,
+            BlendOperationAlpha = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteEnable.All,
+        };
+        _translucentBlendState = device.CreateBlendState(translucentBlend);
+
+        _samplerState = CreateSampler(device, _anisotropy);
+
+        // Light grey, for meshes without (or with a missing) texture.
+        _untextured = GpuTexture.CreateSolid(device, 190, 190, 190, 255);
+        _white = GpuTexture.CreateSolid(device, 255, 255, 255, 255);
+        _untexturedTranslucent = GpuTexture.CreateSolid(device, 190, 200, 210, 64);
+    }
+
+    /// <summary>
+    /// Texture filtering at grazing angles: 1 = plain (fastest), up to 16 (ground textures stay sharp in the distance).
+    /// </summary>
+    public int Anisotropy
+    {
+        get => _anisotropy;
+        set
+        {
+            value = Math.Clamp(value, 1, 16);
+            if (value == _anisotropy)
+                return;
+            _anisotropy = value;
+            _samplerState.Dispose();
+            _samplerState = CreateSampler(_device, value);
+        }
+    }
+
+    private static ID3D11SamplerState CreateSampler(ID3D11Device device, int anisotropy) =>
+        device.CreateSamplerState(new SamplerDescription
+        {
+            Filter = anisotropy > 1 ? Filter.Anisotropic : Filter.MinMagMipLinear,
+            MaxAnisotropy = (uint)anisotropy,
+            AddressU = TextureAddressMode.Wrap,
+            AddressV = TextureAddressMode.Wrap,
+            AddressW = TextureAddressMode.Wrap,
+            ComparisonFunc = ComparisonFunction.Never,
+            MaxLOD = float.MaxValue,
+        });
+
+    /// <summary>Copies a texture to the GPU. Null if its format is not supported.</summary>
+    public GpuTexture? UploadTexture(TextureData texture) => GpuTexture.Create(_device, texture);
+
+    /// <summary>
+    /// Copies a model to the GPU (all its meshes in one vertex and one index buffer). Null if empty.
+    /// <paramref name="meshTextures"/> gives the textures of each mesh (same order as <see cref="ModelData.Meshes"/>,
+    /// then as <see cref="ModelMesh.TextureNames"/>; null for none). Textures are not owned by the model: the caller
+    /// releases them.
+    /// </summary>
+    public GpuModel? Upload(ModelData model, IReadOnlyList<GpuTexture?[]> meshTextures)
+    {
+        var vertices = new List<ModelVertex>();
+        var indices = new List<ushort>();
+        var parts = new List<GpuModel.Part>();
+
+        for (int m = 0; m < model.Meshes.Count; m++)
+        {
+            var mesh = model.Meshes[m];
+            if (mesh.Indices.Length == 0 || mesh.Positions.Length == 0)
+                continue;
+            var textures = m < meshTextures.Count ? meshTextures[m] : [];
+            var texture = textures.Length > 0 ? textures[0] : null;
+            var terrain = mesh.Terrain;
+            GpuTexture?[]? layers = terrain is null ? null : textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray();
+            parts.Add(new GpuModel.Part(indices.Count, mesh.Indices.Length, vertices.Count, texture, mesh.BlendMode, mesh.Emission,
+                layers, terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored));
+            for (int i = 0; i < mesh.Positions.Length; i++)
+            {
+                vertices.Add(new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
+                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? Vector2.Zero));
+            }
+            indices.AddRange(mesh.Indices);
+        }
+
+        if (parts.Count == 0)
+            return null;
+
+        var vertexBuffer = _device.CreateBuffer(
+            CollectionsMarshal.AsSpan(vertices),
+            new BufferDescription((uint)(vertices.Count * sizeof(ModelVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
+        var indexBuffer = _device.CreateBuffer(
+            CollectionsMarshal.AsSpan(indices),
+            new BufferDescription((uint)(indices.Count * sizeof(ushort)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
+
+        return new GpuModel(vertexBuffer, indexBuffer, parts.ToArray(), indices.Count / 3, vertices.Count * sizeof(ModelVertex) + indices.Count * 2);
+    }
+
+    /// <summary>
+    /// Sets the shaders and states shared by every model. Call once before a series of <see cref="Draw"/>,
+    /// which then draws only the meshes of this <paramref name="pass"/>. Draw every model in the
+    /// <see cref="ModelPass.Solid"/> pass first, then in the <see cref="ModelPass.Translucent"/> pass.
+    /// </summary>
+    public void Begin(ModelPass pass)
+    {
+        _pass = pass;
+        bool translucent = pass == ModelPass.Translucent;
+        _context.IASetInputLayout(_inputLayout);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_vertexShader);
+        _context.VSSetConstantBuffer(0, _constantBuffer);
+        _context.PSSetConstantBuffer(0, _constantBuffer);
+        _context.PSSetSampler(0, _samplerState);
+        _context.GSSetShader(null);
+        _context.OMSetBlendState(translucent ? _translucentBlendState : _blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.OMSetDepthStencilState(translucent ? _translucentDepthStencilState : _depthStencilState, 0);
+        _context.RSSetState(_rasterizerState);
+        SetShadows(Shadows);
+    }
+
+    /// <summary>Sends the sun shadows to the shader (or turns them off).</summary>
+    private void SetShadows(ShadowMaps? shadows)
+    {
+        var constants = new ShadowConstants();
+        if (shadows is not null)
+        {
+            constants.Cascade0 = shadows.Cascades[0];
+            constants.Cascade1 = shadows.Cascades[1];
+            constants.Cascade2 = shadows.Cascades[2];
+            constants.Splits = new Vector4(shadows.Splits[0], shadows.Splits[1], shadows.Splits[2], 1f);
+            constants.Texels = new Vector4(shadows.TexelSizes[0], shadows.TexelSizes[1], shadows.TexelSizes[2], 1f / ShadowMaps.Size);
+            constants.Forward = new Vector4(shadows.CameraForward, 0f);
+        }
+        var map = _context.Map(_shadowConstantBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, constants);
+        _context.Unmap(_shadowConstantBuffer, 0);
+        _context.PSSetConstantBuffer(1, _shadowConstantBuffer);
+        if (shadows is null)
+        {
+            _context.PSUnsetShaderResource(5);
+        }
+        else
+        {
+            _context.PSSetShaderResource(5, shadows.View);
+            _context.PSSetSampler(1, shadows.Sampler);
+        }
+    }
+
+    /// <summary>
+    /// Sets the shaders and states for drawing into the shadow image bound by <see cref="ShadowMaps.BeginCascade"/>,
+    /// before a series of <see cref="DrawShadow"/>.
+    /// </summary>
+    public void BeginShadow()
+    {
+        _context.PSUnsetShaderResource(5); // The shadow images are being drawn.
+        _context.IASetInputLayout(_inputLayout);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_vertexShader);
+        _context.VSSetConstantBuffer(0, _constantBuffer);
+        _context.PSSetConstantBuffer(0, _constantBuffer);
+        _context.PSSetSampler(0, _samplerState);
+        _context.GSSetShader(null);
+        _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.OMSetDepthStencilState(_shadowDepthStencilState, 0);
+        _context.RSSetState(_shadowRasterizerState);
+    }
+
+    /// <summary>Draws the solid and cut-out meshes of a placed model into the shadow image seen through <paramref name="lightViewProjection"/>.</summary>
+    public void DrawShadow(GpuModel model, Matrix4x4 world, Matrix4x4 lightViewProjection)
+    {
+        SetModel(model, world, lightViewProjection, Vector3.One, pickId: 0);
+        foreach (var part in model.Parts)
+        {
+            if (part.BlendMode is MeshBlendMode.Translucent or MeshBlendMode.Water)
+                continue; // Glass, decals and water let the light through.
+            if (part.BlendMode == MeshBlendMode.Cutout)
+            {
+                _context.PSSetShader(_shadowCutoutPixelShader);
+                _context.PSSetShaderResource(0, (part.Texture ?? _untextured).View);
+            }
+            else
+            {
+                _context.PSSetShader(null);
+            }
+            _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
+        }
+    }
+
+    /// <summary>Draws the meshes of the current pass of one placed copy of a model. <see cref="Begin"/> must have been called.</summary>
+    public void Draw(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, Vector3 tint)
+    {
+        if (_pass == ModelPass.Translucent && !model.HasTranslucentParts)
+            return;
+        SetModel(model, world, viewProjection, tint, pickId: 0);
+        foreach (var part in model.Parts)
+        {
+            bool translucent = part.BlendMode == MeshBlendMode.Translucent;
+            if (translucent != (_pass == ModelPass.Translucent) || part.BlendMode == MeshBlendMode.Water)
+                continue; // Water: drawn by WaterRenderer.
+            bool terrain = part.Layers is not null && part.BlendMode == MeshBlendMode.Opaque;
+            _context.PSSetShader(part.BlendMode switch
+            {
+                _ when terrain => _terrainPixelShader,
+                MeshBlendMode.Cutout => _cutoutPixelShader,
+                MeshBlendMode.Translucent => _translucentPixelShader,
+                _ => _opaquePixelShader,
+            });
+            _context.RSSetState(part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
+            float emission = part.Emission switch
+            {
+                MeshEmission.Always => 1f,
+                MeshEmission.Night => Lighting.NightLights,
+                _ => 0f,
+            };
+            var baseTexture = part.Texture ?? (part.VertexColored ? _white : translucent ? _untexturedTranslucent : _untextured);
+            if (terrain)
+            {
+                // A missing layer shows layer 0 instead; without the mask, the vertex weights alone.
+                var mask = part.Layers![3];
+                bool useMask = mask is not null && part.TerrainMode != TerrainBlendMode.VertexOnly;
+                SetMesh(emission, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f, 0f, 0f));
+                for (int l = 0; l < 3; l++)
+                    _context.PSSetShaderResource((uint)l + 1, (part.Layers[l] ?? baseTexture).View);
+                _context.PSSetShaderResource(4, (mask ?? baseTexture).View);
+            }
+            else
+            {
+                SetMesh(emission, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, 0f));
+            }
+            _context.PSSetShaderResource(0, baseTexture.View);
+            _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
+        }
+    }
+
+    /// <summary>
+    /// Sets the shaders and states for drawing object numbers into a <see cref="PickBuffer"/> (already bound),
+    /// before a series of <see cref="DrawPick"/>.
+    /// </summary>
+    public void BeginPick()
+    {
+        Begin(ModelPass.Solid);
+        _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue); // No blending on numbers.
+    }
+
+    /// <summary>Draws every mesh of a placed model with the number <paramref name="pickId"/> (not 0). See <see cref="BeginPick"/>.</summary>
+    public void DrawPick(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, uint pickId)
+    {
+        SetModel(model, world, viewProjection, Vector3.One, pickId);
+        foreach (var part in model.Parts)
+        {
+            _context.PSSetShader(part.BlendMode switch
+            {
+                MeshBlendMode.Cutout => _pickCutoutPixelShader,
+                MeshBlendMode.Translucent => _pickTranslucentPixelShader,
+                _ => _pickOpaquePixelShader,
+            });
+            _context.RSSetState(part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
+            _context.PSSetShaderResource(0, (part.Texture ?? _untextured).View);
+            _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
+        }
+    }
+
+    private void SetModel(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, Vector3 tint, uint pickId)
+    {
+        var constants = new Constants
+        {
+            ViewProjection = viewProjection,
+            World = world,
+            Tint = new Vector4(tint, 1f),
+            LightDirection = new Vector4(Lighting.SunDirection, 0f),
+            PickId = pickId,
+            SunColor = new Vector4(Lighting.SunColor, 0f),
+            SkyAmbient = new Vector4(Lighting.SkyAmbient, 0f),
+            GroundAmbient = new Vector4(Lighting.GroundAmbient, 0f),
+            FogColor = new Vector4(Lighting.Horizon, Lighting.FogDistance > 0f ? 1f : 0f),
+            CameraFog = new Vector4(CameraPosition, MathF.Max(Lighting.FogDistance, 1f)),
+        };
+        _constants = constants;
+        WriteConstants();
+
+        _context.IASetVertexBuffer(0, model.VertexBuffer, (uint)sizeof(ModelVertex));
+        _context.IASetIndexBuffer(model.IndexBuffer, Format.R16_UInt, 0);
+    }
+
+    /// <summary>Constants of the model being drawn: only the emission and the terrain settings change from one mesh to the next.</summary>
+    private Constants _constants;
+
+    private void SetMesh(float emission, Vector4 terrain)
+    {
+        if (_constants.Emission.X == emission && _constants.Terrain == terrain)
+            return;
+        _constants.Emission = new Vector4(emission, 0f, 0f, 0f);
+        _constants.Terrain = terrain;
+        WriteConstants();
+    }
+
+    private void WriteConstants()
+    {
+        var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, _constants);
+        _context.Unmap(_constantBuffer, 0);
+    }
+
+    public void Dispose()
+    {
+        _untextured.Dispose();
+        _white.Dispose();
+        _untexturedTranslucent.Dispose();
+        _samplerState.Dispose();
+        _translucentBlendState.Dispose();
+        _blendState.Dispose();
+        _translucentDepthStencilState.Dispose();
+        _depthStencilState.Dispose();
+        _rasterizerState.Dispose();
+        _doubleSidedRasterizerState.Dispose();
+        _constantBuffer.Dispose();
+        _shadowConstantBuffer.Dispose();
+        _shadowRasterizerState.Dispose();
+        _shadowDepthStencilState.Dispose();
+        _shadowCutoutPixelShader.Dispose();
+        _inputLayout.Dispose();
+        _pickTranslucentPixelShader.Dispose();
+        _pickCutoutPixelShader.Dispose();
+        _pickOpaquePixelShader.Dispose();
+        _translucentPixelShader.Dispose();
+        _cutoutPixelShader.Dispose();
+        _opaquePixelShader.Dispose();
+        _terrainPixelShader.Dispose();
+        _vertexShader.Dispose();
+    }
+}
+
+/// <summary>The two passes of <see cref="ModelRenderer"/>, in drawing order.</summary>
+public enum ModelPass
+{
+    /// <summary>Opaque and cutout meshes.</summary>
+    Solid,
+
+    /// <summary>Translucent meshes, blended over the solid ones.</summary>
+    Translucent,
+}
+
+/// <summary>A model stored on the GPU (see <see cref="ModelRenderer.Upload"/>).</summary>
+public sealed class GpuModel : IDisposable
+{
+    /// <summary><paramref name="Layers"/>: ground layers 1 to 3, then the blend mask (terrain only, else null).</summary>
+    internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
+        MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored);
+
+    internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
+    {
+        VertexBuffer = vertexBuffer;
+        IndexBuffer = indexBuffer;
+        Parts = parts;
+        HasTranslucentParts = parts.Any(p => p.BlendMode == MeshBlendMode.Translucent);
+        HasWaterParts = parts.Any(p => p.BlendMode == MeshBlendMode.Water);
+        TriangleCount = triangleCount;
+        ByteSize = byteSize;
+    }
+
+    internal ID3D11Buffer VertexBuffer { get; }
+    internal ID3D11Buffer IndexBuffer { get; }
+    internal Part[] Parts { get; }
+    internal bool HasTranslucentParts { get; }
+
+    /// <summary>True if some meshes are water (see <see cref="WaterRenderer.DrawMesh"/>).</summary>
+    public bool HasWaterParts { get; }
+
+    public int TriangleCount { get; }
+
+    /// <summary>GPU memory used, in bytes.</summary>
+    public long ByteSize { get; }
+
+    public void Dispose()
+    {
+        VertexBuffer.Dispose();
+        IndexBuffer.Dispose();
+    }
+}

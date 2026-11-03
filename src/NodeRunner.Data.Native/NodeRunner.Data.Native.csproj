@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- In-house readers of the game's files (archives, maps, navigation data...). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Archive keys, encrypted with the AES key of the user's own game executable (useless without the game). -->
+    <EmbeddedResource Include="Archives\keys.bin" LogicalName="NodeRunner.ArchiveKeys" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NodeRunner.Tests" />
+    <ProjectReference Include="..\NodeRunner.Data\NodeRunner.Data.csproj" />
+  </ItemGroup>
+
+</Project>

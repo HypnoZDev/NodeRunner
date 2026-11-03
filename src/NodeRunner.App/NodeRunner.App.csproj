@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The executable: window, main loop and ImGui user interface. -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>NodeRunner</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Portable distribution: `dotnet publish` produces a self-contained folder (no .NET install needed). -->
+    <SelfContained>true</SelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Icon font (Lucide, ISC licence) and its licence, copied next to the exe. -->
+  <ItemGroup>
+    <None Include="Assets\Fonts\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The licence, next to the exe (and in the portable ZIP). -->
+  <ItemGroup>
+    <None Include="..\..\LICENSE.md" Link="LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NodeRunner.Data\NodeRunner.Data.csproj" />
+    <ProjectReference Include="..\NodeRunner.Data.Native\NodeRunner.Data.Native.csproj" />
+    <ProjectReference Include="..\NodeRunner.Editor\NodeRunner.Editor.csproj" />
+    <ProjectReference Include="..\NodeRunner.Render\NodeRunner.Render.csproj" />
+  </ItemGroup>
+
+</Project>

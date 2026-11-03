@@ -1,0 +1,65 @@
+using System.Numerics;
+using NodeRunner.Data.Maps;
+
+namespace NodeRunner.Tests;
+
+public class MapEntityTests
+{
+    private static readonly Quaternion Quarter = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
+
+    [Fact]
+    public void Ordinary_entities_store_the_inverse_rotation()
+    {
+        var entity = new MapEntity { ArchetypeHash = 1, Position = Vector3.Zero, StoredRotation = Quaternion.Inverse(Quarter) };
+
+        var turned = Vector3.Transform(Vector3.UnitX, entity.Orientation);
+
+        Assert.Equal(0f, turned.X, 4);
+        Assert.Equal(1f, turned.Y, 4);
+    }
+
+    [Fact]
+    public void Interior_instances_store_the_rotation_directly()
+    {
+        var entity = new MapEntity { ArchetypeHash = 1, Position = Vector3.Zero, StoredRotation = Quarter, IsInterior = true };
+
+        Assert.Equal(Quarter, entity.Orientation);
+    }
+
+    [Theory]
+    [InlineData(0x180000u, true)]    // Casts shadows: an ordinary object.
+    [InlineData(0x1180000u, true)]   // Not drawn in reflections, but drawn normally.
+    [InlineData(0x2180000u, false)]  // Only drawn in reflections (metro tunnel stand-ins).
+    [InlineData(0x800000u, false)]   // Only drawn in shadows.
+    public void Shadow_and_reflection_stand_ins_are_not_drawn(uint flags, bool drawn)
+    {
+        var entity = new MapEntity { ArchetypeHash = 1, Position = Vector3.Zero, Flags = flags };
+
+        Assert.Equal(drawn, entity.IsDrawnInMainView);
+    }
+
+    [Fact]
+    public void Shadow_proxy_archetypes_are_recognised()
+    {
+        Assert.True(new Archetype { NameHash = 1, Flags = 0x20000800 }.IsShadowOrReflectionProxy);
+        Assert.False(new Archetype { NameHash = 1, Flags = 0x20C00000 }.IsShadowOrReflectionProxy);
+    }
+
+    [Fact]
+    public void Transform_applies_scale_rotation_then_position()
+    {
+        var entity = new MapEntity
+        {
+            ArchetypeHash = 1,
+            Position = new Vector3(100f, 200f, 30f),
+            StoredRotation = Quaternion.Inverse(Quarter),
+            Scale = new Vector3(2f, 2f, 1f),
+        };
+
+        var corner = Vector3.Transform(new Vector3(1f, 0f, 1f), entity.Transform);
+
+        Assert.Equal(100f, corner.X, 3);
+        Assert.Equal(202f, corner.Y, 3);
+        Assert.Equal(31f, corner.Z, 3);
+    }
+}

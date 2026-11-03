@@ -1,0 +1,13 @@
+<Project>
+  <!-- Shared settings for every NodeRunner project (src/ and tests/). -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Company>Inside Rockstar</Company>
+    <Authors>Inside Rockstar</Authors>
+    <Copyright>© 2026 Inside Rockstar</Copyright>
+    <Product>NodeRunner Studio</Product>
+    <Version>0.0.1</Version>
+  </PropertyGroup>
+</Project>

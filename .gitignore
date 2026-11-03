@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+bin/
+obj/
+publish/
+artifacts/
+*.zip
+
+# IDE / tooling
+.vs/
+*.user
+*.suo
+*.userprefs
+.idea/
+*.DotSettings.user
+TestResults/
+*.trx
+*.log
+
+# ---------------------------------------------------------------------------
+# User data produced by NodeRunner at run time (never versioned)
+# ---------------------------------------------------------------------------
+/data/
+/settings.json
+/imgui.ini
+
+# ---------------------------------------------------------------------------
+# GAME FILES: rule #2, nothing coming from the game is ever committed.
+# ---------------------------------------------------------------------------
+*.rpf
+*.ymap
+*.ytyp
+*.ydr
+*.ydd
+*.yft
+*.ytd
+*.ybn
+*.ynd
+*.ynv
+*.ymt
+*.ycd
+*.ypt
+*.ynd.xml
+*.ymap.xml
+*.ytyp.xml
+*.awc
+*.dat151.rel
+*.gxt2
+gta5*.exe
+GTA5*.exe
