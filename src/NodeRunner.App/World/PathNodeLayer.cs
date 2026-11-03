@@ -90,6 +90,9 @@ internal sealed class PathNodeLayer : IDisposable
                     var category = Classify(node, target);
                     var color = Color(category);
                     batches[(int)category].AddLine(node.Position + LineOffset, target.Position + LineOffset, color * new Vector4(1, 1, 1, 0.8f));
+                    // Shortcuts are lane changes between parallel chains of a multi-lane road: no surface of their own.
+                    if (link.IsShortcut)
+                        continue;
                     float width = node.IsPedestrian || target.IsPedestrian ? FootpathWidth
                         : Math.Max(1, link.LanesForward + link.LanesBackward) * LaneWidth;
                     AddStrip(surfaces[(int)category], node.Position + SurfaceOffset, target.Position + SurfaceOffset, width, color with { W = SurfaceAlpha });
