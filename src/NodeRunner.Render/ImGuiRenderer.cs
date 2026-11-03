@@ -81,6 +81,7 @@ float4 PS(PS_INPUT input) : SV_Target
         int globalVtxOffset = 0;
         int globalIdxOffset = 0;
         Vector2 clipOff = drawData.DisplayPos;
+        Vector2 clipScale = drawData.FramebufferScale; // Points -> pixels.
 
         for (int n = 0; n < drawData.CmdListsCount; n++)
         {
@@ -91,8 +92,8 @@ float4 PS(PS_INPUT input) : SV_Target
                 if (cmd.UserCallback != IntPtr.Zero)
                     continue; // No custom callbacks used in NodeRunner.
 
-                var clipMin = new Vector2(cmd.ClipRect.X - clipOff.X, cmd.ClipRect.Y - clipOff.Y);
-                var clipMax = new Vector2(cmd.ClipRect.Z - clipOff.X, cmd.ClipRect.W - clipOff.Y);
+                var clipMin = new Vector2(cmd.ClipRect.X - clipOff.X, cmd.ClipRect.Y - clipOff.Y) * clipScale;
+                var clipMax = new Vector2(cmd.ClipRect.Z - clipOff.X, cmd.ClipRect.W - clipOff.Y) * clipScale;
                 if (clipMax.X <= clipMin.X || clipMax.Y <= clipMin.Y)
                     continue;
 
@@ -185,7 +186,8 @@ float4 PS(PS_INPUT input) : SV_Target
 
     private void SetupRenderState(ImDrawDataPtr drawData)
     {
-        _context.RSSetViewport(new Viewport(0, 0, drawData.DisplaySize.X, drawData.DisplaySize.Y));
+        var size = drawData.DisplaySize * drawData.FramebufferScale;
+        _context.RSSetViewport(new Viewport(0, 0, size.X, size.Y));
 
         _context.IASetInputLayout(_inputLayout);
         _context.IASetVertexBuffer(0, _vertexBuffer!, (uint)sizeof(ImDrawVert));
@@ -269,6 +271,14 @@ float4 PS(PS_INPUT input) : SV_Target
             ComparisonFunc = ComparisonFunction.Always,
             MaxLOD = float.MaxValue,
         });
+    }
+
+    // After the fonts were loaded again (display scale changed).
+    public void RebuildFontTexture()
+    {
+        UnregisterTexture(_fontTextureView.NativePointer);
+        _fontTextureView.Dispose();
+        CreateFontTexture();
     }
 
     private void CreateFontTexture()

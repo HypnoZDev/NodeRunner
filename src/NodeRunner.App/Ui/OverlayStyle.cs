@@ -104,7 +104,7 @@ internal static class OverlayStyle
             ImGui.SetTooltip(tooltip);
     }
 
-    private static Vector2 Snap(Vector2 p) => new(MathF.Floor(p.X), MathF.Floor(p.Y));
+    private static Vector2 Snap(Vector2 p) => Widgets.Snap(p);
 
     public static void Divider()
     {

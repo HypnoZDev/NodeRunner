@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.App.Ui;
 
 namespace NodeRunner.App.Input;
 
@@ -12,7 +13,7 @@ internal sealed class ImGuiInput
     public void Attach(Control control)
     {
         _control = control;
-        control.MouseMove += (_, e) => Send(io => io.AddMousePosEvent(e.X, e.Y));
+        control.MouseMove += (_, e) => Send(io => io.AddMousePosEvent(e.X / UiTheme.Scale, e.Y / UiTheme.Scale));
         control.MouseDown += (_, e) => OnMouseButton(e.Button, true);
         control.MouseUp += (_, e) => OnMouseButton(e.Button, false);
         control.MouseWheel += (_, e) => Send(io => io.AddMouseWheelEvent(0f, e.Delta / 120f));

@@ -41,6 +41,9 @@ internal sealed partial class SplashForm : Form
     private readonly Font _creditFont = new("Segoe UI Semibold", 12f, GraphicsUnit.Pixel);
     private readonly Font _smallFont = new("Segoe UI", 10f, GraphicsUnit.Pixel);
     private readonly Bitmap _artwork;
+    // Drawn in points, then scaled to the display (Windows scale).
+    private static readonly Size Design = new(720, 405);
+    private readonly float _scale;
     private readonly PointF[] _route;
     private float _shownProgress;
     private Func<float>? _preloadModels;
@@ -52,7 +55,8 @@ internal sealed partial class SplashForm : Form
         _preloadModels = preloadModels;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(720, 405);
+        _scale = DeviceDpi / 96f;
+        ClientSize = new Size((int)(Design.Width * _scale), (int)(Design.Height * _scale));
         ShowInTaskbar = true;
         Text = Program.Name;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -66,7 +70,7 @@ internal sealed partial class SplashForm : Form
             ? new Font(_fonts.Families[0], 44f, FontStyle.Regular, GraphicsUnit.Pixel)
             : new Font("Segoe UI", 44f, FontStyle.Bold, GraphicsUnit.Pixel);
 
-        (_artwork, _route) = DrawArtwork(ClientSize);
+        (_artwork, _route) = DrawArtwork(Design, _scale);
         _timer.Tick += (_, _) => Step();
         _timer.Start();
     }
@@ -148,7 +152,8 @@ internal sealed partial class SplashForm : Form
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        g.DrawImageUnscaled(_artwork, 0, 0);
+        g.DrawImage(_artwork, new Rectangle(0, 0, _artwork.Width, _artwork.Height));
+        g.ScaleTransform(_scale, _scale);
         DrawRunner(g);
 
         // Name: "NodeRunner" white, "Studio" in the accent gradient, as on the website.
@@ -160,10 +165,10 @@ internal sealed partial class SplashForm : Form
         using (var tagline = new SolidBrush(Color.FromArgb(0xA8, 0xB2, 0xC8)))
             g.DrawString("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V.", _taglineFont, tagline, left, 236f);
         using (var version = new SolidBrush(Color.FromArgb(0x70, 0x7A, 0x90)))
-            g.DrawString($"v{Program.Version}", _smallFont, version, ClientSize.Width - 70f, 22f);
+            g.DrawString($"v{Program.Version}", _smallFont, version, Design.Width - 70f, 22f);
 
         // Loading bar and current step.
-        float barTop = ClientSize.Height - 74f, barWidth = ClientSize.Width - left * 2f;
+        float barTop = Design.Height - 74f, barWidth = Design.Width - left * 2f;
         using (var status = new SolidBrush(Color.FromArgb(0x8A, 0x94, 0xAA)))
             g.DrawString(StatusText(), _statusFont, status, left, barTop - 22f);
         using (var track = new SolidBrush(Color.FromArgb(0x1E, 0x26, 0x38)))
@@ -173,7 +178,7 @@ internal sealed partial class SplashForm : Form
             FillRounded(g, fill, new RectangleF(left, barTop, filled, 4f));
 
         // Credits, with the notice that always goes with them.
-        float creditsTop = ClientSize.Height - 50f;
+        float creditsTop = Design.Height - 50f;
         g.DrawString("Créé par Inside Rockstar / HypnoZ", _creditFont, Brushes.White, left, creditsTop);
         using (var notice = new SolidBrush(Color.FromArgb(0x6A, 0x74, 0x8A)))
             g.DrawString("Non affilié à Rockstar Games ni à Take-Two Interactive", _smallFont, notice, left, creditsTop + 18f);
@@ -226,10 +231,11 @@ internal sealed partial class SplashForm : Form
 
     // The still part of the artwork, drawn once: gradient, glows, then a network of nodes (always the same) towards
     // the right, fading behind the text on the left.
-    private static (Bitmap, PointF[]) DrawArtwork(Size size)
+    private static (Bitmap, PointF[]) DrawArtwork(Size size, float scale)
     {
-        var bitmap = new Bitmap(size.Width, size.Height);
+        var bitmap = new Bitmap((int)(size.Width * scale), (int)(size.Height * scale));
         using var g = Graphics.FromImage(bitmap);
+        g.ScaleTransform(scale, scale);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new Rectangle(Point.Empty, size);
 

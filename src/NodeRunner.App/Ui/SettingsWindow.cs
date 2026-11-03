@@ -5,7 +5,7 @@ using NodeRunner.App.World;
 namespace NodeRunner.App.Ui;
 
 // "Display settings" window: quality presets for smaller PCs (view distance, fog, texture filtering, shadows), sky
-// and time of day, VSync.
+// and time of day, VSync, interface size.
 internal sealed class SettingsWindow(AppState state)
 {
     public const string Title = $"{Icons.Settings}  Paramètres d'affichage###Settings";
@@ -126,6 +126,27 @@ internal sealed class SettingsWindow(AppState state)
         }
 
         ImGui.Dummy(new Vector2(0, 4));
+        if (Widgets.Section("Interface", "settings_interface"))
+        {
+            if (Widgets.BeginProperties("##interface_grid", 0.42f))
+            {
+                Widgets.Property("Taille de l'interface", "Agrandit les textes, panneaux et boutons. Automatique = l'échelle choisie dans Windows (Paramètres > Affichage).");
+                ImGui.SetNextItemWidth(-1f);
+                string current = settings.UiScale > 0f ? Percent(settings.UiScale) : $"Automatique ({Percent(UiTheme.Scale)})";
+                if (ImGui.BeginCombo("##ui_scale", current))
+                {
+                    if (ImGui.Selectable("Automatique", settings.UiScale <= 0f))
+                        SetUiScale(0f);
+                    foreach (float scale in UiScales)
+                        if (ImGui.Selectable(Percent(scale), MathF.Abs(settings.UiScale - scale) < 0.01f))
+                            SetUiScale(scale);
+                    ImGui.EndCombo();
+                }
+                Widgets.EndProperties();
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0, 4));
         if (Widgets.Section("Ambiance", "settings_ambience"))
         {
             if (Widgets.BeginProperties("##ambience_grid", 0.42f))
@@ -147,6 +168,16 @@ internal sealed class SettingsWindow(AppState state)
                 Widgets.EndProperties();
             }
         }
+    }
+
+    private static readonly float[] UiScales = [1f, 1.25f, 1.5f, 1.75f, 2f, 2.25f, 2.5f, 3f];
+
+    private static string Percent(float scale) => $"{MathF.Round(scale * 100f)} %";
+
+    private void SetUiScale(float scale)
+    {
+        state.Settings.UiScale = scale;
+        state.SaveSettings();
     }
 
     private bool Matches(Preset preset)

@@ -161,7 +161,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         float infoHeight = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.Y;
         var size = ImGui.GetContentRegionAvail() - new Vector2(0, infoHeight);
         size = new Vector2(MathF.Floor(Math.Max(size.X, 2)), MathF.Floor(Math.Max(size.Y, 2)));
-        Viewer.RequestedSize = size;
+        Viewer.RequestedSize = size * UiTheme.Scale; // In pixels, for a sharp image.
 
         ImGui.InvisibleButton("##viewer_image", size);
         var min = ImGui.GetItemRectMin();

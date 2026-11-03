@@ -49,9 +49,11 @@ internal sealed unsafe partial class MainForm : Form
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        ClientSize = new Size(1600, 900);
+        float scale = DeviceDpi / 96f;
+        var screen = Screen.PrimaryScreen?.WorkingArea.Size ?? new Size(1920, 1080);
+        ClientSize = new Size(Math.Min((int)(1600 * scale), screen.Width * 9 / 10), Math.Min((int)(900 * scale), screen.Height * 9 / 10));
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(640, 360);
+        MinimumSize = new Size((int)(640 * scale), (int)(360 * scale));
         BackColor = Color.FromArgb(0x11, 0x12, 0x14); // Shown for an instant while resizing: colour of the menu bar.
 
         _surface = new RenderSurface { Dock = DockStyle.Fill, IsWindowFrame = IsFramePoint };
@@ -143,7 +145,7 @@ internal sealed unsafe partial class MainForm : Form
         int edge = FrameThickness();
         if (!IsZoomed(Handle) && p.Y < edge)
             return p.X < edge * 2 ? HtTopLeft : p.X >= ClientSize.Width - edge * 2 ? HtTopRight : HtTop;
-        return WindowChrome.HitTest(p) switch
+        return WindowChrome.HitTest(new PointF(p.X / UiTheme.Scale, p.Y / UiTheme.Scale)) switch
         {
             WindowChrome.Part.MaximizeButton => HtMaxButton,
             WindowChrome.Part.Caption => HtCaption,
@@ -225,10 +227,10 @@ internal sealed unsafe partial class MainForm : Form
         io.BackendFlags |= ImGuiBackendFlags.HasMouseCursors; // See ImGuiInput.UpdateCursor (also enables resizing windows from their edges).
         // ImGui window layout is remembered next to settings.json.
         io.NativePtr->IniFilename = (byte*)Marshal.StringToCoTaskMemUTF8(Path.Combine(_state.Paths.ConfigDirectory, "imgui.ini"));
-        UiTheme.LoadFonts(io);
+        _ = Handle; // The window may not be shown yet (start-up screen): its handle comes before the 3D surface's.
+        UiTheme.LoadFonts(io, DisplayScale());
         UiTheme.Apply();
 
-        _ = Handle; // The window may not be shown yet (start-up screen): its handle comes before the 3D surface's.
         _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height);
         _imguiRenderer = new ImGuiRenderer(_graphics.Device, _graphics.Context);
         _lineRenderer = new ColorRenderer(_graphics.Device, _graphics.Context);
@@ -302,7 +304,9 @@ internal sealed unsafe partial class MainForm : Form
         float deltaTime = (float)Math.Max(now - _lastFrameTime, 1e-5);
         var io = ImGui.GetIO();
         io.DeltaTime = deltaTime;
-        io.DisplaySize = new Vector2(_graphics.Width, _graphics.Height);
+        UpdateDisplayScale(io);
+        io.DisplaySize = new Vector2(_graphics.Width, _graphics.Height) / UiTheme.Scale;
+        io.DisplayFramebufferScale = new Vector2(UiTheme.Scale);
         _lastFrameTime = now;
 
         // Cap the step so a long pause (dialog box, window drag) doesn't teleport the camera.
@@ -335,9 +339,26 @@ internal sealed unsafe partial class MainForm : Form
             Text = title;
     }
 
+    private float DisplayScale() =>
+        _state.Settings.UiScale > 0f ? Math.Clamp(_state.Settings.UiScale, 1f, 3f) : WindowsScale();
+
+    private float WindowsScale() => Math.Max(1f, GetDpiForWindow(Handle) / 96f);
+
+    // Interface size changed, or the window went to a screen with another scale: fonts are rasterised again.
+    private void UpdateDisplayScale(ImGuiIOPtr io)
+    {
+        float scale = DisplayScale();
+        if (scale == UiTheme.Scale)
+            return;
+        UiTheme.LoadFonts(io, scale);
+        _imguiRenderer!.RebuildFontTexture();
+    }
+
     private Rectangle SceneViewport()
     {
         var (position, size) = DockLayout.SceneArea;
+        position *= UiTheme.Scale;
+        size *= UiTheme.Scale;
         int x = Math.Clamp((int)MathF.Round(position.X), 0, _graphics!.Width - 1);
         int y = Math.Clamp((int)MathF.Round(position.Y), 0, _graphics.Height - 1);
         int width = Math.Clamp((int)MathF.Round(size.X), 1, _graphics.Width - x);
@@ -571,7 +592,7 @@ internal sealed unsafe partial class MainForm : Form
         // Road nodes first: a dot on the road is clicked on purpose, the road model is under it.
         if (!control && _state.World.PathNetwork is { } network
             && PathNodeLayer.PickNode(network, viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
-                new Vector2(scene.Width, scene.Height), c => _state.IsLayerVisible(PathNodeLayer.LayerName(c))) is { } node)
+                new Vector2(scene.Width, scene.Height), c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)), 10f * UiTheme.Scale) is { } node)
         {
             _state.Select(null);
             _state.SelectedPathNode = node;

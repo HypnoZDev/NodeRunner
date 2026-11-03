@@ -324,5 +324,6 @@ internal static class Widgets
     public static string Count(long value) =>
         value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture).Replace(',', ' ');
 
-    public static Vector2 Snap(Vector2 p) => new(MathF.Floor(p.X), MathF.Floor(p.Y));
+    // To whole screen pixels (a point is several pixels on a scaled display).
+    public static Vector2 Snap(Vector2 p) => new(MathF.Floor(p.X * UiTheme.Scale) / UiTheme.Scale, MathF.Floor(p.Y * UiTheme.Scale) / UiTheme.Scale);
 }

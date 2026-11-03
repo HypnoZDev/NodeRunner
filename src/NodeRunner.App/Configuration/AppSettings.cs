@@ -18,6 +18,9 @@ public sealed class AppSettings
 
     public bool VSync { get; set; } = true;
 
+    // Interface size (1.5 = 150 %); 0 = the Windows display scale.
+    public float UiScale { get; set; }
+
     public bool ShowSky { get; set; } = true;
 
     public float TimeOfDay { get; set; } = 13f;

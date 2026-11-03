@@ -44,6 +44,9 @@ internal static unsafe class UiTheme
 
     public const float FrameRounding = 4f;
 
+    // Windows display scale (1.5 at 150 %). The interface is laid out in points; one point is Scale pixels.
+    public static float Scale { get; private set; } = 1f;
+
     public static ImFontPtr SemiboldFont { get; private set; }
 
     public static ImFontPtr TitleFont { get; private set; }
@@ -57,8 +60,12 @@ internal static unsafe class UiTheme
     private static readonly ushort* GlyphRanges = CreateGlyphRanges(
         0x0020, 0x00FF, 0x0100, 0x017F, 0x2000, 0x206F, 0x20AC, 0x20AC, 0x2190, 0x21FF);
 
-    public static void LoadFonts(ImGuiIOPtr io)
+    // Fonts are rasterised at the real pixel size, then drawn at their size in points: sharp text at any scale.
+    public static void LoadFonts(ImGuiIOPtr io, float scale)
     {
+        Scale = scale;
+        io.Fonts.Clear();
+        io.FontGlobalScale = 1f / scale;
         string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
         string regular = Path.Combine(fonts, "segoeui.ttf");
         string semibold = Path.Combine(fonts, "seguisb.ttf");
@@ -66,7 +73,7 @@ internal static unsafe class UiTheme
             semibold = Path.Combine(fonts, "segoeuib.ttf");
 
         var main = File.Exists(regular)
-            ? io.Fonts.AddFontFromFileTTF(regular, FontSize, null, (IntPtr)GlyphRanges)
+            ? io.Fonts.AddFontFromFileTTF(regular, FontSize * Scale, null, (IntPtr)GlyphRanges)
             : io.Fonts.AddFontDefault();
         MergeIcons(io, IconSize, IconOffsetY);
         SemiboldFont = AddFont(io, semibold, FontSize, main);
@@ -80,7 +87,7 @@ internal static unsafe class UiTheme
     private const float BrandFontSize = 17f;
 
     private static ImFontPtr AddFont(ImGuiIOPtr io, string path, float size, ImFontPtr fallback) =>
-        File.Exists(path) ? io.Fonts.AddFontFromFileTTF(path, size, null, (IntPtr)GlyphRanges) : fallback;
+        File.Exists(path) ? io.Fonts.AddFontFromFileTTF(path, size * Scale, null, (IntPtr)GlyphRanges) : fallback;
 
     private static void MergeIcons(ImGuiIOPtr io, float size, float offsetY)
     {
@@ -91,9 +98,9 @@ internal static unsafe class UiTheme
         var config = new ImFontConfigPtr(ImGuiNative.ImFontConfig_ImFontConfig());
         config.MergeMode = true;
         config.PixelSnapH = true;
-        config.GlyphMinAdvanceX = size; // Same width for every icon, so they line up.
-        config.GlyphOffset = new Vector2(0, offsetY);
-        io.Fonts.AddFontFromFileTTF(path, size, config, (IntPtr)IconRanges);
+        config.GlyphMinAdvanceX = size * Scale; // Same width for every icon, so they line up.
+        config.GlyphOffset = new Vector2(0, offsetY * Scale);
+        io.Fonts.AddFontFromFileTTF(path, size * Scale, config, (IntPtr)IconRanges);
         config.Destroy(); // The atlas keeps its own copy.
     }
 
