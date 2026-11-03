@@ -23,7 +23,15 @@ internal sealed class PathNodeLayer : IDisposable
 
     public static readonly IReadOnlyList<PathCategory> Categories = Enum.GetValues<PathCategory>();
 
+    // Width of one lane of a road surface, and of a footpath.
+    private const float LaneWidth = 4.5f;
+    private const float FootpathWidth = 2f;
+    private const float SurfaceAlpha = 0.28f;
+    private const float PointSize = 0.45f;
+
     private readonly ColorMesh?[] _meshes = new ColorMesh?[Categories.Count];
+    private readonly ColorMesh?[] _surfaces = new ColorMesh?[Categories.Count];
+    private readonly ColorMesh?[] _points = new ColorMesh?[Categories.Count];
     private readonly int[] _counts = new int[Categories.Count];
     private PathNetwork? _built;
 
@@ -65,10 +73,14 @@ internal sealed class PathNodeLayer : IDisposable
             return;
 
         var batches = Categories.Select(_ => new LineBatch()).ToArray();
+        var surfaces = Categories.Select(_ => new TriangleBatch()).ToArray();
+        var points = Categories.Select(_ => new TriangleBatch()).ToArray();
         foreach (var area in network.Areas)
         {
             foreach (var node in area.Nodes)
             {
+                var nodeCategory = Classify(node, node);
+                AddPoint(points[(int)nodeCategory], node.Position + LineOffset, Brighter(Color(nodeCategory)));
                 foreach (var link in area.LinksOf(node))
                 {
                     var target = network.GetNode(link.Target);
@@ -76,7 +88,11 @@ internal sealed class PathNodeLayer : IDisposable
                         continue;
 
                     var category = Classify(node, target);
-                    batches[(int)category].AddLine(node.Position + LineOffset, target.Position + LineOffset, Color(category));
+                    var color = Color(category);
+                    batches[(int)category].AddLine(node.Position + LineOffset, target.Position + LineOffset, color * new Vector4(1, 1, 1, 0.8f));
+                    float width = node.IsPedestrian || target.IsPedestrian ? FootpathWidth
+                        : Math.Max(1, link.LanesForward + link.LanesBackward) * LaneWidth;
+                    AddStrip(surfaces[(int)category], node.Position + SurfaceOffset, target.Position + SurfaceOffset, width, color with { W = SurfaceAlpha });
                 }
             }
         }
@@ -85,17 +101,52 @@ internal sealed class PathNodeLayer : IDisposable
         {
             _counts[i] = batches[i].LineCount;
             _meshes[i] = renderer.CreateMesh(batches[i]);
+            _surfaces[i] = renderer.CreateMesh(surfaces[i]);
+            _points[i] = renderer.CreateMesh(points[i]);
         }
     }
 
     public void Draw(ColorRenderer renderer, Matrix4x4 viewProjection, Vector3 cameraPosition, Func<PathCategory, bool> isVisible)
     {
-        for (int i = 0; i < _meshes.Length; i++)
+        // Surfaces first, then the centre lines and the nodes over them.
+        foreach (var meshes in new[] { _surfaces, _meshes, _points })
         {
-            if (_meshes[i] is { } mesh && isVisible((PathCategory)i))
-                renderer.Draw(mesh, viewProjection, cameraPosition);
+            for (int i = 0; i < meshes.Length; i++)
+            {
+                if (meshes[i] is { } mesh && isVisible((PathCategory)i))
+                    renderer.Draw(mesh, viewProjection, cameraPosition);
+            }
         }
     }
+
+    private static readonly Vector3 SurfaceOffset = new(0f, 0f, 0.15f);
+
+    // Flat band of the given width along a link, both faces (seen from above and below).
+    private static void AddStrip(TriangleBatch batch, Vector3 a, Vector3 b, float width, Vector4 color)
+    {
+        var along = new Vector2(b.X - a.X, b.Y - a.Y);
+        if (along.LengthSquared() < 1e-4f)
+            return;
+        along = Vector2.Normalize(along);
+        var side = new Vector3(-along.Y, along.X, 0f) * (width * 0.5f);
+        batch.AddTriangle(a - side, a + side, b + side, color);
+        batch.AddTriangle(a - side, b + side, b - side, color);
+        batch.AddTriangle(b + side, a + side, a - side, color);
+        batch.AddTriangle(b - side, b + side, a - side, color);
+    }
+
+    // Small flat diamond on the node, both faces.
+    private static void AddPoint(TriangleBatch batch, Vector3 p, Vector4 color)
+    {
+        var x = new Vector3(PointSize, 0, 0);
+        var y = new Vector3(0, PointSize, 0);
+        batch.AddTriangle(p - x, p - y, p + x, color);
+        batch.AddTriangle(p - x, p + x, p + y, color);
+        batch.AddTriangle(p + x, p - y, p - x, color);
+        batch.AddTriangle(p + y, p + x, p - x, color);
+    }
+
+    private static Vector4 Brighter(Vector4 c) => new(c.X + (1 - c.X) * 0.5f, c.Y + (1 - c.Y) * 0.5f, c.Z + (1 - c.Z) * 0.5f, 1f);
 
     // The visible node closest to the mouse on screen (within maxPixels), among those near the camera.
     public static PathNode? PickNode(PathNetwork network, Matrix4x4 viewProjection, Vector3 cameraPosition, Vector2 mouse,
@@ -177,6 +228,10 @@ internal sealed class PathNodeLayer : IDisposable
         {
             _meshes[i]?.Dispose();
             _meshes[i] = null;
+            _surfaces[i]?.Dispose();
+            _surfaces[i] = null;
+            _points[i]?.Dispose();
+            _points[i] = null;
             _counts[i] = 0;
         }
     }
