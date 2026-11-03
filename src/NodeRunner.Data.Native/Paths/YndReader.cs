@@ -9,13 +9,13 @@ namespace NodeRunner.Data.Native.Paths;
 // links pointer, 0x30 link count. Junction data that follows is not read yet.
 public sealed class YndReader : IPathNodeReader
 {
-    private const int HeaderSize = 0x70;
-    private const int NodeSize = 40;
-    private const int LinkSize = 8;
+    internal const int HeaderSize = 0x70;
+    internal const int NodeSize = 40;
+    internal const int LinkSize = 8;
 
     // Node positions are stored as fixed-point integers.
-    private const float XyScale = 1f / 4f;
-    private const float ZScale = 1f / 32f;
+    internal const float XyScale = 1f / 4f;
+    internal const float ZScale = 1f / 32f;
 
     public PathNodeArea Read(ReadOnlySpan<byte> data, int areaId)
     {
@@ -50,12 +50,14 @@ public sealed class YndReader : IPathNodeReader
         {
             int o = nodesOffset + i * NodeSize;
             byte linkCountFlags = res.Byte(o + 37);
+            var position = new Vector3(res.Int16(o + 28) * XyScale, res.Int16(o + 30) * XyScale, res.Int16(o + 34) * ZScale);
             nodes[i] = new PathNode
             {
                 Id = new PathNodeId(res.UInt16(o + 16), res.UInt16(o + 18)),
                 StreetNameHash = res.UInt32(o + 20),
                 FirstLink = res.UInt16(o + 26),
-                Position = new Vector3(res.Int16(o + 28) * XyScale, res.Int16(o + 30) * XyScale, res.Int16(o + 34) * ZScale),
+                Position = position,
+                GamePosition = position,
                 Flags0 = res.Byte(o + 32),
                 Flags1 = res.Byte(o + 33),
                 Flags2 = res.Byte(o + 36),

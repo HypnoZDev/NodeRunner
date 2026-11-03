@@ -735,7 +735,7 @@ internal sealed unsafe partial class MainForm : Form
     // Saves the modified map files into the project.
     private bool SaveMaps()
     {
-        if (_state.MapsToSave.Count == 0)
+        if (_state.PendingSaveCount == 0)
             return true;
         if (_state.Project is null)
         {
@@ -859,17 +859,17 @@ internal sealed unsafe partial class MainForm : Form
     // cancelled.
     private bool ConfirmLeaveChanges()
     {
-        if (!_state.History.HasUnsavedChanges || _state.MapsToSave.Count == 0)
+        if (!_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
             return true;
-        int count = _state.MapsToSave.Count;
+        string count = _state.PendingSaveText;
         if (_state.Project is not { } project)
         {
             return MessageBox.Show(this,
-                $"Des modifications ne sont dans aucun projet ({count} YMAP) : elles seront perdues.\nContinuer ?",
+                $"Des modifications ne sont dans aucun projet ({count}) : elles seront perdues.\nContinuer ?",
                 Program.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
         }
         var answer = MessageBox.Show(this,
-            $"Des modifications du projet « {project.Name} » ne sont pas enregistrées ({count} YMAP).\nLes enregistrer d'abord ?",
+            $"Des modifications du projet « {project.Name} » ne sont pas enregistrées ({count}).\nLes enregistrer d'abord ?",
             Program.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
         return answer == DialogResult.No || (answer == DialogResult.Yes && SaveMaps());
     }
@@ -917,10 +917,10 @@ internal sealed unsafe partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        if (e.Cancel || !_state.History.HasUnsavedChanges || _state.MapsToSave.Count == 0)
+        if (e.Cancel || !_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
             return;
         var answer = MessageBox.Show(this,
-            $"Des modifications ne sont pas enregistrées ({_state.MapsToSave.Count} YMAP).\nLes enregistrer avant de quitter ?",
+            $"Des modifications ne sont pas enregistrées ({_state.PendingSaveText}).\nLes enregistrer avant de quitter ?",
             Program.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
         if (answer == DialogResult.Yes && _state.Project is null)
         {

@@ -29,7 +29,7 @@ internal static class ResourceExporter
         }
     }
 
-    public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, string resourceFolder,
+    public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
         IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts)
     {
         if (Inspect(resourceFolder) == TargetState.Foreign)
@@ -48,7 +48,8 @@ internal static class ResourceExporter
             return new MapFileSaver.Report([], [$"impossible de vider {stream} : {ex.Message}"]);
         }
 
-        var report = MapFileSaver.Save(world, maps, stream, markSaved: false);
+        var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
+        PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
         if (report.Saved.Count == 0)
             return report;
         WriteCollisions(world, collisionCuts, stream, report);
@@ -66,7 +67,8 @@ internal static class ResourceExporter
     }
 
     private static bool IsStreamedFile(string path) =>
-        path.EndsWith(".ymap", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase);
+        path.EndsWith(".ymap", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase);
 
     private static void WriteCollisions(WorldLoader world, IReadOnlyList<CollisionFileCut> cuts, string stream, MapFileSaver.Report report)
     {

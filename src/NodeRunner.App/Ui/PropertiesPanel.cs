@@ -541,7 +541,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
             {
                 var target = network.GetNode(link.Target);
                 Widgets.Property($"Vers {link.Target.AreaId}:{link.Target.NodeId}");
-                string lanes = $"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {link.Length} m";
+                string lanes = $"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {network.LinkLength(node, link)} m";
                 if (link.IsShortcut) lanes += ", raccourci";
                 if (link.IsNarrowRoad) lanes += ", étroite";
                 if (link.DontUseForNavigation) lanes += ", hors navigation";

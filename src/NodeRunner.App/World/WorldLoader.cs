@@ -252,11 +252,18 @@ internal sealed class WorldLoader : IDisposable
             var collisions = CollisionCatalog.Create(content, new YbnReader(files), new MapCacheReader(),
                 maps.GetInteriorArchetypeHashes());
 
+            // Road nodes: the game's, with the project's saved files put back (unsaved moves are dropped, like the maps').
+            var pathErrors = new List<string>();
+            var paths = PathNetwork?.WithSavedAreas(files, new YndReader(), PathFileSaver.ReadSaved(_saveFolder, pathErrors), pathErrors);
+            maps.SavedMapErrors.AddRange(pathErrors);
+
             lock (_lock)
             {
                 if (generation != _generation)
                     return;
                 Maps = maps;
+                if (paths is not null)
+                    PathNetwork = paths;
                 Collisions = collisions;
                 Models = models;
                 ModelReader = new DrawableReader(files);

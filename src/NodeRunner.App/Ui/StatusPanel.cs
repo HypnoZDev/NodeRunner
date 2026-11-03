@@ -170,7 +170,7 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
         if (world.Content is { Errors.Count: > 0 } content)
             lists.Add(("Problèmes de DLC", content.Errors, null));
         if (world.Maps is { SavedMapErrors.Count: > 0 } savedMaps)
-            lists.Add(("YMAP enregistrés non repris", savedMaps.SavedMapErrors, "La version du jeu est affichée à leur place."));
+            lists.Add(("Fichiers enregistrés non repris", savedMaps.SavedMapErrors, "La version du jeu est affichée à leur place."));
         if (world.Maps is { Errors.Count: > 0 } maps)
             lists.Add(("Fichiers de carte ignorés", maps.Errors, "Fichiers dans un autre format (XML, PSO), pas encore lus."));
         if (world.Textures is { Errors.Count: > 0 } textures)

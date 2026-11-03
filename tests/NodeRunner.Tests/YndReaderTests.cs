@@ -8,7 +8,7 @@ namespace NodeRunner.Tests;
 public class YndReaderTests
 {
     // Synthetic file: header at 0, 2 nodes at 0x70, 1 link at 0xC0.
-    private static byte[] BuildSampleYnd()
+    internal static byte[] BuildSampleYnd()
     {
         var data = new byte[0xC8];
         var span = data.AsSpan();

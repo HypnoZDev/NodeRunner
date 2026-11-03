@@ -34,12 +34,12 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         Widgets.ToolbarSeparator();
         var history = state.History;
         string saveTip = state.Project is { } project
-            ? $"Enregistrer les YMAP modifiés dans le projet « {project.Name} » (Ctrl+S)"
-            : "Enregistrer les YMAP modifiés (Ctrl+S) : un projet sera créé d'abord";
+            ? $"Enregistrer les fichiers modifiés dans le projet « {project.Name} » (Ctrl+S)"
+            : "Enregistrer les fichiers modifiés (Ctrl+S) : un projet sera créé d'abord";
         if (Widgets.IconButton(Icons.Save, "save", saveTip, history.HasUnsavedChanges, active: false))
             save();
         ImGui.SameLine();
-        if (Widgets.IconButton(Icons.Package, "export", "Exporter en ressource FiveM (fxmanifest.lua + YMAP dans « stream »)", state.MapsToExport.Count > 0))
+        if (Widgets.IconButton(Icons.Package, "export", "Exporter en ressource FiveM (fxmanifest.lua + YMAP dans « stream »)", state.MapsToExport.Count > 0 || state.PathAreasToSave.Count > 0))
             export();
         ImGui.SameLine();
         if (Widgets.IconButton(Icons.Undo, "undo", history.NextUndo is { } undo ? $"Annuler : {undo.Description} (Ctrl+Z)" : "Annuler (Ctrl+Z)", history.CanUndo))

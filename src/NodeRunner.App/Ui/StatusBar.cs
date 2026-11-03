@@ -73,7 +73,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
         if (state.History.HasUnsavedChanges)
         {
             Separator();
-            Item(Icons.Save, $"Modifications non enregistrées ({state.MapsToSave.Count} YMAP) : Ctrl+S", UiTheme.Warning);
+            Item(Icons.Save, $"Modifications non enregistrées ({state.PendingSaveText}) : Ctrl+S", UiTheme.Warning);
         }
         else if (state.LastSave is { } save && (DateTime.Now - save.Time).TotalSeconds < 8)
         {

@@ -211,8 +211,8 @@ internal sealed class MainUi
         {
             DrawProjectMenuItems();
             ImGui.Separator();
-            int toSave = _state.MapsToSave.Count;
-            if (ImGui.MenuItem($"{Icons.Save}  Enregistrer les YMAP modifiés{(toSave > 0 ? $" ({toSave})" : "")}", "Ctrl+S", false, toSave > 0))
+            int toSave = _state.PendingSaveCount;
+            if (ImGui.MenuItem($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}", "Ctrl+S", false, toSave > 0))
                 SaveRequested = true;
             if (ImGui.MenuItem($"{Icons.Package}  Exporter en ressource FiveM..."))
                 _exportWindow.Open();

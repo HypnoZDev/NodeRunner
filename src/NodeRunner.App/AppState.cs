@@ -45,8 +45,20 @@ internal sealed class AppState
     private readonly List<MapEntity> _selection = [];
     private MapLibrary? _selectionLibrary;
 
-    // A node of the road network selected in the 3D view (an object selection clears it).
-    public Data.Paths.PathNode? SelectedPathNode { get; set; }
+    // A node of the road network selected in the 3D view (an object selection clears it). Forgotten when the network is
+    // read again (map loading).
+    public Data.Paths.PathNode? SelectedPathNode
+    {
+        get => _selectedNodeNetwork == World.PathNetwork ? _selectedNode : null;
+        set
+        {
+            _selectedNode = value;
+            _selectedNodeNetwork = World.PathNetwork;
+        }
+    }
+
+    private Data.Paths.PathNode? _selectedNode;
+    private Data.Paths.PathNetwork? _selectedNodeNetwork;
 
     public void Select(MapEntity? entity)
     {
@@ -480,20 +492,37 @@ internal sealed class AppState
 
     public (string Text, bool Success, DateTime Time)? LastSave { get; private set; }
 
+    // Road network files to write when saving (and exporting): areas changed since the map was loaded, and those taken
+    // back from the project.
+    public IReadOnlyList<int> PathAreasToSave => World.PathNetwork is { } network
+        ? network.ChangedAreas.Concat(network.SavedAreas).Distinct().Order().ToList()
+        : [];
+
+    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count;
+
+    // "2 YMAP", "2 YMAP, 1 YND".
+    public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count);
+
+    public static string FilesText(int maps, int paths) =>
+        paths == 0 ? $"{maps} YMAP" : maps == 0 ? $"{paths} YND" : $"{maps} YMAP, {paths} YND";
+
     public void SaveMaps()
     {
         if (SaveFolder is not { } folder)
             return;
         var maps = MapsToSave;
-        if (maps.Count == 0)
+        var paths = PathAreasToSave;
+        if (maps.Count == 0 && paths.Count == 0)
             return;
-        var report = MapFileSaver.Save(World, maps, folder);
+        var report = maps.Count > 0 ? MapFileSaver.Save(World, maps, folder) : new MapFileSaver.Report([], []);
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
             _savedMaps.Add(map);
+        PathFileSaver.Save(World, paths, folder, report);
         if (report.Errors.Count == 0)
         {
             History.MarkSaved();
-            LastSave = ($"{report.Saved.Count} YMAP enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
+            int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
+            LastSave = ($"{FilesText(report.Saved.Count - pathFiles, pathFiles)} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
         }
         else
             LastSave = ($"Échec de l'enregistrement : {string.Join(" ; ", report.Errors)}", false, DateTime.Now);

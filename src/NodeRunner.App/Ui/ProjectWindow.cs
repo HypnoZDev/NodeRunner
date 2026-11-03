@@ -101,7 +101,7 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
         if (state.Project is null && state.History.HasUnsavedChanges)
         {
             ImGui.Dummy(new Vector2(0, 2));
-            Widgets.Hint($"{Icons.Info}  Les modifications en cours ({state.MapsToSave.Count} YMAP) iront dans ce projet.", wrap: true);
+            Widgets.Hint($"{Icons.Info}  Les modifications en cours ({state.PendingSaveText}) iront dans ce projet.", wrap: true);
         }
 
         ImGui.Dummy(new Vector2(0, 4));

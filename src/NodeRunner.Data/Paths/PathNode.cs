@@ -10,6 +10,9 @@ public sealed class PathNode
     // Change it through PathNetwork.MoveNode, so that the network's Revision follows.
     public required Vector3 Position { get; set; }
 
+    // Where the game's file puts the node (the link lengths stored by the game go with these positions).
+    public Vector3 GamePosition { get; set; }
+
     public uint StreetNameHash { get; init; }
 
     public bool IsPedestrian { get; init; }

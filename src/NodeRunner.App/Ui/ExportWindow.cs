@@ -65,10 +65,11 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
     private void DrawContent()
     {
         Widgets.Hint("Crée un dossier prêt pour le dossier « resources » d'un serveur FiveM : fxmanifest.lua "
-            + "et les YMAP modifiés dans « stream ». Les fichiers du jeu ne sont pas touchés.", wrap: true);
+            + "et les fichiers modifiés (YMAP, pathnodes) dans « stream ». Les fichiers du jeu ne sont pas touchés.", wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
 
         var maps = state.MapsToExport;
+        var pathAreas = state.PathAreasToSave;
         string? folder = state.ExportFolder;
         bool nameValid = FiveMResource.IsValidName(_name);
         string? target = folder is not null && nameValid ? Path.Combine(folder, _name) : null;
@@ -123,7 +124,13 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
 
             Widgets.Property("YMAP", "Les YMAP modifiés pendant cette session et ceux déjà enregistrés");
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(maps.Count == 0 ? "aucune modification à exporter" : $"{maps.Count} fichier(s)");
+            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 ? "aucune modification à exporter" : "aucun" : $"{maps.Count} fichier(s)");
+            if (pathAreas.Count > 0)
+            {
+                Widgets.Property("Pathnodes", "Fichiers du réseau routier (nodesN.ynd) dont des nœuds ont été déplacés");
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted(string.Join(", ", pathAreas.Select(Data.Paths.PathNetwork.FileName)));
+            }
             Widgets.EndProperties();
         }
 
@@ -133,10 +140,10 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             DrawCheck(maps.Count);
 
         ImGui.Dummy(new Vector2(0, 4));
-        bool canExport = maps.Count > 0 && target is not null && targetState != ResourceExporter.TargetState.Foreign;
+        bool canExport = (maps.Count > 0 || pathAreas.Count > 0) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
         ImGui.BeginDisabled(!canExport);
         if (Widgets.PrimaryButton($"{Icons.Package}  Exporter", 120f) && target is not null)
-            Export(maps, target);
+            Export(maps, pathAreas, target);
         ImGui.EndDisabled();
         ImGui.SameLine();
         if (Widgets.Button("Fermer", width: 90f))
@@ -370,21 +377,24 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         _ => "autre",
     };
 
-    private void Export(IReadOnlyList<MapData> maps, string target)
+    private void Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target)
     {
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
-        var report = ResourceExporter.Export(state.World, maps, target, SelectedCuts(), occlusion);
+        var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion);
         int collisionFiles = report.Saved.Count(f => f.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase));
+        int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
         int occlusionFiles = report.Saved.Count(f => occlusion.Any(c => string.Equals(c.FileName, f, StringComparison.OrdinalIgnoreCase)));
         var extra = new List<string>();
         if (collisionFiles > 0)
             extra.Add($"{collisionFiles} collision(s) .ybn");
         if (occlusionFiles > 0)
             extra.Add($"{occlusionFiles} YMAP d'occlusion");
+        if (pathFiles > 0)
+            extra.Add($"{pathFiles} pathnodes .ynd");
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
         _result = report.Errors.Count == 0
-            ? ($"{report.Saved.Count - collisionFiles - occlusionFiles} YMAP{extraText} exporté(s) dans {target}", true, target)
+            ? ($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles} YMAP{extraText} exporté(s) dans {target}", true, target)
             : ($"Échec de l'export : {string.Join(" ; ", report.Errors)}", false, report.Saved.Count > 0 ? target : null);
     }
 
