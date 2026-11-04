@@ -441,6 +441,8 @@ internal sealed class ModelLayer : IDisposable
                     // Any error, not only the expected ones: an exception escaping this loop would stop it for good,
                     // and no detailed model would load anymore (the map would stay on its LOD models).
                     errors.Add($"{Path.GetFileName(location.Path)} : {ex.Message}");
+                    if (ex is not (InvalidDataException or IOException))
+                        Diagnostics.ErrorLog.Add($"Modèle {Path.GetFileName(location.Path)}", ex);
                     _results.Enqueue(new LoadedModel(location, generation, null, [], errors));
                 }
             }

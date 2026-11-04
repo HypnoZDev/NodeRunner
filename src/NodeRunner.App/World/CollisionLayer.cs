@@ -190,6 +190,8 @@ internal sealed class CollisionLayer : IDisposable
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException) // Any error would stop the loop for good.
                 {
+                    if (ex is not (InvalidDataException or IOException))
+                        Diagnostics.ErrorLog.Add("Collisions", ex);
                     _results.Enqueue((file, generation, null, ex.Message));
                 }
             }

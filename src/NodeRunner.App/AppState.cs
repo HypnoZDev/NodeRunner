@@ -525,7 +525,10 @@ internal sealed class AppState
             LastSave = ($"{FilesText(report.Saved.Count - pathFiles, pathFiles)} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
         }
         else
+        {
             LastSave = ($"Échec de l'enregistrement : {string.Join(" ; ", report.Errors)}", false, DateTime.Now);
+            Diagnostics.ErrorLog.Add("Enregistrement", string.Join(" ; ", report.Errors));
+        }
     }
 
     public MapProject? Project { get; private set; }
@@ -552,6 +555,7 @@ internal sealed class AppState
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
             ProjectError = $"Projet introuvable ou illisible ({folder}) : {ex.Message}";
+            Diagnostics.ErrorLog.Add("Projet", ProjectError, ex);
             Settings.ProjectFolder = null;
             SaveSettings();
         }
@@ -723,6 +727,7 @@ internal sealed class AppState
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             ProjectError = $"projet.json non enregistré : {ex.Message}";
+            Diagnostics.ErrorLog.Add("Projet", ProjectError, ex);
         }
     }
 

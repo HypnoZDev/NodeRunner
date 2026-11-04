@@ -107,13 +107,17 @@ public class ArchiveTests : IDisposable
     {
         var ngKeys = RandomNumberGenerator.GetBytes(ArchiveKeys.NgKeyCount * ArchiveKeys.NgKeyLength);
         var ngTables = RandomNumberGenerator.GetBytes(ArchiveKeys.NgTablesLength);
-        var file = ArchiveKeyFile.Write(AesKey, ngKeys, ngTables);
+        var archiveKey = RandomNumberGenerator.GetBytes(32);
+        var file = ArchiveKeyFile.Write(AesKey, ngKeys, ngTables, [("exe", AesKey), ("x64a.rpf", archiveKey)]);
 
-        var keys = ArchiveKeyFile.Read(file, AesKey);
+        var keys = ArchiveKeyFile.Read(file, source => source == "exe" ? AesKey : null)!;
         Assert.Equal(AesKey, keys.AesKey);
         Assert.Equal(BinaryPrimitives.ReadUInt32LittleEndian(ngKeys.AsSpan(ArchiveKeys.NgKeyLength)), keys.NgKey(1)[0]);
 
-        Assert.Throws<InvalidDataException>(() => ArchiveKeyFile.Read(file, RandomNumberGenerator.GetBytes(32)));
+        var fromArchive = ArchiveKeyFile.Read(file, source => source == "x64a.rpf" ? archiveKey : null)!;
+        Assert.Equal(AesKey, fromArchive.AesKey);
+
+        Assert.Null(ArchiveKeyFile.Read(file, _ => RandomNumberGenerator.GetBytes(32)));
     }
 
     private RpfFileSystem Open()

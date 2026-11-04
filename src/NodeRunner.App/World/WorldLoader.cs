@@ -37,6 +37,9 @@ internal sealed class WorldLoader : IDisposable
 
     public string? Error { get; private set; }
 
+    // Key loading of the last opening of the archives (what was tried, what worked), for error reports.
+    public GameArchiveKeys? Keys { get; private set; }
+
     public PathNetwork? PathNetwork { get; private set; }
 
     public ScenarioSet? Scenarios { get; private set; }
@@ -157,7 +160,9 @@ internal sealed class WorldLoader : IDisposable
     private void LoadInBackground(GameInstallation game, MapSelection selection, HashSet<string>? hiddenScriptedMaps, int generation, System.Diagnostics.Stopwatch clock)
     {
         var progress = new Progress(this, generation);
-        var files = new RpfFileSystem(new GameArchiveKeys());
+        var keys = new GameArchiveKeys();
+        Keys = keys;
+        var files = new RpfFileSystem(keys);
         try
         {
             files.Open(game, progress);
@@ -290,7 +295,8 @@ internal sealed class WorldLoader : IDisposable
                 return;
             Error = ex.Message;
             IsBusy = false;
-            Status = "Échec du chargement.";
+            Diagnostics.ErrorLog.Add("Chargement de la carte", ex);
+            Status = $"Échec du chargement : {ex.Message}";
         }
     }
 

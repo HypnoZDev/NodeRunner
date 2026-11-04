@@ -222,6 +222,8 @@ internal sealed class NavMeshLayer : IDisposable
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException) // Any error would stop the loop for good.
                 {
+                    if (ex is not (InvalidDataException or IOException))
+                        Diagnostics.ErrorLog.Add("Navmesh", ex);
                     _results.Enqueue((key, generation, null, ex.Message));
                 }
             }

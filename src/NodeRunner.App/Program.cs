@@ -1,4 +1,5 @@
 using NodeRunner.App.Configuration;
+using NodeRunner.App.Diagnostics;
 
 namespace NodeRunner.App;
 
@@ -11,14 +12,25 @@ internal static class Program
 
     public const string Author = "Inside Rockstar";
 
+    private static AppState? _state;
+
     [STAThread]
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
+        // Errors escaping a window event or a thread: our own message and report instead of the raw .NET dialog.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => Crash(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                Crash(ex);
+        };
 
         var paths = AppPaths.Resolve();
         var settings = AppSettings.Load(paths.SettingsFile);
         var state = new AppState(paths, settings);
+        _state = state;
         state.RedetectGame();
         state.RestoreProject();
         state.SaveSettings(); // Creates settings.json on first launch so the user can find it.
@@ -38,9 +50,32 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"{Name} a rencontré une erreur et doit se fermer :\n\n" + ex,
-                Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Crash(ex);
         }
+    }
+
+    private static int _crashing;
+
+    private static void Crash(Exception ex)
+    {
+        if (Interlocked.Exchange(ref _crashing, 1) == 1)
+            return;
+        ErrorLog.Add("Plantage", ex);
+        string? report = ErrorReport.WriteCrashFile(_state, ex);
+        string where = report is null ? "" : $"\n\nUn rapport a été enregistré ici :\n{report}\n\nEnvoie ce fichier au développeur (Discord, GitHub) pour qu'il corrige le problème.";
+        MessageBox.Show($"{Name} a rencontré une erreur et doit se fermer :\n\n{ex.Message}{where}",
+            Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        if (report is not null)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{report}\"");
+            }
+            catch (Exception)
+            {
+                // Explorer not available: the path is in the message.
+            }
+        }
+        Environment.Exit(1);
     }
 }

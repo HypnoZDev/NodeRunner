@@ -238,7 +238,10 @@ internal sealed unsafe partial class MainForm : Form
         _skyRenderer = new SkyRenderer(_graphics.Device, _graphics.Context);
         _waterRenderer = new WaterRenderer(_graphics.Device, _graphics.Context);
         _pickBuffer = new PickBuffer(_graphics.Device, _graphics.Context);
-        _state.AdapterName = _graphics.AdapterName;
+        _state.AdapterName = _graphics.IsSoftware ? $"{_graphics.AdapterName} (rendu logiciel, lent)" : _graphics.AdapterName;
+        if (_graphics.IsSoftware)
+            Diagnostics.ErrorLog.Add("Carte graphique", "Aucune carte graphique compatible DirectX 11 : affichage en rendu logiciel (lent). "
+                + "Installe ou mets à jour le pilote de ta carte graphique.");
 
         RestoreCamera();
         _surface.Resize += (_, _) => _graphics?.Resize(_surface.ClientSize.Width, _surface.ClientSize.Height);

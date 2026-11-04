@@ -48,19 +48,11 @@ public sealed class GraphicsDevice : IDisposable
             flags |= DeviceCreationFlags.Debug;
 #endif
 
-        FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
-        D3D11.D3D11CreateDevice(
-            null,
-            DriverType.Hardware,
-            flags,
-            levels,
-            out ID3D11Device device,
-            out FeatureLevel featureLevel,
-            out ID3D11DeviceContext context).CheckError();
-
+        var (device, context, featureLevel, software) = CreateDevice(flags);
         Device = device;
         Context = context;
         FeatureLevel = featureLevel;
+        IsSoftware = software;
 
         using (var dxgiDevice = Device.QueryInterface<IDXGIDevice>())
         using (var adapter = dxgiDevice.GetAdapter())
@@ -87,6 +79,61 @@ public sealed class GraphicsDevice : IDisposable
 
         CreateBackBufferView();
         CreateDepthBuffer();
+    }
+
+    // True when no graphics card offers Direct3D 11 and Windows draws in software (WARP): works, but slowly.
+    public bool IsSoftware { get; }
+
+    // The default adapter is not always usable (laptops with two GPUs, missing driver, remote desktop): every adapter
+    // is tried, the high-performance one first, then the software renderer.
+    private (ID3D11Device, ID3D11DeviceContext, FeatureLevel, bool) CreateDevice(DeviceCreationFlags flags)
+    {
+        FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
+        var adapters = new List<IDXGIAdapter1>();
+        using (var factory6 = _factory.QueryInterfaceOrNull<IDXGIFactory6>())
+        {
+            for (uint i = 0; ; i++)
+            {
+                IDXGIAdapter1? adapter = null;
+                bool found = factory6 is not null
+                    ? factory6.EnumAdapterByGpuPreference(i, GpuPreference.HighPerformance, out adapter).Success
+                    : _factory.EnumAdapters1(i, out adapter).Success;
+                if (!found || adapter is null)
+                    break;
+                adapters.Add(adapter);
+            }
+        }
+
+        Exception? lastError = null;
+        try
+        {
+            foreach (var adapter in adapters)
+            {
+                if ((adapter.Description1.Flags & AdapterFlags.Software) != 0)
+                    continue;
+                var result = D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, flags, levels,
+                    out ID3D11Device? device, out FeatureLevel level, out ID3D11DeviceContext? context);
+                if (result.Success && device is not null && context is not null)
+                    return (device, context, level, false);
+                lastError = new InvalidOperationException($"{adapter.Description1.Description} : {result}");
+            }
+
+            // Retry without the debug layer, then in software.
+            foreach (var driver in new[] { DriverType.Hardware, DriverType.Warp })
+            {
+                var result = D3D11.D3D11CreateDevice(null, driver, DeviceCreationFlags.BgraSupport, levels,
+                    out ID3D11Device? device, out FeatureLevel level, out ID3D11DeviceContext? context);
+                if (result.Success && device is not null && context is not null)
+                    return (device, context, level, driver == DriverType.Warp);
+            }
+        }
+        finally
+        {
+            foreach (var adapter in adapters)
+                adapter.Dispose();
+        }
+        throw new InvalidOperationException(
+            "Aucune carte graphique compatible DirectX 11 n'a été trouvée (pilote graphique à installer ou à mettre à jour ?).", lastError);
     }
 
     public void Resize(int width, int height)

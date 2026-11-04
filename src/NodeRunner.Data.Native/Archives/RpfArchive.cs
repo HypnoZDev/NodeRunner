@@ -21,9 +21,13 @@ internal static class RpfArchive
     private const uint DirectoryMarker = 0x7FFFFF00;
     private const long BlockSize = 512;
 
+    private const int MaxDepth = 8;
+
     public static void Read(SafeFileHandle handle, int disk, long start, string name, uint length, string path,
-        ArchiveKeys keys, Dictionary<string, RpfEntry> files, List<string> archives)
+        ArchiveKeys keys, Dictionary<string, RpfEntry> files, List<string> archives, int depth = 0)
     {
+        if (depth > MaxDepth)
+            throw new InvalidDataException($"{path} : archives imbriquées en boucle.");
         Span<byte> header = stackalloc byte[16];
         ReadExactly(handle, header, start);
         if (BinaryPrimitives.ReadUInt32LittleEndian(header) != Magic)
@@ -51,10 +55,15 @@ internal static class RpfArchive
             throw new InvalidDataException($"{path} : impossible de déchiffrer la table des fichiers.");
 
         archives.Add(path);
+        var visited = new bool[entryCount];
         AddDirectory(0, path);
 
         void AddDirectory(int index, string directoryPath)
         {
+            // A modded archive can hold a folder listed twice or inside itself: would never end.
+            if (visited[index] || directoryPath.Length > 1024)
+                throw new InvalidDataException($"{path} : dossiers en boucle.");
+            visited[index] = true;
             var e = entries.AsSpan(index * 16, 16);
             int first = BinaryPrimitives.ReadInt32LittleEndian(e[8..]);
             int count = BinaryPrimitives.ReadInt32LittleEndian(e[12..]);
@@ -98,7 +107,11 @@ internal static class RpfArchive
                 files[childPath] = new RpfEntry(childName, disk, offset, storedSize, value1, 0, false, fileEncryption);
 
                 if (storedSize == 0 && childName.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
-                    Read(handle, disk, offset, childName, value1, childPath, keys, files, archives);
+                {
+                    if (offset == start)
+                        throw new InvalidDataException($"{childPath} : archive qui se contient elle-même.");
+                    Read(handle, disk, offset, childName, value1, childPath, keys, files, archives, depth + 1);
+                }
             }
         }
     }

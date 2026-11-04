@@ -47,9 +47,8 @@ public sealed class RpfFileSystem : IGameFileSystem
 
         for (int i = 0; i < paths.Count; i++)
         {
-            if (i % 20 == 0)
-                progress?.Report($"Lecture des archives ({i} / {paths.Count})...");
             string relative = paths[i];
+            progress?.Report($"Lecture des archives ({i} / {paths.Count}) : {relative}");
             SafeFileHandle handle;
             try
             {
@@ -71,9 +70,9 @@ public sealed class RpfFileSystem : IGameFileSystem
                 long length = RandomAccess.GetLength(handle);
                 RpfArchive.Read(handle, disk, 0, Path.GetFileName(relative), (uint)length, relative, keys, files, archives);
             }
-            catch (Exception ex) when (ex is InvalidDataException or IOException)
+            catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
             {
-                // A damaged archive is skipped whole, as if it were absent.
+                // A damaged (or badly modded) archive is skipped whole, as if it were absent.
                 _errors.Add($"{relative} : {ex.Message}");
                 continue;
             }

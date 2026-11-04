@@ -101,6 +101,8 @@ internal sealed partial class SplashForm : Form
         }
         if (done)
         {
+            if (now > Timeout && !mapDone)
+                Diagnostics.ErrorLog.Add("Chargement", $"Chargement anormalement long (plus de {Timeout / 60:0} min), arrêté à l'étape : {_world.Status}");
             // Closed at once (no wait for the bar to reach its end): the main window opens on the loaded view.
             _timer.Stop();
             Close();

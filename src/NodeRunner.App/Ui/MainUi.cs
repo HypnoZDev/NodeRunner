@@ -38,7 +38,8 @@ internal sealed class MainUi
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open);
-        _statusBar = new StatusBar(state, modelLayer);
+        _errorWindow = new ErrorWindow(state, modelLayer, collisionLayer, navMeshLayer);
+        _statusBar = new StatusBar(state, modelLayer, _errorWindow.Open);
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);
@@ -75,6 +76,7 @@ internal sealed class MainUi
     private readonly RoomHover _roomHover;
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
+    private readonly ErrorWindow _errorWindow;
 
     public bool BrowseGameFolderRequested { get; set; }
 
@@ -135,6 +137,7 @@ internal sealed class MainUi
         ProjectWindow.Draw();
         _deleteWindow.Draw();
         _settingsWindow.Draw();
+        _errorWindow.Draw();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
         _searchPalette.Draw(); // Last: above the panels.
     }
@@ -300,6 +303,9 @@ internal sealed class MainUi
 
         if (Menu("Aide"))
         {
+            if (ImGui.MenuItem($"{Icons.TriangleAlert}  Erreurs et rapport..."))
+                _errorWindow.Open();
+            ImGui.Separator();
             if (ImGui.MenuItem($"À propos de {Program.Name}"))
                 _showAbout = true;
             ImGui.EndMenu();

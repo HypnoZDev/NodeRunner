@@ -7,7 +7,7 @@ namespace NodeRunner.App.Ui;
 
 // Bar at the bottom of the window: map version and DLC, loading progress or errors on the left; camera position, game
 // edition and frames per second on the right.
-internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
+internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action openErrors)
 {
     private const float PaddingY = 3f;
 
@@ -49,6 +49,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
         {
             Separator();
             Item(Icons.TriangleAlert, world.Status, UiTheme.Error);
+            Clickable("Clic : voir l'erreur et copier le rapport");
         }
         else if (world.IsBusy)
         {
@@ -88,15 +89,23 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
         string position = $"{Icons.MapPinned}  X {p.X:0}   Y {p.Y:0}   Z {p.Z:0}";
         string edition = state.Game is { } game ? $"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}" : $"{Icons.HardDrive}  GTA V introuvable";
         string fps = $"{Icons.Gauge}  {ImGui.GetIO().Framerate:0} FPS";
+        int errorCount = Diagnostics.ErrorLog.Count;
+        string errors = errorCount > 0 ? $"{Icons.TriangleAlert}  {errorCount}" : Icons.TriangleAlert;
 
         float gap = 24f;
-        float width = ImGui.CalcTextSize(position).X + ImGui.CalcTextSize(edition).X + ImGui.CalcTextSize(fps).X + gap * 2;
+        float width = ImGui.CalcTextSize(errors).X + ImGui.CalcTextSize(position).X + ImGui.CalcTextSize(edition).X + ImGui.CalcTextSize(fps).X + gap * 3;
         float x = ImGui.GetWindowWidth() - ImGui.GetStyle().WindowPadding.X - width;
         ImGui.SameLine();
         if (x <= ImGui.GetCursorPosX() + gap)
             return; // Window too narrow: the left part wins.
 
         ImGui.SetCursorPosX(x);
+        if (errorCount > 0)
+            ImGui.TextColored(Diagnostics.ErrorLog.Unseen > 0 ? UiTheme.Error : UiTheme.Warning, errors);
+        else
+            ImGui.TextDisabled(errors);
+        Clickable(errorCount > 0 ? $"{errorCount} erreur(s) : clic pour les voir et copier le rapport" : "Aucune erreur. Clic : rapport à envoyer en cas de problème");
+        ImGui.SameLine(0, gap);
         ImGui.TextDisabled(position);
         ImGui.SameLine(0, gap);
         ImGui.TextDisabled(edition);
@@ -110,6 +119,16 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer)
             ImGui.TextColored(c, $"{icon}  {text}");
         else
             ImGui.TextUnformatted($"{icon}  {text}");
+    }
+
+    private void Clickable(string tooltip)
+    {
+        if (!ImGui.IsItemHovered())
+            return;
+        ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        ImGui.SetTooltip(tooltip);
+        if (ImGui.IsItemClicked())
+            openErrors();
     }
 
     private static void Separator()

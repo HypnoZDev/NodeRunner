@@ -161,34 +161,11 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
 
     private void DrawProblems()
     {
-        var world = state.World;
-        var lists = new List<(string Title, IReadOnlyCollection<string> Errors, string? Note)>();
-        if (state.ProjectError is { } projectError)
-            lists.Add(("Projet", [projectError], null));
-        if (world.PathNetwork is { Errors.Count: > 0 } network)
-            lists.Add(("Pathnodes illisibles", network.Errors, null));
-        if (world.Content is { Errors.Count: > 0 } content)
-            lists.Add(("Problèmes de DLC", content.Errors, null));
-        if (world.Maps is { SavedMapErrors.Count: > 0 } savedMaps)
-            lists.Add(("Fichiers enregistrés non repris", savedMaps.SavedMapErrors, "La version du jeu est affichée à leur place."));
-        if (world.Maps is { Errors.Count: > 0 } maps)
-            lists.Add(("Fichiers de carte ignorés", maps.Errors, "Fichiers dans un autre format (XML, PSO), pas encore lus."));
-        if (world.Textures is { Errors.Count: > 0 } textures)
-            lists.Add(("Liens de textures illisibles", textures.Errors, null));
-        if (modelLayer.Errors.Count > 0)
-            lists.Add(("Modèles ou textures illisibles", modelLayer.Errors, null));
-        if (world.Collisions is { Errors.Count: > 0 } collisionCatalog)
-            lists.Add(("Fichiers cache illisibles", collisionCatalog.Errors, "Les collisions qu'ils situent ne sont pas affichées."));
-        if (collisionLayer.Errors.Count > 0)
-            lists.Add(("Collisions illisibles", collisionLayer.Errors, null));
-        if (navMeshLayer.Errors.Count > 0)
-            lists.Add(("Cases de navmesh illisibles", navMeshLayer.Errors, null));
-        if (world.Scenarios is { Errors.Count: > 0 } scenarios)
-            lists.Add(("Fichiers de scénarios ignorés", scenarios.Errors, null));
+        var lists = Diagnostics.ErrorReport.Problems(state, modelLayer, collisionLayer, navMeshLayer);
         if (lists.Count == 0)
             return;
 
-        if (!Widgets.Section($"Problèmes ({lists.Sum(l => l.Errors.Count)})", "info_problems", defaultOpen: false))
+        if (!Widgets.Section($"Problèmes ({lists.Sum(l => l.Items.Count)})", "info_problems", defaultOpen: false))
             return;
         foreach (var (title, errors, note) in lists)
         {
