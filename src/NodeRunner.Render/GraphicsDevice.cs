@@ -73,7 +73,17 @@ public sealed class GraphicsDevice : IDisposable
             AlphaMode = AlphaMode.Ignore,
         };
 
-        _swapChain = _factory.CreateSwapChainForHwnd(Device, windowHandle, swapChainDesc);
+        try
+        {
+            _swapChain = _factory.CreateSwapChainForHwnd(Device, windowHandle, swapChainDesc);
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            // Flip model refused (old driver, remote desktop, some virtual machines): the older presentation model.
+            swapChainDesc.SwapEffect = SwapEffect.Discard;
+            swapChainDesc.Scaling = Scaling.Stretch;
+            _swapChain = _factory.CreateSwapChainForHwnd(Device, windowHandle, swapChainDesc);
+        }
         // We handle fullscreen ourselves; disable DXGI's Alt+Enter behaviour.
         _factory.MakeWindowAssociation(windowHandle, WindowAssociationFlags.IgnoreAltEnter);
 

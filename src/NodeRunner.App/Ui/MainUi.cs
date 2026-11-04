@@ -29,7 +29,7 @@ internal sealed class MainUi
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
-        _propertiesPanel = new PropertiesPanel(state, OpenInViewer);
+        _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
@@ -151,7 +151,12 @@ internal sealed class MainUi
         if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || _gizmo.IsDragging || _state.PendingDeletion is not null)
             return;
         if (ImGui.IsKeyPressed(ImGuiKey.Delete, false))
-            _state.RequestDelete();
+        {
+            if (_state.Tool == TransformTool.Collision)
+                _state.DeleteSelectedCollision();
+            else
+                _state.RequestDelete();
+        }
         if (ImGui.IsKeyPressed(ImGuiKey.End, false))
             _state.PutSelectionOnGround();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.C))
@@ -174,6 +179,7 @@ internal sealed class MainUi
             else if (ToolKeyPressed(ImGuiKey._2, ImGuiKey.Keypad2)) _state.Tool = TransformTool.Move;
             else if (ToolKeyPressed(ImGuiKey._3, ImGuiKey.Keypad3)) _state.Tool = TransformTool.Rotate;
             else if (ToolKeyPressed(ImGuiKey._4, ImGuiKey.Keypad4)) _state.Tool = TransformTool.Scale;
+            else if (ToolKeyPressed(ImGuiKey._5, ImGuiKey.Keypad5)) _state.Tool = TransformTool.Collision;
         }
     }
 

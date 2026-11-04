@@ -1,3 +1,4 @@
+using NodeRunner.Data.Collisions;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Resources;
@@ -30,7 +31,7 @@ internal static class ResourceExporter
     }
 
     public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
-        IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts)
+        IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts, CollisionEdits collisionEdits)
     {
         if (Inspect(resourceFolder) == TargetState.Foreign)
             return new MapFileSaver.Report([], ["ce dossier existe déjà et n'a pas été créé par NodeRunner"]);
@@ -50,9 +51,9 @@ internal static class ResourceExporter
 
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
-        if (report.Saved.Count == 0)
+        if (report.Saved.Count == 0 && collisionEdits.Files.Count == 0)
             return report;
-        WriteCollisions(world, collisionCuts, stream, report);
+        CollisionFileSaver.Save(world, collisionEdits, collisionCuts, stream, report);
         WriteOccluders(world, occlusionCuts, stream, report);
         try
         {
@@ -69,34 +70,6 @@ internal static class ResourceExporter
     private static bool IsStreamedFile(string path) =>
         path.EndsWith(".ymap", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase)
         || path.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase);
-
-    private static void WriteCollisions(WorldLoader world, IReadOnlyList<CollisionFileCut> cuts, string stream, MapFileSaver.Report report)
-    {
-        if (cuts.Count == 0)
-            return;
-        if (world.Collisions is not { } catalog)
-        {
-            report.Errors.Add("collisions non chargées : fichiers .ybn non exportés");
-            return;
-        }
-        foreach (var cut in cuts)
-        {
-            try
-            {
-                if (catalog.RemovePolygons(cut.File, cut.Polygons) is not { } bytes)
-                {
-                    report.Errors.Add($"{cut.FileName} : fichier du jeu introuvable");
-                    continue;
-                }
-                File.WriteAllBytes(Path.Combine(stream, cut.FileName), bytes);
-                report.Saved.Add(cut.FileName);
-            }
-            catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                report.Errors.Add($"{cut.FileName} : {ex.Message}");
-            }
-        }
-    }
 
     private static void WriteOccluders(WorldLoader world, IReadOnlyList<OccluderFileCut> cuts, string stream, MapFileSaver.Report report)
     {

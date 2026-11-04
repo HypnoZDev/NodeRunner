@@ -70,7 +70,7 @@ public sealed class RpfFileSystem : IGameFileSystem
                 long length = RandomAccess.GetLength(handle);
                 RpfArchive.Read(handle, disk, 0, Path.GetFileName(relative), (uint)length, relative, keys, files, archives);
             }
-            catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // A damaged (or badly modded) archive is skipped whole, as if it were absent.
                 _errors.Add($"{relative} : {ex.Message}");
@@ -166,8 +166,9 @@ public sealed class RpfFileSystem : IGameFileSystem
     {
         using var input = new MemoryStream(data);
         using var deflate = new DeflateStream(input, CompressionMode.Decompress);
-        // The expected length only sizes the buffer: capped, in case the flags are wrong.
-        using var output = new MemoryStream(Math.Clamp(expectedLength, 0, 256 * 1024 * 1024));
+        // The expected length only sizes the buffer: capped, in case the flags are wrong (modded files), so that a few
+        // reads at once cannot exhaust the memory of a small PC; the buffer grows if really needed.
+        using var output = new MemoryStream(Math.Clamp(expectedLength, 0, 32 * 1024 * 1024));
         deflate.CopyTo(output);
         return output.Length == output.Capacity ? output.GetBuffer() : output.ToArray();
     }

@@ -143,6 +143,10 @@ public sealed class CollisionCatalog
     public byte[]? RemovePolygons(CollisionFile file, IReadOnlySet<int> polygons) =>
         (_reader as ICollisionWriter ?? throw new NotSupportedException()).RemovePolygons(file.Path, polygons);
 
+    // The file with new materials and without removed polygons.
+    public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials) =>
+        (_reader as ICollisionWriter ?? throw new NotSupportedException()).Edit(path, removed, materials);
+
     public static CollisionKind KindOf(string fileName)
     {
         StripPrefix(fileName, out var kind);

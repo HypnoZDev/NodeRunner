@@ -59,6 +59,9 @@ public sealed class AppSettings
 
     public float CollisionRadius { get; set; } = 200f;
 
+    // Version of the collision shown and edited: peds and objects, vehicles (hi@) or other (ma@).
+    public NodeRunner.Data.Collisions.CollisionKind CollisionKind { get; set; }
+
     public float NavMeshRadius { get; set; } = 450f;
 
     public float EntityRadius { get; set; } = 300f;

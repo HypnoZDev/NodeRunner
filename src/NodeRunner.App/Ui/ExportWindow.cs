@@ -124,7 +124,14 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
 
             Widgets.Property("YMAP", "Les YMAP modifiés pendant cette session et ceux déjà enregistrés");
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 ? "aucune modification à exporter" : "aucun" : $"{maps.Count} fichier(s)");
+            int editedCollisions = state.CollisionEdits.Files.Count;
+            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 && editedCollisions == 0 ? "aucune modification à exporter" : "aucun" : $"{maps.Count} fichier(s)");
+            if (editedCollisions > 0)
+            {
+                Widgets.Property("Collisions", "Fichiers .ybn modifiés à la main (outil Collisions)");
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted($"{editedCollisions} fichier(s) .ybn modifié(s)");
+            }
             if (pathAreas.Count > 0)
             {
                 Widgets.Property("Pathnodes", "Fichiers du réseau routier (nodesN.ynd) dont des nœuds ont été déplacés");
@@ -140,7 +147,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             DrawCheck(maps.Count);
 
         ImGui.Dummy(new Vector2(0, 4));
-        bool canExport = (maps.Count > 0 || pathAreas.Count > 0) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
+        bool canExport = (maps.Count > 0 || pathAreas.Count > 0 || state.CollisionEdits.Files.Count > 0) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
         ImGui.BeginDisabled(!canExport);
         if (Widgets.PrimaryButton($"{Icons.Package}  Exporter", 120f) && target is not null)
             Export(maps, pathAreas, target);
@@ -381,7 +388,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
     {
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
-        var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion);
+        var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion, state.CollisionEdits);
         int collisionFiles = report.Saved.Count(f => f.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase));
         int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
         int occlusionFiles = report.Saved.Count(f => occlusion.Any(c => string.Equals(c.FileName, f, StringComparison.OrdinalIgnoreCase)));

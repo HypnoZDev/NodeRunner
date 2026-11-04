@@ -172,7 +172,7 @@ internal sealed class AppState
         var box = GroundSnap.WorldBox(entity, archetype) ?? (entity.Position, entity.Position);
         // Everything below the start of the rays, down to the bottom of the map.
         var collisions = CollisionQuery.CollisionIn(World,
-            box.Min with { Z = -1000f }, box.Max with { Z = GroundSnap.StartHeight(box.Min.Z, box.Max.Z) });
+            box.Min with { Z = -1000f }, box.Max with { Z = GroundSnap.StartHeight(box.Min.Z, box.Max.Z) }, CollisionEdits);
         return GroundSnap.Snap(entity, archetype, collisions);
     }
 
@@ -183,7 +183,7 @@ internal sealed class AppState
         if (World.Collisions is null)
             return null;
         float from = point.Z + GroundSnap.MaxRise;
-        var collisions = CollisionQuery.CollisionIn(World, point with { Z = -1000f }, point with { Z = from });
+        var collisions = CollisionQuery.CollisionIn(World, point with { Z = -1000f }, point with { Z = from }, CollisionEdits);
         return GroundSnap.HighestBelow(collisions, new System.Numerics.Vector2(point.X, point.Y), from);
     }
 
@@ -434,8 +434,63 @@ internal sealed class AppState
             Select(null);
             SelectedPathNode = nodeEdit.Node;
         }
+        else if (edit is CollisionEdit collisionEdit)
+        {
+            Tool = TransformTool.Collision;
+            SelectCollision(collisionEdit.Polygons.Where(p => !CollisionEdits.IsRemoved(p.Path, p.Polygon)), CollisionSelectMode.Replace);
+        }
         else if (edit is { Selection.Count: > 0 })
             SelectAll(edit.Selection);
+    }
+
+    // --- Collision editing (tool 5) ---
+
+    // Hand changes to the collision files of the project.
+    public Data.Collisions.CollisionEdits CollisionEdits { get; private set; } = new();
+
+    private readonly HashSet<CollisionPolygon> _selectedCollision = [];
+
+    public IReadOnlySet<CollisionPolygon> SelectedCollision => _selectedCollision;
+
+    // Incremented when the collision selection changes (the 3D view rebuilds its highlight).
+    public int CollisionSelectionVersion { get; private set; }
+
+    public void SelectCollision(IEnumerable<CollisionPolygon> polygons, CollisionSelectMode mode)
+    {
+        if (mode == CollisionSelectMode.Replace)
+            _selectedCollision.Clear();
+        foreach (var polygon in polygons)
+        {
+            if (mode == CollisionSelectMode.Toggle && !_selectedCollision.Add(polygon))
+                _selectedCollision.Remove(polygon);
+            else
+                _selectedCollision.Add(polygon);
+        }
+        CollisionSelectionVersion++;
+    }
+
+    public void DeleteSelectedCollision()
+    {
+        if (_selectedCollision.Count == 0)
+            return;
+        Apply(CollisionEdit.Remove(CollisionEdits, [.. _selectedCollision]));
+        int count = _selectedCollision.Count;
+        SelectCollision([], CollisionSelectMode.Replace);
+        Notify(count == 1 ? "1 surface de collision supprimée" : $"{count} surfaces de collision supprimées");
+    }
+
+    public void SetSelectedCollisionMaterial(byte material)
+    {
+        if (_selectedCollision.Count == 0 || World.Collisions is not { } catalog)
+            return;
+        Apply(CollisionEdit.SetMaterial(CollisionEdits, [.. _selectedCollision], material, catalog.Materials.Name(material)));
+        CollisionSelectionVersion++;
+    }
+
+    private void Apply(IEdit edit)
+    {
+        edit.Redo();
+        History.Add(edit);
     }
 
     // Map files to write when saving: those changed in this session (even if the change was undone since, so that a
@@ -498,10 +553,68 @@ internal sealed class AppState
         ? network.ChangedAreas.Concat(network.SavedAreas).Distinct().Order().ToList()
         : [];
 
-    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count;
+    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0);
+
+    // Collision changes not written to the project yet.
+    public bool CollisionsPending => CollisionEdits.Revision != _savedCollisionRevision;
+
+    private int _savedCollisionRevision;
+
+    private const string CollisionEditsFileName = "collisions.json";
+
+    // The project's collision changes (collisions.json next to projet.json); none without a project.
+    private void LoadCollisionEdits()
+    {
+        CollisionEdits = new Data.Collisions.CollisionEdits();
+        if (Project is { } project && Path.Combine(project.Folder, CollisionEditsFileName) is var file && File.Exists(file))
+        {
+            try
+            {
+                CollisionEdits = Data.Collisions.CollisionEdits.FromJson(File.ReadAllText(file));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                Diagnostics.ErrorLog.Add("Projet", $"{CollisionEditsFileName} illisible : {ex.Message}", ex);
+            }
+        }
+        _savedCollisionRevision = CollisionEdits.Revision;
+        SelectCollision([], CollisionSelectMode.Replace);
+    }
+
+    // Writes collisions.json and the changed .ybn files into the stream folder (files no longer changed are removed).
+    private void SaveCollisionEdits(string stream, MapFileSaver.Report report)
+    {
+        if (Project is not { } project)
+            return;
+        string file = Path.Combine(project.Folder, CollisionEditsFileName);
+        try
+        {
+            if (File.Exists(file))
+            {
+                var before = Data.Collisions.CollisionEdits.FromJson(File.ReadAllText(file));
+                foreach (var path in before.Files.Keys.Where(p => CollisionEdits.For(p) is null))
+                {
+                    string old = Path.Combine(stream, Path.GetFileName(path));
+                    if (File.Exists(old))
+                        File.Delete(old);
+                }
+            }
+            if (CollisionEdits.Files.Count == 0)
+                File.Delete(file);
+            else
+                File.WriteAllText(file, CollisionEdits.ToJson());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            report.Errors.Add($"{CollisionEditsFileName} : {ex.Message}");
+            return;
+        }
+        CollisionFileSaver.Save(World, CollisionEdits, [], stream, report);
+    }
 
     // "2 YMAP", "2 YMAP, 1 YND".
-    public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count);
+    public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count)
+        + (CollisionsPending ? $", {CollisionEdits.Files.Count} YBN" : "");
 
     public static string FilesText(int maps, int paths) =>
         paths == 0 ? $"{maps} YMAP" : maps == 0 ? $"{paths} YND" : $"{maps} YMAP, {paths} YND";
@@ -512,14 +625,18 @@ internal sealed class AppState
             return;
         var maps = MapsToSave;
         var paths = PathAreasToSave;
-        if (maps.Count == 0 && paths.Count == 0)
+        bool collisions = CollisionsPending;
+        if (maps.Count == 0 && paths.Count == 0 && !collisions)
             return;
         var report = maps.Count > 0 ? MapFileSaver.Save(World, maps, folder) : new MapFileSaver.Report([], []);
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
             _savedMaps.Add(map);
         PathFileSaver.Save(World, paths, folder, report);
+        if (collisions)
+            SaveCollisionEdits(folder, report);
         if (report.Errors.Count == 0)
         {
+            _savedCollisionRevision = CollisionEdits.Revision;
             History.MarkSaved();
             int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
             LastSave = ($"{FilesText(report.Saved.Count - pathFiles, pathFiles)} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
@@ -551,6 +668,7 @@ internal sealed class AppState
         {
             Project = MapProject.Load(folder);
             ApplyProjectMap(Project);
+            LoadCollisionEdits();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
@@ -636,6 +754,7 @@ internal sealed class AppState
         Settings.ProjectFolder = null;
         SaveSettings();
         LastSave = null;
+        LoadCollisionEdits();
         World.RequestMapReload();
     }
 
@@ -648,8 +767,12 @@ internal sealed class AppState
         AddRecentProject(project.Folder);
         ApplyProjectMap(project);
         SaveSettings();
+        // Without reload, the changes in progress go into the new project (they are kept).
         if (reload)
+        {
+            LoadCollisionEdits();
             World.RequestMapReload();
+        }
     }
 
     private void ApplyProjectMap(MapProject project)
@@ -803,11 +926,19 @@ internal sealed class AppState
     }
 }
 
-// Tools of the 3D view (floating bar, keys 1 to 4).
+public enum CollisionSelectMode
+{
+    Replace,
+    Add,
+    Toggle,
+}
+
+// Tools of the 3D view (floating bar, keys 1 to 5).
 public enum TransformTool
 {
     Select,
     Move,
     Rotate,
     Scale,
+    Collision,
 }

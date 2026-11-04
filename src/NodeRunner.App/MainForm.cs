@@ -32,6 +32,12 @@ internal sealed unsafe partial class MainForm : Form
     private object? _waterShown; // The WaterMap uploaded to _waterRenderer.
     private PickBuffer? _pickBuffer;
     private (Point Location, bool Control)? _pickRequest;
+
+    // Collision tool: left button pressed at this point (a drag draws a selection rectangle), and the click or
+    // rectangle to select at the next frame.
+    private Point? _collisionDragStart;
+    private Point _collisionDragCurrent;
+    private (Point A, Point B, bool Control)? _collisionPickRequest;
     private readonly PathNodeLayer _pathNodeLayer = new();
     private readonly ScenarioLayer _scenarioLayer = new();
     private readonly NavMeshLayer _navMeshLayer = new();
@@ -317,6 +323,7 @@ internal sealed unsafe partial class MainForm : Form
 
         ImGui.NewFrame();
         _ui.Draw();
+        DrawCollisionRectangle();
         ImGui.Render();
         _input.UpdateCursor();
 
@@ -324,6 +331,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Viewer.Render(_modelRenderer!, _imguiRenderer, _graphics);
         var scene = SceneViewport();
         PickClickedObject(scene);
+        PickCollision(scene);
         PlaceRequestedObject(scene);
         _graphics.BeginFrame(BackgroundColor);
         _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
@@ -414,8 +422,14 @@ internal sealed unsafe partial class MainForm : Form
         _navMeshLayer.Draw(lines, viewProjection, camera.Position,
             s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)), _state.IsLayerVisible(NavMeshLayer.OutlinesLayer));
         bool collisionsEnabled = CollisionLayer.Surfaces.Any(s => _state.IsLayerVisible(CollisionLayer.LayerName(s)));
-        _collisionLayer.Update(_state.World, lines, camera.Position, _state.Settings.CollisionRadius, collisionsEnabled);
-        _collisionLayer.Draw(lines, viewProjection, camera.Position, s => _state.IsLayerVisible(CollisionLayer.LayerName(s)));
+        // The collision tool shows the collision even when its layer is hidden.
+        bool collisionTool = _state.Tool == TransformTool.Collision;
+        _collisionLayer.Update(_state.World, lines, camera.Position, _state.Settings.CollisionRadius, collisionsEnabled || collisionTool,
+            _state.Settings.CollisionKind, _state.CollisionEdits);
+        _collisionLayer.Draw(lines, viewProjection, camera.Position,
+            s => _state.IsLayerVisible(CollisionLayer.LayerName(s)) || (collisionTool && !collisionsEnabled));
+        if (collisionTool)
+            _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion);
         _pathNodeLayer.Update(_state.World, lines, deferChanges: _ui.IsGizmoDragging || ImGui.IsAnyItemActive());
         _pathNodeLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)));
         bool entitiesEnabled = EntityBoxLayer.Categories.Any(c => _state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
@@ -570,7 +584,25 @@ internal sealed unsafe partial class MainForm : Form
             // Clicks on an ImGui window belong to the interface; a click outside the global search only closes it;
             // a click on a 3D handle grabs it.
             if (e.Button == MouseButtons.Left && !ImGui.GetIO().WantCaptureMouse && !_ui.IsSearchOpen && !_ui.IsGizmoHovered)
-                _pickRequest = (e.Location, (ModifierKeys & Keys.Control) != 0);
+            {
+                if (_state.Tool == TransformTool.Collision)
+                    _collisionDragStart = _collisionDragCurrent = e.Location;
+                else
+                    _pickRequest = (e.Location, (ModifierKeys & Keys.Control) != 0);
+            }
+        };
+        _surface.MouseMove += (_, e) =>
+        {
+            if (_collisionDragStart is not null)
+                _collisionDragCurrent = e.Location;
+        };
+        _surface.MouseUp += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left && _collisionDragStart is { } start)
+            {
+                _collisionPickRequest = (start, e.Location, (ModifierKeys & Keys.Control) != 0);
+                _collisionDragStart = null;
+            }
         };
         _surface.KeyDown += (_, e) =>
         {
@@ -579,8 +611,55 @@ internal sealed unsafe partial class MainForm : Form
             {
                 _state.Select(null);
                 _state.Marker = null;
+                _state.SelectCollision([], CollisionSelectMode.Replace);
             }
         };
+    }
+
+    private const int DragThreshold = 4; // pixels: below, a click
+
+    private void DrawCollisionRectangle()
+    {
+        if (_collisionDragStart is not { } start || !IsDrag(start, _collisionDragCurrent))
+            return;
+        var a = new Vector2(Math.Min(start.X, _collisionDragCurrent.X), Math.Min(start.Y, _collisionDragCurrent.Y)) / UiTheme.Scale;
+        var b = new Vector2(Math.Max(start.X, _collisionDragCurrent.X), Math.Max(start.Y, _collisionDragCurrent.Y)) / UiTheme.Scale;
+        var drawList = ImGui.GetForegroundDrawList();
+        drawList.AddRectFilled(a, b, Widgets.Col(new Vector4(1f, 0.62f, 0.1f, 0.12f)));
+        drawList.AddRect(a, b, Widgets.Col(new Vector4(1f, 0.75f, 0.3f, 0.9f)));
+    }
+
+    private static bool IsDrag(Point a, Point b) => Math.Abs(a.X - b.X) > DragThreshold || Math.Abs(a.Y - b.Y) > DragThreshold;
+
+    // Collision tool: click = the polygon under the mouse, drag = the polygons seen in the rectangle; Ctrl adds
+    // (a Ctrl+click on a selected polygon removes it).
+    private void PickCollision(Rectangle scene)
+    {
+        if (_collisionPickRequest is not var (a, b, control))
+            return;
+        _collisionPickRequest = null;
+        var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+        var viewport = new Vector2(scene.Width, scene.Height);
+        var origin = new Vector2(scene.X, scene.Y);
+        HashSet<CollisionPolygon> picked;
+        bool drag = IsDrag(a, b);
+        if (drag)
+        {
+            var min = new Vector2(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)) - origin;
+            var max = new Vector2(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)) - origin;
+            picked = _collisionLayer.Pick(viewProjection, viewport, Vector2.Max(min, Vector2.Zero), Vector2.Min(max, viewport));
+        }
+        else
+        {
+            if (!scene.Contains(b))
+                return;
+            var point = new Vector2(b.X, b.Y) - origin;
+            picked = _collisionLayer.Pick(viewProjection, viewport, point - new Vector2(0.5f), point + new Vector2(0.5f));
+        }
+        var mode = !control ? CollisionSelectMode.Replace : drag ? CollisionSelectMode.Add : CollisionSelectMode.Toggle;
+        _state.SelectCollision(picked, mode);
+        if (drag)
+            _state.Notify(picked.Count == 0 ? "aucune surface de collision dans le rectangle" : $"{_state.SelectedCollision.Count} surface(s) de collision sélectionnée(s)", warning: picked.Count == 0);
     }
 
     private void PickClickedObject(Rectangle scene)

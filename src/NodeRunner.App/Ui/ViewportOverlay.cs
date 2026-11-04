@@ -73,6 +73,10 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         ImGui.SameLine();
         ToolButton("##tool_scale", Icons.Scale, TransformTool.Scale,
             "Mettre à l'échelle (4) : X ou Y = horizontale, Z = verticale, centre = les deux\nCtrl : par pas de 0,1 · Échap : annuler");
+        ImGui.SameLine();
+        ToolButton("##tool_collision", Icons.Mountain, TransformTool.Collision,
+            "Collisions (5) : clic sur une surface de collision, Ctrl+clic pour en ajouter ou en retirer,\n"
+            + "glisser = toutes les surfaces visibles dans le rectangle (Ctrl : ajouter)\nSuppr : supprimer · matériau : panneau Propriétés");
 
         OverlayStyle.Divider();
         bool followGround = state.Settings.FollowGround;

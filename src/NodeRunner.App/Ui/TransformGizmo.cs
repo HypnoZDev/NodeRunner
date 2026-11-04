@@ -75,6 +75,8 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Tool != tool))
             EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node);
 
+        if (tool == TransformTool.Collision)
+            return;
         if (node is not null)
         {
             if (tool != TransformTool.Move || !SetUpFrame(node.Position, null, tool))

@@ -11,8 +11,10 @@ namespace NodeRunner.App.Ui;
 // Properties panel (docked on the right) of the selected object: name and quick actions, then a label / value grid in
 // sections: placement (editable, each change can be undone), files, level of detail (parent and children can be
 // selected in turn), entity sets of an interior (shown or hidden live), render settings.
-internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
+internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, CollisionLayer collisionLayer)
 {
+    private readonly CollisionProperties _collision = new(state, collisionLayer);
+
     public const string Title = $"{Icons.SlidersHorizontal}  Propriétés###Propriétés";
 
     private const int MaxChildrenListed = 40;
@@ -47,6 +49,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel)
     {
         if (!ImGui.Begin(Title, ref visible))
         {
+            ImGui.End();
+            return;
+        }
+        if (state.Tool == TransformTool.Collision)
+        {
+            _collision.Draw();
             ImGui.End();
             return;
         }

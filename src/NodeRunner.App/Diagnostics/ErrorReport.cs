@@ -50,6 +50,9 @@ internal static class ErrorReport
         text.AppendLine($"=== Rapport {Program.Name} {Program.Version} ===");
         text.AppendLine($"Date : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         text.AppendLine($"Windows : {Environment.OSVersion.Version} ({RuntimeInformation.OSArchitecture}), .NET {Environment.Version}");
+        long totalMemory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        text.AppendLine($"Mémoire : {totalMemory / (1024 * 1024 * 1024.0):0.0} Go au total, "
+            + $"{Environment.WorkingSet / (1024 * 1024 * 1024.0):0.0} Go utilisés par {Program.Name}");
         if (state is not null)
         {
             text.AppendLine($"Carte graphique : {state.AdapterName}");

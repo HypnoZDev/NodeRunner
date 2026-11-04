@@ -19,7 +19,8 @@ internal sealed class CollisionQuery
 
     public List<string> Errors { get; } = new();
 
-    public List<PlacedCollision> CollisionIn(WorldLoader loader, Vector3 min, Vector3 max)
+    // edits: hand changes to the collision (removed surfaces are not ground anymore).
+    public List<PlacedCollision> CollisionIn(WorldLoader loader, Vector3 min, Vector3 max, CollisionEdits? edits = null)
     {
         Errors.Clear();
         var result = new List<PlacedCollision>();
@@ -34,7 +35,7 @@ internal sealed class CollisionQuery
         foreach (var file in catalog.FilesIn(min, max))
         {
             if (Read(catalog, file.Path) is { } mesh)
-                result.Add(new PlacedCollision(mesh, Matrix4x4.Identity));
+                result.Add(new PlacedCollision(edits?.Apply(file.Path, mesh) ?? mesh, Matrix4x4.Identity));
         }
 
         var center = new Vector2((min.X + max.X) * 0.5f, (min.Y + max.Y) * 0.5f);
