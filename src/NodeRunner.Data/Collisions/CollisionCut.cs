@@ -11,6 +11,10 @@ public interface ICollisionWriter
     // The game's file path without the given polygons (numbered as in Polygons), as a complete .ybn file ready to be
     // streamed; null if the file does not exist.
     byte[]? RemovePolygons(string path, IReadOnlySet<int> polygons);
+
+    // The game's file with new materials for some polygons, then without the removed ones (both numbered as in
+    // Polygons), as a complete .ybn file; null if the file does not exist.
+    byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials);
 }
 
 // Chooses the collision polygons of deleted buildings.
