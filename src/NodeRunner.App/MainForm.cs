@@ -560,7 +560,8 @@ internal sealed unsafe partial class MainForm : Form
 
         if (_state.Settings.ShowGrid)
         {
-            float fadeDistance = WorldGrid.AddTo(lines, camera.Position);
+            var gridColor = _state.Settings.GridColor is [var r, var g, var b, var a] ? new Vector4(r, g, b, a) : WorldGrid.DefaultColor;
+            float fadeDistance = WorldGrid.AddTo(lines, camera.Position, _state.Settings.GridSpacing, gridColor);
             lines.Flush(viewProjection, camera.Position, fadeDistance);
         }
 

@@ -214,6 +214,44 @@ internal sealed class SettingsWindow(AppState state)
         {
             if (Widgets.BeginProperties("##layers_grid", 0.42f))
             {
+                Widgets.Property("Grille", "Grille au niveau de la mer (touche G). Taille d'une case : Automatique = 10 m près du sol, 100 m en hauteur. Une ligne sur dix est plus marquée.");
+                bool grid = settings.ShowGrid;
+                if (ImGui.Checkbox("##show_grid", ref grid))
+                {
+                    settings.ShowGrid = grid;
+                    state.SaveSettings();
+                }
+
+                Widgets.Property("Taille des cases", "Distance entre deux lignes de la grille.");
+                ImGui.SetNextItemWidth(-1f);
+                if (ImGui.BeginCombo("##grid_spacing", settings.GridSpacing > 0f ? $"{settings.GridSpacing:0} m" : "Automatique"))
+                {
+                    foreach (float spacing in GridSpacings)
+                    {
+                        if (ImGui.Selectable(spacing > 0f ? $"{spacing:0} m" : "Automatique", MathF.Abs(settings.GridSpacing - spacing) < 0.01f))
+                        {
+                            settings.GridSpacing = spacing;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+
+                Widgets.Property("Couleur de la grille", "Couleur et opacité des lignes (clic sur le carré de couleur pour la choisir). « Origine » remet la couleur d'origine.");
+                var gridColor = settings.GridColor is [var r, var g, var b, var a] ? new Vector4(r, g, b, a) : NodeRunner.Render.WorldGrid.DefaultColor;
+                float resetWidth = ImGui.CalcTextSize("Origine").X + ImGui.GetStyle().FramePadding.X * 2f;
+                ImGui.SetNextItemWidth(-resetWidth - ImGui.GetStyle().ItemSpacing.X);
+                if (ImGui.ColorEdit4("##grid_color", ref gridColor, ImGuiColorEditFlags.AlphaBar | ImGuiColorEditFlags.AlphaPreviewHalf | ImGuiColorEditFlags.NoOptions))
+                    settings.GridColor = [gridColor.X, gridColor.Y, gridColor.Z, gridColor.W];
+                SaveWhenReleased();
+                ImGui.SameLine();
+                if (ImGui.Button("Origine##grid_color_reset"))
+                {
+                    var d = NodeRunner.Render.WorldGrid.DefaultColor;
+                    settings.GridColor = [d.X, d.Y, d.Z, d.W];
+                    state.SaveSettings();
+                }
+
                 Widgets.Property("Rayon des collisions", "Distance autour de la caméra où le calque Collisions est chargé. Plus grand = plus de surfaces, plus lent. Aussi dans le panneau Calques.");
                 ImGui.SetNextItemWidth(-1f);
                 float collision = settings.CollisionRadius;
@@ -296,6 +334,8 @@ internal sealed class SettingsWindow(AppState state)
             }
         }
     }
+
+    private static readonly float[] GridSpacings = [0f, 1f, 5f, 10f, 25f, 50f, 100f];
 
     private static readonly float[] BackupSteps = [0f, 1f, 2f, 5f, 10f, 15f];
 

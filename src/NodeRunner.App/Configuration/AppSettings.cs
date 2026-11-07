@@ -80,6 +80,12 @@ public sealed class AppSettings
 
     public bool ShowGrid { get; set; } = true;
 
+    // Metres between two grid lines; 0 = automatic (10 m near the ground, 100 m high up).
+    public float GridSpacing { get; set; }
+
+    // Colour of the main grid lines (red, green, blue, opacity from 0 to 1).
+    public float[] GridColor { get; set; } = [0.55f, 0.58f, 0.62f, 0.6f];
+
     public bool FollowGround { get; set; }
 
     public HashSet<string> HiddenLayers { get; set; } = new();

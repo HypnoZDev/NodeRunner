@@ -6,17 +6,22 @@ namespace NodeRunner.Render;
 // gets larger and coarser as the camera goes up.
 public static class WorldGrid
 {
-    private static readonly Vector4 MinorColor = new(0.35f, 0.38f, 0.42f, 0.35f);
-    private static readonly Vector4 MajorColor = new(0.55f, 0.58f, 0.62f, 0.6f);
+    public static readonly Vector4 DefaultColor = new(0.55f, 0.58f, 0.62f, 0.6f);
+    private const int MaxHalfCount = 250; // Lines on each side of the camera, whatever the spacing.
     private static readonly Vector4 AxisXColor = new(0.9f, 0.25f, 0.25f, 1f);
     private static readonly Vector4 AxisYColor = new(0.25f, 0.85f, 0.3f, 1f);
     private static readonly Vector4 AxisZColor = new(0.3f, 0.5f, 1f, 1f);
 
-    public static float AddTo(ColorRenderer lines, Vector3 cameraPosition)
+    // spacing: metres between two lines, 0 = chosen from the altitude. color: the major lines (the others are fainter).
+    public static float AddTo(ColorRenderer lines, Vector3 cameraPosition, float spacing = 0f, Vector4? color = null)
     {
+        var majorColor = color ?? DefaultColor;
+        var minorColor = new Vector4(majorColor.X * 0.65f, majorColor.Y * 0.65f, majorColor.Z * 0.68f, majorColor.W * 0.58f);
         float altitude = MathF.Abs(cameraPosition.Z);
         float extent = Math.Clamp(altitude * 4f, 500f, 8000f);
-        float spacing = extent <= 1000f ? 10f : 100f;
+        if (spacing <= 0f)
+            spacing = extent <= 1000f ? 10f : 100f;
+        extent = MathF.Min(extent, spacing * MaxHalfCount);
         float majorSpacing = spacing * 10f;
 
         // Snap the grid to multiples of the major spacing so lines don't "swim" when the camera moves.
@@ -31,8 +36,8 @@ public static class WorldGrid
         {
             float x = centerX + i * spacing;
             float y = centerY + i * spacing;
-            lines.AddLine(new Vector3(x, minY, 0f), new Vector3(x, maxY, 0f), IsMajor(x, majorSpacing) ? MajorColor : MinorColor);
-            lines.AddLine(new Vector3(minX, y, 0f), new Vector3(maxX, y, 0f), IsMajor(y, majorSpacing) ? MajorColor : MinorColor);
+            lines.AddLine(new Vector3(x, minY, 0f), new Vector3(x, maxY, 0f), IsMajor(x, majorSpacing) ? majorColor : minorColor);
+            lines.AddLine(new Vector3(minX, y, 0f), new Vector3(maxX, y, 0f), IsMajor(y, majorSpacing) ? majorColor : minorColor);
         }
 
         // World axes, slightly above the grid so they are not hidden by it.
