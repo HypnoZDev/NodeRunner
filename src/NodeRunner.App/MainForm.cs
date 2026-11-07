@@ -262,7 +262,7 @@ internal sealed unsafe partial class MainForm : Form
         UiTheme.LoadFonts(io, DisplayScale());
         UiTheme.Apply();
 
-        _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height, _backdrop);
+        _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height, _backdrop, _state.Settings.GraphicsCard);
         if (_graphics.IsTransparent)
             _windowAlpha = new WindowAlpha(_graphics.Device, _graphics.Context);
         _state.TransparentWindow = _graphics.IsTransparent;

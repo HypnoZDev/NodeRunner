@@ -114,6 +114,29 @@ internal sealed class SettingsWindow(AppState state)
                     SaveWhenReleased();
                 }
 
+                Widgets.Property("Carte graphique", "Carte utilisée pour la vue 3D. Automatique = la plus puissante (la carte dédiée d'un portable à deux cartes). Prend effet au prochain démarrage ; si la carte choisie ne marche pas, NodeRunner prend une autre carte.");
+                ImGui.SetNextItemWidth(-1f);
+                _graphicsCards ??= NodeRunner.Render.GraphicsDevice.AdapterNames();
+                if (ImGui.BeginCombo("##graphics_card", settings.GraphicsCard ?? $"Automatique ({_graphicsCards.FirstOrDefault() ?? "?"})"))
+                {
+                    if (ImGui.Selectable("Automatique (la plus puissante)", settings.GraphicsCard is null))
+                    {
+                        settings.GraphicsCard = null;
+                        state.SaveSettings();
+                    }
+                    foreach (string card in _graphicsCards)
+                    {
+                        if (ImGui.Selectable(card, settings.GraphicsCard == card))
+                        {
+                            settings.GraphicsCard = card;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+                if (!state.AdapterName.StartsWith(settings.GraphicsCard ?? _graphicsCards.FirstOrDefault() ?? state.AdapterName, StringComparison.Ordinal))
+                    ImGui.TextColored(UiTheme.Warning, $"En ce moment : {state.AdapterName}. Prend effet au prochain démarrage.");
+
                 Widgets.Property("Images par seconde max.", "Limite le nombre d'images par seconde : moins de chauffe et de bruit sur les portables, batterie qui dure plus. Avec la synchronisation verticale, la plus basse des deux limites s'applique.");
                 ImGui.SetNextItemWidth(-1f);
                 if (ImGui.BeginCombo("##max_fps", settings.MaxFps > 0 ? $"{settings.MaxFps}" : "Illimité"))
@@ -365,6 +388,8 @@ internal sealed class SettingsWindow(AppState state)
             }
         }
     }
+
+    private IReadOnlyList<string>? _graphicsCards;
 
     private static readonly int[] BackgroundFpsChoices = [5, 10, 15, 30, 60, 0];
 

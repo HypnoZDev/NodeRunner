@@ -24,6 +24,9 @@ public sealed class AppSettings
     // Images per second while another window has the focus; 0 = as when active.
     public int BackgroundFps { get; set; } = 30;
 
+    // Name of the graphics card to use (as Windows names it); null = the most powerful one. Read at start-up.
+    public string? GraphicsCard { get; set; }
+
     // Mouse look speed of the camera (1 = default).
     public float MouseSensitivity { get; set; } = 1f;
 

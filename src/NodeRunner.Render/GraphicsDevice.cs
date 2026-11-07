@@ -40,7 +40,8 @@ public sealed class GraphicsDevice : IDisposable
 
     // transparent: the swap chain goes through DirectComposition with premultiplied alpha, so that Windows shows its
     // backdrop behind the pixels that are not opaque (falls back to an opaque swap chain if that fails).
-    public GraphicsDevice(IntPtr windowHandle, int width, int height, bool transparent = false)
+    // preferredAdapter: name of the graphics card to try first (see AdapterNames); null = the most powerful one.
+    public GraphicsDevice(IntPtr windowHandle, int width, int height, bool transparent = false, string? preferredAdapter = null)
     {
         Width = Math.Max(1, width);
         Height = Math.Max(1, height);
@@ -54,7 +55,7 @@ public sealed class GraphicsDevice : IDisposable
             flags |= DeviceCreationFlags.Debug;
 #endif
 
-        var (device, context, featureLevel, software) = CreateDevice(flags);
+        var (device, context, featureLevel, software) = CreateDevice(flags, preferredAdapter);
         Device = device;
         Context = context;
         FeatureLevel = featureLevel;
@@ -153,22 +154,16 @@ public sealed class GraphicsDevice : IDisposable
 
     // The default adapter is not always usable (laptops with two GPUs, missing driver, remote desktop): every adapter
     // is tried, the high-performance one first, then the software renderer.
-    private (ID3D11Device, ID3D11DeviceContext, FeatureLevel, bool) CreateDevice(DeviceCreationFlags flags)
+    private (ID3D11Device, ID3D11DeviceContext, FeatureLevel, bool) CreateDevice(DeviceCreationFlags flags, string? preferredAdapter)
     {
         FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
-        var adapters = new List<IDXGIAdapter1>();
-        using (var factory6 = _factory.QueryInterfaceOrNull<IDXGIFactory6>())
+        var adapters = EnumerateAdapters(_factory);
+        // The chosen card first; if it is gone or refuses Direct3D 11, the others as usual.
+        if (preferredAdapter is not null && adapters.FindIndex(a => a.Description1.Description == preferredAdapter) is > 0 and var index)
         {
-            for (uint i = 0; ; i++)
-            {
-                IDXGIAdapter1? adapter = null;
-                bool found = factory6 is not null
-                    ? factory6.EnumAdapterByGpuPreference(i, GpuPreference.HighPerformance, out adapter).Success
-                    : _factory.EnumAdapters1(i, out adapter).Success;
-                if (!found || adapter is null)
-                    break;
-                adapters.Add(adapter);
-            }
+            var preferred = adapters[index];
+            adapters.RemoveAt(index);
+            adapters.Insert(0, preferred);
         }
 
         Exception? lastError = null;
@@ -201,6 +196,45 @@ public sealed class GraphicsDevice : IDisposable
         }
         throw new InvalidOperationException(
             "Aucune carte graphique compatible DirectX 11 n'a été trouvée (pilote graphique à installer ou à mettre à jour ?).", lastError);
+    }
+
+    // Graphics cards of this PC (no software renderer), the most powerful first.
+    public static IReadOnlyList<string> AdapterNames()
+    {
+        try
+        {
+            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory2>();
+            var adapters = EnumerateAdapters(factory);
+            var names = adapters.Where(a => (a.Description1.Flags & AdapterFlags.Software) == 0)
+                .Select(a => a.Description1.Description).Distinct().ToList();
+            foreach (var adapter in adapters)
+                adapter.Dispose();
+            return names;
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            return [];
+        }
+    }
+
+    private static List<IDXGIAdapter1> EnumerateAdapters(IDXGIFactory2 factory)
+    {
+        var adapters = new List<IDXGIAdapter1>();
+        using (var factory6 = factory.QueryInterfaceOrNull<IDXGIFactory6>())
+        {
+            for (uint i = 0; ; i++)
+            {
+                IDXGIAdapter1? adapter = null;
+                bool found = factory6 is not null
+                    ? factory6.EnumAdapterByGpuPreference(i, GpuPreference.HighPerformance, out adapter).Success
+                    : factory.EnumAdapters1(i, out adapter).Success;
+                if (!found || adapter is null)
+                    break;
+                adapters.Add(adapter);
+            }
+        }
+
+        return adapters;
     }
 
     public void Resize(int width, int height)
