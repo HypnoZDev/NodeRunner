@@ -44,6 +44,12 @@ public static class OccluderFit
     public const float MinLevelRise = 3f;
     public const int MaxLevels = 3;
 
+    // An interior covering at least this share of the object's height keeps its whole column free; a lower one (a
+    // garage on a floor of a tower) only cuts the boxes at its height.
+    public const float TallInteriorShare = 0.5f;
+    public const float InteriorMargin = 0.5f;
+    public const float MinPieceHeight = 3f;
+
     private const float VerticalNormal = 0.3f;
     private const float FlatNormal = 0.8f;
     private const float PreferredCell = 0.5f;
@@ -307,10 +313,17 @@ public static class OccluderFit
                 for (int i = 0; i < inside.Length; i++)
                     inside[i] &= _owned[i];
             }
+            float height = _frame.Max.Z - _frame.Min.Z;
+            var lowInteriors = new List<(Vector3 Min, Vector3 Max)>();
             foreach (var (min, max) in keepOut)
             {
                 if (max.Z < _frame.Min.Z || min.Z > _frame.Max.Z)
                     continue;
+                if (MathF.Min(max.Z, _frame.Max.Z) - MathF.Max(min.Z, _frame.Min.Z) < TallInteriorShare * height)
+                {
+                    lowInteriors.Add((min, max));
+                    continue;
+                }
                 for (int i = 0; i < inside.Length; i++)
                 {
                     var p = _frame.ToWorld(_origin + new Vector2(i % _width + 0.5f, i / _width + 0.5f) * _cell);
@@ -368,7 +381,38 @@ public static class OccluderFit
                         break;
                 }
             }
-            return boxes;
+            return lowInteriors.Count == 0 ? boxes : CutAround(boxes, lowInteriors);
+        }
+
+        // Boxes cut at the height of the interiors they cross: the parts below and above them stay.
+        private static List<OccluderBox> CutAround(List<OccluderBox> boxes, List<(Vector3 Min, Vector3 Max)> interiors)
+        {
+            var result = new List<OccluderBox>();
+            foreach (var box in boxes)
+            {
+                var corners = box.Corners();
+                var bmin = corners.Aggregate(Vector3.Min);
+                var bmax = corners.Aggregate(Vector3.Max);
+                var pieces = new List<(float Bottom, float Top)> { (bmin.Z, bmax.Z) };
+                foreach (var (min, max) in interiors)
+                {
+                    if (min.X > bmax.X || max.X < bmin.X || min.Y > bmax.Y || max.Y < bmin.Y)
+                        continue;
+                    float cutBottom = min.Z - InteriorMargin, cutTop = max.Z + InteriorMargin;
+                    pieces = pieces.SelectMany(p => cutTop <= p.Bottom || cutBottom >= p.Top
+                            ? [p]
+                            : new[] { (p.Bottom, MathF.Min(p.Top, cutBottom)), (MathF.Max(p.Bottom, cutTop), p.Top) }
+                                .Where(q => q.Item2 - q.Item1 >= MinPieceHeight))
+                        .ToList();
+                }
+                foreach (var (bottom, top) in pieces)
+                {
+                    if (result.Count >= MaxBoxesPerObject)
+                        return result;
+                    result.Add((box with { Center = box.Center with { Z = (bottom + top) / 2 }, Size = box.Size with { Z = top - bottom } }).Quantized());
+                }
+            }
+            return result;
         }
 
         // Where the walls in and around a rectangle stand: the ground, as buildings that cannot be entered have no floor
