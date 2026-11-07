@@ -68,6 +68,11 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         Widgets.ToolbarSeparator();
         if (Widgets.ToolbarButton(Icons.Search, "Rechercher", "Rechercher un objet, un YMAP, un type ou aller à une position FiveM (Ctrl+K)"))
             openSearch();
+
+        Widgets.ToolbarSeparator();
+        Widgets.ToolbarButton(Icons.Users, "Online (bientôt)",
+            "NodeRunner Online : bientôt disponible.\nCréez une session, donnez le code NRS-XXXX à vos collègues (jusqu'à 5 personnes)\net modifiez la carte ensemble, le projet restant sur le PC de l'hôte.",
+            enabled: false);
     }
 
     private void DrawProject()
