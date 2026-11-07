@@ -5,7 +5,7 @@
 **The GTA V map in 3D, to explore it, understand it and edit it. Free, portable, built for FiveM mapping.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.1.0/NodeRunner-1.1.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.2.0/NodeRunner-1.2.0-win-x64.zip">
     <img src="https://img.shields.io/badge/Download-NodeRunner%20Studio%20for%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download NodeRunner Studio for Windows">
   </a>
   <br>
@@ -65,7 +65,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 
 ## Download
 
-**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.1.0/NodeRunner-1.1.0-win-x64.zip)**
+**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.2.0/NodeRunner-1.2.0-win-x64.zip)**
 · other versions are on the [Releases](https://github.com/HypnoZDev/NodeRunner/releases) page.
 
 1. Download the `NodeRunner-x.y.z-win-x64.zip` file.

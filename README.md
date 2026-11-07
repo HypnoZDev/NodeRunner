@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.1.0/NodeRunner-1.1.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.2.0/NodeRunner-1.2.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -64,7 +64,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.1.0/NodeRunner-1.1.0-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.2.0/NodeRunner-1.2.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
