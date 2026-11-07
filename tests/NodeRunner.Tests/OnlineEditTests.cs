@@ -164,8 +164,10 @@ public class OnlineEditTests
         Share(EntitySetMoveEdit.Apply(a.Library, [instance.EntitySets[0].Entities[0]], -1, "Sortir du set"));
         Share(DeleteEdit.Apply(a.Library, DeletionPlan.For(a.Instance(1).InteriorEntities[2]), "Supprimer dans l'intérieur"));
 
+        Share(EntityRoomEdit.Apply(a.Library, [instance.InteriorEntities[0]], [0], "Changer de salle"));
+
         // Rooms and portals.
-        var room = a.Library.GetArchetype(InteriorHash)!.InteriorRooms[1];
+        var room =a.Library.GetArchetype(InteriorHash)!.InteriorRooms[1];
         Share(RoomEdit.Apply(a.Library, instance, 1, room with { Name = "salon", BoundsMax = new(6, 6, 3), Flags = 0x40 }, "Salle"));
         var portal = a.Library.GetArchetype(InteriorHash)!.InteriorPortals[0];
         Share(PortalEdit.Apply(a.Library, instance, 0, portal with { Opacity = 50, Corners = [new(5, 0, 0), new(5, 2, 0), new(5, 2, 2), new(5, 0, 2)] }, "Portail"));

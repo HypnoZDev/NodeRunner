@@ -271,6 +271,26 @@ public class YtypWriterTests
     }
 
     [Fact]
+    public void Writes_an_object_put_in_another_room()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var portalObjects = interior.InteriorEntities.Select(e => e.InteriorPortal).ToList();
+        interior.InteriorEntities[0].SetInteriorPlace(0, interior.InteriorEntities[0].InteriorPortal);
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal([0, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
+        Assert.Equal(portalObjects, back.InteriorEntities.Select(e => e.InteriorPortal));
+        Assert.Equal(interior.InteriorEntitySets.Single().Entities.Select(e => e.InteriorRoom),
+            back.InteriorEntitySets.Single().Entities.Select(e => e.InteriorRoom));
+
+        // Back in no room: as in the file.
+        interior.InteriorEntities[0].SetInteriorPlace(-1, interior.InteriorEntities[0].InteriorPortal);
+        back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
+    }
+
+    [Fact]
     public void Adds_and_removes_rooms_and_portals()
     {
         var source = Sample();

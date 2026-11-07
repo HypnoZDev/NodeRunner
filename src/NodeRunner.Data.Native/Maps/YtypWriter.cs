@@ -50,22 +50,19 @@ public sealed class YtypWriter : IMapTypesWriter
                 CollectOriginals(document, PointerItems(document, (setBlock, setOffset + s * YtypReader.EntitySetSize), YtypReader.EntitySetEntities),
                     interior.InteriorEntitySets[s].Entities, originals);
 
-            // Rooms or portals added or removed: their lists are rebuilt, and the objects of each room or portal listed
-            // again from the objects' own room and portal.
-            Layout? layout = null;
-            if (LayoutChanged(document, item, interior))
-            {
-                int itemCount = Array(document, item, YtypReader.InteriorEntities).Count;
-                layout = new Layout(Owners(document, item, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, itemCount),
-                    Owners(document, item, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, itemCount),
-                    [.. interior.InteriorRooms.Select(r => r.SourceIndex)], [.. interior.InteriorPortals.Select(p => p.SourceIndex)]);
-            }
-            WriteRooms(document, item, interior, layout is not null, borrowed);
-            WritePortals(document, item, interior.InteriorPortals, layout is not null, borrowed);
+            // Rooms or portals added or removed: their lists are rebuilt. Then, or when an object changed room, the
+            // objects of each room or portal are listed again from the objects' own room and portal.
+            int itemCount = Array(document, item, YtypReader.InteriorEntities).Count;
+            var layout = new Layout(Owners(document, item, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, itemCount),
+                Owners(document, item, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, itemCount),
+                [.. interior.InteriorRooms.Select(r => r.SourceIndex)], [.. interior.InteriorPortals.Select(p => p.SourceIndex)],
+                LayoutChanged(document, item, interior));
+            WriteRooms(document, item, interior, layout.Rebuilt, borrowed);
+            WritePortals(document, item, interior.InteriorPortals, layout.Rebuilt, borrowed);
             WriteInteriorEntities(document, item, interior.InteriorEntities, originals, layout);
             for (int s = 0; s < setCount; s++)
                 WriteEntitySet(document, item, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities, originals,
-                    layout is not null ? interior.InteriorRooms.Count : -1);
+                    interior.InteriorRooms.Count);
         }
 
         var (content, pageFlags) = document.Write();
@@ -97,8 +94,15 @@ public sealed class YtypWriter : IMapTypesWriter
                                     ?? throw new InvalidDataException($"description des {what} introuvable (aucun autre .ytyp n'en a)"));
     }
 
-    // The file's room (or portal) of each object of the interior, by index in its list of objects (-1: none).
-    private sealed record Layout(int[] FileRooms, int[] FilePortals, int[] RoomSources, int[] PortalSources);
+    // The file's room (or portal) of each object of the interior, by index in its list of objects (-1: none); Rebuilt:
+    // rooms or portals added or removed.
+    private sealed record Layout(int[] FileRooms, int[] FilePortals, int[] RoomSources, int[] PortalSources, bool Rebuilt)
+    {
+        // The item's file room and portal, as numbered now.
+        public (int Room, int Portal) FilePlace(int item) =>
+            (FileRooms[item] >= 0 ? System.Array.IndexOf(RoomSources, FileRooms[item]) : -1,
+             FilePortals[item] >= 0 ? System.Array.IndexOf(PortalSources, FilePortals[item]) : -1);
+    }
 
     private static bool LayoutChanged(MetaDocument document, (int Block, int Offset) interior, Archetype archetype) =>
         Array(document, interior, YtypReader.InteriorRooms).Count != archetype.InteriorRooms.Count
@@ -325,25 +329,27 @@ public sealed class YtypWriter : IMapTypesWriter
     // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
     // The rooms and portals list their objects by index, renumbered.
     private static void WriteInteriorEntities(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<MapEntity> entities,
-        Dictionary<MapEntity, byte[]> originals, Layout? layout)
+        Dictionary<MapEntity, byte[]> originals, Layout layout)
     {
         var items = PointerItems(document, interior, YtypReader.InteriorEntities);
         int fileCount = WriteEntities(document, items, entities);
 
         var newIndex = new int[items.Count];
         var kept = new List<(int Block, int Offset)>();
-        // Room and portal of each kept item, with the layout: the object's own, or the file's one for other items.
+        // Room and portal of each kept item: the object's own, or the file's one for other items.
         var places = new List<(int Room, int Portal)>();
+        bool relist = layout.Rebuilt;
         int entity = 0;
         for (int i = 0; i < items.Count; i++)
         {
             bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
             bool keep = !isEntity || !entities[entity].IsDeleted;
-            if (keep && layout is not null)
+            if (keep)
             {
-                places.Add(isEntity ? (entities[entity].InteriorRoom, entities[entity].InteriorPortal)
-                    : (System.Array.IndexOf(layout.RoomSources, layout.FileRooms[i]) is var room && layout.FileRooms[i] >= 0 ? room : -1,
-                       System.Array.IndexOf(layout.PortalSources, layout.FilePortals[i]) is var portal && layout.FilePortals[i] >= 0 ? portal : -1));
+                var file = i < layout.FileRooms.Length ? layout.FilePlace(i) : (-1, -1);
+                var own = isEntity ? (entities[entity].InteriorRoom, entities[entity].InteriorPortal) : file;
+                relist |= own != file;
+                places.Add(own);
             }
             if (isEntity)
                 entity++;
@@ -352,7 +358,7 @@ public sealed class YtypWriter : IMapTypesWriter
                 kept.Add(items[i]);
         }
         var added = entities.Skip(fileCount).Where(e => !e.IsDeleted).ToList();
-        if (kept.Count == items.Count && added.Count == 0 && layout is null)
+        if (kept.Count == items.Count && added.Count == 0 && !relist)
             return;
 
         var additions = new List<(int Index, int Room)>();
@@ -364,7 +370,7 @@ public sealed class YtypWriter : IMapTypesWriter
         }
 
         WritePointers(document, interior, YtypReader.InteriorEntities, kept);
-        if (layout is null)
+        if (!relist)
         {
             Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex, additions);
             Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex, []);
@@ -409,7 +415,7 @@ public sealed class YtypWriter : IMapTypesWriter
     // The objects of an entity set, those deleted left out along with their room in the set's list of rooms (same
     // index as the pointer).
     // Objects added to the set are appended, with their room.
-    // roomCount: with rooms added or removed, the objects' own rooms replace the file's ones (odd values kept); -1 otherwise.
+    // roomCount: the interior's rooms; the objects' own rooms in range replace the file's ones (odd values kept).
     private static void WriteEntitySet(MetaDocument document, (int Block, int Offset) interior, (int Block, int Offset) set,
         IReadOnlyList<MapEntity> entities, Dictionary<MapEntity, byte[]> originals, int roomCount)
     {
@@ -419,6 +425,7 @@ public sealed class YtypWriter : IMapTypesWriter
         var (locationBlock, locationOffset, locationCount) = Array(document, set, YtypReader.EntitySetLocations);
         var kept = new List<(int Block, int Offset)>();
         var rooms = new List<uint>();
+        bool roomChanged = false;
         int entity = 0;
         for (int i = 0; i < items.Count; i++)
         {
@@ -431,11 +438,15 @@ public sealed class YtypWriter : IMapTypesWriter
                 continue;
             kept.Add(items[i]);
             if (i < locationCount)
-                rooms.Add(own >= 0 && own < roomCount ? (uint)own
-                    : BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4)));
+            {
+                uint file = BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4));
+                uint room = own >= 0 && own < roomCount ? (uint)own : file;
+                roomChanged |= room != file;
+                rooms.Add(room);
+            }
         }
         var added = entities.Skip(fileCount).Where(e => !e.IsDeleted).ToList();
-        if (kept.Count == items.Count && added.Count == 0 && roomCount < 0)
+        if (kept.Count == items.Count && added.Count == 0 && !roomChanged)
             return;
 
         if (added.Count > 0)

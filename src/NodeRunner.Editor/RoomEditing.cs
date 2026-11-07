@@ -65,6 +65,54 @@ public sealed class PortalEdit(MapLibrary library, MapEntity interior, int index
     public void Redo() => library.SetPortal(Interior.ArchetypeHash, Index, after);
 }
 
+// Objects of an interior put in another room, in every instance of the interior.
+public sealed class EntityRoomEdit : IEdit
+{
+    private readonly MapLibrary _library;
+    private readonly MapEntity[] _placed;
+    private readonly int[] _before;
+    private readonly int[] _after;
+
+    private EntityRoomEdit(MapLibrary library, MapEntity[] placed, int[] before, int[] after, string description)
+    {
+        _library = library;
+        _placed = placed;
+        _before = before;
+        _after = after;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => _placed[^1];
+    public IEnumerable<MapEntity> Entities => _placed;
+    public IReadOnlyList<MapEntity> Selection => _placed;
+
+    // The new room of each object.
+    public IReadOnlyList<int> Rooms => _after;
+
+    public static EntityRoomEdit Apply(MapLibrary library, IReadOnlyList<MapEntity> placed, IReadOnlyList<int> rooms, string description)
+    {
+        if (placed.Count == 0 || rooms.Count != placed.Count)
+            throw new ArgumentException("One room per object expected.", nameof(rooms));
+        int[] before = [.. placed.Select(p => p.InteriorRoom)];
+        var edit = new EntityRoomEdit(library, [.. placed], before, [.. rooms], description);
+        edit.Redo();
+        return edit;
+    }
+
+    public void Undo()
+    {
+        for (int i = _placed.Length - 1; i >= 0; i--)
+            _library.SetEntityRoom(_placed[i], _before[i]);
+    }
+
+    public void Redo()
+    {
+        for (int i = 0; i < _placed.Length; i++)
+            _library.SetEntityRoom(_placed[i], _after[i]);
+    }
+}
+
 // A room or portal added to an interior or removed from it (objects and other portals renumbered), in every instance.
 public sealed class InteriorLayoutEdit(MapLibrary library, MapEntity interior, InteriorLayout before, InteriorLayout after, string description,
     bool isPortal, int index, bool added) : IEdit, IInteriorEdit

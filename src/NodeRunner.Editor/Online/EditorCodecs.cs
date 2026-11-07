@@ -100,6 +100,23 @@ internal sealed class EntitySetMoveCodec : EditCodec<EntitySetMoveEdit>
     }
 }
 
+internal sealed class EntityRoomCodec : EditCodec<EntityRoomEdit>
+{
+    public override string Tag => "entity-room";
+
+    protected override void Write(EntityRoomEdit edit, EditWriter w)
+    {
+        w.WriteEntities(edit.Selection);
+        w.WriteList(edit.Rooms, w.Write);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var placed = r.ReadEntities();
+        return EntityRoomEdit.Apply(r.Context.Library, placed, r.ReadList(r.ReadInt), description);
+    }
+}
+
 internal sealed class EntitySetCodec : EditCodec<EntitySetEdit>
 {
     public override string Tag => "entity-set";

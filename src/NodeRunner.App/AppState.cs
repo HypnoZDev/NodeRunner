@@ -248,6 +248,34 @@ internal sealed class AppState
             : $"{what} : rangé(s) dans l'entity set {setName}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp).");
     }
 
+    // Puts the selected objects of the main selection's interior in a room (0 = limbo), or with AutomaticRoom each in
+    // the smallest room around it, in every copy of the interior.
+    public void SetSelectionRoom(int room)
+    {
+        if (World.Maps is not { } library || Selection?.Interior is not { } instance
+            || library.GetArchetype(instance.ArchetypeHash) is not { Kind: Data.Maps.ArchetypeKind.Interior } archetype
+            || room < AutomaticRoom || room >= archetype.InteriorRooms.Count)
+            return;
+        var objects = SelectedEntities.Where(e => e.Interior == instance && e.Definition is not null).ToList();
+        var rooms = objects.Select(e => room != AutomaticRoom ? room
+            : Math.Max(0, Adding.RoomAt(instance, archetype, e.Position + new System.Numerics.Vector3(0, 0, RoomProbeHeight)))).ToList();
+        var changing = objects.Select((e, i) => (Entity: e, Room: rooms[i])).Where(c => c.Entity.InteriorRoom != c.Room).ToList();
+        if (changing.Count == 0)
+        {
+            Notify(objects.Count == 1 ? "L'objet est déjà dans cette salle." : "Les objets sont déjà dans ces salles.");
+            return;
+        }
+        string what = changing.Count == 1 ? World.Names?.Describe(changing[0].Entity.ArchetypeHash) ?? "l'objet" : $"{changing.Count} objets";
+        string RoomLabel(int r) => r == 0 ? "limbo" : archetype.InteriorRooms[r].Name is { Length: > 0 } name ? name : $"salle {r}";
+        string target = changing.Select(c => c.Room).Distinct().Count() == 1 ? RoomLabel(changing[0].Room) : "leurs salles";
+        var edit = EntityRoomEdit.Apply(library, [.. changing.Select(c => c.Entity)], [.. changing.Select(c => c.Room)], $"Mettre {what} dans {target}");
+        History.Add(edit);
+        SelectAll(edit.Selection);
+        Notify($"{what} : dans {target}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S).");
+    }
+
+    public const int AutomaticRoom = -2;
+
     // Lift of the point tested against the rooms: an object standing on a floor is just above the room's bottom.
     private const float RoomProbeHeight = 0.3f;
 

@@ -302,7 +302,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.Property("Dans l'intérieur");
             if (Widgets.Link($"{names.Describe(interior.ArchetypeHash)}##interior", "Sélectionner l'intérieur"))
                 state.Select(interior);
-            if (entity.InteriorRoom >= 0)
+            if (entity.Definition is not null && library.GetArchetype(interior.ArchetypeHash) is { Kind: ArchetypeKind.Interior } mlo)
+                RoomChoice(entity, interior, mlo);
+            else if (entity.InteriorRoom >= 0)
                 Widgets.PropertyText("Salle", entity.InteriorRoom == 0 ? "0 (limbo, vue de l'extérieur)" : $"{entity.InteriorRoom}");
             if (entity.InteriorPortal >= 0)
                 Widgets.PropertyText("Attaché au portail", $"{entity.InteriorPortal}");
@@ -313,6 +315,37 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (archetype is null)
             ImGui.TextColored(UiTheme.Warning, "Type introuvable dans les fichiers .ytyp.");
+    }
+
+    // The room of an object of an interior, to change (the game draws an object only when its room is visible); warns
+    // when the object stands in another room's box.
+    private void RoomChoice(MapEntity entity, MapEntity interior, Archetype mlo)
+    {
+        Widgets.Property("Salle", "Le jeu n'affiche un objet que quand sa salle est visible : un objet rangé dans la mauvaise salle "
+            + "disparaît selon l'endroit où se trouve le joueur. S'applique aux objets sélectionnés du même intérieur, dans toutes "
+            + "les copies de l'intérieur ; enregistré dans son .ytyp.");
+        if (ImGui.BeginCombo("##entity_room", entity.InteriorRoom < 0 ? "Aucune" : RoomLabel(mlo, entity.InteriorRoom), ImGuiComboFlags.HeightLarge))
+        {
+            if (ImGui.Selectable("Automatique (salle autour de l'objet)"))
+                state.SetSelectionRoom(AppState.AutomaticRoom);
+            ImGui.Separator();
+            for (int r = 0; r < mlo.InteriorRooms.Count; r++)
+            {
+                if (ImGui.Selectable($"{RoomLabel(mlo, r)}##room{r}", r == entity.InteriorRoom) && r != entity.InteriorRoom)
+                    state.SetSelectionRoom(r);
+            }
+            ImGui.EndCombo();
+        }
+
+        int around = Adding.RoomAt(interior, mlo, entity.Position + new Vector3(0, 0, 0.3f));
+        if (around > 0 && around != entity.InteriorRoom)
+        {
+            Widgets.Property("");
+            ImGui.TextColored(UiTheme.Warning, $"{Icons.TriangleAlert} Posé dans {RoomLabel(mlo, around)}");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("L'objet est dans la boîte d'une autre salle : en jeu, il peut disparaître. Choisir « Automatique » "
+                    + "dans la liste pour le ranger dans la salle où il se trouve.");
+        }
     }
 
     // The entity set holding an object of an interior, to change: the object goes into another set or out of its set.

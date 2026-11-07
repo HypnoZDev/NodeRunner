@@ -224,6 +224,16 @@ public sealed class MapLibrary
         RoomVersion++;
     }
 
+    // Puts an object of an interior in another room (0 = limbo, -1 = none), in every instance; its portal is kept.
+    public void SetEntityRoom(MapEntity placed, int room)
+    {
+        var definition = placed.Definition ?? throw new ArgumentException("Not an object of an interior.", nameof(placed));
+        if (placed.Interior is not { } instance || room < -1 || room >= InteriorArchetype(instance.ArchetypeHash).InteriorRooms.Count)
+            throw new ArgumentOutOfRangeException(nameof(room));
+        definition.SetInteriorPlace(room, definition.InteriorPortal);
+        RoomVersion++;
+    }
+
     // Rooms, portals and the room and portal of each object of an interior (to undo adding or removing one).
     public InteriorLayout GetLayout(uint interiorHash)
     {

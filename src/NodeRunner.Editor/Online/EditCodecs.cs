@@ -66,6 +66,7 @@ public sealed class EditCodecs
         .Add(new AddCodec())
         .Add(new InteriorAddCodec())
         .Add(new EntitySetMoveCodec())
+        .Add(new EntityRoomCodec())
         .Add(new EntitySetCodec())
         .Add(new DeleteCodec())
         .Add(new MergeCodec())
