@@ -232,7 +232,10 @@ public sealed class MapEntity
 // default, as in the game until a script activates it.
 public sealed class PlacedEntitySet
 {
-    public required uint NameHash { get; init; }
+    public required uint NameHash { get => _nameHash; init => _nameHash = value; }
+    private uint _nameHash;
+
+    internal void Rename(uint nameHash) => _nameHash = nameHash;
 
     public required MapEntity Interior { get; init; }
 

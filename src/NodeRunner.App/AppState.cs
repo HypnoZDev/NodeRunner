@@ -809,6 +809,7 @@ internal sealed class AppState
     // Archetype files (.ytyp) to write when saving: those of the interiors whose objects were moved in this session.
     public IReadOnlyList<string> InteriorFilesToSave => World.Maps is { } library
         ? History.All.SelectMany(e => e.Entities).Select(e => e.Interior).OfType<MapEntity>()
+            .Concat(History.All.OfType<EntitySetEdit>().Select(e => e.Interior))
             .Select(i => library.GetArchetypeFile(i.ArchetypeHash)).OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
         : [];

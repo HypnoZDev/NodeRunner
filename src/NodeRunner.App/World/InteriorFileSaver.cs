@@ -21,9 +21,9 @@ internal static class InteriorFileSaver
             try
             {
                 var interiors = library.InteriorsInFile(path);
-                if (interiors.Count == 0 || files.ReadFile(path) is not { } source || files.GetResourceHeader(path) is not { } header)
+                if (interiors.Count == 0 || Source(files, library, path) is not { } source || files.GetResourceHeader(path) is not { } header)
                     throw new InvalidDataException("fichier du jeu introuvable");
-                var written = writer.Write(source, interiors);
+                var written = writer.Write(source, interiors, NeedsEntitySetInfo(source, interiors) ? EntitySetInfo(files, library) : null);
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
                 Verify(file, interiors);
 
@@ -38,6 +38,38 @@ internal static class InteriorFileSaver
                 report.Errors.Add($"{name} : {ex.Message}");
             }
         }
+    }
+
+    // The file as it was when the map was loaded: a project's file is read from disk, and saving overwrites it, while
+    // the interiors' objects still match its first version.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MapLibrary, Dictionary<string, byte[]>> Sources = new();
+
+    private static byte[]? Source(Data.FileSystem.GameContent files, MapLibrary library, string path)
+    {
+        var cache = Sources.GetOrCreateValue(library);
+        lock (cache)
+        {
+            if (!cache.TryGetValue(path, out var source) && files.ReadFile(path) is { } read)
+                cache[path] = source = read;
+            return source;
+        }
+    }
+
+    private static bool NeedsEntitySetInfo(byte[] source, List<Archetype> interiors) =>
+        interiors.Any(i => i.InteriorEntitySets.Count > 0) && YtypWriter.EntitySetInfo(source) is null;
+
+    // The description of entity sets, from the first game .ytyp that has sets.
+    private static Data.Native.Resources.MetaDocument.StructureInfo? EntitySetInfo(Data.FileSystem.GameContent files, MapLibrary library)
+    {
+        foreach (uint hash in library.GetInteriorArchetypeHashes())
+        {
+            if (library.GetArchetype(hash) is not { InteriorEntitySets.Count: > 0 } || library.GetArchetypeFile(hash) is not { } file
+                || Source(files, library, file) is not { } source)
+                continue;
+            if (YtypWriter.EntitySetInfo(source) is { } info)
+                return info;
+        }
+        return null;
     }
 
     private static void Verify(byte[] file, List<Archetype> interiors)

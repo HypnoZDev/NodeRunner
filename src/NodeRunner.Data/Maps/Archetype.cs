@@ -50,13 +50,17 @@ public sealed class Archetype
 
     // For an interior: optional groups of objects (furniture styles, upgrades of Online properties...), hidden until
     // a script activates them.
-    public IReadOnlyList<InteriorEntitySet> InteriorEntitySets { get; init; } = [];
+    public IReadOnlyList<InteriorEntitySet> InteriorEntitySets { get => _entitySets; init => _entitySets = value; }
+    private IReadOnlyList<InteriorEntitySet> _entitySets = [];
+
+    internal void AddEntitySet(InteriorEntitySet set) => _entitySets = [.. _entitySets, set];
+    internal void RemoveEntitySet(InteriorEntitySet set) => _entitySets = [.. _entitySets.Where(s => s != set)];
 }
 
 // An optional group of objects of an interior, placed relative to it (each with its room).
 public sealed class InteriorEntitySet(uint nameHash, IReadOnlyList<MapEntity> entities)
 {
-    public uint NameHash { get; } = nameHash;
+    public uint NameHash { get; internal set; } = nameHash;
 
     public IReadOnlyList<MapEntity> Entities { get; private set; } = entities;
 

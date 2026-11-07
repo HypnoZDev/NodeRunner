@@ -187,6 +187,64 @@ public sealed class EntitySetMoveEdit : IEdit
     }
 }
 
+// An entity set created in an interior, or renamed; changes the interior's archetype file (.ytyp), no map file.
+public sealed class EntitySetEdit : IEdit
+{
+    private readonly MapLibrary _library;
+    private readonly InteriorEntitySet? _created;
+    private readonly int _index;
+    private readonly uint _oldName;
+    private readonly uint _newName;
+
+    private EntitySetEdit(MapLibrary library, MapEntity interior, InteriorEntitySet? created, int index, uint oldName, uint newName, string description)
+    {
+        _library = library;
+        Interior = interior;
+        _created = created;
+        _index = index;
+        _oldName = oldName;
+        _newName = newName;
+        Description = description;
+    }
+
+    // The interior instance the set was made or renamed from.
+    public MapEntity Interior { get; }
+
+    public string Description { get; }
+    public MapEntity? Subject => Interior;
+    public IEnumerable<MapEntity> Entities => [];
+
+    public static EntitySetEdit Create(MapLibrary library, MapEntity interior, uint nameHash, string description)
+    {
+        var set = new InteriorEntitySet(nameHash, []);
+        library.AddEntitySet(interior.ArchetypeHash, set);
+        return new EntitySetEdit(library, interior, set, -1, 0, nameHash, description);
+    }
+
+    public static EntitySetEdit Rename(MapLibrary library, MapEntity interior, int index, uint nameHash, string description)
+    {
+        uint old = interior.EntitySets[index].NameHash;
+        library.RenameEntitySet(interior.ArchetypeHash, index, nameHash);
+        return new EntitySetEdit(library, interior, null, index, old, nameHash, description);
+    }
+
+    public void Undo()
+    {
+        if (_created is not null)
+            _library.RemoveEntitySet(Interior.ArchetypeHash, _created);
+        else
+            _library.RenameEntitySet(Interior.ArchetypeHash, _index, _oldName);
+    }
+
+    public void Redo()
+    {
+        if (_created is not null)
+            _library.AddEntitySet(Interior.ArchetypeHash, _created);
+        else
+            _library.RenameEntitySet(Interior.ArchetypeHash, _index, _newName);
+    }
+}
+
 // An object copied (Ctrl+C): its type, its place in the copied group, how it is turned and scaled.
 public readonly record struct CopiedObject(uint ArchetypeHash, Vector3 Offset, Quaternion Orientation, Vector3 Scale);
 

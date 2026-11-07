@@ -10,7 +10,11 @@ public sealed class YtypWriter : IMapTypesWriter
 {
     private const int PointerSize = 8;
 
-    public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors)
+    public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors) => Write(source, interiors, null);
+
+    // entitySetInfo: the description of an entity set (EntitySetInfo of another .ytyp), needed when a set is created
+    // in a file that has none.
+    public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors, MetaDocument.StructureInfo? entitySetInfo)
     {
         var document = MetaDocument.Read(source);
         int root = document.RootBlock;
@@ -25,8 +29,16 @@ public sealed class YtypWriter : IMapTypesWriter
             if (item == default)
                 throw new InvalidDataException($"L'intérieur 0x{interior.NameHash:X8} n'est pas dans ce fichier.");
             var (setBlock, setOffset, setCount) = Array(document, item, YtypReader.InteriorEntitySets);
-            if (setCount != interior.InteriorEntitySets.Count)
+            if (setCount > interior.InteriorEntitySets.Count)
                 throw new InvalidDataException("Les entity sets de l'intérieur ne sont pas ceux du fichier.");
+            if (setCount < interior.InteriorEntitySets.Count)
+            {
+                (setBlock, setOffset) = AppendEntitySets(document, item, setBlock, setOffset, setCount, interior.InteriorEntitySets.Count, entitySetInfo);
+                setCount = interior.InteriorEntitySets.Count;
+            }
+            for (int s = 0; s < setCount; s++)
+                BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[setBlock].Data.AsSpan(setOffset + s * YtypReader.EntitySetSize + YtypReader.EntitySetName),
+                    interior.InteriorEntitySets[s].NameHash);
 
             // File data of every object, before anything is changed: an object moved into or out of a set keeps it.
             var originals = new Dictionary<MapEntity, byte[]>();
@@ -46,6 +58,25 @@ public sealed class YtypWriter : IMapTypesWriter
 
     // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
     // The rooms and portals list their objects by index, renumbered.
+    // The description of entity sets in a .ytyp, null if it has none.
+    public static MetaDocument.StructureInfo? EntitySetInfo(ReadOnlySpan<byte> source) =>
+        MetaDocument.Read(source).FindStructure(YtypReader.EntitySetStructure);
+
+    // The interior's sets in a new block: the file's ones, then empty new ones (named by the caller).
+    private static (int Block, int Offset) AppendEntitySets(MetaDocument document, (int Block, int Offset) interior, int block, int offset,
+        int fileCount, int count, MetaDocument.StructureInfo? info)
+    {
+        if (document.FindStructure(YtypReader.EntitySetStructure) is null)
+            document.Structures.Add(info ?? throw new InvalidDataException("description des entity sets introuvable (aucun autre .ytyp n'en a)"));
+        var data = new byte[count * YtypReader.EntitySetSize];
+        if (fileCount > 0)
+            document.Blocks[block].Data.AsSpan(offset, fileCount * YtypReader.EntitySetSize).CopyTo(data);
+        int newBlock = document.Blocks.Count;
+        document.Blocks.Add(new MetaDocument.Block(YtypReader.EntitySetStructure, data));
+        SetArray(document, interior, YtypReader.InteriorEntitySets, newBlock, 0, count);
+        return (newBlock, 0);
+    }
+
     private static void CollectOriginals(MetaDocument document, List<(int Block, int Offset)> items, IReadOnlyList<MapEntity> entities,
         Dictionary<MapEntity, byte[]> into)
     {

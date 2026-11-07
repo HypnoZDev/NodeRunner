@@ -75,7 +75,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 DrawFiles(entity, library, names);
             if (Widgets.Section("Niveau de détail", "lod"))
                 DrawLevelOfDetail(entity, names);
-            if ((entity.IsInterior ? entity : entity.Interior) is { EntitySets.Count: > 0 } interior
+            if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
                 && Widgets.Section($"Entity sets ({interior.EntitySets.Count})", "entity_sets"))
                 DrawEntitySets(interior, library, names);
             if (Widgets.Section("Réglages", "flags", defaultOpen: false))
@@ -376,10 +376,101 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             bool active = set.IsActive;
             if (ImGui.Checkbox($"{names.Describe(set.NameHash)}##set{i}", ref active))
                 library.SetEntitySetActive(set, active);
+            if (ImGui.BeginPopupContextItem($"set_menu{i}"))
+            {
+                if (ImGui.MenuItem("Renommer..."))
+                {
+                    _renamedSet = i;
+                    _renamedInterior = interior;
+                    _focusRename = true;
+                    _setNewName = names.TryGet(set.NameHash) ?? "";
+                }
+                ImGui.EndPopup();
+            }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                ImGui.SetTooltip("Clic droit : renommer");
             ImGui.SameLine();
             int count = set.Entities.Count(e => !e.IsDeleted);
             ImGui.TextColored(UiTheme.TextMuted, count == 1 ? "1 objet" : $"{count} objets");
+
+            if (_renamedSet == i && _renamedInterior == interior)
+            {
+                ImGui.SetNextItemWidth(-1);
+                if (_focusRename)
+                {
+                    ImGui.SetKeyboardFocusHere();
+                    _focusRename = false;
+                }
+                if (ImGui.InputTextWithHint($"##rename{i}", "Nouveau nom (Entrée ; Échap pour annuler)", ref _setNewName, 96, ImGuiInputTextFlags.EnterReturnsTrue))
+                {
+                    RenameEntitySet(interior, i, names);
+                    _renamedSet = -1;
+                }
+                else if (ImGui.IsKeyPressed(ImGuiKey.Escape))
+                    _renamedSet = -1;
+            }
         }
+
+        // A new set, empty: objects are put in it with the "Entity set" list of their properties.
+        ImGui.Dummy(new Vector2(0, 2));
+        float buttonWidth = ImGui.CalcTextSize("Créer").X + ImGui.GetStyle().FramePadding.X * 2 + 24f;
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonWidth - ImGui.GetStyle().ItemSpacing.X);
+        bool create = ImGui.InputTextWithHint("##new_set", "Nom du nouvel entity set", ref _newSetName, 96, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        create |= Widgets.Button($"{Icons.Boxes}  Créer", "Ajouter un entity set vide à cet intérieur (dans toutes ses copies, enregistré dans son .ytyp).\n"
+            + "Ensuite, sélectionner des objets de l'intérieur et choisir ce set dans leur ligne « Entity set ».", buttonWidth,
+            enabled: CleanSetName(_newSetName).Length > 0);
+        if (create)
+            CreateEntitySet(interior, names);
+    }
+
+    private int _renamedSet = -1;
+    private MapEntity? _renamedInterior;
+    private bool _focusRename;
+    private string _setNewName = "";
+    private string _newSetName = "";
+
+    private static string CleanSetName(string name) => name.Trim().Trim('"', '\'', '`', '«', '»', ' ', ' ');
+
+    private void CreateEntitySet(MapEntity interior, HashNames names)
+    {
+        string name = CleanSetName(_newSetName);
+        if (name.Length == 0 || state.World.Maps is not { } library)
+            return;
+        uint hash = Joaat.Hash(name);
+        if (interior.EntitySets.Any(s => s.NameHash == hash))
+        {
+            state.Notify($"Cet intérieur a déjà un entity set « {name} ».", warning: true);
+            return;
+        }
+        names.Add(name);
+        state.History.Add(EntitySetEdit.Create(library, interior, hash, $"Créer l'entity set {name}"));
+        library.SetEntitySetActive(interior.EntitySets[^1], true);
+        _newSetName = "";
+        state.Notify($"Entity set « {name.ToLowerInvariant()} » créé, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S).");
+    }
+
+    private void RenameEntitySet(MapEntity interior, int index, HashNames names)
+    {
+        string name = CleanSetName(_setNewName);
+        if (name.Length == 0 || state.World.Maps is not { } library || index >= interior.EntitySets.Count)
+            return;
+        uint hash = Joaat.Hash(name);
+        if (hash == interior.EntitySets[index].NameHash)
+        {
+            names.Add(name);
+            return;
+        }
+        if (interior.EntitySets.Any(s => s.NameHash == hash))
+        {
+            state.Notify($"Cet intérieur a déjà un entity set « {name} ».", warning: true);
+            return;
+        }
+        string old = names.Describe(interior.EntitySets[index].NameHash);
+        names.Add(name);
+        state.History.Add(EntitySetEdit.Rename(library, interior, index, hash, $"Renommer l'entity set {old}"));
+        state.Notify($"Entity set renommé en « {name.ToLowerInvariant()} » (enregistré dans son .ytyp au Ctrl+S). "
+            + "Les scripts qui l'activent doivent utiliser ce nouveau nom.");
     }
 
     private static void SetAll(MapLibrary library, IEnumerable<PlacedEntitySet> sets, bool active)

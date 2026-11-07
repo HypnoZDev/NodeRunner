@@ -160,6 +160,49 @@ public sealed class MapLibrary
         return result ?? throw new ArgumentException("Interior instance not loaded.", nameof(placed));
     }
 
+    private IEnumerable<MapEntity> InteriorInstances(uint interiorHash) =>
+        _maps.SelectMany(m => m.Entities).Where(e => e.IsInterior && e.ArchetypeHash == interiorHash);
+
+    // Adds an entity set (empty, or brought back by an undo) at the end of an interior's sets, in every instance.
+    public void AddEntitySet(uint interiorHash, InteriorEntitySet set)
+    {
+        if (GetArchetype(interiorHash) is not { Kind: ArchetypeKind.Interior } archetype)
+            throw new ArgumentException("Not an interior.", nameof(interiorHash));
+        archetype.AddEntitySet(set);
+        foreach (var instance in InteriorInstances(interiorHash))
+            instance.EntitySets = [.. instance.EntitySets, PlaceEntitySet(set, instance)];
+        StructureVersion++;
+    }
+
+    public void RemoveEntitySet(uint interiorHash, InteriorEntitySet set)
+    {
+        if (GetArchetype(interiorHash) is not { } archetype)
+            return;
+        int index = archetype.InteriorEntitySets.ToList().IndexOf(set);
+        if (index < 0)
+            return;
+        archetype.RemoveEntitySet(set);
+        foreach (var instance in InteriorInstances(interiorHash))
+        {
+            if (index < instance.EntitySets.Count)
+                instance.EntitySets = [.. instance.EntitySets.Where((_, i) => i != index)];
+        }
+        StructureVersion++;
+    }
+
+    // Renames an entity set (the files keep the hash of its name) in every instance.
+    public void RenameEntitySet(uint interiorHash, int index, uint nameHash)
+    {
+        if (GetArchetype(interiorHash) is not { } archetype || index < 0 || index >= archetype.InteriorEntitySets.Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        archetype.InteriorEntitySets[index].NameHash = nameHash;
+        foreach (var instance in InteriorInstances(interiorHash))
+        {
+            if (index < instance.EntitySets.Count)
+                instance.EntitySets[index].Rename(nameHash);
+        }
+    }
+
     public void SetEntitySetActive(PlacedEntitySet set, bool active)
     {
         if (set.IsActive == active)

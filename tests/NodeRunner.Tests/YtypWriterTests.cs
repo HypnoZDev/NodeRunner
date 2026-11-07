@@ -195,4 +195,23 @@ public class YtypWriterTests
         Assert.Equal([0, 0], read.Entities.Select(e => e.InteriorRoom));
         Assert.Equal(2f, read.Entities[1].Position.X);
     }
+
+    [Fact]
+    public void Renames_and_creates_entity_sets()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        interior.InteriorEntitySets[0].NameHash = 0xBEEF;
+        var created = new InteriorEntitySet(0xCAFE, []);
+        interior.AddEntitySet(created);
+        var moved = interior.InteriorEntities[0];
+        new MapLibrary().SetDeleted([moved], true, countAsDeleted: false);
+        created.AddEntity(MovedCopy(moved));
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal([0xBEEFu, 0xCAFEu], back.InteriorEntitySets.Select(s => s.NameHash));
+        Assert.Equal([103u, 104u], back.InteriorEntitySets[0].Entities.Select(e => e.ArchetypeHash));
+        Assert.Equal([100u], back.InteriorEntitySets[1].Entities.Select(e => e.ArchetypeHash));
+        Assert.Equal([101u, 102u], back.InteriorEntities.Select(e => e.ArchetypeHash));
+    }
 }
