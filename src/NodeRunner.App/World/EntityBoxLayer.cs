@@ -35,11 +35,11 @@ internal sealed class EntityBoxLayer : IDisposable
 
     public static string Label(EntityBoxCategory category) => category switch
     {
-        EntityBoxCategory.Hd => "Détail (HD)",
-        EntityBoxCategory.OrphanHd => "Détail sans LOD (props...)",
-        EntityBoxCategory.Lod => "LOD (vue moyenne)",
-        EntityBoxCategory.Slod => "SLOD (vue lointaine)",
-        EntityBoxCategory.Interior => "Intérieurs (MLO)",
+        EntityBoxCategory.Hd => L("Détail (HD)"),
+        EntityBoxCategory.OrphanHd => L("Détail sans LOD (props...)"),
+        EntityBoxCategory.Lod => L("LOD (vue moyenne)"),
+        EntityBoxCategory.Slod => L("SLOD (vue lointaine)"),
+        EntityBoxCategory.Interior => L("Intérieurs (MLO)"),
         _ => category.ToString(),
     };
 
@@ -73,7 +73,7 @@ internal sealed class EntityBoxLayer : IDisposable
             _building = null;
             if (!finished.IsCompletedSuccessfully)
             {
-                Diagnostics.ErrorLog.Add("Cadres des objets", finished.Exception!.GetBaseException());
+                Diagnostics.ErrorLog.Add(L("Cadres des objets"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
             }
             else if (finished.Result.Library == _library)

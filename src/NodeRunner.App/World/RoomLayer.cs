@@ -56,9 +56,9 @@ internal sealed class RoomLayer : IDisposable
 
     public static string Label(RoomLayerPart part) => part switch
     {
-        RoomLayerPart.Rooms => "Salles",
-        RoomLayerPart.InnerPortals => "Portails entre salles",
-        RoomLayerPart.OutsidePortals => "Portails vers l'extérieur",
+        RoomLayerPart.Rooms => L("Salles"),
+        RoomLayerPart.InnerPortals => L("Portails entre salles"),
+        RoomLayerPart.OutsidePortals => L("Portails vers l'extérieur"),
         _ => part.ToString(),
     };
 
@@ -90,7 +90,7 @@ internal sealed class RoomLayer : IDisposable
             _building = null;
             if (!finished.IsCompletedSuccessfully)
             {
-                Diagnostics.ErrorLog.Add("Salles et portails", finished.Exception!.GetBaseException());
+                Diagnostics.ErrorLog.Add(L("Salles et portails"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
             }
             else if (finished.Result.Library == _library)
@@ -283,7 +283,7 @@ internal sealed class RoomLayer : IDisposable
     }
 
     private static string RoomName(Archetype archetype, int room) =>
-        room == 0 ? "extérieur"
+        room == 0 ? L("extérieur")
         : room < archetype.InteriorRooms.Count && archetype.InteriorRooms[room].Name.Length > 0 ? $"{room} ({archetype.InteriorRooms[room].Name})"
         : $"{room}";
 

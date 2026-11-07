@@ -65,8 +65,8 @@ internal sealed class OcclusionLayer : IDisposable
 
     public static string Label(OcclusionLayerPart part) => part switch
     {
-        OcclusionLayerPart.Boxes => "Boîtes d'occlusion",
-        OcclusionLayerPart.Models => "Maillages d'occlusion",
+        OcclusionLayerPart.Boxes => L("Boîtes d'occlusion"),
+        OcclusionLayerPart.Models => L("Maillages d'occlusion"),
         _ => part.ToString(),
     };
 
@@ -95,7 +95,7 @@ internal sealed class OcclusionLayer : IDisposable
             _building = null;
             if (!finished.IsCompletedSuccessfully)
             {
-                Diagnostics.ErrorLog.Add("Occlusion", finished.Exception!.GetBaseException());
+                Diagnostics.ErrorLog.Add(L("Occlusion"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN);
             }
             else if (finished.Result.Library == _library)

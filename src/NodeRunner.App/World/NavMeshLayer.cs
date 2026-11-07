@@ -40,13 +40,13 @@ internal sealed class NavMeshLayer : IDisposable
 
     public static string Label(NavMeshSurface surface) => surface switch
     {
-        NavMeshSurface.Pavement => "Trottoirs et chemins",
-        NavMeshSurface.Road => "Routes",
-        NavMeshSurface.Ground => "Sol (terrain, places...)",
-        NavMeshSurface.SteepSlope => "Pentes raides",
-        NavMeshSurface.Interior => "Intérieurs",
-        NavMeshSurface.Water => "Eau",
-        NavMeshSurface.TrainTrack => "Voies ferrées",
+        NavMeshSurface.Pavement => L("Trottoirs et chemins"),
+        NavMeshSurface.Road => L("Routes"),
+        NavMeshSurface.Ground => L("Sol (terrain, places...)"),
+        NavMeshSurface.SteepSlope => L("Pentes raides"),
+        NavMeshSurface.Interior => L("Intérieurs"),
+        NavMeshSurface.Water => L("Eau"),
+        NavMeshSurface.TrainTrack => L("Voies ferrées"),
         _ => surface.ToString(),
     };
 
@@ -223,7 +223,7 @@ internal sealed class NavMeshLayer : IDisposable
                 catch (Exception ex) when (ex is not OperationCanceledException) // Any error would stop the loop for good.
                 {
                     if (ex is not (InvalidDataException or IOException))
-                        Diagnostics.ErrorLog.Add("Navmesh", ex);
+                        Diagnostics.ErrorLog.Add(L("Navmesh"), ex);
                     _results.Enqueue((key, generation, null, ex.Message));
                 }
             }

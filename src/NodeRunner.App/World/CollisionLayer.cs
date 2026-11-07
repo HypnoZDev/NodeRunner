@@ -48,20 +48,20 @@ internal sealed class CollisionLayer : IDisposable
 
     public static string Label(CollisionSurface surface) => surface switch
     {
-        CollisionSurface.Road => "Routes, trottoirs, béton",
-        CollisionSurface.Terrain => "Terrain (terre, sable, roche)",
-        CollisionSurface.Vegetation => "Végétation (herbe, buissons)",
-        CollisionSurface.Water => "Eau",
-        CollisionSurface.Glass => "Verre",
-        CollisionSurface.Building => "Bâtiments et objets",
+        CollisionSurface.Road => L("Routes, trottoirs, béton"),
+        CollisionSurface.Terrain => L("Terrain (terre, sable, roche)"),
+        CollisionSurface.Vegetation => L("Végétation (herbe, buissons)"),
+        CollisionSurface.Water => L("Eau"),
+        CollisionSurface.Glass => L("Verre"),
+        CollisionSurface.Building => L("Bâtiments et objets"),
         _ => surface.ToString(),
     };
 
     public static string KindLabel(CollisionKind kind) => kind switch
     {
-        CollisionKind.Vehicle => "Véhicules (hi@)",
-        CollisionKind.Other => "Autre (ma@)",
-        _ => "Piétons et objets",
+        CollisionKind.Vehicle => L("Véhicules (hi@)"),
+        CollisionKind.Other => L("Autre (ma@)"),
+        _ => L("Piétons et objets"),
     };
 
     public static Vector4 Color(CollisionSurface surface) => surface switch
@@ -224,7 +224,7 @@ internal sealed class CollisionLayer : IDisposable
                 catch (Exception ex) when (ex is not OperationCanceledException) // Any error would stop the loop for good.
                 {
                     if (ex is not (InvalidDataException or IOException))
-                        Diagnostics.ErrorLog.Add("Collisions", ex);
+                        Diagnostics.ErrorLog.Add(L("Collisions"), ex);
                     _results.Enqueue((file, generation, null, null, null, ex.Message));
                 }
             }

@@ -141,7 +141,7 @@ internal sealed class ModelLayer : IDisposable
             }
             else
             {
-                Diagnostics.ErrorLog.Add("Objets à afficher", finished.Exception!.GetBaseException());
+                Diagnostics.ErrorLog.Add(L("Objets à afficher"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
             }
         }
@@ -571,7 +571,7 @@ internal sealed class ModelLayer : IDisposable
                     // and no detailed model would load anymore (the map would stay on its LOD models).
                     errors.Add($"{Path.GetFileName(location.Path)} : {ex.Message}");
                     if (ex is not (InvalidDataException or IOException))
-                        Diagnostics.ErrorLog.Add($"Modèle {Path.GetFileName(location.Path)}", ex);
+                        Diagnostics.ErrorLog.Add(L($"Modèle {Path.GetFileName(location.Path)}"), ex);
                     _results.Enqueue(new LoadedModel(location, generation, null, [], [], errors));
                 }
             }

@@ -16,17 +16,17 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoBackground
         | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoMove;
 
-    private static readonly (string Label, string Icon, string[] Layers)[] LayerGroups =
+    private static (string Label, string Icon, string[] Layers)[] LayerGroups =>
     [
-        ("Modèles 3D", Icons.Box, [ModelLayer.LayerName]),
-        ("Eau", Icons.Waves, [WaterLayer.LayerName]),
-        ("Boîtes des objets", Icons.Boxes, EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName).ToArray()),
-        ("Pathnodes (routes)", Icons.Route, PathNodeLayer.Categories.Select(PathNodeLayer.LayerName).ToArray()),
-        ("Points de scénario", Icons.Users, ScenarioLayer.Categories.Select(ScenarioLayer.LayerName).ToArray()),
-        ("Navmesh", Icons.Footprints, NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer).ToArray()),
-        ("Collisions", Icons.Mountain, CollisionLayer.Surfaces.Select(CollisionLayer.LayerName).ToArray()),
-        ("Salles et portails", Icons.House, RoomLayer.Parts.Select(RoomLayer.LayerName).ToArray()),
-        ("Occlusion", Icons.ScanEye, OcclusionLayer.Parts.Select(OcclusionLayer.LayerName).ToArray()),
+        (L("Modèles 3D"), Icons.Box, [ModelLayer.LayerName]),
+        (L("Eau"), Icons.Waves, [WaterLayer.LayerName]),
+        (L("Boîtes des objets"), Icons.Boxes, EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName).ToArray()),
+        (L("Pathnodes (routes)"), Icons.Route, PathNodeLayer.Categories.Select(PathNodeLayer.LayerName).ToArray()),
+        (L("Points de scénario"), Icons.Users, ScenarioLayer.Categories.Select(ScenarioLayer.LayerName).ToArray()),
+        (L("Navmesh"), Icons.Footprints, NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer).ToArray()),
+        (L("Collisions"), Icons.Mountain, CollisionLayer.Surfaces.Select(CollisionLayer.LayerName).ToArray()),
+        (L("Salles et portails"), Icons.House, RoomLayer.Parts.Select(RoomLayer.LayerName).ToArray()),
+        (L("Occlusion"), Icons.ScanEye, OcclusionLayer.Parts.Select(OcclusionLayer.LayerName).ToArray()),
     ];
 
     private static readonly (Vector3 Direction, string Label, Vector4 Color)[] Axes =
@@ -64,48 +64,48 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
 
     private void DrawBar()
     {
-        ToolButton("##tool_select", Icons.MousePointer, TransformTool.Select, "Sélection (1) : clic gauche sur un objet");
+        ToolButton("##tool_select", Icons.MousePointer, TransformTool.Select, L("Sélection (1) : clic gauche sur un objet"));
         ImGui.SameLine();
         ToolButton("##tool_move", Icons.Move, TransformTool.Move,
-            "Déplacer (2) : flèches le long d'un axe, carrés dans un plan\nCtrl : par pas de 0,5 m · Échap : annuler");
+            L("Déplacer (2) : flèches le long d'un axe, carrés dans un plan\nCtrl : par pas de 0,5 m · Échap : annuler"));
         ImGui.SameLine();
         ToolButton("##tool_rotate", Icons.Rotate, TransformTool.Rotate,
-            "Tourner (3) : anneaux autour de X, Y et Z\nCtrl : par pas de 15° · Échap : annuler");
+            L("Tourner (3) : anneaux autour de X, Y et Z\nCtrl : par pas de 15° · Échap : annuler"));
         ImGui.SameLine();
         ToolButton("##tool_scale", Icons.Scale, TransformTool.Scale,
-            "Mettre à l'échelle (4) : X ou Y = horizontale, Z = verticale, centre = les deux\nCtrl : par pas de 0,1 · Échap : annuler");
+            L("Mettre à l'échelle (4) : X ou Y = horizontale, Z = verticale, centre = les deux\nCtrl : par pas de 0,1 · Échap : annuler"));
         ImGui.SameLine();
         ToolButton("##tool_collision", Icons.Mountain, TransformTool.Collision,
-            "Collisions (5) : clic sur une surface de collision, Ctrl+clic pour en ajouter ou en retirer,\n"
-            + "glisser = toutes les surfaces visibles dans le rectangle (Ctrl : ajouter)\nSuppr : supprimer · matériau : panneau Propriétés");
+            L("Collisions (5) : clic sur une surface de collision, Ctrl+clic pour en ajouter ou en retirer,\n")
+            + L("glisser = toutes les surfaces visibles dans le rectangle (Ctrl : ajouter)\nSuppr : supprimer · matériau : panneau Propriétés"));
 
         OverlayStyle.Divider();
         bool followGround = state.Settings.FollowGround;
         if (OverlayStyle.IconButton("##follow_ground", Icons.Footprints,
-            "Suivre le sol : en déplaçant avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision", active: followGround))
+            L("Suivre le sol : en déplaçant avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision"), active: followGround))
         {
             state.Settings.FollowGround = !followGround;
             state.SaveSettings();
         }
         ImGui.SameLine();
         bool grid = state.Settings.ShowGrid;
-        if (OverlayStyle.IconButton("##grid", Icons.Grid, "Grille au sol", active: grid))
+        if (OverlayStyle.IconButton("##grid", Icons.Grid, L("Grille au sol"), active: grid))
         {
             state.Settings.ShowGrid = !grid;
             state.SaveSettings();
         }
 
         OverlayStyle.Divider();
-        if (OverlayStyle.MenuButton("##layers", Icons.Layers, "Calques", "Afficher ou masquer les familles de calques"))
+        if (OverlayStyle.MenuButton("##layers", Icons.Layers, L("Calques"), L("Afficher ou masquer les familles de calques")))
             ImGui.OpenPopup("layers_menu");
         var layersAnchor = new Vector2(ImGui.GetItemRectMin().X, ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y);
         ImGui.SameLine();
-        if (OverlayStyle.MenuButton("##camera", Icons.Video, $"{cameraController.Speed:0} m/s", "Caméra : vitesse, champ de vision, commandes"))
+        if (OverlayStyle.MenuButton("##camera", Icons.Video, $"{cameraController.Speed:0} m/s", L("Caméra : vitesse, champ de vision, commandes")))
             ImGui.OpenPopup("camera_menu");
         var cameraAnchor = new Vector2(ImGui.GetItemRectMin().X, ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y);
         ImGui.SameLine();
         float hour = state.Settings.TimeOfDay;
-        if (OverlayStyle.MenuButton("##time", IsNight(hour) ? Icons.Moon : Icons.Sun, FormatHour(hour), "Heure du jour : soleil, lumière et ciel"))
+        if (OverlayStyle.MenuButton("##time", IsNight(hour) ? Icons.Moon : Icons.Sun, FormatHour(hour), L("Heure du jour : soleil, lumière et ciel")))
             ImGui.OpenPopup("time_menu");
         var timeAnchor = new Vector2(ImGui.GetItemRectMin().X, ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y);
 
@@ -143,12 +143,12 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         }
         ImGui.Separator();
         bool grid = state.Settings.ShowGrid;
-        if (ImGui.MenuItem($"{Icons.Grid}  Grille au sol", null, grid))
+        if (ImGui.MenuItem(L($"{Icons.Grid}  Grille au sol"), null, grid))
         {
             state.Settings.ShowGrid = !grid;
             state.SaveSettings();
         }
-        ImGui.TextDisabled("Détail par catégorie : panneau Calques.");
+        ImGui.TextDisabled(L("Détail par catégorie : panneau Calques."));
     }
 
     private static bool IsNight(float hour) => hour < 6f || hour >= 20f;
@@ -170,7 +170,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
             state.SaveSettings();
 
         (string Icon, string Label, float Hour)[] moments =
-            [(Icons.Sunrise, "Aube", 6.5f), (Icons.Sun, "Midi", 13f), (Icons.Sunset, "Soir", 19f), (Icons.Moon, "Nuit", 23f)];
+            [(Icons.Sunrise, L("Aube"), 6.5f), (Icons.Sun, L("Midi"), 13f), (Icons.Sunset, L("Soir"), 19f), (Icons.Moon, L("Nuit"), 23f)];
         foreach (var (icon, label, momentHour) in moments)
         {
             if (ImGui.MenuItem($"{icon}  {label}", FormatHour(momentHour), MathF.Abs(settings.TimeOfDay - momentHour) < 0.01f))
@@ -182,18 +182,18 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
 
         ImGui.Separator();
         bool sky = settings.ShowSky;
-        if (ImGui.MenuItem("Ciel", null, sky))
+        if (ImGui.MenuItem(L("Ciel"), null, sky))
         {
             settings.ShowSky = !sky;
             state.SaveSettings();
         }
         bool fog = settings.Fog;
-        if (ImGui.MenuItem("Brouillard", null, fog))
+        if (ImGui.MenuItem(L("Brouillard"), null, fog))
         {
             settings.Fog = !fog;
             state.SaveSettings();
         }
-        ImGui.TextDisabled("Autres réglages : Affichage > Paramètres d'affichage.");
+        ImGui.TextDisabled(L("Autres réglages : Affichage > Paramètres d'affichage."));
     }
 
     private void DrawCameraMenu()
@@ -201,33 +201,33 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         var camera = state.Camera;
         float speed = cameraController.Speed;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("Vitesse (m/s)", ref speed, CameraController.MinSpeed, CameraController.MaxSpeed, "%.0f", ImGuiSliderFlags.Logarithmic))
+        if (ImGui.SliderFloat(L("Vitesse (m/s)"), ref speed, CameraController.MinSpeed, CameraController.MaxSpeed, "%.0f", ImGuiSliderFlags.Logarithmic))
             cameraController.Speed = speed;
         float fov = state.Settings.FieldOfView;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("Champ de vision (°)", ref fov, MainForm.MinFieldOfView, MainForm.MaxFieldOfView, "%.0f"))
+        if (ImGui.SliderFloat(L("Champ de vision (°)"), ref fov, MainForm.MinFieldOfView, MainForm.MaxFieldOfView, "%.0f"))
             state.Settings.FieldOfView = fov;
         if (ImGui.IsItemDeactivatedAfterEdit())
             state.SaveSettings();
-        if (ImGui.MenuItem($"{Icons.House}  Revenir à l'origine"))
+        if (ImGui.MenuItem(L($"{Icons.House}  Revenir à l'origine")))
         {
             camera.Position = new Vector3(-150f, -150f, 100f);
             camera.LookAt(Vector3.Zero);
         }
-        if (state.Selection is { } entity && ImGui.MenuItem($"{Icons.Crosshair}  Aller à l'objet sélectionné"))
+        if (state.Selection is { } entity && ImGui.MenuItem(L($"{Icons.Crosshair}  Aller à l'objet sélectionné")))
             state.FocusOn(entity);
 
         ImGui.Separator();
-        ImGui.TextDisabled("Clic droit maintenu + souris : regarder autour");
-        ImGui.TextDisabled("Z Q S D / W A S D / flèches : se déplacer");
-        ImGui.TextDisabled("Espace ou E : monter      C : descendre");
-        ImGui.TextDisabled("Shift : 5 fois plus rapide      Molette : vitesse");
-        ImGui.TextDisabled("Clic gauche : sélectionner      Échap : désélectionner");
-        ImGui.TextDisabled("1 / 2 / 3 / 4 : sélection, déplacer, tourner, échelle");
-        ImGui.TextDisabled("Ctrl en glissant : par pas      Suppr : supprimer");
-        ImGui.TextDisabled("Fin : poser les objets sélectionnés au sol");
-        ImGui.TextDisabled("Ctrl+C / Ctrl+V : copier, coller au centre de la vue");
-        ImGui.TextDisabled("Bouton empreintes : suivre le sol en déplaçant");
+        ImGui.TextDisabled(L("Clic droit maintenu + souris : regarder autour"));
+        ImGui.TextDisabled(L("Z Q S D / W A S D / flèches : se déplacer"));
+        ImGui.TextDisabled(L("Espace ou E : monter      C : descendre"));
+        ImGui.TextDisabled(L("Shift : 5 fois plus rapide      Molette : vitesse"));
+        ImGui.TextDisabled(L("Clic gauche : sélectionner      Échap : désélectionner"));
+        ImGui.TextDisabled(L("1 / 2 / 3 / 4 : sélection, déplacer, tourner, échelle"));
+        ImGui.TextDisabled(L("Ctrl en glissant : par pas      Suppr : supprimer"));
+        ImGui.TextDisabled(L("Fin : poser les objets sélectionnés au sol"));
+        ImGui.TextDisabled(L("Ctrl+C / Ctrl+V : copier, coller au centre de la vue"));
+        ImGui.TextDisabled(L("Bouton empreintes : suivre le sol en déplaçant"));
     }
 
     // The three world axes as the camera sees them: thin lines with a colored letter at the tip, no background.

@@ -42,7 +42,7 @@ internal sealed unsafe class ScenePanel(AppState state)
     private MapEntity? _revealed;
     private bool _scrollToSelection;
 
-    private static readonly string[] Filters = [$"{Icons.Crosshair}  Proches", $"{Icons.Globe}  Toute la carte"];
+    private static string[] Filters => [L($"{Icons.Crosshair}  Proches"), L($"{Icons.Globe}  Toute la carte")];
 
     private readonly record struct Row(int Depth, MapData Map, MapEntity? Entity, bool Open, bool HasChildren);
 
@@ -57,7 +57,7 @@ internal sealed unsafe class ScenePanel(AppState state)
     {
         if (state.World.Maps is not { } library)
         {
-            Widgets.Hint(state.World.IsBusy ? "Chargement de la carte..." : "Aucune carte chargée.");
+            Widgets.Hint(state.World.IsBusy ? L("Chargement de la carte...") : L("Aucune carte chargée."));
             return;
         }
         var names = state.World.Names ?? new HashNames();
@@ -91,13 +91,13 @@ internal sealed unsafe class ScenePanel(AppState state)
     private void DrawFilters(MapLibrary library, HashNames names)
     {
         int filter = _nearOnly ? 0 : 1;
-        if (Widgets.Segmented("scene_filter", Filters, ref filter, [$"YMAP à moins de {NearRadius:0} m de la caméra", "Tous les YMAP chargés"]))
+        if (Widgets.Segmented("scene_filter", Filters, ref filter, [L($"YMAP à moins de {NearRadius:0} m de la caméra"), L("Tous les YMAP chargés")]))
         {
             _nearOnly = filter == 0;
             _dirty = true;
         }
 
-        if (Widgets.SearchField("##scene_search", "YMAP ou objet (ex. prop_tree)", ref _search))
+        if (Widgets.SearchField("##scene_search", L("YMAP ou objet (ex. prop_tree)"), ref _search))
         {
             _matches = _search.Trim().Length >= 2 ? Search(library, names, _search.Trim()) : null;
             _dirty = true;
@@ -197,9 +197,9 @@ internal sealed unsafe class ScenePanel(AppState state)
         if (!ImGui.BeginTable("##scene_table", 3, flags, new Vector2(0, -footer)))
             return;
         ImGui.TableSetupScrollFreeze(0, 1);
-        ImGui.TableSetupColumn("Nom", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 62);
-        ImGui.TableSetupColumn("Dist.", ImGuiTableColumnFlags.WidthFixed, 54);
+        ImGui.TableSetupColumn(L("Nom"), ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn(L("Type"), ImGuiTableColumnFlags.WidthFixed, 62);
+        ImGui.TableSetupColumn(L("Dist."), ImGuiTableColumnFlags.WidthFixed, 54);
         ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.TextFaint);
         ImGui.TableHeadersRow();
         ImGui.PopStyleColor();
@@ -272,12 +272,12 @@ internal sealed unsafe class ScenePanel(AppState state)
                 state.FocusOn(entity);
         }
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal) && row.Map.FilePath is { } path && entity is null)
-            ImGui.SetTooltip(row.Map.IsCustom ? $"YMAP du projet (objets ajoutés), absent des fichiers du jeu\n{(row.Map.IsSaved ? $"Enregistré dans {state.SaveFolder}" : "Pas encore enregistré (Ctrl+S)")}"
-                : row.Map.IsSaved ? $"Version enregistrée, dans {state.SaveFolder}\nFichier du jeu : {path}" : path);
+            ImGui.SetTooltip(row.Map.IsCustom ? L($"YMAP du projet (objets ajoutés), absent des fichiers du jeu\n{(row.Map.IsSaved ? L($"Enregistré dans {state.SaveFolder}") : L("Pas encore enregistré (Ctrl+S)"))}")
+                : row.Map.IsSaved ? L($"Version enregistrée, dans {state.SaveFolder}\nFichier du jeu : {path}") : path);
         DrawContextMenu(row, names);
 
         ImGui.TableNextColumn();
-        ImGui.TextDisabled(entity is null ? (row.Map.IsScripted ? "YMAP script" : "YMAP") : TypeName(entity));
+        ImGui.TextDisabled(entity is null ? (row.Map.IsScripted ? L("YMAP script") : "YMAP") : TypeName(entity));
         ImGui.TableNextColumn();
         if (entity is null)
             RightAligned($"{row.Map.KeptEntities.Count()}");
@@ -305,26 +305,26 @@ internal sealed unsafe class ScenePanel(AppState state)
             return;
         if (row.Entity is { } entity)
         {
-            if (ImGui.MenuItem($"{Icons.Crosshair}  Aller à l'objet"))
+            if (ImGui.MenuItem(L($"{Icons.Crosshair}  Aller à l'objet")))
             {
                 state.Select(entity);
                 state.FocusOn(entity);
             }
             ImGui.Separator();
-            if (ImGui.MenuItem($"{Icons.File}  Copier le nom : {names.Describe(entity.ArchetypeHash)}"))
+            if (ImGui.MenuItem(L($"{Icons.File}  Copier le nom : {names.Describe(entity.ArchetypeHash)}")))
                 CopyText(names.Describe(entity.ArchetypeHash));
             string position = state.FormatPosition(entity.Position);
             string withHeading = state.FormatPosition(entity.Position, FiveMFormat.Heading(entity));
-            if (ImGui.MenuItem($"{Icons.MapPinned}  Copier la position : {position}"))
+            if (ImGui.MenuItem(L($"{Icons.MapPinned}  Copier la position : {position}")))
                 CopyText(position);
-            if (ImGui.MenuItem($"{Icons.MapPinned}  Copier position et cap : {withHeading}"))
+            if (ImGui.MenuItem(L($"{Icons.MapPinned}  Copier position et cap : {withHeading}")))
                 CopyText(withHeading);
             if (state.IsSelected(entity) && state.SelectedEntities.Count is var selected and > 1
-                && ImGui.MenuItem($"{Icons.MapPinned}  Copier les {selected} objets sélectionnés (liste {PositionText.FormatName(state.CopyFormat)})"))
+                && ImGui.MenuItem(L($"{Icons.MapPinned}  Copier les {selected} objets sélectionnés (liste {PositionText.FormatName(state.CopyFormat)})")))
                 CopyText(state.FormatSelection());
             ImGui.Separator();
             int group = state.IsSelected(entity) ? state.DeletableSelection.Count : 1;
-            if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer...", "Suppr", false, entity.CanDelete))
+            if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer..."), L("Suppr"), false, entity.CanDelete))
             {
                 // On a selected object: the whole selection goes; otherwise only this object.
                 if (!state.IsSelected(entity))
@@ -334,9 +334,9 @@ internal sealed unsafe class ScenePanel(AppState state)
         }
         else
         {
-            if (ImGui.MenuItem($"{Icons.File}  Copier le nom : {MapName(row.Map)}"))
+            if (ImGui.MenuItem(L($"{Icons.File}  Copier le nom : {MapName(row.Map)}")))
                 CopyText(MapName(row.Map));
-            if (row.Map.FilePath is { } path && ImGui.MenuItem($"{Icons.FolderOpen}  Copier le chemin dans les archives"))
+            if (row.Map.FilePath is { } path && ImGui.MenuItem(L($"{Icons.FolderOpen}  Copier le chemin dans les archives")))
                 CopyText(path);
         }
         ImGui.EndPopup();
@@ -346,12 +346,12 @@ internal sealed unsafe class ScenePanel(AppState state)
     {
         int maps = _rows.Count(r => r.Entity is null);
         string text = _matches is not null
-            ? $"{maps} YMAP trouvé(s), {_matchCount} objet(s){(_matchCount >= MaxSearchMatches ? " (limite atteinte)" : "")}"
+            ? L($"{maps} YMAP trouvé(s), {_matchCount} objet(s){(_matchCount >= MaxSearchMatches ? L(" (limite atteinte)") : "")}")
             : _nearOnly
-                ? $"{maps} YMAP proches sur {library.Maps.Count}"
-                : $"{library.Maps.Count} YMAP, {library.EntityCount} objets";
+                ? L($"{maps} YMAP proches sur {library.Maps.Count}")
+                : L($"{library.Maps.Count} YMAP, {library.EntityCount} objets");
         if (state.SelectedEntities.Count is var selected and > 0)
-            text += $" · {selected} sélectionné{(selected > 1 ? "s" : "")}";
+            text += L($" · {selected} sélectionné(s)");
         // Thin line under the list, then the count.
         var p = ImGui.GetCursorScreenPos();
         float left = ImGui.GetWindowPos().X;
@@ -361,10 +361,10 @@ internal sealed unsafe class ScenePanel(AppState state)
     }
 
     private static string TypeName(MapEntity entity) =>
-        entity.IsInterior ? "Intérieur" : entity.LodLevel switch
+        entity.IsInterior ? L("Intérieur") : entity.LodLevel switch
         {
             LodLevel.Hd => "HD",
-            LodLevel.OrphanHd => "HD seul",
+            LodLevel.OrphanHd => L("HD seul"),
             LodLevel.Lod => "LOD",
             var level => level.ToString().ToUpperInvariant(),
         };

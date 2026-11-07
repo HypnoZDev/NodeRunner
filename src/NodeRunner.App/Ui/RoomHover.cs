@@ -143,31 +143,31 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
 
         var names = state.World.Names ?? new HashNames();
         ImGui.BeginTooltip();
-        ImGui.TextUnformatted(portal.LeadsOutside ? $"Portail {portal.Index} vers l'extérieur" : $"Portail {portal.Index} entre deux salles");
-        ImGui.TextColored(UiTheme.TextMuted, $"Relie : {Side(portal.Portal.RoomFrom, portal.RoomFrom)}  et  {Side(portal.Portal.RoomTo, portal.RoomTo)}");
-        ImGui.TextColored(UiTheme.TextMuted, $"Intérieur : {names.Describe(portal.Interior.ArchetypeHash)}");
+        ImGui.TextUnformatted(portal.LeadsOutside ? L($"Portail {portal.Index} vers l'extérieur") : L($"Portail {portal.Index} entre deux salles"));
+        ImGui.TextColored(UiTheme.TextMuted, L($"Relie : {Side(portal.Portal.RoomFrom, portal.RoomFrom)}  et  {Side(portal.Portal.RoomTo, portal.RoomTo)}"));
+        ImGui.TextColored(UiTheme.TextMuted, L($"Intérieur : {names.Describe(portal.Interior.ArchetypeHash)}"));
         if (portal.ObjectCount > 0)
-            ImGui.TextColored(UiTheme.TextMuted, portal.ObjectCount == 1 ? "1 objet attaché (porte...)" : $"{portal.ObjectCount} objets attachés (portes...)");
-        ImGui.TextColored(UiTheme.TextFaint, $"Drapeaux : 0x{portal.Portal.Flags:X}");
-        ImGui.TextColored(UiTheme.TextFaint, "Clic : sélectionner le portail");
+            ImGui.TextColored(UiTheme.TextMuted, portal.ObjectCount == 1 ? L("1 objet attaché (porte...)") : L($"{portal.ObjectCount} objets attachés (portes...)"));
+        ImGui.TextColored(UiTheme.TextFaint, L($"Drapeaux : 0x{portal.Portal.Flags:X}"));
+        ImGui.TextColored(UiTheme.TextFaint, L("Clic : sélectionner le portail"));
         ImGui.EndTooltip();
     }
 
-    private static string Side(int room, string name) => room == 0 ? "l'extérieur" : $"la salle {name}";
+    private static string Side(int room, string name) => room == 0 ? L("l'extérieur") : L($"la salle {name}");
 
     private void Show(RoomBox room)
     {
         DrawBox(room.Room.BoundsMin, room.Room.BoundsMax, room.Transform, Widgets.Col(new Vector4(0.9f, 0.7f, 1f, 1f)), 2f);
 
         var names = state.World.Names ?? new HashNames();
-        string name = room.Room.Name.Length > 0 ? room.Room.Name : "(sans nom)";
+        string name = room.Room.Name.Length > 0 ? room.Room.Name : L("(sans nom)");
         ImGui.BeginTooltip();
-        ImGui.TextUnformatted($"Salle {room.Index} : {name}");
-        ImGui.TextColored(UiTheme.TextMuted, $"Intérieur : {names.Describe(room.Interior.ArchetypeHash)}");
-        ImGui.TextColored(UiTheme.TextMuted, $"{room.PortalCount} portails · {room.ObjectCount} objets");
+        ImGui.TextUnformatted(L($"Salle {room.Index} : {name}"));
+        ImGui.TextColored(UiTheme.TextMuted, L($"Intérieur : {names.Describe(room.Interior.ArchetypeHash)}"));
+        ImGui.TextColored(UiTheme.TextMuted, L($"{room.PortalCount} portails · {room.ObjectCount} objets"));
         if (room.Room.HidesExterior)
-            ImGui.TextColored(UiTheme.TextMuted, "L'extérieur n'est pas dessiné depuis cette salle");
-        ImGui.TextColored(UiTheme.TextFaint, "Clic : sélectionner la salle");
+            ImGui.TextColored(UiTheme.TextMuted, L("L'extérieur n'est pas dessiné depuis cette salle"));
+        ImGui.TextColored(UiTheme.TextFaint, L("Clic : sélectionner la salle"));
         ImGui.EndTooltip();
     }
 

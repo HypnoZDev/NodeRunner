@@ -16,93 +16,93 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
 
     public void DrawContent()
     {
-        if (LayerSection("Modèles 3D", "models", [ModelLayer.LayerName]))
+        if (LayerSection(L("Modèles 3D"), "models", [ModelLayer.LayerName]))
         {
-            LayerRow(ModelLayer.LayerName, new Vector4(0.75f, 0.74f, 0.71f, 1f), "Carte en 3D");
-            SettingSlider("Distance de vue", "view_distance", state.Settings.ViewDistanceMultiplier,
+            LayerRow(ModelLayer.LayerName, new Vector4(0.75f, 0.74f, 0.71f, 1f), L("Carte en 3D"));
+            SettingSlider(L("Distance de vue"), "view_distance", state.Settings.ViewDistanceMultiplier,
                 ModelLayer.MinDistanceMultiplier, ModelLayer.MaxDistanceMultiplier, "x %.2f", v => state.Settings.ViewDistanceMultiplier = v,
-                "x 1 = distances du jeu. Plus grand : les détails restent visibles de plus loin.", ImGuiSliderFlags.Logarithmic);
+                L("x 1 = distances du jeu. Plus grand : les détails restent visibles de plus loin."), ImGuiSliderFlags.Logarithmic);
         }
 
-        if (LayerSection("Eau", "water", [WaterLayer.LayerName]))
-            LayerRow(WaterLayer.LayerName, new Vector4(0.25f, 0.55f, 0.80f, 1f), "Mer, lacs et rivières");
+        if (LayerSection(L("Eau"), "water", [WaterLayer.LayerName]))
+            LayerRow(WaterLayer.LayerName, new Vector4(0.25f, 0.55f, 0.80f, 1f), L("Mer, lacs et rivières"));
 
-        if (LayerSection("Pathnodes", "paths", PathNodeLayer.Categories.Select(PathNodeLayer.LayerName)))
+        if (LayerSection(L("Pathnodes"), "paths", PathNodeLayer.Categories.Select(PathNodeLayer.LayerName)))
         {
             foreach (var category in PathNodeLayer.Categories)
                 LayerRow(PathNodeLayer.LayerName(category), PathNodeLayer.Color(category), PathNodeLayer.Label(category), Widgets.Count(pathNodeLayer.Count(category)));
         }
 
-        if (LayerSection("Points de scénario", "scenarios", ScenarioLayer.Categories.Select(ScenarioLayer.LayerName)))
+        if (LayerSection(L("Points de scénario"), "scenarios", ScenarioLayer.Categories.Select(ScenarioLayer.LayerName)))
         {
             foreach (var category in ScenarioLayer.Categories)
                 LayerRow(ScenarioLayer.LayerName(category), ScenarioLayer.Color(category), ScenarioLayer.Label(category), Widgets.Count(scenarioLayer.Count(category)));
         }
 
-        if (LayerSection("Navmesh", "navmesh", NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer)))
+        if (LayerSection(L("Navmesh"), "navmesh", NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer)))
         {
             foreach (var surface in NavMeshLayer.Surfaces)
                 LayerRow(NavMeshLayer.LayerName(surface), NavMeshLayer.Color(surface), NavMeshLayer.Label(surface));
-            LayerRow(NavMeshLayer.OutlinesLayer, new Vector4(0.6f, 0.6f, 0.6f, 1f), "Contours des polygones");
-            SettingSlider("Rayon de chargement", "navmesh_radius", state.Settings.NavMeshRadius,
+            LayerRow(NavMeshLayer.OutlinesLayer, new Vector4(0.6f, 0.6f, 0.6f, 1f), L("Contours des polygones"));
+            SettingSlider(L("Rayon de chargement"), "navmesh_radius", state.Settings.NavMeshRadius,
                 NavMeshLayer.MinRadius, NavMeshLayer.MaxRadius, "%.0f m", v => state.Settings.NavMeshRadius = v);
         }
 
-        if (LayerSection("Collisions", "collisions", CollisionLayer.Surfaces.Select(CollisionLayer.LayerName), defaultOpen: false))
+        if (LayerSection(L("Collisions"), "collisions", CollisionLayer.Surfaces.Select(CollisionLayer.LayerName), defaultOpen: false))
         {
             foreach (var surface in CollisionLayer.Surfaces)
                 LayerRow(CollisionLayer.LayerName(surface), CollisionLayer.Color(surface), CollisionLayer.Label(surface));
-            SettingSlider("Rayon de chargement", "collision_radius", state.Settings.CollisionRadius,
+            SettingSlider(L("Rayon de chargement"), "collision_radius", state.Settings.CollisionRadius,
                 CollisionLayer.MinRadius, CollisionLayer.MaxRadius, "%.0f m", v => state.Settings.CollisionRadius = v);
         }
 
-        if (LayerSection("Boîtes des objets", "entities", EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName), defaultOpen: false))
+        if (LayerSection(L("Boîtes des objets"), "entities", EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName), defaultOpen: false))
         {
             foreach (var category in EntityBoxLayer.Categories)
                 LayerRow(EntityBoxLayer.LayerName(category), EntityBoxLayer.Color(category), EntityBoxLayer.Label(category), Widgets.Count(entityBoxLayer.Count(category)));
-            SettingSlider("Rayon d'affichage", "entity_radius", state.Settings.EntityRadius,
+            SettingSlider(L("Rayon d'affichage"), "entity_radius", state.Settings.EntityRadius,
                 EntityBoxLayer.MinRadius, EntityBoxLayer.MaxRadius, "%.0f m", v => state.Settings.EntityRadius = v);
         }
 
-        if (LayerSection("Salles et portails (intérieurs)", "rooms", RoomLayer.Parts.Select(RoomLayer.LayerName), defaultOpen: false))
+        if (LayerSection(L("Salles et portails (intérieurs)"), "rooms", RoomLayer.Parts.Select(RoomLayer.LayerName), defaultOpen: false))
         {
             foreach (var part in RoomLayer.Parts)
                 LayerRow(RoomLayer.LayerName(part), RoomLayer.Color(part), RoomLayer.Label(part),
                     part == RoomLayerPart.Rooms ? Widgets.Count(roomLayer.Rooms.Count) : null);
-            Widgets.Hint($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle ou un portail pour voir ses détails, cliquez dessus pour le modifier.", wrap: true);
+            Widgets.Hint(L($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle ou un portail pour voir ses détails, cliquez dessus pour le modifier."), wrap: true);
         }
 
-        if (LayerSection("Occlusion", "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))
+        if (LayerSection(L("Occlusion"), "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))
         {
             foreach (var part in OcclusionLayer.Parts)
                 LayerRow(OcclusionLayer.LayerName(part), OcclusionLayer.Color(part), OcclusionLayer.Label(part), Widgets.Count(occlusionLayer.Count(part)));
-            Widgets.Hint($"Occluders à moins de {OcclusionLayer.Radius:0} m : le jeu ne dessine pas ce qui est caché derrière.", wrap: true);
+            Widgets.Hint(L($"Occluders à moins de {OcclusionLayer.Radius:0} m : le jeu ne dessine pas ce qui est caché derrière."), wrap: true);
             bool preview = state.Settings.OcclusionPreview;
-            if (ImGui.Checkbox("Aperçu comme le jeu", ref preview))
+            if (ImGui.Checkbox(L("Aperçu comme le jeu"), ref preview))
             {
                 state.Settings.OcclusionPreview = preview;
                 state.SaveSettings();
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Ne dessine plus les objets entièrement cachés derrière les occluders (à moins de {OcclusionCuller.Radius:0} m), "
-                    + "comme le jeu. Un trou dans le décor = occluder mal placé. Les objets sélectionnés restent toujours affichés.");
+                ImGui.SetTooltip(L($"Ne dessine plus les objets entièrement cachés derrière les occluders (à moins de {OcclusionCuller.Radius:0} m), ")
+                    + L("comme le jeu. Un trou dans le décor = occluder mal placé. Les objets sélectionnés restent toujours affichés."));
             if (preview)
             {
                 ImGui.SameLine();
-                Widgets.Hint($"{occlusionCuller.HiddenCount} objet(s) caché(s)");
+                Widgets.Hint(L($"{occlusionCuller.HiddenCount} objet(s) caché(s)"));
             }
-            if (Widgets.Button($"{Icons.Box}  Nouvelle boîte", "Boîte de 10 m posée au sol devant la caméra, à ajuster avec les poignées."))
+            if (Widgets.Button(L($"{Icons.Box}  Nouvelle boîte"), L("Boîte de 10 m posée au sol devant la caméra, à ajuster avec les poignées.")))
                 state.CreateOccluderBox();
             ImGui.SameLine();
             int selected = state.SelectedEntities.Count;
-            if (Widgets.Button($"{Icons.Boxes}  Sur la sélection{(selected > 1 ? $" ({selected})" : "")}",
-                    "Pour chaque objet sélectionné : une boîte à l'intérieur de chaque bâtiment fermé de sa collision, sinon dans la boîte de son modèle. "
-                    + "Pour un intérieur (MLO) ou un objet dedans : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres. "
-                    + "Sélectionnez d'abord les bâtiments (calque Occlusion masqué, Ctrl+clic pour plusieurs).", enabled: selected > 0))
+            if (Widgets.Button(L($"{Icons.Boxes}  Sur la sélection{(selected > 1 ? $" ({selected})" : "")}"),
+                    L("Pour chaque objet sélectionné : une boîte à l'intérieur de chaque bâtiment fermé de sa collision, sinon dans la boîte de son modèle. ")
+                    + L("Pour un intérieur (MLO) ou un objet dedans : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres. ")
+                    + L("Sélectionnez d'abord les bâtiments (calque Occlusion masqué, Ctrl+clic pour plusieurs)."), enabled: selected > 0))
                 state.CreateOccluderBoxesFromSelection();
         }
 
-        if (Widgets.Section("Cartes de mission (scripts)", "scripted", defaultOpen: false))
+        if (Widgets.Section(L("Cartes de mission (scripts)"), "scripted", defaultOpen: false))
             DrawScriptedMaps();
     }
 
@@ -110,7 +110,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
     {
         var all = layers.ToList();
         bool any = all.Any(state.IsLayerVisible);
-        bool open = Widgets.Section(title, id, defaultOpen, any ? Icons.Eye : Icons.EyeOff, any ? "Tout masquer" : "Tout afficher", out bool toggle);
+        bool open = Widgets.Section(title, id, defaultOpen, any ? Icons.Eye : Icons.EyeOff, any ? L("Tout masquer") : L("Tout afficher"), out bool toggle);
         if (toggle)
             foreach (var layer in all)
                 state.SetLayerVisible(layer, !any);
@@ -151,25 +151,25 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         var hidden = settings.HiddenScriptedMaps ?? _defaultHiddenScriptedMaps;
         int shownCount = _knownScriptedMaps.Count(name => !hidden.Contains(name));
 
-        Widgets.Hint("Cartes chargées par le jeu pendant une mission ou à la demande d'un script (appartements et bureaux Online, "
-            + "yachts, Cayo Perico...). Cochées, elles sont affichées. Par défaut, une seule version de chaque lieu.", wrap: true);
+        Widgets.Hint(L("Cartes chargées par le jeu pendant une mission ou à la demande d'un script (appartements et bureaux Online, ")
+            + L("yachts, Cayo Perico...). Cochées, elles sont affichées. Par défaut, une seule version de chaque lieu."), wrap: true);
         ImGui.Dummy(new Vector2(0, 2));
-        Widgets.SearchField("##scripted_search", "Rechercher (ex. apa_v_mp)", ref _scriptedMapSearch, 64);
+        Widgets.SearchField("##scripted_search", L("Rechercher (ex. apa_v_mp)"), ref _scriptedMapSearch, 64);
 
-        if (Widgets.Button("Par défaut##scripted", "Revenir au choix par défaut", enabled: settings.HiddenScriptedMaps is not null))
+        if (Widgets.Button(L("Par défaut##scripted"), L("Revenir au choix par défaut"), enabled: settings.HiddenScriptedMaps is not null))
         {
             settings.HiddenScriptedMaps = null;
             state.SaveSettings();
         }
         ImGui.SameLine(0, 4);
-        if (Widgets.Button("Tout décocher##scripted", enabled: shownCount > 0))
+        if (Widgets.Button(L("Tout décocher##scripted"), enabled: shownCount > 0))
         {
             settings.HiddenScriptedMaps = _knownScriptedMaps.ToHashSet();
             state.SaveSettings();
         }
         ImGui.SameLine();
         ImGui.AlignTextToFramePadding();
-        Widgets.Hint($"{shownCount} / {_knownScriptedMaps.Count} affichées");
+        Widgets.Hint(L($"{shownCount} / {_knownScriptedMaps.Count} affichées"));
 
         ImGui.PushStyleColor(ImGuiCol.ChildBg, UiTheme.Rgb(0x141518));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8, 6));
@@ -194,7 +194,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
                 }
             }
             if (listed.Count == MaxScriptedMapsListed)
-                Widgets.Hint("... (affine la recherche pour voir les autres)");
+                Widgets.Hint(L("... (affine la recherche pour voir les autres)"));
         }
         ImGui.EndChild();
     }

@@ -38,12 +38,12 @@ internal sealed class PathNodeLayer : IDisposable
 
     public static string Label(PathCategory category) => category switch
     {
-        PathCategory.Road => "Routes",
-        PathCategory.Highway => "Autoroutes",
-        PathCategory.OffRoad => "Hors-piste",
-        PathCategory.Tunnel => "Tunnels",
-        PathCategory.SwitchedOff => "Sans trafic par défaut (ruelles, parkings...)",
-        PathCategory.Pedestrian => "Chemins piétons",
+        PathCategory.Road => L("Routes"),
+        PathCategory.Highway => L("Autoroutes"),
+        PathCategory.OffRoad => L("Hors-piste"),
+        PathCategory.Tunnel => L("Tunnels"),
+        PathCategory.SwitchedOff => L("Sans trafic par défaut (ruelles, parkings...)"),
+        PathCategory.Pedestrian => L("Chemins piétons"),
         _ => category.ToString(),
     };
 

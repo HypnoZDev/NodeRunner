@@ -93,7 +93,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     {
         if (_justOpened || !ImGui.IsAnyItemActive())
             ImGui.SetKeyboardFocusHere();
-        Widgets.SearchField("##search_query", "Objet, YMAP, type, ou position FiveM : vector3(x, y, z)", ref _query,
+        Widgets.SearchField("##search_query", L("Objet, YMAP, type, ou position FiveM : vector3(x, y, z)"), ref _query,
             flags: ImGuiInputTextFlags.AutoSelectAll);
 
         if (_query != _searched || state.World.Maps != _searchedLibrary)
@@ -144,14 +144,14 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         string query = _query.Trim();
         if (query.Length == 0)
         {
-            Widgets.Hint("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9", wrap: true);
+            Widgets.Hint(L("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9"), wrap: true);
             if (state.World.Maps is null)
-                Widgets.Hint(state.World.IsBusy ? "Carte en cours de chargement : seules les positions sont disponibles." : "Aucune carte chargée.", wrap: true);
+                Widgets.Hint(state.World.IsBusy ? L("Carte en cours de chargement : seules les positions sont disponibles.") : L("Aucune carte chargée."), wrap: true);
         }
         else if (query.Length < 2)
-            Widgets.Hint("Tape au moins 2 caractères.");
+            Widgets.Hint(L("Tape au moins 2 caractères."));
         else
-            Widgets.Hint(state.World.Maps is null ? "Carte en cours de chargement." : $"Aucun résultat pour « {query} ».");
+            Widgets.Hint(state.World.Maps is null ? L("Carte en cours de chargement.") : L($"Aucun résultat pour « {query} »."));
     }
 
     private void DrawResults()
@@ -226,8 +226,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private bool DrawChoice(Result result, Vector2 min, Vector2 max)
     {
         bool placed = result.Kind == Kind.Object || IsPlaced(result.Type);
-        string world = $"{Icons.Crosshair}  Monde";
-        string viewer = $"{Icons.Box}  Visionneuse";
+        string world = L($"{Icons.Crosshair}  Monde");
+        string viewer = L($"{Icons.Box}  Visionneuse");
         var padding = ImGui.GetStyle().FramePadding;
         float buttonHeight = ImGui.GetFrameHeight();
         float worldWidth = ImGui.CalcTextSize(world).X + padding.X * 2;
@@ -239,14 +239,14 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         bool clicked = false;
         ImGui.SetCursorScreenPos(new Vector2(max.X - 6f - _choiceWidth, y));
         ImGui.BeginDisabled(!placed);
-        if (Widgets.Button(world, placed ? "Aller à l'objet dans la vue 3D (Entrée)" : "Ce type n'est placé nulle part sur la carte"))
+        if (Widgets.Button(world, placed ? L("Aller à l'objet dans la vue 3D (Entrée)") : L("Ce type n'est placé nulle part sur la carte")))
         {
             Activate(result);
             clicked = true;
         }
         ImGui.EndDisabled();
         ImGui.SameLine(0, 6f);
-        if (!clicked && Widgets.Button(viewer, "Voir le modèle seul dans la visionneuse (Ctrl+Entrée), puis « Placer » pour l'ajouter à la carte"))
+        if (!clicked && Widgets.Button(viewer, L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée), puis « Placer » pour l'ajouter à la carte")))
         {
             OpenInViewer(result);
             clicked = true;
@@ -273,7 +273,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         ImGui.GetWindowDrawList().AddLine(new Vector2(ImGui.GetWindowPos().X, p.Y), new Vector2(ImGui.GetWindowPos().X + ImGui.GetWindowWidth(), p.Y), Widgets.Col(UiTheme.Divider));
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.PushFont(UiTheme.SmallFont);
-        ImGui.TextColored(UiTheme.TextFaint, "↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer");
+        ImGui.TextColored(UiTheme.TextFaint, L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
         ImGui.PopFont();
     }
 
@@ -290,7 +290,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
 
         string query = _query.Trim();
         if (Coordinates.TryParse(query) is { } coordinates)
-            AddGroup("Position", [PositionResult(coordinates)]);
+            AddGroup(L("Position"), [PositionResult(coordinates)]);
 
         if (query.Length >= 2 && state.World.Maps is { } library)
         {
@@ -298,12 +298,12 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             BuildIndex(library, names);
             LearnTypedName(query, library, names);
             if (HashText.TryParse(query) is { } hash && FindHash(hash, library, names) is { Count: > 0 } byHash)
-                AddGroup("Hash", byHash);
+                AddGroup(L("Hash"), byHash);
             var groups = new List<Group>
             {
-                new("Objets les plus proches", FindObjects(query, names)),
+                new(L("Objets les plus proches"), FindObjects(query, names)),
                 new("YMAP", FindMaps(query)),
-                new("Types (archétypes)", FindTypes(query, library)),
+                new(L("Types (archétypes)"), FindTypes(query, library)),
             };
             // The kind with the best match first (e.g. a YMAP whose exact name was typed), otherwise in this order.
             foreach (var group in groups.Where(g => g.Results.Count > 0).OrderBy(g => g.Results.Min(r => r.Score)))
@@ -321,9 +321,9 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     {
         string text = string.Create(CultureInfo.InvariantCulture, $"{c.X:0.00}, {c.Y:0.00}, {(c.Z is { } z ? z.ToString("0.00", CultureInfo.InvariantCulture) : "?")}");
         string detail = c.Heading is { } h
-            ? string.Create(CultureInfo.InvariantCulture, $"cap {h:0.#}° · {Distance(c.ToVector3(state.Camera.Position.Z)):0} m")
-            : c.Z is null ? "hauteur estimée" : $"{Distance(c.ToVector3(0)):0} m";
-        return new Result(Kind.Position, Icons.MapPinned, $"Aller à {text}", detail, 0) { Position = c };
+            ? string.Create(CultureInfo.InvariantCulture, $"{L("cap")} {h:0.#}° · {Distance(c.ToVector3(state.Camera.Position.Z)):0} m")
+            : c.Z is null ? L("hauteur estimée") : $"{Distance(c.ToVector3(0)):0} m";
+        return new Result(Kind.Position, Icons.MapPinned, L($"Aller à {text}"), detail, 0) { Position = c };
     }
 
     private void BuildIndex(MapLibrary library, HashNames names)
@@ -387,7 +387,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             .OrderBy(m => m.Score).ThenBy(m => m.Name.Length).ThenBy(m => m.Name, StringComparer.Ordinal)
             .Take(MaxMaps)
             .Select(m => new Result(Kind.Map, Icons.File, m.Name,
-                $"{m.Map.Entities.Count} objets · {Distance(Center(m.Map)):0} m", m.Score) { Map = m.Map })
+                L($"{m.Map.Entities.Count} objets · {Distance(Center(m.Map)):0} m"), m.Score) { Map = m.Map })
             .ToList();
 
     private List<Result> FindTypes(string query, MapLibrary library) =>
@@ -402,7 +402,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     {
         int count = _objectsByType.TryGetValue(hash, out var list) ? list.Count : 0;
         string file = library.GetArchetypeFile(hash) is { } path ? Path.GetFileName(path) : "?";
-        string placed = count == 0 ? "non placé" : count == 1 ? "1 sur la carte" : $"{count} sur la carte";
+        string placed = count == 0 ? L("non placé") : count == 1 ? L("1 sur la carte") : L($"{count} sur la carte");
         return new Result(Kind.Type, Icons.Package, name, $"{prefix}{file} · {placed}", score) { Type = hash };
     }
 
@@ -414,7 +414,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         if (IsType(hash, library))
             results.Add(TypeResult(hash, names.Describe(hash), -1, library, $"0x{hash:X8} · "));
         foreach (var (map, name) in _maps.Where(m => m.Map.NameHash == hash).Take(MaxMaps))
-            results.Add(new Result(Kind.Map, Icons.File, name, $"0x{hash:X8} · YMAP · {map.Entities.Count} objets", -1) { Map = map });
+            results.Add(new Result(Kind.Map, Icons.File, name, L($"0x{hash:X8} · YMAP · {map.Entities.Count} objets"), -1) { Map = map });
         return results;
     }
 

@@ -110,6 +110,7 @@ public class LocalizationTests
                 else if (c == 'L' && Peek(1) == '(' && (_i == 0 || !(char.IsLetterOrDigit(text[_i - 1]) || text[_i - 1] is '_' or '.')))
                 {
                     _i += 2;
+                    depth++; // Its ')' is read as code.
                     while (char.IsWhiteSpace(text[_i]))
                         _i++;
                     if (!IsStringStart())

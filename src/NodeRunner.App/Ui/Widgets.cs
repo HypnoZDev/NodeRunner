@@ -121,7 +121,7 @@ internal static class Widgets
             var after = ImGui.GetCursorScreenPos();
             float size = max.Y - min.Y - 4f;
             ImGui.SetCursorScreenPos(new Vector2(max.X - size - 2f, min.Y + 2f));
-            if (IconButton(Icons.X, $"{id}_clear", "Effacer", size: size))
+            if (IconButton(Icons.X, $"{id}_clear", L("Effacer"), size: size))
             {
                 text = "";
                 changed = true;

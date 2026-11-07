@@ -22,11 +22,11 @@ internal sealed class ScenarioLayer : IDisposable
 
     public static string Label(ScenarioCategory category) => category switch
     {
-        ScenarioCategory.PedActivity => "Piétons (activités, marche)",
-        ScenarioCategory.PedSeated => "Piétons assis",
-        ScenarioCategory.Vehicle => "Véhicules",
-        ScenarioCategory.Animal => "Animaux",
-        ScenarioCategory.Other => "Autres",
+        ScenarioCategory.PedActivity => L("Piétons (activités, marche)"),
+        ScenarioCategory.PedSeated => L("Piétons assis"),
+        ScenarioCategory.Vehicle => L("Véhicules"),
+        ScenarioCategory.Animal => L("Animaux"),
+        ScenarioCategory.Other => L("Autres"),
         _ => category.ToString(),
     };
 
