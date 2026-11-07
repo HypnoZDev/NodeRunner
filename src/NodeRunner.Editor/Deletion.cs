@@ -17,9 +17,13 @@ public sealed class DeletionPlan
     public required IReadOnlyList<MapEntity> Children { get; init; }
     public required IReadOnlyList<MapEntity> Parents { get; init; }
 
+    // The same objects in the other instances of their interior.
+    public IReadOnlyList<MapEntity> Copies { get; init; } = [];
+
     public required IReadOnlyList<MapEntity> KeptParents { get; init; }
 
-    public IEnumerable<MapData> Maps => Entities.Select(e => e.Map).OfType<MapData>().Distinct();
+    // The map files rewritten (objects of an interior are in its archetype file instead).
+    public IEnumerable<MapData> Maps => Entities.Where(e => e.Interior is null).Select(e => e.Map).OfType<MapData>().Distinct();
 
     public static DeletionPlan For(MapEntity target) => For([target]);
 
@@ -28,14 +32,21 @@ public sealed class DeletionPlan
         if (targets.Count == 0)
             throw new ArgumentException("Nothing to delete.", nameof(targets));
         if (targets.Any(t => !t.CanDelete))
-            throw new InvalidOperationException("Objects inside an interior are defined by the interior's archetype.");
+            throw new InvalidOperationException("Objects of an entity set cannot be deleted yet.");
 
-        // Every object chosen and its children first: a parent goes only if all its children go.
+        // Every object chosen and its children first: a parent goes only if all its children go. An object of an
+        // interior goes from every instance of the interior (no level of detail inside).
         var going = new HashSet<MapEntity>();
         var chosen = targets.Where(going.Add).ToList();
         var children = new List<MapEntity>();
+        var copies = new List<MapEntity>();
         foreach (var target in chosen)
-            AddChildren(target, children, going);
+        {
+            if (target.Definition is { } definition)
+                copies.AddRange(definition.Copies.Where(c => !c.IsDeleted && going.Add(c)));
+            else
+                AddChildren(target, children, going);
+        }
 
         var parents = new List<MapEntity>();
         var kept = new List<MapEntity>();
@@ -58,8 +69,9 @@ public sealed class DeletionPlan
         return new DeletionPlan
         {
             Targets = chosen,
-            Entities = [.. chosen, .. children, .. parents],
+            Entities = [.. chosen, .. children, .. copies, .. parents],
             Children = children,
+            Copies = copies,
             Parents = parents,
             KeptParents = kept,
         };

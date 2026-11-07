@@ -82,6 +82,6 @@ public class MapEntityTests
         Assert.True(Vector3.Distance(new Vector3(3, 500, 10), inSecond.Position) < 1e-4f);
         Assert.Equal(new Vector3(2, 2, 1), inSecond.Scale);
         Assert.True(MathF.Abs(Quaternion.Dot(Quarter, inSecond.Orientation)) > 0.9999f);
-        Assert.False(inSecond.CanDelete);
+        Assert.True(inSecond.CanDelete);
     }
 }

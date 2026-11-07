@@ -47,7 +47,7 @@ internal static class InteriorFileSaver
         {
             var read = written.Archetypes.FirstOrDefault(a => a.NameHash == interior.NameHash)
                        ?? throw new InvalidDataException("vérification échouée (intérieur absent)");
-            var expected = interior.InteriorEntities.Concat(interior.InteriorEntitySets.SelectMany(s => s.Entities)).ToList();
+            var expected = interior.InteriorEntities.Where(e => !e.IsDeleted).Concat(interior.InteriorEntitySets.SelectMany(s => s.Entities)).ToList();
             var actual = read.InteriorEntities.Concat(read.InteriorEntitySets.SelectMany(s => s.Entities)).ToList();
             if (expected.Count != actual.Count
                 || expected.Zip(actual).Any(p => System.Numerics.Vector3.Distance(p.First.Position, p.Second.Position) > Tolerance))

@@ -180,11 +180,11 @@ internal sealed unsafe class ScenePanel(AppState state)
                 continue;
             foreach (var entity in entities)
             {
-                bool hasChildren = entity.IsInterior && entity.InteriorEntities.Count > 0;
+                bool hasChildren = entity.IsInterior && entity.InteriorEntities.Any(c => !c.IsDeleted);
                 bool interiorOpen = hasChildren && _expandedInteriors.Contains(entity);
                 _rows.Add(new Row(1, map, entity, interiorOpen, hasChildren));
                 if (interiorOpen)
-                    foreach (var child in entity.InteriorEntities)
+                    foreach (var child in entity.InteriorEntities.Where(c => !c.IsDeleted))
                         _rows.Add(new Row(2, map, child, false, false));
             }
         }

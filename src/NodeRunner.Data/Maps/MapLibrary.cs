@@ -83,6 +83,9 @@ public sealed class MapLibrary
             if (entity.IsDeleted != deleted)
                 DeletedCount += deleted ? 1 : -1;
             entity.IsDeleted = deleted;
+            // An object of an interior goes from its archetype, with all its copies.
+            if (entity.Definition is { } definition)
+                definition.IsDeleted = deleted;
         }
         StructureVersion++;
     }

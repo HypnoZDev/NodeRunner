@@ -82,11 +82,14 @@ public sealed class MapEntity
     // moving it moves it in every instance of the interior.
     public bool CanEdit => true;
 
-    // False for the objects inside an interior: removing one needs the archetype rewritten without it.
-    public bool CanDelete => Interior is null;
+    // False for the objects of an interior's entity set (not handled yet).
+    public bool CanDelete => EntitySet is null;
 
     // For an object inside an interior: its definition in the interior's archetype (placed relative to the interior).
     public MapEntity? Definition => _definition;
+
+    // For a definition: its copies placed in the interior instances.
+    public IReadOnlyList<MapEntity> Copies => _copies ?? (IReadOnlyList<MapEntity>)[];
 
     // Moves, turns and scales the object (orientation is the world orientation, as Orientation).
     public void SetPlacement(Vector3 position, Quaternion orientation, Vector3 scale)

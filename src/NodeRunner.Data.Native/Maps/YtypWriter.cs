@@ -24,7 +24,7 @@ public sealed class YtypWriter : IMapTypesWriter
                                        && ReadUInt32(document, i, YtypReader.ArchName) == interior.NameHash);
             if (item == default)
                 throw new InvalidDataException($"L'intérieur 0x{interior.NameHash:X8} n'est pas dans ce fichier.");
-            WriteEntities(document, PointerItems(document, item, YtypReader.InteriorEntities), interior.InteriorEntities);
+            WriteInteriorEntities(document, item, interior.InteriorEntities);
 
             var (setBlock, setOffset, setCount) = Array(document, item, YtypReader.InteriorEntitySets);
             if (setCount != interior.InteriorEntitySets.Count)
@@ -38,6 +38,70 @@ public sealed class YtypWriter : IMapTypesWriter
 
         var (content, pageFlags) = document.Write();
         return new MapFileContent(content, pageFlags);
+    }
+
+    // The interior's objects, those deleted left out: the rooms and portals list their objects by index, renumbered.
+    private static void WriteInteriorEntities(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<MapEntity> entities)
+    {
+        var items = PointerItems(document, interior, YtypReader.InteriorEntities);
+        WriteEntities(document, items, entities);
+
+        var newIndex = new int[items.Count];
+        int next = 0, entity = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
+            bool keep = !isEntity || !entities[entity].IsDeleted;
+            if (isEntity)
+                entity++;
+            newIndex[i] = keep ? next++ : -1;
+        }
+        if (next == items.Count)
+            return;
+
+        var (block, offset, _) = Array(document, interior, YtypReader.InteriorEntities);
+        var kept = items.Where((_, i) => newIndex[i] >= 0).ToList();
+        var array = document.Blocks[block].Data;
+        for (int i = 0; i < kept.Count; i++)
+            BinaryPrimitives.WriteUInt64LittleEndian(array.AsSpan(offset + i * PointerSize), MetaDocument.Pointer(kept[i].Block, kept[i].Offset));
+        SetCount(document, interior, YtypReader.InteriorEntities, kept.Count);
+
+        Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex);
+        Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex);
+    }
+
+    // The object lists (indices) of the rooms or portals of an interior, in place.
+    private static void Renumber(MetaDocument document, (int Block, int Offset) interior, int field, int size, int objectsField, int[] newIndex)
+    {
+        var (block, offset, count) = Array(document, interior, field);
+        for (int r = 0; r < count; r++)
+        {
+            var owner = (block, offset + r * size);
+            var (listBlock, listOffset, listCount) = Array(document, owner, objectsField);
+            if (listCount == 0)
+                continue;
+            var data = document.Blocks[listBlock].Data;
+            int written = 0;
+            for (int i = 0; i < listCount; i++)
+            {
+                uint index = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(listOffset + i * 4));
+                if (index < newIndex.Length && newIndex[index] < 0)
+                    continue;
+                uint renumbered = index < newIndex.Length ? (uint)newIndex[index] : index;
+                BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(listOffset + written++ * 4), renumbered);
+            }
+            SetCount(document, owner, objectsField, written);
+        }
+    }
+
+    // Count and capacity of an array field; an empty array points nowhere.
+    private static void SetCount(MetaDocument document, (int Block, int Offset) item, int field, int count)
+    {
+        var span = document.Blocks[item.Block].Data.AsSpan(item.Offset + field);
+        if (count == 0)
+            BinaryPrimitives.WriteUInt64LittleEndian(span, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[8..], (ushort)count);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[10..], (ushort)count);
     }
 
     // The objects of the file are those of the archetype read from it, in the same order (the reader skips the

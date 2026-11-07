@@ -37,26 +37,26 @@ public sealed class YtypReader : IMapTypesReader
 
     // CMloArchetypeDef fields.
     internal const int InteriorEntities = 152;
-    private const int InteriorRooms = 168;
-    private const int InteriorPortals = 184;
+    internal const int InteriorRooms = 168;
+    internal const int InteriorPortals = 184;
     internal const int InteriorEntitySets = 200;
 
     // CMloRoomDef and CMloPortalDef.
-    private const uint RoomStructure = 186126833;
+    internal const uint RoomStructure = 186126833;
     private const uint PortalStructure = 2572186314;
-    private const int RoomSize = 112;
-    private const int PortalSize = 64;
+    internal const int RoomSize = 112;
+    internal const int PortalSize = 64;
     private const int RoomName = 8;
     private const int RoomBoundsMin = 32;
     private const int RoomBoundsMax = 48;
     private const int RoomFlags = 76;
     private const int RoomExteriorVisibilityDepth = 88;
-    private const int RoomAttachedObjects = 96;
+    internal const int RoomAttachedObjects = 96;
     private const int PortalRoomFrom = 8;
     private const int PortalRoomTo = 12;
     private const int PortalFlags = 16;
     private const int PortalCorners = 32;
-    private const int PortalAttachedObjects = 48;
+    internal const int PortalAttachedObjects = 48;
 
     // CMloEntitySet: name, room of each object, objects.
     private const uint EntitySetStructure = 3601308153;

@@ -338,7 +338,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             foreach (var entity in map.KeptEntities)
             {
                 Add(entity);
-                foreach (var child in entity.InteriorEntities)
+                foreach (var child in entity.InteriorEntities.Where(c => !c.IsDeleted))
                     Add(child);
             }
         }

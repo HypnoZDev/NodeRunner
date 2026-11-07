@@ -62,9 +62,16 @@ internal sealed class DeleteWindow(AppState state)
             ListRows("Versions détaillées", "Remplacent les objets de près (enfants dans la chaîne LOD) : elles partent avec eux.", plan.Children, names);
             ListRows("Versions simplifiées", "Ne représentaient que ces objets de loin (parents LOD sans autre enfant) : elles partent aussi.", plan.Parents, names);
             ListRows("Reste", "Représente aussi d'autres objets : reste visible de loin.", plan.KeptParents, names);
+            ListRows("Autres copies", "Le même objet dans les autres exemplaires de cet intérieur : il est défini une seule fois, dans son .ytyp.", plan.Copies, names);
             var maps = plan.Maps.Select(m => m.FilePath is { } p ? Path.GetFileName(p) : "?").Order().ToList();
-            Widgets.PropertyText("YMAP modifiés", string.Join(", ", maps.Take(3)) + (maps.Count > 3 ? $" (+{maps.Count - 3})" : ""),
-                string.Join("\n", maps));
+            if (maps.Count > 0)
+                Widgets.PropertyText("YMAP modifiés", string.Join(", ", maps.Take(3)) + (maps.Count > 3 ? $" (+{maps.Count - 3})" : ""),
+                    string.Join("\n", maps));
+            var types = plan.Entities.Select(e => e.Interior).OfType<MapEntity>()
+                .Select(i => state.World.Maps?.GetArchetypeFile(i.ArchetypeHash)).OfType<string>()
+                .Select(Path.GetFileName).Distinct().Order().ToList();
+            if (types.Count > 0)
+                Widgets.PropertyText("YTYP modifiés", string.Join(", ", types));
             Widgets.EndProperties();
         }
 
