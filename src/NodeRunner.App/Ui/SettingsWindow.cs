@@ -142,6 +142,20 @@ internal sealed class SettingsWindow(AppState state)
                             SetUiScale(scale);
                     ImGui.EndCombo();
                 }
+
+                Widgets.Property("Transparence", "Laisse voir un peu le fond d'écran de Windows à travers les panneaux, comme les fenêtres de Windows 11 (effet Mica, seulement quand la fenêtre est active). 0 % = interface opaque.");
+                if (!MainForm.BackdropSupported)
+                    ImGui.TextColored(UiTheme.TextFaint, "Windows 11 (22H2 ou plus récent) requis");
+                else
+                {
+                    ImGui.SetNextItemWidth(-1f);
+                    float transparency = settings.Transparency * 100f;
+                    if (ImGui.SliderFloat("##transparency", ref transparency, 0f, MainForm.MaxTransparency * 100f, "%.0f %%"))
+                        settings.Transparency = transparency / 100f;
+                    SaveWhenReleased();
+                    if (!state.TransparentWindow && settings.Transparency > 0f)
+                        ImGui.TextColored(UiTheme.Warning, "Prend effet au prochain démarrage de NodeRunner.");
+                }
                 Widgets.EndProperties();
             }
         }

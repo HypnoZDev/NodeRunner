@@ -1,6 +1,7 @@
 using System.Numerics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.DirectComposition;
 using Vortice.DXGI;
 using Vortice.Mathematics;
 
@@ -22,6 +23,9 @@ public sealed class GraphicsDevice : IDisposable
     private ID3D11DepthStencilView? _depthView;
     private ID3D11Texture2D? _depthCopy;
     private ID3D11ShaderResourceView? _depthCopyView;
+    private IDCompositionDevice? _composition;
+    private IDCompositionTarget? _compositionTarget;
+    private IDCompositionVisual? _compositionVisual;
 
     public static Format ColorFormat => BackBufferFormat;
 
@@ -34,7 +38,9 @@ public sealed class GraphicsDevice : IDisposable
 
     public string AdapterName { get; }
 
-    public GraphicsDevice(IntPtr windowHandle, int width, int height)
+    // transparent: the swap chain goes through DirectComposition with premultiplied alpha, so that Windows shows its
+    // backdrop behind the pixels that are not opaque (falls back to an opaque swap chain if that fails).
+    public GraphicsDevice(IntPtr windowHandle, int width, int height, bool transparent = false)
     {
         Width = Math.Max(1, width);
         Height = Math.Max(1, height);
@@ -78,22 +84,68 @@ public sealed class GraphicsDevice : IDisposable
             AlphaMode = AlphaMode.Ignore,
         };
 
-        try
-        {
-            _swapChain = _factory.CreateSwapChainForHwnd(Device, windowHandle, swapChainDesc);
-        }
-        catch (SharpGen.Runtime.SharpGenException)
-        {
-            // Flip model refused (old driver, remote desktop, some virtual machines): the older presentation model.
-            swapChainDesc.SwapEffect = SwapEffect.Discard;
-            swapChainDesc.Scaling = Scaling.Stretch;
-            _swapChain = _factory.CreateSwapChainForHwnd(Device, windowHandle, swapChainDesc);
-        }
+        var composed = transparent ? CreateCompositionSwapChain(windowHandle, swapChainDesc) : null;
+        IsTransparent = composed is not null;
+        _swapChain = composed ?? CreateHwndSwapChain(windowHandle, swapChainDesc);
         // We handle fullscreen ourselves; disable DXGI's Alt+Enter behaviour.
         _factory.MakeWindowAssociation(windowHandle, WindowAssociationFlags.IgnoreAltEnter);
 
         CreateBackBufferView();
         CreateDepthBuffer();
+    }
+
+    // True when the window's pixels carry an alpha that Windows uses (see WindowAlpha).
+    public bool IsTransparent { get; }
+
+    private IDXGISwapChain1 CreateHwndSwapChain(IntPtr windowHandle, SwapChainDescription1 description)
+    {
+        try
+        {
+            return _factory.CreateSwapChainForHwnd(Device, windowHandle, description);
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            // Flip model refused (old driver, remote desktop, some virtual machines): the older presentation model.
+            description.SwapEffect = SwapEffect.Discard;
+            description.Scaling = Scaling.Stretch;
+            return _factory.CreateSwapChainForHwnd(Device, windowHandle, description);
+        }
+    }
+
+    private IDXGISwapChain1? CreateCompositionSwapChain(IntPtr windowHandle, SwapChainDescription1 description)
+    {
+        IDXGISwapChain1? swapChain = null;
+        try
+        {
+            description.SwapEffect = SwapEffect.FlipSequential;
+            description.Scaling = Scaling.Stretch;
+            description.AlphaMode = AlphaMode.Premultiplied;
+            swapChain = _factory.CreateSwapChainForComposition(Device, description);
+            using (var dxgiDevice = Device.QueryInterface<IDXGIDevice>())
+                _composition = DComp.DCompositionCreateDevice<IDCompositionDevice>(dxgiDevice);
+            _composition.CreateTargetForHwnd(windowHandle, true, out _compositionTarget).CheckError();
+            _composition.CreateVisual(out _compositionVisual).CheckError();
+            _compositionVisual!.SetContent(swapChain).CheckError();
+            _compositionTarget!.SetRoot(_compositionVisual).CheckError();
+            _composition.Commit().CheckError();
+            return swapChain;
+        }
+        catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            swapChain?.Dispose();
+            DisposeComposition();
+            return null;
+        }
+    }
+
+    private void DisposeComposition()
+    {
+        _compositionVisual?.Dispose();
+        _compositionVisual = null;
+        _compositionTarget?.Dispose();
+        _compositionTarget = null;
+        _composition?.Dispose();
+        _composition = null;
     }
 
     // True when no graphics card offers Direct3D 11 and Windows draws in software (WARP): works, but slowly.
@@ -320,6 +372,7 @@ public sealed class GraphicsDevice : IDisposable
         _backBufferView?.Dispose();
         DisposeDepthBuffer();
         _swapChain.Dispose();
+        DisposeComposition();
         Context.Dispose();
         Device.Dispose();
         _factory.Dispose();

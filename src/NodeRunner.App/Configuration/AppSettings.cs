@@ -18,6 +18,9 @@ public sealed class AppSettings
 
     public bool VSync { get; set; } = true;
 
+    // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
+    public float Transparency { get; set; } = 0.15f;
+
     // Interface size (1.5 = 150 %); 0 = the Windows display scale.
     public float UiScale { get; set; }
 

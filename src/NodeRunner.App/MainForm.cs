@@ -47,6 +47,9 @@ internal sealed unsafe partial class MainForm : Form
     private readonly OcclusionLayer _occlusionLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
+    private WindowAlpha? _windowAlpha;
+    private readonly bool _backdrop;
+    private bool? _backdropShown;
     private IntPtr _imguiContext;
     private double _lastFrameTime;
 
@@ -64,14 +67,34 @@ internal sealed unsafe partial class MainForm : Form
         MinimumSize = new Size((int)(640 * scale), (int)(360 * scale));
         BackColor = Color.FromArgb(0x11, 0x12, 0x14); // Shown for an instant while resizing: colour of the menu bar.
 
+        _backdrop = state.Settings.Transparency > 0f && BackdropSupported;
         _surface = new RenderSurface { Dock = DockStyle.Fill, IsWindowFrame = IsFramePoint };
         Controls.Add(_surface);
     }
+
+    // No GDI surface: the window shows only DirectX's image and, through its transparent pixels, the backdrop.
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+            if (_backdrop)
+                parameters.ExStyle |= WsExNoRedirectionBitmap;
+            return parameters;
+        }
+    }
+
+    private const int WsExNoRedirectionBitmap = 0x00200000;
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         UseDarkTitleBar();
+        if (_backdrop)
+        {
+            var margins = new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            _ = DwmExtendFrameIntoClientArea(Handle, ref margins);
+        }
         // Recompute the frame now that WM_NCCALCSIZE removes the Windows caption.
         SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, SwpFrameChanged | SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
     }
@@ -239,7 +262,10 @@ internal sealed unsafe partial class MainForm : Form
         UiTheme.LoadFonts(io, DisplayScale());
         UiTheme.Apply();
 
-        _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height);
+        _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height, _backdrop);
+        if (_graphics.IsTransparent)
+            _windowAlpha = new WindowAlpha(_graphics.Device, _graphics.Context);
+        _state.TransparentWindow = _graphics.IsTransparent;
         _imguiRenderer = new ImGuiRenderer(_graphics.Device, _graphics.Context);
         _lineRenderer = new ColorRenderer(_graphics.Device, _graphics.Context);
         _modelRenderer = new ModelRenderer(_graphics.Device, _graphics.Context);
@@ -283,6 +309,8 @@ internal sealed unsafe partial class MainForm : Form
         _shadowMaps = null;
         _pickBuffer?.Dispose();
         _pickBuffer = null;
+        _windowAlpha?.Dispose();
+        _windowAlpha = null;
         _lineRenderer?.Dispose();
         _lineRenderer = null;
         _imguiRenderer?.Dispose();
@@ -408,7 +436,12 @@ internal sealed unsafe partial class MainForm : Form
         graphics.BeginFrame(BackgroundColor);
         graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
         DrawWorld(_lineRenderer!, scene);
+        float opacity = 1f - Math.Clamp(_state.Settings.Transparency, 0f, MaxTransparency);
+        _windowAlpha?.MakeOpaque(scene.X, scene.Y, scene.Width, scene.Height);
         imguiRenderer.Render(ImGui.GetDrawData());
+        if (_windowAlpha is not null && opacity < 1f)
+            _windowAlpha.Fade(graphics.Width, graphics.Height, scene.X, scene.Y, scene.Width, scene.Height, opacity);
+        ShowBackdrop(_windowAlpha is not null && opacity < 1f);
         graphics.Present(_state.Settings.VSync);
 
         HandleUiRequests();
@@ -1266,6 +1299,33 @@ internal sealed unsafe partial class MainForm : Form
         SetWindowAttribute(DwmBorderColor, UiTheme.ColorRef(UiTheme.Chrome));
         SetWindowAttribute(DwmTextColor, UiTheme.ColorRef(UiTheme.TextMuted));
     }
+
+    // --- Win32: Windows 11 backdrop (Mica) behind the interface (22H2+, see WindowAlpha) ---
+
+    public const float MaxTransparency = 0.5f;
+
+    public static bool BackdropSupported => Environment.OSVersion.Version.Build >= 22621;
+
+    private const int DwmSystemBackdropType = 38;
+    private const int BackdropNone = 1;
+    private const int BackdropMica = 2;
+
+    private void ShowBackdrop(bool shown)
+    {
+        if (_backdropShown == shown)
+            return;
+        _backdropShown = shown;
+        SetWindowAttribute(DwmSystemBackdropType, shown ? BackdropMica : BackdropNone);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Margins
+    {
+        public int Left, Right, Top, Bottom;
+    }
+
+    [LibraryImport("dwmapi.dll")]
+    private static partial int DwmExtendFrameIntoClientArea(IntPtr window, ref Margins margins);
 
     private void SetWindowAttribute(int attribute, int value) =>
         _ = DwmSetWindowAttribute(Handle, attribute, ref value, sizeof(int));

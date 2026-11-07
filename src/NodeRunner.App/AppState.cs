@@ -23,6 +23,9 @@ internal sealed class AppState
 
     public string AdapterName { get; set; } = "?";
 
+    // The window shows the Windows 11 backdrop (Mica) through the interface (see Settings.Transparency).
+    public bool TransparentWindow { get; set; }
+
     public Camera Camera { get; } = new();
 
     public WorldLoader World { get; }
