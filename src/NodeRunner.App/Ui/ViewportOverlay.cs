@@ -203,10 +203,12 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         ImGui.SetNextItemWidth(200);
         if (ImGui.SliderFloat("Vitesse (m/s)", ref speed, CameraController.MinSpeed, CameraController.MaxSpeed, "%.0f", ImGuiSliderFlags.Logarithmic))
             cameraController.Speed = speed;
-        float fov = camera.FieldOfView * 180f / MathF.PI;
+        float fov = state.Settings.FieldOfView;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("Champ de vision (°)", ref fov, 30f, 110f, "%.0f"))
-            camera.FieldOfView = fov * MathF.PI / 180f;
+        if (ImGui.SliderFloat("Champ de vision (°)", ref fov, MainForm.MinFieldOfView, MainForm.MaxFieldOfView, "%.0f"))
+            state.Settings.FieldOfView = fov;
+        if (ImGui.IsItemDeactivatedAfterEdit())
+            state.SaveSettings();
         if (ImGui.MenuItem($"{Icons.House}  Revenir à l'origine"))
         {
             camera.Position = new Vector3(-150f, -150f, 100f);

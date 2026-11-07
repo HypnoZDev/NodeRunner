@@ -419,6 +419,7 @@ internal sealed unsafe partial class MainForm : Form
         _lastFrameTime = now;
 
         // Cap the step so a long pause (dialog box, window drag) doesn't teleport the camera.
+        _state.Camera.FieldOfView = Math.Clamp(_state.Settings.FieldOfView, MinFieldOfView, MaxFieldOfView) * MathF.PI / 180f;
         _cameraController.Sensitivity = Math.Clamp(_state.Settings.MouseSensitivity, MinMouseSensitivity, MaxMouseSensitivity);
         _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
 
@@ -1307,6 +1308,9 @@ internal sealed unsafe partial class MainForm : Form
 
     public const float MinMouseSensitivity = 0.2f;
     public const float MaxMouseSensitivity = 3f;
+
+    public const float MinFieldOfView = 30f;
+    public const float MaxFieldOfView = 110f;
 
     public static bool BackdropSupported => Environment.OSVersion.Version.Build >= 22621;
 

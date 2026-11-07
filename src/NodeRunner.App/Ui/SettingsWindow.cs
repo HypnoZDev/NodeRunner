@@ -136,6 +136,13 @@ internal sealed class SettingsWindow(AppState state)
                 if (ImGui.SliderFloat("##mouse_sensitivity", ref sensitivity, MainForm.MinMouseSensitivity * 100f, MainForm.MaxMouseSensitivity * 100f, "%.0f %%", ImGuiSliderFlags.Logarithmic))
                     settings.MouseSensitivity = sensitivity / 100f;
                 SaveWhenReleased();
+
+                Widgets.Property("Champ de vision", "Angle de vue vertical de la vue 3D : petit = effet zoom, grand = grand angle (bords déformés). 60° = réglage d'origine. Aussi dans le menu Caméra de la vue 3D.");
+                ImGui.SetNextItemWidth(-1f);
+                float fov = settings.FieldOfView;
+                if (ImGui.SliderFloat("##field_of_view", ref fov, MainForm.MinFieldOfView, MainForm.MaxFieldOfView, "%.0f°"))
+                    settings.FieldOfView = fov;
+                SaveWhenReleased();
                 Widgets.EndProperties();
             }
         }
