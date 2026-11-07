@@ -501,7 +501,7 @@ internal sealed class AppState
         {
             if (library.GetArchetype(interior.ArchetypeHash) is not { } archetype)
                 continue;
-            var walls = MloOccluders.Fit(interior, archetype, InteriorCollision(interior));
+            var walls = MloOccluders.Fit(interior, archetype, InteriorCollision(interior), World.Collisions?.Materials);
             boxes.AddRange(walls);
             if (walls.Count > 0)
                 mlo++;

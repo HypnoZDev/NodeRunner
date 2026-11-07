@@ -29,15 +29,16 @@ public static class MloOccluders
 
     private sealed record Room(int Index, Vector3 Min, Vector3 Max);
 
-    // collision: the interior's own collision, in its local space.
-    public static List<OccluderBox> Fit(MapEntity interior, Archetype archetype, CollisionMesh? collision)
+    // collision: the interior's own collision, in its local space. Glass is an opening, plants are not walls.
+    public static List<OccluderBox> Fit(MapEntity interior, Archetype archetype, CollisionMesh? collision,
+        CollisionMaterials? materials = null)
     {
         var rooms = archetype.InteriorRooms
             .Select((r, i) => new Room(i, r.BoundsMin, r.BoundsMax))
             .Where(r => r.Index > 0 && r.Min != r.Max && !archetype.InteriorRooms[r.Index].Name.Equals("limbo", StringComparison.OrdinalIgnoreCase))
             .ToList();
         var openings = archetype.InteriorPortals.Where(p => (p.RoomFrom == 0 || p.RoomTo == 0) && p.Corners.Count >= 3).ToList();
-        var walls = collision is null ? [] : VerticalTriangles(collision);
+        var walls = collision is null ? [] : VerticalTriangles(collision, materials ?? CollisionMaterials.Empty);
 
         var transform = interior.Transform;
         float heading = MathF.Atan2(transform.M12, transform.M11);
@@ -59,7 +60,7 @@ public static class MloOccluders
 
     // The wall pieces of one side of a room (-X, +X, -Y, +Y), in the interior's space.
     private static IEnumerable<(Vector3 Center, Vector3 Size, float Angle)> SideWalls(Room room, int side, List<Room> rooms,
-        List<InteriorPortal> openings, List<(Vector3 A, Vector3 B, Vector3 C)> walls, bool hasCollision)
+        List<InteriorPortal> openings, List<Wall> walls, bool hasCollision)
     {
         int a = side / 2;              // 0: wall across X, 1: across Y.
         int b = 1 - a;                 // Along the wall.
@@ -125,15 +126,17 @@ public static class MloOccluders
                     continue;
                 var start = OnPlane(u0 + (i + 0.5f) * cu, z0 + (j + 0.5f) * cz, -Search);
                 float first = float.MaxValue, last = float.MinValue;
+                bool glass = false;
                 foreach (var t in near)
                 {
                     if (Hit(start, normal, t) is { } d && d <= 2 * Search)
                     {
+                        glass |= t.Glass;
                         first = MathF.Min(first, d);
                         last = MathF.Max(last, d);
                     }
                 }
-                if (first == float.MaxValue)
+                if (first == float.MaxValue || glass)
                 {
                     wall[i, j] = false;
                     continue;
@@ -205,21 +208,26 @@ public static class MloOccluders
         }
     }
 
-    private static List<(Vector3 A, Vector3 B, Vector3 C)> VerticalTriangles(CollisionMesh mesh)
+    private readonly record struct Wall(Vector3 A, Vector3 B, Vector3 C, bool Glass);
+
+    private static List<Wall> VerticalTriangles(CollisionMesh mesh, CollisionMaterials materials)
     {
-        var triangles = new List<(Vector3, Vector3, Vector3)>();
+        var triangles = new List<Wall>();
         for (int t = 0; t + 2 < mesh.Indices.Count; t += 3)
         {
             var (p, q, r) = (mesh.Vertices[mesh.Indices[t]], mesh.Vertices[mesh.Indices[t + 1]], mesh.Vertices[mesh.Indices[t + 2]]);
             var n = Vector3.Cross(q - p, r - p);
             float length = n.Length();
-            if (length > 1e-6f && MathF.Abs(n.Z) / length < VerticalNormal)
-                triangles.Add((p, q, r));
+            if (length <= 1e-6f || MathF.Abs(n.Z) / length >= VerticalNormal)
+                continue;
+            var surface = t / 3 < mesh.Materials.Count ? materials.Surface(mesh.Materials[t / 3]) : CollisionSurface.Building;
+            if (surface != CollisionSurface.Vegetation)
+                triangles.Add(new Wall(p, q, r, surface == CollisionSurface.Glass));
         }
         return triangles;
     }
 
-    private static bool Near((Vector3 A, Vector3 B, Vector3 C) t, int axis, float plane)
+    private static bool Near(Wall t, int axis, float plane)
     {
         float min = MathF.Min(Get(t.A, axis), MathF.Min(Get(t.B, axis), Get(t.C, axis)));
         float max = MathF.Max(Get(t.A, axis), MathF.Max(Get(t.B, axis), Get(t.C, axis)));
@@ -227,7 +235,7 @@ public static class MloOccluders
     }
 
     // Distance along the line to the triangle (either side), or null.
-    private static float? Hit(Vector3 origin, Vector3 direction, (Vector3 A, Vector3 B, Vector3 C) t)
+    private static float? Hit(Vector3 origin, Vector3 direction, Wall t)
     {
         var e1 = t.B - t.A;
         var e2 = t.C - t.A;

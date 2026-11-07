@@ -25,13 +25,19 @@ public class MloOccludersTests
     };
 
     // Inner and outer faces of the four walls.
-    private static CollisionMesh Walls()
+    // eastMaterial: the material of the +X wall (0 = concrete, 1 = glass).
+    private static CollisionMesh Walls(byte eastMaterial = 0)
     {
         var points = new List<Vector3>();
-        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d) => points.AddRange([a, b, c, a, c, d]);
+        var materials = new List<byte>();
+        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, byte material = 0)
+        {
+            points.AddRange([a, b, c, a, c, d]);
+            materials.AddRange([material, material]);
+        }
         foreach (float x in new[] { 4.8f, 5.1f })
         {
-            Quad(new(x, -6, 0), new(x, 6, 0), new(x, 6, 4), new(x, -6, 4));
+            Quad(new(x, -6, 0), new(x, 6, 0), new(x, 6, 4), new(x, -6, 4), eastMaterial);
             Quad(new(-x, -6, 0), new(-x, 6, 0), new(-x, 6, 4), new(-x, -6, 4));
             Quad(new(-6, x, 0), new(6, x, 0), new(6, x, 4), new(-6, x, 4));
             Quad(new(-6, -x, 0), new(6, -x, 0), new(6, -x, 4), new(-6, -x, 4));
@@ -42,15 +48,19 @@ public class MloOccludersTests
             BoundsMax = new Vector3(6, 6, 4),
             Vertices = points,
             Indices = Enumerable.Range(0, points.Count).ToArray(),
-            Materials = new byte[points.Count / 3],
+            Materials = materials,
         };
     }
 
-    private static List<(Vector3 Center, OccluderBox Box)> Fit(params InteriorRoom[] rooms)
+    private static readonly CollisionMaterials Materials = CollisionMaterials.Parse("1\nCONCRETE\nGLASS_SHOOT_THROUGH\n");
+
+    private static List<(Vector3 Center, OccluderBox Box)> Fit(params InteriorRoom[] rooms) => Fit(Walls(), rooms);
+
+    private static List<(Vector3 Center, OccluderBox Box)> Fit(CollisionMesh walls, params InteriorRoom[] rooms)
     {
         var archetype = new Archetype { NameHash = 1, Kind = ArchetypeKind.Interior, InteriorRooms = [Limbo, .. rooms], InteriorPortals = [Door] };
         Matrix4x4.Invert(Interior.Transform, out var toLocal);
-        return MloOccluders.Fit(Interior, archetype, Walls()).Select(b => (Vector3.Transform(b.Center, toLocal), b)).ToList();
+        return MloOccluders.Fit(Interior, archetype, walls, Materials).Select(b => (Vector3.Transform(b.Center, toLocal), b)).ToList();
     }
 
     [Fact]
@@ -80,5 +90,13 @@ public class MloOccludersTests
     {
         var next = new InteriorRoom(new Vector3(5, -5, 0), new Vector3(15, 5, 4)) { Name = "next" };
         Assert.DoesNotContain(Fit(Room, next), b => b.Center.X > 4.5f && b.Center.X < 5.5f && MathF.Abs(b.Center.Y) < 4.5f);
+    }
+
+    [Fact]
+    public void Glass_wall_gets_no_box()
+    {
+        var boxes = Fit(Walls(eastMaterial: 1), Room);
+        Assert.DoesNotContain(boxes, b => b.Center.X > 4.5f);
+        Assert.Contains(boxes, b => b.Center.X < -4.5f);
     }
 }
