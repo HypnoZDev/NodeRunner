@@ -27,6 +27,46 @@ public static class Adding
         };
     }
 
+    // The definition of a new object of an interior, from the object placed in the world: placed relative to the
+    // interior instance, in room.
+    public static MapEntity InteriorDefinition(MapEntity placed, MapEntity instance, int room)
+    {
+        var toLocal = Quaternion.Inverse(instance.Orientation);
+        return new MapEntity
+        {
+            ArchetypeHash = placed.ArchetypeHash,
+            Position = Vector3.Transform(placed.Position - instance.Position, toLocal),
+            StoredRotation = Quaternion.Inverse(Quaternion.Normalize(toLocal * placed.Orientation)),
+            Scale = placed.Scale,
+            Flags = placed.Flags,
+            Guid = placed.Guid,
+            LodDistance = placed.LodDistance,
+            LodLevel = placed.LodLevel,
+            InteriorRoom = room,
+        };
+    }
+
+    // The room of an interior instance holding point (world), the smallest when they overlap; -1 if none. Room 0
+    // ("limbo") is the outside.
+    public static int RoomAt(MapEntity instance, Archetype archetype, Vector3 point)
+    {
+        Matrix4x4.Invert(instance.Transform, out var toLocal);
+        var p = Vector3.Transform(point, toLocal);
+        int best = -1;
+        float bestVolume = float.MaxValue;
+        for (int r = 1; r < archetype.InteriorRooms.Count; r++)
+        {
+            var room = archetype.InteriorRooms[r];
+            if (room.Name.Equals("limbo", StringComparison.OrdinalIgnoreCase) || Vector3.Clamp(p, room.BoundsMin, room.BoundsMax) != p)
+                continue;
+            var size = room.BoundsMax - room.BoundsMin;
+            float volume = size.X * size.Y * size.Z;
+            if (volume < bestVolume)
+                (best, bestVolume) = (r, volume);
+        }
+        return best;
+    }
+
     // Where to put an object so that it stands on ground: the bottom of its box at that height (models are usually
     // made with their origin at the base, but not always).
     public static Vector3 StandingOn(Vector3 ground, Archetype? archetype) =>
@@ -65,6 +105,40 @@ public sealed class AddEdit : IEdit
 
     public void Undo() => _library.SetDeleted(_entities, true);
     public void Redo() => _library.SetDeleted(_entities, false);
+}
+
+// Objects added to an interior (to its archetype, so to every instance of it): undone by deleting them, redone by
+// bringing them back.
+public sealed class InteriorAddEdit : IEdit
+{
+    private readonly MapLibrary _library;
+    private readonly MapEntity[] _placed;
+    private readonly MapEntity[] _copies;
+
+    private InteriorAddEdit(MapLibrary library, MapEntity[] placed, string description)
+    {
+        _library = library;
+        _placed = placed;
+        _copies = [.. placed.SelectMany(p => p.Definition!.Copies)];
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => _placed[^1];
+    public IEnumerable<MapEntity> Entities => _copies;
+    public IReadOnlyList<MapEntity> Selection => _placed;
+
+    // definitions: placed relative to instance (InteriorDefinition); returns the edit, whose Selection holds their
+    // copies in instance.
+    public static InteriorAddEdit Apply(MapLibrary library, MapEntity instance, IReadOnlyList<MapEntity> definitions, string description)
+    {
+        if (definitions.Count == 0)
+            throw new ArgumentException("Nothing to add.", nameof(definitions));
+        return new InteriorAddEdit(library, [.. definitions.Select(d => library.AddToInterior(instance, d))], description);
+    }
+
+    public void Undo() => _library.SetDeleted(_copies, true);
+    public void Redo() => _library.SetDeleted(_copies, false);
 }
 
 // An object copied (Ctrl+C): its type, its place in the copied group, how it is turned and scaled.

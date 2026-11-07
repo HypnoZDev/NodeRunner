@@ -84,4 +84,19 @@ public class MapEntityTests
         Assert.True(MathF.Abs(Quaternion.Dot(Quarter, inSecond.Orientation)) > 0.9999f);
         Assert.True(inSecond.CanDelete);
     }
+
+    [Fact]
+    public void Placed_in_an_interior_relative_to_its_instance()
+    {
+        var instance = new MapEntity { ArchetypeHash = 2, Position = new Vector3(100, 0, 0), StoredRotation = Quarter, IsInterior = true };
+        var placed = new MapEntity { ArchetypeHash = 1, Position = new Vector3(100, 2, 1), StoredRotation = Quaternion.Inverse(Quarter) };
+
+        var definition = NodeRunner.Editor.Adding.InteriorDefinition(placed, instance, 3);
+        var copy = definition.PlaceInside(instance);
+
+        Assert.True(Vector3.Distance(new Vector3(2, 0, 1), definition.Position) < 1e-4f);
+        Assert.True(Vector3.Distance(placed.Position, copy.Position) < 1e-4f);
+        Assert.True(MathF.Abs(Quaternion.Dot(placed.Orientation, copy.Orientation)) > 0.9999f);
+        Assert.Equal(3, definition.InteriorRoom);
+    }
 }

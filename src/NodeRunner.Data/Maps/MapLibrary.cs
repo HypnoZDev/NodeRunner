@@ -90,6 +90,25 @@ public sealed class MapLibrary
         StructureVersion++;
     }
 
+    // Adds an object to the archetype of instance's interior (definition: placed relative to the interior) and to every
+    // instance of that interior; returns its copy in instance.
+    public MapEntity AddToInterior(MapEntity instance, MapEntity definition)
+    {
+        if (!instance.IsInterior || GetArchetype(instance.ArchetypeHash) is not { Kind: ArchetypeKind.Interior } archetype)
+            throw new ArgumentException("Not an interior instance.", nameof(instance));
+        archetype.AddInteriorEntity(definition);
+        MapEntity? placed = null;
+        foreach (var other in _maps.SelectMany(m => m.Entities).Where(e => e.IsInterior && e.ArchetypeHash == instance.ArchetypeHash))
+        {
+            var copy = definition.PlaceInside(other);
+            other.InteriorEntities = [.. other.InteriorEntities, copy];
+            if (other == instance)
+                placed = copy;
+        }
+        StructureVersion++;
+        return placed ?? throw new ArgumentException("Interior instance not loaded.", nameof(instance));
+    }
+
     public void SetEntitySetActive(PlacedEntitySet set, bool active)
     {
         if (set.IsActive == active)

@@ -40,91 +40,159 @@ public sealed class YtypWriter : IMapTypesWriter
         return new MapFileContent(content, pageFlags);
     }
 
-    // The interior's objects, those deleted left out: the rooms and portals list their objects by index, renumbered.
+    // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
+    // The rooms and portals list their objects by index, renumbered.
     private static void WriteInteriorEntities(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<MapEntity> entities)
     {
         var items = PointerItems(document, interior, YtypReader.InteriorEntities);
-        WriteEntities(document, items, entities);
+        int fileCount = WriteEntities(document, items, entities);
 
         var newIndex = new int[items.Count];
-        int next = 0, entity = 0;
+        var kept = new List<(int Block, int Offset)>();
+        int entity = 0;
         for (int i = 0; i < items.Count; i++)
         {
             bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
             bool keep = !isEntity || !entities[entity].IsDeleted;
             if (isEntity)
                 entity++;
-            newIndex[i] = keep ? next++ : -1;
+            newIndex[i] = keep ? kept.Count : -1;
+            if (keep)
+                kept.Add(items[i]);
         }
-        if (next == items.Count)
+        var added = entities.Skip(fileCount).Where(e => !e.IsDeleted).ToList();
+        if (kept.Count == items.Count && added.Count == 0)
             return;
 
-        var (block, offset, _) = Array(document, interior, YtypReader.InteriorEntities);
-        var kept = items.Where((_, i) => newIndex[i] >= 0).ToList();
-        var array = document.Blocks[block].Data;
-        for (int i = 0; i < kept.Count; i++)
-            BinaryPrimitives.WriteUInt64LittleEndian(array.AsSpan(offset + i * PointerSize), MetaDocument.Pointer(kept[i].Block, kept[i].Offset));
-        SetCount(document, interior, YtypReader.InteriorEntities, kept.Count);
+        var additions = new List<(int Index, int Room)>();
+        if (added.Count > 0)
+        {
+            var template = AnyEntity(document) ?? throw new InvalidDataException("aucun objet modèle dans ce fichier");
+            var data = new byte[added.Count * YmapReader.EntitySize];
+            int block = document.Blocks.Count;
+            document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, data));
+            for (int i = 0; i < added.Count; i++)
+            {
+                int o = i * YmapReader.EntitySize;
+                template.CopyTo(data, o);
+                YmapWriter.WriteNewEntityFields(data, o, added[i]);
+                WritePlacement(data, o, added[i]);
+                additions.Add((kept.Count, added[i].InteriorRoom));
+                kept.Add((block, o));
+            }
+        }
 
-        Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex);
-        Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex);
+        WritePointers(document, interior, YtypReader.InteriorEntities, kept);
+        Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex, additions);
+        Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex, []);
     }
 
-    // The object lists (indices) of the rooms or portals of an interior, in place.
-    private static void Renumber(MetaDocument document, (int Block, int Offset) interior, int field, int size, int objectsField, int[] newIndex)
+    private static byte[]? AnyEntity(MetaDocument document)
+    {
+        var block = document.Blocks.Find(b => b.Structure == YmapReader.EntityStructure && b.Data.Length >= YmapReader.EntitySize);
+        return block?.Data.AsSpan(0, YmapReader.EntitySize).ToArray();
+    }
+
+    // Replaces a pointer array, in place when it does not grow, otherwise in a new block.
+    private static void WritePointers(MetaDocument document, (int Block, int Offset) item, int field, List<(int Block, int Offset)> targets)
+    {
+        var (block, offset, count) = Array(document, item, field);
+        if (targets.Count > count)
+        {
+            uint structure = block >= 0 ? document.Blocks[block].Structure : PointerArrayStructure(document);
+            block = document.Blocks.Count;
+            offset = 0;
+            document.Blocks.Add(new MetaDocument.Block(structure, new byte[targets.Count * PointerSize]));
+        }
+        if (block >= 0)
+        {
+            var data = document.Blocks[block].Data;
+            for (int i = 0; i < targets.Count; i++)
+                BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(offset + i * PointerSize), MetaDocument.Pointer(targets[i].Block, targets[i].Offset));
+        }
+        SetArray(document, item, field, block, offset, targets.Count);
+    }
+
+    // The structure of the blocks holding arrays of pointers: that of the file's list of archetypes.
+    private static uint PointerArrayStructure(MetaDocument document)
+    {
+        var (block, _, _) = Array(document, (document.RootBlock, 0), YtypReader.TypesArchetypes);
+        return document.Blocks[block].Structure;
+    }
+
+    // The object lists (indices) of the rooms or portals of an interior: renumbered, with the added objects appended
+    // to their room.
+    private static void Renumber(MetaDocument document, (int Block, int Offset) interior, int field, int size, int objectsField,
+        int[] newIndex, List<(int Index, int Room)> additions)
     {
         var (block, offset, count) = Array(document, interior, field);
+        uint? listStructure = null;
+        for (int r = 0; r < count; r++)
+        {
+            var (listBlock, _, listCount) = Array(document, (block, offset + r * size), objectsField);
+            if (listCount > 0)
+                listStructure ??= document.Blocks[listBlock].Structure;
+        }
         for (int r = 0; r < count; r++)
         {
             var owner = (block, offset + r * size);
             var (listBlock, listOffset, listCount) = Array(document, owner, objectsField);
-            if (listCount == 0)
-                continue;
-            var data = document.Blocks[listBlock].Data;
-            int written = 0;
+            var list = new List<uint>();
             for (int i = 0; i < listCount; i++)
             {
-                uint index = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(listOffset + i * 4));
-                if (index < newIndex.Length && newIndex[index] < 0)
-                    continue;
-                uint renumbered = index < newIndex.Length ? (uint)newIndex[index] : index;
-                BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(listOffset + written++ * 4), renumbered);
+                uint index = BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[listBlock].Data.AsSpan(listOffset + i * 4));
+                if (index >= newIndex.Length)
+                    list.Add(index);
+                else if (newIndex[index] >= 0)
+                    list.Add((uint)newIndex[index]);
             }
-            SetCount(document, owner, objectsField, written);
+            list.AddRange(additions.Where(a => a.Room == r).Select(a => (uint)a.Index));
+            if (list.Count > listCount)
+            {
+                listBlock = document.Blocks.Count;
+                listOffset = 0;
+                document.Blocks.Add(new MetaDocument.Block(listStructure ?? throw new InvalidDataException("aucune liste d'objets de salle dans ce fichier"),
+                    new byte[list.Count * 4]));
+            }
+            for (int i = 0; i < list.Count; i++)
+                BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[listBlock].Data.AsSpan(listOffset + i * 4), list[i]);
+            SetArray(document, owner, objectsField, listBlock, listOffset, list.Count);
         }
     }
 
-    // Count and capacity of an array field; an empty array points nowhere.
-    private static void SetCount(MetaDocument document, (int Block, int Offset) item, int field, int count)
+    // Pointer, count and capacity of an array field; an empty array points nowhere.
+    private static void SetArray(MetaDocument document, (int Block, int Offset) item, int field, int block, int offset, int count)
     {
         var span = document.Blocks[item.Block].Data.AsSpan(item.Offset + field);
-        if (count == 0)
-            BinaryPrimitives.WriteUInt64LittleEndian(span, 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(span, count == 0 ? 0 : MetaDocument.Pointer(block, offset));
         BinaryPrimitives.WriteUInt16LittleEndian(span[8..], (ushort)count);
         BinaryPrimitives.WriteUInt16LittleEndian(span[10..], (ushort)count);
     }
 
-    // The objects of the file are those of the archetype read from it, in the same order (the reader skips the
-    // pointers to other structures).
-    private static void WriteEntities(MetaDocument document, List<(int Block, int Offset)> items, IReadOnlyList<MapEntity> entities)
+    // The objects of the file are the first ones of the archetype read from it, in the same order (the reader skips
+    // the pointers to other structures); returns how many.
+    private static int WriteEntities(MetaDocument document, List<(int Block, int Offset)> items, IReadOnlyList<MapEntity> entities)
     {
         var objects = items.Where(i => document.Blocks[i.Block].Structure == YmapReader.EntityStructure).ToList();
-        if (objects.Count != entities.Count)
+        if (objects.Count > entities.Count)
             throw new InvalidDataException("Les objets de l'intérieur ne sont pas ceux du fichier.");
         for (int i = 0; i < objects.Count; i++)
         {
-            var entity = entities[i];
-            if (ReadUInt32(document, objects[i], YmapReader.EntityArchetype) != entity.ArchetypeHash)
+            if (ReadUInt32(document, objects[i], YmapReader.EntityArchetype) != entities[i].ArchetypeHash)
                 throw new InvalidDataException($"L'objet n° {i + 1} de l'intérieur n'est pas celui du fichier.");
-            var data = document.Blocks[objects[i].Block].Data;
-            int o = objects[i].Offset;
-            WriteVector3(data, o + YmapReader.EntityPosition, entity.Position);
-            var r = entity.StoredRotation;
-            WriteVector3(data, o + YmapReader.EntityRotation, new Vector3(r.X, r.Y, r.Z));
-            WriteFloat(data, o + YmapReader.EntityRotation + 12, r.W);
-            WriteFloat(data, o + YmapReader.EntityScaleXy, entity.Scale.X);
-            WriteFloat(data, o + YmapReader.EntityScaleZ, entity.Scale.Z);
+            WritePlacement(document.Blocks[objects[i].Block].Data, objects[i].Offset, entities[i]);
         }
+        return objects.Count;
+    }
+
+    private static void WritePlacement(byte[] data, int o, MapEntity entity)
+    {
+        WriteVector3(data, o + YmapReader.EntityPosition, entity.Position);
+        var r = entity.StoredRotation;
+        WriteVector3(data, o + YmapReader.EntityRotation, new Vector3(r.X, r.Y, r.Z));
+        WriteFloat(data, o + YmapReader.EntityRotation + 12, r.W);
+        WriteFloat(data, o + YmapReader.EntityScaleXy, entity.Scale.X);
+        WriteFloat(data, o + YmapReader.EntityScaleZ, entity.Scale.Z);
     }
 
     private static (int Block, int Offset, int Count) Array(MetaDocument document, (int Block, int Offset) item, int field)

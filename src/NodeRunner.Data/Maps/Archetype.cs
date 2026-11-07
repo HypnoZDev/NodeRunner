@@ -38,7 +38,11 @@ public sealed class Archetype
     public uint AssetNameHash { get; init; }
 
     // For an interior: the objects it contains (walls, furniture...), placed relative to the interior instance.
-    public IReadOnlyList<MapEntity> InteriorEntities { get; init; } = [];
+    public IReadOnlyList<MapEntity> InteriorEntities { get => _interiorEntities; init => _interiorEntities = value; }
+    private IReadOnlyList<MapEntity> _interiorEntities = [];
+
+    // A new list, not changed in place: background threads may be going through the old one.
+    internal void AddInteriorEntity(MapEntity entity) => _interiorEntities = [.. _interiorEntities, entity];
 
     public IReadOnlyList<InteriorRoom> InteriorRooms { get; init; } = [];
 

@@ -173,11 +173,45 @@ internal sealed class AppState
         if (GroundPosition(entity, archetype) is { } onCollision)
             entity.SetPlacement(onCollision, entity.Orientation, entity.Scale);
         string name = World.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
-        History.Add(AddEdit.Apply(library, map, entity, $"Ajouter {name}"));
-        Select(entity);
+        if (AddToInterior(library, [entity], $"Ajouter {name}") is not { } inside)
+        {
+            History.Add(AddEdit.Apply(library, map, entity, $"Ajouter {name}"));
+            inside = [entity];
+        }
+        SelectAll(inside);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
     }
+
+    // Lift of the point tested against the rooms: an object standing on a floor is just above the room's bottom.
+    private const float RoomProbeHeight = 0.3f;
+
+    // New objects placed in a room of an interior go into the interior's archetype (.ytyp), as the game draws the
+    // objects of a map file (.ymap) badly inside interiors; null when the group's first object is in no room.
+    private IReadOnlyList<MapEntity>? AddToInterior(MapLibrary library, IReadOnlyList<MapEntity> entities, string description)
+    {
+        var probe = entities[0].Position + new System.Numerics.Vector3(0, 0, RoomProbeHeight);
+        foreach (var instance in library.EntitiesAround(new System.Numerics.Vector2(probe.X, probe.Y), InteriorSearchRadius))
+        {
+            if (!instance.IsInterior || library.GetArchetype(instance.ArchetypeHash) is not { Kind: Data.Maps.ArchetypeKind.Interior } archetype
+                || Adding.RoomAt(instance, archetype, probe) is not (> 0 and var room))
+                continue;
+            var definitions = entities.Select(e =>
+            {
+                int own = Adding.RoomAt(instance, archetype, e.Position + new System.Numerics.Vector3(0, 0, RoomProbeHeight));
+                return Adding.InteriorDefinition(e, instance, own > 0 ? own : room);
+            }).ToList();
+            var edit = InteriorAddEdit.Apply(library, instance, definitions, description);
+            History.Add(edit);
+            string roomName = archetype.InteriorRooms[room].Name;
+            Notify($"Ajouté à l'intérieur {World.Names?.Describe(instance.ArchetypeHash) ?? ""} (salle {roomName}) : enregistré dans son .ytyp, dans toutes ses copies.");
+            return edit.Selection;
+        }
+        return null;
+    }
+
+    // Interiors are found by their origin: the biggest ones (tunnels) span a few hundred metres.
+    private const float InteriorSearchRadius = 400f;
 
     public CollisionQuery CollisionQuery { get; } = new();
 
@@ -308,7 +342,10 @@ internal sealed class AppState
             return;
         var pasted = ObjectCopy.Paste(Copied, ground, library.GetArchetype);
         string name = pasted.Count == 1 ? World.Names?.Describe(pasted[0].ArchetypeHash) ?? $"0x{pasted[0].ArchetypeHash:X8}" : $"{pasted.Count} objets";
-        History.Add(AddEdit.Apply(library, map, pasted, $"Coller {name}"));
+        if (AddToInterior(library, pasted, $"Coller {name}") is { } inside)
+            pasted = inside;
+        else
+            History.Add(AddEdit.Apply(library, map, pasted, $"Coller {name}"));
         SelectAll(pasted);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;

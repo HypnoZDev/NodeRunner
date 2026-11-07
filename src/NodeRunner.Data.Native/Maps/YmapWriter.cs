@@ -153,7 +153,7 @@ public sealed class YmapWriter : IMapDataWriter
         return new MapFileContent(bytes, pageFlags);
     }
 
-    private static void WriteNewEntityFields(byte[] data, int o, MapEntity entity)
+    internal static void WriteNewEntityFields(byte[] data, int o, MapEntity entity)
     {
         var item = data.AsSpan(o, YmapReader.EntitySize);
         BinaryPrimitives.WriteUInt32LittleEndian(item[YmapReader.EntityArchetype..], entity.ArchetypeHash);

@@ -111,4 +111,26 @@ public class YtypWriterTests
         Assert.Equal(-1, back.InteriorEntities[0].InteriorRoom);
         Assert.Equal(0, back.InteriorEntities[1].InteriorRoom);
     }
+
+    [Fact]
+    public void Adds_an_object_to_a_room()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var library = new MapLibrary();
+        library.SetDeleted([interior.InteriorEntities[0]], true);
+        interior.AddInteriorEntity(new MapEntity
+        {
+            ArchetypeHash = 555, Position = new Vector3(1, 2, 3), StoredRotation = Quaternion.Identity, InteriorRoom = 0,
+            LodDistance = 50, LodLevel = LodLevel.OrphanHd,
+        });
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal([101u, 102u, 555u], back.InteriorEntities.Select(e => e.ArchetypeHash));
+        var added = back.InteriorEntities[2];
+        Assert.Equal(new Vector3(1, 2, 3), added.Position);
+        Assert.Equal(0, added.InteriorRoom);
+        Assert.Equal(50f, added.LodDistance);
+        Assert.All(back.InteriorEntities.Skip(1), e => Assert.Equal(0, e.InteriorRoom));
+    }
 }
