@@ -62,4 +62,26 @@ public class MapEntityTests
         Assert.Equal(202f, corner.Y, 3);
         Assert.Equal(31f, corner.Z, 3);
     }
+
+    [Fact]
+    public void Moving_an_object_of_an_interior_moves_it_in_every_instance()
+    {
+        var definition = new MapEntity { ArchetypeHash = 1, Position = new Vector3(1, 0, 0) };
+        var first = new MapEntity { ArchetypeHash = 2, Position = new Vector3(100, 0, 0), StoredRotation = Quarter, IsInterior = true };
+        var second = new MapEntity { ArchetypeHash = 2, Position = new Vector3(0, 500, 10), IsInterior = true };
+        var inFirst = definition.PlaceInside(first);
+        var inSecond = definition.PlaceInside(second);
+        Assert.Equal(100f, inFirst.Position.X, 4);
+        Assert.Equal(1f, inFirst.Position.Y, 4);
+
+        // Two metres further along the first instance's X (world Y), turned a quarter, scaled.
+        inFirst.SetPlacement(new Vector3(100, 3, 0), Quarter * inFirst.Orientation, new Vector3(2, 2, 1));
+
+        Assert.Equal(3f, definition.Position.X, 4);
+        Assert.Equal(0f, definition.Position.Y, 4);
+        Assert.True(Vector3.Distance(new Vector3(3, 500, 10), inSecond.Position) < 1e-4f);
+        Assert.Equal(new Vector3(2, 2, 1), inSecond.Scale);
+        Assert.True(MathF.Abs(Quaternion.Dot(Quarter, inSecond.Orientation)) > 0.9999f);
+        Assert.False(inSecond.CanDelete);
+    }
 }

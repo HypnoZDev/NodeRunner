@@ -257,8 +257,7 @@ public class GameContentTests
         Assert.Equal(202f, chair.Position.X, 3);
         Assert.Equal(0f, chair.Position.Y, 3);
         Assert.NotEqual(revision, chair.Revision);
-        Assert.False(chair.CanEdit);
-        Assert.Throws<InvalidOperationException>(() => chair.SetPlacement(Vector3.Zero, Quaternion.Identity, Vector3.One));
+        Assert.False(chair.CanDelete);
     }
 
     private static (MapLibrary Library, MapEntity Shell, MapEntity Instance) LoadTunnel()

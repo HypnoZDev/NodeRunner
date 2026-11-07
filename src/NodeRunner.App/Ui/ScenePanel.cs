@@ -323,8 +323,8 @@ internal sealed unsafe class ScenePanel(AppState state)
                 && ImGui.MenuItem($"{Icons.MapPinned}  Copier les {selected} objets sélectionnés (liste {PositionText.FormatName(state.CopyFormat)})"))
                 CopyText(state.FormatSelection());
             ImGui.Separator();
-            int group = state.IsSelected(entity) ? state.EditableSelection.Count : 1;
-            if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer...", "Suppr", false, entity.CanEdit))
+            int group = state.IsSelected(entity) ? state.DeletableSelection.Count : 1;
+            if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer...", "Suppr", false, entity.CanDelete))
             {
                 // On a selected object: the whole selection goes; otherwise only this object.
                 if (!state.IsSelected(entity))

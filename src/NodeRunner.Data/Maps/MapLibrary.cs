@@ -35,6 +35,11 @@ public sealed class MapLibrary
     public string? GetArchetypeFile(uint nameHash) => _archetypeFiles.GetValueOrDefault(nameHash);
     private readonly Dictionary<uint, string> _archetypeFiles = new();
 
+    // The interiors (MLO) defined in one archetype file, in no particular order.
+    public List<Archetype> InteriorsInFile(string path) => _archetypeFiles
+        .Where(f => string.Equals(f.Value, path, StringComparison.OrdinalIgnoreCase))
+        .Select(f => GetArchetype(f.Key)).OfType<Archetype>().Where(a => a.Kind == ArchetypeKind.Interior).ToList();
+
     // Top-level entities (no parent) seen from further than NearRootDistance: big LOD/SLOD models covering whole
     // districts.
     public IReadOnlyList<MapEntity> FarRoots => _farRoots;

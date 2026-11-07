@@ -91,9 +91,11 @@ internal sealed class AppState
         _selection.AddRange(entities.Distinct());
     }
 
-    // The selected objects that can be moved or deleted (not those defined by an interior's archetype), the main one
-    // last.
+    // The selected objects that can be moved, the main one last.
     public IReadOnlyList<MapEntity> EditableSelection => SelectedEntities.Where(e => e.CanEdit).ToList();
+
+    // The selected objects that can be deleted (not those defined by an interior's archetype), the main one last.
+    public IReadOnlyList<MapEntity> DeletableSelection => SelectedEntities.Where(e => e.CanDelete).ToList();
 
     public void ToggleSelect(MapEntity entity)
     {
@@ -132,7 +134,7 @@ internal sealed class AppState
 
     public void RequestDelete()
     {
-        if (EditableSelection is { Count: > 0 } targets)
+        if (DeletableSelection is { Count: > 0 } targets)
             PendingDeletion = DeletionPlan.For(targets);
     }
 
@@ -699,7 +701,7 @@ internal sealed class AppState
             }
             var maps = history.All
                 .SelectMany(e => e.Entities)
-                .Select(entity => (entity.Interior ?? entity).Map)
+                .Where(entity => entity.Interior is null).Select(entity => entity.Map)
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()
@@ -745,7 +747,34 @@ internal sealed class AppState
         ? network.ChangedAreas.Concat(network.SavedAreas).Distinct().Order().ToList()
         : [];
 
-    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0)
+    // Archetype files (.ytyp) to write when saving: those of the interiors whose objects were moved in this session.
+    public IReadOnlyList<string> InteriorFilesToSave => World.Maps is { } library
+        ? History.All.SelectMany(e => e.Entities).Select(e => e.Interior).OfType<MapEntity>()
+            .Select(i => library.GetArchetypeFile(i.ArchetypeHash)).OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        : [];
+
+    // Archetype files of a FiveM export: those to save, plus the project's versions taken back when the map was loaded.
+    public IReadOnlyList<string> InteriorFilesToExport => World.Maps is { } library
+        ? InteriorFilesToSave.Concat(ProjectInteriorFiles(library)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        : [];
+
+    private (MapLibrary Library, List<string> Files)? _projectInteriorFiles;
+
+    // The interiors' archetype files taken from the project's stream folder when the map was loaded.
+    private List<string> ProjectInteriorFiles(MapLibrary library)
+    {
+        if (_projectInteriorFiles is not { } cached || cached.Library != library)
+        {
+            var files = library.GetInteriorArchetypeHashes().Select(library.GetArchetypeFile).OfType<string>()
+                .Where(p => p.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            _projectInteriorFiles = cached = (library, files);
+        }
+        return cached.Files;
+    }
+
+    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + InteriorFilesToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0)
         + (OccludersPending ? Math.Max(1, OccluderEdits.StreamFileNames.Count()) : 0);
 
     // Occluder changes not written to the project yet.
@@ -863,6 +892,7 @@ internal sealed class AppState
 
     // "2 YMAP", "2 YMAP, 1 YND".
     public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count)
+        + (InteriorFilesToSave.Count is var interiors and > 0 ? $", {interiors} YTYP" : "")
         + (CollisionsPending ? $", {CollisionEdits.Files.Count} YBN" : "")
         + (OccludersPending ? $", {OccluderEdits.StreamFileNames.Count()} YMAP d'occlusion" : "");
 
@@ -877,12 +907,14 @@ internal sealed class AppState
         var paths = PathAreasToSave;
         bool collisions = CollisionsPending;
         bool occluders = OccludersPending;
-        if (maps.Count == 0 && paths.Count == 0 && !collisions && !occluders)
+        var interiorFiles = InteriorFilesToSave;
+        if (maps.Count == 0 && paths.Count == 0 && !collisions && !occluders && interiorFiles.Count == 0)
             return;
         var report = maps.Count > 0 ? MapFileSaver.Save(World, maps, folder) : new MapFileSaver.Report([], []);
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
             _savedMaps.Add(map);
         PathFileSaver.Save(World, paths, folder, report);
+        InteriorFileSaver.Save(World, interiorFiles, folder, report);
         if (collisions)
             SaveCollisionEdits(folder, report);
         if (occluders)
@@ -892,7 +924,9 @@ internal sealed class AppState
             _savedCollisionRevision = CollisionEdits.Revision;
             History.MarkSaved();
             int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
-            LastSave = ($"{FilesText(report.Saved.Count - pathFiles, pathFiles)} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
+            int typeFiles = report.Saved.Count(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase));
+            string text = FilesText(report.Saved.Count - pathFiles - typeFiles, pathFiles) + (typeFiles > 0 ? $", {typeFiles} YTYP" : "");
+            LastSave = ($"{text} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
         }
         else
         {

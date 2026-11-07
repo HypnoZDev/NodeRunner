@@ -160,7 +160,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (ImGui.MenuItem($"{Icons.X}  Désélectionner", "Échap"))
                 state.Select(null);
             ImGui.Separator();
-            int group = state.EditableSelection.Count;
+            int group = state.DeletableSelection.Count;
             if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer...", "Suppr", false, group > 0))
                 state.RequestDelete();
             ImGui.EndPopup();
@@ -188,8 +188,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         Widgets.PropertyText("Distance d'affichage", $"{library.DrawDistance(entity):0} m");
         Widgets.EndProperties();
 
-        if (!entity.CanEdit)
-            Widgets.Hint("Objet défini par l'intérieur (.ytyp) : il se déplace avec l'intérieur.", wrap: true);
+        if (entity.Interior is not null)
+            Widgets.Hint("Objet défini par l'intérieur (.ytyp) : le déplacer le déplace dans toutes les copies de cet intérieur ; Ctrl+S écrit le .ytyp modifié.", wrap: true);
     }
 
     // Fields to move, turn and scale the object: drag with the mouse, or double-click to type a value.

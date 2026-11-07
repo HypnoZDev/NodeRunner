@@ -27,7 +27,7 @@ public sealed class DeletionPlan
     {
         if (targets.Count == 0)
             throw new ArgumentException("Nothing to delete.", nameof(targets));
-        if (targets.Any(t => !t.CanEdit))
+        if (targets.Any(t => !t.CanDelete))
             throw new InvalidOperationException("Objects inside an interior are defined by the interior's archetype.");
 
         // Every object chosen and its children first: a parent goes only if all its children go.

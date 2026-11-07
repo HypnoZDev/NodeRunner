@@ -268,13 +268,13 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip("Ajoute une copie au sol, au centre de la vue 3D, dans le YMAP du projet (le groupe garde sa disposition).");
             ImGui.Separator();
-            int group = _state.EditableSelection.Count;
+            int group = _state.DeletableSelection.Count;
             if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer l'objet sélectionné...",
                 "Suppr", false, group > 0))
                 _state.RequestDelete();
-            if (group == 0 && _state.Selection is { CanEdit: false } && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Les objets d'un intérieur sont définis par son .ytyp : supprimer l'intérieur entier, ou attendre l'édition des YTYP.");
-            if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Poser au sol", "Fin", false, group > 0))
+            if (group == 0 && _state.Selection is { CanDelete: false } && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip("Les objets d'un intérieur sont définis par son .ytyp : ils se déplacent, mais ne se suppriment pas encore.");
+            if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Poser au sol", "Fin", false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip("Monte ou descend chaque objet sélectionné jusqu'à ce que le bas de sa boîte touche la collision en dessous.");

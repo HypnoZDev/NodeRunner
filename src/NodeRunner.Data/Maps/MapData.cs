@@ -78,20 +78,33 @@ public sealed class MapEntity
     // transform, rotation angles shown...) can be refreshed.
     public int Revision { get; private set; }
 
-    // False for the objects inside an interior: they are defined by the interior's archetype (.ytyp), not by a map
-    // file, and move with the interior instance.
-    public bool CanEdit => Interior is null;
+    // Every placed object can be moved. An object inside an interior is defined by the interior's archetype (.ytyp):
+    // moving it moves it in every instance of the interior.
+    public bool CanEdit => true;
+
+    // False for the objects inside an interior: removing one needs the archetype rewritten without it.
+    public bool CanDelete => Interior is null;
+
+    // For an object inside an interior: its definition in the interior's archetype (placed relative to the interior).
+    public MapEntity? Definition => _definition;
 
     // Moves, turns and scales the object (orientation is the world orientation, as Orientation).
     public void SetPlacement(Vector3 position, Quaternion orientation, Vector3 scale)
     {
-        if (!CanEdit)
-            throw new InvalidOperationException("Objects inside an interior move with the interior instance.");
+        if (Interior is { } interior && _definition is { } definition)
+        {
+            var toLocal = Quaternion.Inverse(interior.Orientation);
+            definition.SetPlacement(Vector3.Transform(position - interior.Position, toLocal),
+                Quaternion.Normalize(toLocal * orientation), scale);
+            return;
+        }
 
         _position = position;
         _storedRotation = IsInterior ? orientation : Quaternion.Inverse(orientation);
         _scale = scale;
         Revision++;
+        foreach (var copy in _copies ?? [])
+            copy.FollowInterior();
         foreach (var inside in InteriorEntities)
             inside.FollowInterior();
         foreach (var set in EntitySets)
@@ -138,6 +151,8 @@ public sealed class MapEntity
     public MapEntity? Interior { get; private init; }
 
     private MapEntity? _definition;
+    // For a definition: its copies placed in the interior instances.
+    private List<MapEntity>? _copies;
 
     public MapData? Map { get; internal set; }
 
@@ -154,7 +169,7 @@ public sealed class MapEntity
     internal MapEntity PlaceInside(MapEntity instance)
     {
         var (position, storedRotation) = PlacedInside(instance);
-        return new MapEntity
+        var copy = new MapEntity
         {
             ArchetypeHash = ArchetypeHash,
             Position = position,
@@ -172,6 +187,8 @@ public sealed class MapEntity
             IsWindowView = IsWindowView,
             _definition = this,
         };
+        (_copies ??= []).Add(copy);
+        return copy;
     }
 
     private (Vector3 Position, Quaternion StoredRotation) PlacedInside(MapEntity instance) =>
@@ -183,6 +200,7 @@ public sealed class MapEntity
         if (Interior is null || _definition is null)
             return;
         (_position, _storedRotation) = _definition.PlacedInside(Interior);
+        _scale = _definition.Scale;
         Revision++;
     }
 

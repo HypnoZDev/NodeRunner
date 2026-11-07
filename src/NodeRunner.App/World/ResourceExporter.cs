@@ -32,7 +32,7 @@ internal static class ResourceExporter
 
     public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
         IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts, CollisionEdits collisionEdits,
-        string occluderFileName)
+        string occluderFileName, IReadOnlyList<string> interiorFiles)
     {
         if (Inspect(resourceFolder) == TargetState.Foreign)
             return new MapFileSaver.Report([], ["ce dossier existe déjà et n'a pas été créé par NodeRunner"]);
@@ -52,6 +52,7 @@ internal static class ResourceExporter
 
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
+        InteriorFileSaver.Save(world, interiorFiles, stream, report);
         if (report.Saved.Count == 0 && collisionEdits.Files.Count == 0 && OccluderMaps.Capture(world, occluderFileName).IsEmpty)
             return report;
         CollisionFileSaver.Save(world, collisionEdits, collisionCuts, stream, report);
@@ -70,5 +71,5 @@ internal static class ResourceExporter
 
     private static bool IsStreamedFile(string path) =>
         path.EndsWith(".ymap", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase)
-        || path.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase);
+        || path.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase);
 }
