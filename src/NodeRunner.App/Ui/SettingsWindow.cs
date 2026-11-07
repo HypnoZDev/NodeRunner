@@ -176,6 +176,19 @@ internal sealed class SettingsWindow(AppState state)
                 settings.SnapRotate = StepCombo("##snap_rotate", settings.SnapRotate, RotateSteps, "{0}°");
                 Widgets.Property("Crans d'échelle", "Pas des cubes d'échelle quand on maintient Ctrl.");
                 settings.SnapScale = StepCombo("##snap_scale", settings.SnapScale, ScaleSteps, "{0}");
+
+                Widgets.Property("Format de copie", "Format des positions copiées (Copier vector3 / vector4, listes d'objets, scripts d'entity sets) : Lua pour les scripts FiveM, JSON, ou C#. Aussi dans Propriétés > menu « ... ».");
+                ImGui.SetNextItemWidth(-1f);
+                if (ImGui.BeginCombo("##copy_format", NodeRunner.Editor.PositionText.FormatName(state.CopyFormat)))
+                {
+                    foreach (var format in Enum.GetValues<NodeRunner.Editor.CopyFormat>())
+                    {
+                        string example = NodeRunner.Editor.PositionText.Position(new Vector3(215.76f, -810.12f, 30.73f), null, format);
+                        if (ImGui.Selectable($"{NodeRunner.Editor.PositionText.FormatName(format)}  ·  {example}", state.CopyFormat == format))
+                            state.CopyFormat = format;
+                    }
+                    ImGui.EndCombo();
+                }
                 Widgets.EndProperties();
             }
         }
