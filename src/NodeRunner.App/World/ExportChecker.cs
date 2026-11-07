@@ -198,7 +198,7 @@ internal static class ExportChecker
         // Their occluders, in the game's occluder map files (one mesh stands for a whole block): removed triangle by triangle.
         var occlusionCuts = new List<OccluderFileCut>();
         if (sceneryEntities.Count > 0)
-            occlusionCuts = OcclusionRemoval.Plan(OccluderMaps(world), sceneryEntities);
+            occlusionCuts = OcclusionRemoval.Plan(OccluderMaps.Get(world).Select(f => (f.GamePath, f.Occluders)), sceneryEntities);
         if (occlusionCuts.Count > 0 && scanRoot is not null)
         {
             var occlusionConflicts = ConflictScanner.ScanResources(scanRoot, ownFolders, occlusionCuts.Select(c => c.FileName).ToList());
@@ -245,40 +245,6 @@ internal static class ExportChecker
 
         summary = $"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}";
         return new Result(items, summary, cuts, occlusionCuts);
-    }
-
-    private static readonly object OccluderLock = new();
-    private static (MapLibrary Library, List<(string GamePath, MapOccluders Occluders)> Files)? _occluderMaps;
-
-    // The occluders of the loaded map, by file: map files without objects (the game keeps occluders apart,
-    // *_occl_*.ymap).
-    private static List<(string GamePath, MapOccluders Occluders)> OccluderMaps(WorldLoader world)
-    {
-        if (world.Maps is not { } library || world.Content is not { } content)
-            return [];
-        lock (OccluderLock)
-        {
-            if (_occluderMaps is { } cached && cached.Library == library)
-                return cached.Files;
-            var reader = new OccluderFile();
-            var files = new List<(string, MapOccluders)>();
-            foreach (var map in library.Maps)
-            {
-                if (map.IsCustom || map.FilePath is not { } path || map.Entities.Count > 0 || content.ReadFile(path) is not { } bytes)
-                    continue;
-                try
-                {
-                    if (reader.ReadOccluders(bytes) is { IsEmpty: false } occluders)
-                        files.Add((path, occluders));
-                }
-                catch (InvalidDataException)
-                {
-                    // Grass maps (data in the graphics part) and damaged files: no occluders to read.
-                }
-            }
-            _occluderMaps = (library, files);
-            return files;
-        }
     }
 
     private static string Owners(IEnumerable<MapConflict> conflicts, string one, string several)

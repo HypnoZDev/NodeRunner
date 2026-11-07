@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
 // (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer)
+internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer)
 {
     private const int MaxScriptedMapsListed = 300;
 
@@ -70,6 +70,13 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
                 LayerRow(RoomLayer.LayerName(part), RoomLayer.Color(part), RoomLayer.Label(part),
                     part == RoomLayerPart.Rooms ? Widgets.Count(roomLayer.Rooms.Count) : null);
             Widgets.Hint($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle pour voir son nom.", wrap: true);
+        }
+
+        if (LayerSection("Occlusion", "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))
+        {
+            foreach (var part in OcclusionLayer.Parts)
+                LayerRow(OcclusionLayer.LayerName(part), OcclusionLayer.Color(part), OcclusionLayer.Label(part), Widgets.Count(occlusionLayer.Count(part)));
+            Widgets.Hint($"Occluders à moins de {OcclusionLayer.Radius:0} m : le jeu ne dessine pas ce qui est caché derrière.", wrap: true);
         }
 
         if (Widgets.Section("Cartes de mission (scripts)", "scripted", defaultOpen: false))

@@ -44,6 +44,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly CollisionLayer _collisionLayer = new();
     private readonly EntityBoxLayer _entityBoxLayer = new();
     private readonly RoomLayer _roomLayer = new();
+    private readonly OcclusionLayer _occlusionLayer = new();
     private readonly ModelLayer _modelLayer = new();
     private IntPtr _imguiContext;
     private double _lastFrameTime;
@@ -51,7 +52,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _modelLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _modelLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -267,6 +268,7 @@ internal sealed unsafe partial class MainForm : Form
         _collisionLayer.Dispose();
         _entityBoxLayer.Dispose();
         _roomLayer.Dispose();
+        _occlusionLayer.Dispose();
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
@@ -506,6 +508,9 @@ internal sealed unsafe partial class MainForm : Form
         bool roomsEnabled = RoomLayer.Parts.Any(p => _state.IsLayerVisible(RoomLayer.LayerName(p)));
         _roomLayer.Update(_state.World, lines, camera.Position, roomsEnabled);
         _roomLayer.Draw(lines, viewProjection, camera.Position, p => _state.IsLayerVisible(RoomLayer.LayerName(p)));
+        bool occlusionEnabled = OcclusionLayer.Parts.Any(p => _state.IsLayerVisible(OcclusionLayer.LayerName(p)));
+        _occlusionLayer.Update(_state.World, lines, camera.Position, occlusionEnabled);
+        _occlusionLayer.Draw(lines, viewProjection, camera.Position, p => _state.IsLayerVisible(OcclusionLayer.LayerName(p)));
 
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));

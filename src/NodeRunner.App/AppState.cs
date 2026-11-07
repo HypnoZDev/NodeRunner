@@ -858,7 +858,8 @@ internal sealed class AppState
         IsHiddenByDefault(layer) ? Settings.ShownLayers.Contains(layer) : !Settings.HiddenLayers.Contains(layer);
 
     private static bool IsHiddenByDefault(string layer) =>
-        layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal);
+        layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
+        || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal);
 
     public void SetLayerVisible(string layer, bool visible)
     {

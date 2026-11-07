@@ -26,13 +26,13 @@ internal sealed class MainUi
     private bool _showImGuiDemo;
     private bool _resetLayout;
 
-    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, ModelLayer modelLayer)
+    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, ModelLayer modelLayer)
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
-        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer);
+        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);
