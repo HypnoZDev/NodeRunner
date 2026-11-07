@@ -488,9 +488,41 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                 Widgets.EndProperties();
             }
         }
+
+        ImGui.Dummy(new Vector2(0, 8));
+        if (!_confirmReset)
+        {
+            if (Widgets.Button(L("Remettre les réglages d'origine..."),
+                L("Remet tous les réglages de cette fenêtre comme au premier lancement. Le dossier de GTA V, les projets, la version de la carte, les calques et la caméra ne changent pas.")))
+                _confirmReset = true;
+        }
+        else
+        {
+            ImGui.TextColored(UiTheme.Warning, L("Remettre tous les réglages de cette fenêtre comme au premier lancement ?"));
+            if (Widgets.PrimaryButton(L("Remettre##reset_settings")))
+            {
+                _confirmReset = false;
+                ResetSettings();
+            }
+            ImGui.SameLine();
+            if (Widgets.Button(L("Ne rien changer##reset_settings")))
+                _confirmReset = false;
+        }
     }
 
-    private const float FolderTextWidth = 320f;
+    private bool _confirmReset;
+
+    private void ResetSettings()
+    {
+        var settings = state.Settings;
+        settings.ResetDisplaySettings();
+        Loc.Current = settings.InterfaceLanguage;
+        UiTheme.SetAccent(settings.AccentColor, applyNextFrame: true);
+        state.SaveSettings();
+        state.Notify(L("Réglages d'origine remis (la carte graphique et la transparence changent au prochain démarrage)."));
+    }
+
+    private const float FolderTextWidth = 230f;
 
     private IReadOnlyList<string>? _graphicsCards;
 

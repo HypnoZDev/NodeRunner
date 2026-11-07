@@ -142,5 +142,13 @@ public static partial class English
         ("Ouvrir", "Open"),
         ("Ouvre ce dossier dans l'Explorateur Windows.", "Opens this folder in Windows Explorer."),
         ("Documents\\NodeRunner", "Documents\\NodeRunner"),
+        ("Remettre les réglages d'origine...", "Restore default settings..."),
+        ("Remet tous les réglages de cette fenêtre comme au premier lancement. Le dossier de GTA V, les projets, la version de la carte, les calques et la caméra ne changent pas.",
+            "Puts every setting of this window back as at the first launch. The GTA V folder, projects, map version, layers and camera do not change."),
+        ("Remettre tous les réglages de cette fenêtre comme au premier lancement ?", "Put every setting of this window back as at the first launch?"),
+        ("Remettre", "Restore"),
+        ("Ne rien changer", "Keep as is"),
+        ("Réglages d'origine remis (la carte graphique et la transparence changent au prochain démarrage).",
+            "Default settings restored (the graphics card and transparency change at the next start)."),
     ];
 }
