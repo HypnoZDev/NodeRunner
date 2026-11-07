@@ -30,10 +30,7 @@ public sealed class YtypWriter : IMapTypesWriter
             if (setCount != interior.InteriorEntitySets.Count)
                 throw new InvalidDataException("Les entity sets de l'intérieur ne sont pas ceux du fichier.");
             for (int s = 0; s < setCount; s++)
-            {
-                var set = (setBlock, setOffset + s * YtypReader.EntitySetSize);
-                WriteEntities(document, PointerItems(document, set, YtypReader.EntitySetEntities), interior.InteriorEntitySets[s].Entities);
-            }
+                WriteEntitySet(document, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities);
         }
 
         var (content, pageFlags) = document.Write();
@@ -85,6 +82,38 @@ public sealed class YtypWriter : IMapTypesWriter
         WritePointers(document, interior, YtypReader.InteriorEntities, kept);
         Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex, additions);
         Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex, []);
+    }
+
+    // The objects of an entity set, those deleted left out along with their room in the set's list of rooms (same
+    // index as the pointer).
+    private static void WriteEntitySet(MetaDocument document, (int Block, int Offset) set, IReadOnlyList<MapEntity> entities)
+    {
+        var items = PointerItems(document, set, YtypReader.EntitySetEntities);
+        WriteEntities(document, items, entities);
+
+        var (locationBlock, locationOffset, locationCount) = Array(document, set, YtypReader.EntitySetLocations);
+        var kept = new List<(int Block, int Offset)>();
+        var rooms = new List<uint>();
+        int entity = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
+            bool keep = !isEntity || !entities[entity].IsDeleted;
+            if (isEntity)
+                entity++;
+            if (!keep)
+                continue;
+            kept.Add(items[i]);
+            if (i < locationCount)
+                rooms.Add(BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4)));
+        }
+        if (kept.Count == items.Count)
+            return;
+
+        WritePointers(document, set, YtypReader.EntitySetEntities, kept);
+        for (int i = 0; i < rooms.Count; i++)
+            BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4), rooms[i]);
+        SetArray(document, set, YtypReader.EntitySetLocations, locationBlock, locationOffset, rooms.Count);
     }
 
     private static byte[]? AnyEntity(MetaDocument document)

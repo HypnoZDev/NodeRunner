@@ -358,7 +358,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (ImGui.Checkbox($"{names.Describe(set.NameHash)}##set{i}", ref active))
                 library.SetEntitySetActive(set, active);
             ImGui.SameLine();
-            ImGui.TextColored(UiTheme.TextMuted, set.Entities.Count == 1 ? "1 objet" : $"{set.Entities.Count} objets");
+            int count = set.Entities.Count(e => !e.IsDeleted);
+            ImGui.TextColored(UiTheme.TextMuted, count == 1 ? "1 objet" : $"{count} objets");
         }
     }
 

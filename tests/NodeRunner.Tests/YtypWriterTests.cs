@@ -11,7 +11,8 @@ public class YtypWriterTests
     private const uint PointerBlock = 7;
     private const uint InteriorName = 0x1234;
 
-    // A .ytyp holding one interior with three objects, the last two in its room.
+    // A .ytyp holding one interior with three objects, the last two in its room, and an entity set of two objects
+    // (rooms 0 and 7).
     private static byte[] Sample()
     {
         var document = new MetaDocument { Name = "sample", RootBlock = 0 };
@@ -25,6 +26,7 @@ public class YtypWriterTests
         Structure(YtypReader.InteriorArchetypeStructure, 240);
         Structure(YmapReader.EntityStructure, YmapReader.EntitySize);
         Structure(YtypReader.RoomStructure, YtypReader.RoomSize);
+        Structure(YtypReader.EntitySetStructure, YtypReader.EntitySetSize);
 
         void Array(byte[] data, int field, int block, int offset, int count)
         {
@@ -49,8 +51,19 @@ public class YtypWriterTests
         var roomObjects = new byte[8];
         BinaryPrimitives.WriteUInt32LittleEndian(roomObjects, 1);
         BinaryPrimitives.WriteUInt32LittleEndian(roomObjects.AsSpan(4), 2);
-        var entities = new byte[3 * YmapReader.EntitySize];
-        for (int i = 0; i < 3; i++)
+        Array(interior, YtypReader.InteriorEntitySets, 7, 0, 1);
+        var set = new byte[YtypReader.EntitySetSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(set.AsSpan(YtypReader.EntitySetName), 0xABCD);
+        Array(set, YtypReader.EntitySetLocations, 8, 0, 2);
+        Array(set, YtypReader.EntitySetEntities, 9, 0, 2);
+        var setRooms = new byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(setRooms.AsSpan(4), 7);
+        var setPointers = new byte[16];
+        for (int i = 0; i < 2; i++)
+            BinaryPrimitives.WriteUInt64LittleEndian(setPointers.AsSpan(i * 8), MetaDocument.Pointer(4, (3 + i) * YmapReader.EntitySize));
+
+        var entities = new byte[5 * YmapReader.EntitySize];
+        for (int i = 0; i < 5; i++)
         {
             int o = i * YmapReader.EntitySize;
             BinaryPrimitives.WriteUInt32LittleEndian(entities.AsSpan(o + YmapReader.EntityArchetype), (uint)(100 + i));
@@ -67,6 +80,9 @@ public class YtypWriterTests
         document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, entities));
         document.Blocks.Add(new MetaDocument.Block(YtypReader.RoomStructure, room));
         document.Blocks.Add(new MetaDocument.Block(PointerBlock + 1, roomObjects));
+        document.Blocks.Add(new MetaDocument.Block(YtypReader.EntitySetStructure, set));
+        document.Blocks.Add(new MetaDocument.Block(PointerBlock + 1, setRooms));
+        document.Blocks.Add(new MetaDocument.Block(PointerBlock, setPointers));
         return document.Write().Content;
     }
 
@@ -132,5 +148,22 @@ public class YtypWriterTests
         Assert.Equal(0, added.InteriorRoom);
         Assert.Equal(50f, added.LodDistance);
         Assert.All(back.InteriorEntities.Skip(1), e => Assert.Equal(0, e.InteriorRoom));
+    }
+
+    [Fact]
+    public void Deletes_an_object_of_an_entity_set_with_its_room()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var set = interior.InteriorEntitySets.Single();
+        Assert.Equal([0, 7], set.Entities.Select(e => e.InteriorRoom));
+        new MapLibrary().SetDeleted([set.Entities[0]], true);
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        var read = back.InteriorEntitySets.Single();
+        Assert.Equal(0xABCDu, read.NameHash);
+        Assert.Equal([104u], read.Entities.Select(e => e.ArchetypeHash));
+        Assert.Equal(7, read.Entities[0].InteriorRoom);
+        Assert.Equal(3, back.InteriorEntities.Count);
     }
 }

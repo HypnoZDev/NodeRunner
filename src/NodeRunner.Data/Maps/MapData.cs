@@ -82,8 +82,8 @@ public sealed class MapEntity
     // moving it moves it in every instance of the interior.
     public bool CanEdit => true;
 
-    // False for the objects of an interior's entity set (not handled yet).
-    public bool CanDelete => EntitySet is null;
+    // Deleting an object of an interior deletes it from the interior's archetype, in every instance.
+    public bool CanDelete => true;
 
     // For an object inside an interior: its definition in the interior's archetype (placed relative to the interior).
     public MapEntity? Definition => _definition;

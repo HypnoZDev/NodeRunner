@@ -59,10 +59,10 @@ public sealed class YtypReader : IMapTypesReader
     internal const int PortalAttachedObjects = 48;
 
     // CMloEntitySet: name, room of each object, objects.
-    private const uint EntitySetStructure = 3601308153;
+    internal const uint EntitySetStructure = 3601308153;
     internal const int EntitySetSize = 48;
-    private const int EntitySetName = 8;
-    private const int EntitySetLocations = 16;
+    internal const int EntitySetName = 8;
+    internal const int EntitySetLocations = 16;
     internal const int EntitySetEntities = 32;
 
     public MapTypes Read(ReadOnlySpan<byte> data)

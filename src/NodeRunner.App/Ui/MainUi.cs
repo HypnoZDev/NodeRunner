@@ -272,8 +272,6 @@ internal sealed class MainUi
             if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer l'objet sélectionné...",
                 "Suppr", false, group > 0))
                 _state.RequestDelete();
-            if (group == 0 && _state.Selection is { CanDelete: false } && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Les objets d'un intérieur sont définis par son .ytyp : ils se déplacent, mais ne se suppriment pas encore.");
             if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Poser au sol", "Fin", false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))

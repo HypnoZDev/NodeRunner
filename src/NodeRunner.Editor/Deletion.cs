@@ -32,7 +32,7 @@ public sealed class DeletionPlan
         if (targets.Count == 0)
             throw new ArgumentException("Nothing to delete.", nameof(targets));
         if (targets.Any(t => !t.CanDelete))
-            throw new InvalidOperationException("Objects of an entity set cannot be deleted yet.");
+            throw new InvalidOperationException("These objects cannot be deleted.");
 
         // Every object chosen and its children first: a parent goes only if all its children go. An object of an
         // interior goes from every instance of the interior (no level of detail inside).

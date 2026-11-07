@@ -49,7 +49,7 @@ public static class LodSelector
                     continue; // Hidden until activated, as in the game.
                 foreach (var inside in set.Entities)
                 {
-                    if (IsDrawn(pass, inside) && InRange(pass, inside))
+                    if (!inside.IsDeleted && IsDrawn(pass, inside) && InRange(pass, inside))
                         pass.Selected.Add(inside);
                 }
             }
