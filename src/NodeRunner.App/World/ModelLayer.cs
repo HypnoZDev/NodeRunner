@@ -190,7 +190,7 @@ internal sealed class ModelLayer : IDisposable
     }
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
-        Action? beforeTranslucent = null)
+        Action? beforeTranslucent = null, OcclusionCuller? occlusion = null)
     {
         var frustum = new Frustum(viewProjection);
         _lastFrustum = frustum;
@@ -221,6 +221,9 @@ internal sealed class ModelLayer : IDisposable
             _lastUsed[entity.Location] = now;
             if (model is null || !frustum.Intersects(entity.SphereCenter, entity.SphereRadius)
                 || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > maxDistance)
+                continue;
+            // The selection stays visible, so it can still be seen and moved.
+            if (occlusion is not null && !_selectedSet.Contains(entity.Entity) && occlusion.IsHidden(entity.SphereCenter, entity.SphereRadius))
                 continue;
 
             var tint = _selectedSet.Contains(entity.Entity) ? SelectedTint : Vector3.One;

@@ -45,6 +45,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly EntityBoxLayer _entityBoxLayer = new();
     private readonly RoomLayer _roomLayer = new();
     private readonly OcclusionLayer _occlusionLayer = new();
+    private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
     private IntPtr _imguiContext;
     private double _lastFrameTime;
@@ -52,7 +53,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _modelLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -482,9 +483,13 @@ internal sealed unsafe partial class MainForm : Form
 
         if (settings.ShowSky)
             _skyRenderer!.Draw(viewProjection, lighting);
+        bool occlusionPreview = modelsEnabled && settings.OcclusionPreview;
+        _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
+        if (occlusionPreview)
+            _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, viewProjection, _state.SelectedEntities, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
-                () => DrawWater(viewProjection, lighting));
+                () => DrawWater(viewProjection, lighting), occlusionPreview ? _occlusionCuller : null);
         else
             DrawWater(viewProjection, lighting);
 

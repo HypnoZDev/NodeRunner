@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
 // (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer)
+internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller)
 {
     private const int MaxScriptedMapsListed = 300;
 
@@ -77,6 +77,20 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             foreach (var part in OcclusionLayer.Parts)
                 LayerRow(OcclusionLayer.LayerName(part), OcclusionLayer.Color(part), OcclusionLayer.Label(part), Widgets.Count(occlusionLayer.Count(part)));
             Widgets.Hint($"Occluders à moins de {OcclusionLayer.Radius:0} m : le jeu ne dessine pas ce qui est caché derrière.", wrap: true);
+            bool preview = state.Settings.OcclusionPreview;
+            if (ImGui.Checkbox("Aperçu comme le jeu", ref preview))
+            {
+                state.Settings.OcclusionPreview = preview;
+                state.SaveSettings();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Ne dessine plus les objets entièrement cachés derrière les occluders (à moins de {OcclusionCuller.Radius:0} m), "
+                    + "comme le jeu. Un trou dans le décor = occluder mal placé. Les objets sélectionnés restent toujours affichés.");
+            if (preview)
+            {
+                ImGui.SameLine();
+                Widgets.Hint($"{occlusionCuller.HiddenCount} objet(s) caché(s)");
+            }
             if (Widgets.Button($"{Icons.Box}  Nouvelle boîte", "Boîte de 10 m posée au sol devant la caméra, à ajuster avec les poignées."))
                 state.CreateOccluderBox();
             ImGui.SameLine();
