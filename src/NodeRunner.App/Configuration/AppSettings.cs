@@ -27,6 +27,9 @@ public sealed class AppSettings
     // Name of the graphics card to use (as Windows names it); null = the most powerful one. Read at start-up.
     public string? GraphicsCard { get; set; }
 
+    // Video memory for the models, in MB; 0 = automatic (70 % of what Windows grants NodeRunner).
+    public int ModelMemoryMb { get; set; }
+
     // Mouse look speed of the camera (1 = default).
     public float MouseSensitivity { get; set; } = 1f;
 

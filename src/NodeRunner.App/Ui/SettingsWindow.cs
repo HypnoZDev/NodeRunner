@@ -137,6 +137,24 @@ internal sealed class SettingsWindow(AppState state)
                 if (!state.AdapterName.StartsWith(settings.GraphicsCard ?? _graphicsCards.FirstOrDefault() ?? state.AdapterName, StringComparison.Ordinal))
                     ImGui.TextColored(UiTheme.Warning, $"En ce moment : {state.AdapterName}. Prend effet au prochain démarrage.");
 
+                Widgets.Property("Mémoire vidéo des modèles", "Mémoire de la carte graphique gardée pour les modèles et textures de la carte. Moins = moins de risques de saccades si d'autres programmes utilisent la carte, mais les modèles lointains se rechargent plus souvent. Automatique = 70 % de ce que Windows accorde. Jamais plus de 90 % de ce que Windows accorde.");
+                ImGui.SetNextItemWidth(-1f);
+                string MemoryText(int mb) => mb > 0 ? $"{mb / 1024f:0.#} Go" : "Automatique";
+                if (ImGui.BeginCombo("##model_memory", MemoryText(settings.ModelMemoryMb)))
+                {
+                    foreach (int mb in ModelMemoryChoices)
+                    {
+                        if (ImGui.Selectable(MemoryText(mb), settings.ModelMemoryMb == mb))
+                        {
+                            settings.ModelMemoryMb = mb;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+                if (state.ModelMemory is var (used, limit) && limit < long.MaxValue)
+                    ImGui.TextColored(UiTheme.TextFaint, $"Utilisée : {used / 1048576f / 1024f:0.0} Go sur {limit / 1048576f / 1024f:0.0} Go");
+
                 Widgets.Property("Images par seconde max.", "Limite le nombre d'images par seconde : moins de chauffe et de bruit sur les portables, batterie qui dure plus. Avec la synchronisation verticale, la plus basse des deux limites s'applique.");
                 ImGui.SetNextItemWidth(-1f);
                 if (ImGui.BeginCombo("##max_fps", settings.MaxFps > 0 ? $"{settings.MaxFps}" : "Illimité"))
@@ -390,6 +408,8 @@ internal sealed class SettingsWindow(AppState state)
     }
 
     private IReadOnlyList<string>? _graphicsCards;
+
+    private static readonly int[] ModelMemoryChoices = [0, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384];
 
     private static readonly int[] BackgroundFpsChoices = [5, 10, 15, 30, 60, 0];
 

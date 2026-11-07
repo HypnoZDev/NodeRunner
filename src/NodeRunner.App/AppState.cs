@@ -23,6 +23,11 @@ internal sealed class AppState
 
     public string AdapterName { get; set; } = "?";
 
+    // Video memory of the models: used and limit (bytes), set by the main window.
+    public Func<(long Used, long Limit)>? ModelMemoryInfo { get; set; }
+
+    public (long Used, long Limit)? ModelMemory => ModelMemoryInfo?.Invoke();
+
     // The window shows the Windows 11 backdrop (Mica) through the interface (see Settings.Transparency).
     public bool TransparentWindow { get; set; }
 

@@ -274,7 +274,16 @@ internal sealed unsafe partial class MainForm : Form
         _pickBuffer = new PickBuffer(_graphics.Device, _graphics.Context);
         var graphics = _graphics;
         // Most of the video memory for the models, the rest for the window, shadows and other layers.
-        _modelLayer.MemoryBudget = () => graphics.VideoMemoryBudget() is > 0 and var budget ? budget * 7 / 10 : long.MaxValue;
+        // A fixed size chosen in the settings never goes above 90 % of what Windows grants (no crash on a small card).
+        _modelLayer.MemoryBudget = () =>
+        {
+            long budget = graphics.VideoMemoryBudget();
+            long chosen = (long)_state.Settings.ModelMemoryMb << 20;
+            if (chosen > 0)
+                return budget > 0 ? Math.Min(chosen, budget * 9 / 10) : chosen;
+            return budget > 0 ? budget * 7 / 10 : long.MaxValue;
+        };
+        _state.ModelMemoryInfo = () => (_modelLayer.GpuBytes, _modelLayer.MemoryLimit);
         _state.AdapterName = _graphics.IsSoftware ? $"{_graphics.AdapterName} (rendu logiciel, lent)" : _graphics.AdapterName;
         if (_graphics.IsSoftware)
             Diagnostics.ErrorLog.Add("Carte graphique", "Aucune carte graphique compatible DirectX 11 : affichage en rendu logiciel (lent). "
