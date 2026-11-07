@@ -6,6 +6,19 @@ namespace NodeRunner.Data.Maps;
 // only; Index is its position in the file's list.
 public sealed record OccluderBox(int Index, Vector3 Center, Vector3 Size, float Angle)
 {
+    // Units of the game's files: centre and size in quarters of a metre, sine and cosine of the angle times 16384.
+    public const float PositionUnit = 0.25f;
+    public const float AngleUnit = 16384f;
+
+    // The box as the game's file stores it.
+    public OccluderBox Quantized()
+    {
+        static float Round(float v) => MathF.Round(v / PositionUnit) * PositionUnit;
+        static Vector3 RoundVector(Vector3 v) => new(Round(v.X), Round(v.Y), Round(v.Z));
+        float angle = MathF.Atan2(MathF.Round(MathF.Sin(Angle) * AngleUnit), MathF.Round(MathF.Cos(Angle) * AngleUnit));
+        return this with { Center = RoundVector(Center), Size = Vector3.Max(RoundVector(Size), new Vector3(PositionUnit)), Angle = angle };
+    }
+
     public Vector3[] Corners()
     {
         var x = new Vector3(MathF.Cos(Angle), MathF.Sin(Angle), 0);

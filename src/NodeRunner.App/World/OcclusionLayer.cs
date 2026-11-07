@@ -14,7 +14,7 @@ internal enum OcclusionLayerPart
 // A box or a mesh of an occluder map file.
 internal sealed record OccluderSelection(OccluderMapFile File, OcclusionLayerPart Kind, int Index)
 {
-    public OccluderBox? Box => Kind == OcclusionLayerPart.Boxes ? File.Occluders.Boxes[Index] : null;
+    public OccluderBox? Box => Kind == OcclusionLayerPart.Boxes ? File.Boxes[Index] : null;
 
     public OccluderModel? Model => Kind == OcclusionLayerPart.Models ? File.Occluders.Models[Index] : null;
 
@@ -57,6 +57,7 @@ internal sealed class OcclusionLayer : IDisposable
     private MapLibrary? _library;
     private Task<BuildResult>? _building;
     private Vector2 _builtCenter = new(float.NaN);
+    private int _builtRevision = -1;
     private List<(OccluderMapFile File, OccluderBox Box)> _boxes = [];
     private List<(OccluderMapFile File, OccluderModel Model)> _models = [];
     private OccluderSelection? _outlined;
@@ -107,10 +108,11 @@ internal sealed class OcclusionLayer : IDisposable
             return;
 
         var center = new Vector2(cameraPosition.X, cameraPosition.Y);
-        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance)
+        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance || OccluderMaps.Revision != _builtRevision)
         {
             var library = _library;
             _builtCenter = center;
+            _builtRevision = OccluderMaps.Revision;
             _building = Task.Run(() => Build(library, OccluderMaps.Get(loader), center));
         }
     }
@@ -253,8 +255,10 @@ internal sealed class OcclusionLayer : IDisposable
 
         foreach (var file in files)
         {
-            foreach (var box in file.Occluders.Boxes)
+            // By index: a box may be edited meanwhile.
+            for (int b = 0; b < file.Boxes.Count; b++)
             {
+                var box = file.Boxes[b];
                 float reach = Radius + 0.5f * MathF.Max(box.Size.X, box.Size.Y);
                 if (Vector2.DistanceSquared(new Vector2(box.Center.X, box.Center.Y), center) > reach * reach)
                     continue;

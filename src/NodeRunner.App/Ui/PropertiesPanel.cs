@@ -507,6 +507,73 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
     }
 
+    private OccluderBox? _boxEditStart;
+
+    // Centre, size and rotation of a box occluder, changed live; one undo step when a field is released, the box then
+    // rounded as the game's file stores it.
+    private void DrawOccluderBoxFields(OccluderSelection occluder)
+    {
+        var file = occluder.File;
+        Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
+        float width = Widgets.SplitWidth(3);
+
+        void Track(OccluderBox before)
+        {
+            if (ImGui.IsItemActivated())
+                _boxEditStart = before;
+            if (ImGui.IsItemDeactivatedAfterEdit() && _boxEditStart is { } start)
+            {
+                var end = file.Boxes[occluder.Index].Quantized();
+                OccluderMaps.SetBox(file, end);
+                if (end != start)
+                    state.History.Add(new OccluderBoxEdit(file, start, end, $"Modifier la boîte d'occlusion {occluder.Index}"));
+                _boxEditStart = null;
+            }
+        }
+
+        Widgets.Property("Centre", "Mètres. X = est, Y = nord, Z = haut. Arrondi à 25 cm (précision du format du jeu). Aussi avec les poignées (touche 2).");
+        for (int i = 0; i < 3; i++)
+        {
+            if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            var box = file.Boxes[occluder.Index];
+            var center = box.Center;
+            float value = center[i];
+            if (Widgets.AxisField($"##occl_center{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+            {
+                center[i] = value;
+                OccluderMaps.SetBox(file, box with { Center = center });
+            }
+            Track(box);
+        }
+
+        Widgets.Property("Taille", "Longueur (X), largeur (Y) et hauteur (Z) de la boîte, en mètres, dans son propre sens. Aussi avec les poignées (touche 4).");
+        for (int i = 0; i < 3; i++)
+        {
+            if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            var box = file.Boxes[occluder.Index];
+            var size = box.Size;
+            float value = size[i];
+            if (Widgets.AxisField($"##occl_size{i}", ref value, axes[i], width, 0.05f, "%.2f", OccluderBox.PositionUnit, 8000f))
+            {
+                size[i] = MathF.Max(OccluderBox.PositionUnit, value);
+                OccluderMaps.SetBox(file, box with { Size = size });
+            }
+            Track(box);
+        }
+
+        Widgets.Property("Rotation Z", "Degrés. Une boîte d'occlusion ne tourne qu'autour de l'axe vertical. Aussi avec les poignées (touche 3).");
+        {
+            var box = file.Boxes[occluder.Index];
+            float degrees = (box.Angle * 180f / MathF.PI + 360f) % 360f;
+            if (Widgets.AxisField("##occl_angle", ref degrees, UiTheme.AxisZ, ImGui.GetContentRegionAvail().X, 0.5f, "%.1f°"))
+                OccluderMaps.SetBox(file, box with { Angle = degrees * MathF.PI / 180f });
+            Track(box);
+        }
+
+        if (file.IsBoxChanged(occluder.Index))
+            Widgets.PropertyText("État", "modifiée (pas encore enregistrée)", "L'enregistrement des boîtes d'occlusion arrive à l'étape suivante.", UiTheme.Warning);
+    }
+
     private void DrawOccluder(OccluderSelection occluder)
     {
         var (min, max) = occluder.Bounds();
@@ -527,13 +594,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (Widgets.Section(isBox ? "Boîte" : "Maillage", "occluder") && Widgets.BeginProperties("##occluder"))
         {
-            if (occluder.Box is { } box)
-            {
-                Widgets.PropertyText("Centre", $"{box.Center.X:0.##}, {box.Center.Y:0.##}, {box.Center.Z:0.##}", "Mètres. Précision du format : 25 cm.");
-                Widgets.PropertyText("Taille", $"{box.Size.X:0.##} x {box.Size.Y:0.##} x {box.Size.Z:0.##} m", "Longueur x largeur x hauteur.");
-                float degrees = box.Angle * 180f / MathF.PI;
-                Widgets.PropertyText("Rotation Z", $"{(degrees + 360f) % 360f:0.#}°", "Une boîte d'occlusion ne tourne qu'autour de l'axe vertical.");
-            }
+            if (occluder.Box is not null)
+                DrawOccluderBoxFields(occluder);
             else if (occluder.Model is { } model)
             {
                 Widgets.PropertyText("Triangles", Widgets.Count(model.TriangleCount));

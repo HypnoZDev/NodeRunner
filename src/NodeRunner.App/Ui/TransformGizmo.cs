@@ -2,12 +2,14 @@ using System.Numerics;
 using ImGuiNET;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Paths;
+using NodeRunner.App.World;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
 // 3D handles on the selected objects, drawn over the 3D view (behind the panels): arrows and planes to move them,
-// rings to turn them, cubes to scale them. A selected road node can only be moved.
+// rings to turn them, cubes to scale them. A selected road node can only be moved; a box occluder turns only around
+// the vertical axis and each of its sides is resized on its own.
 internal sealed class TransformGizmo(AppState state)
 {
     private const float LengthPixels = 110f;   // Length of an arrow on the screen, whatever the distance.
@@ -18,6 +20,8 @@ internal sealed class TransformGizmo(AppState state)
     private const float RotateStep = 15f;      // Degrees, with Ctrl.
     private const float ScaleStep = 0.1f;      // With Ctrl.
     private const float MinScale = 0.01f;
+    private const float MinBoxSide = 0.25f;     // Metres: the precision of a box occluder in the game's files.
+    private const float BoxSizeStep = 0.5f;     // Metres, with Ctrl.
 
     private enum Kind { None, Axis, Plane, Ring, ScaleAxis, ScaleUniform }
 
@@ -29,6 +33,8 @@ internal sealed class TransformGizmo(AppState state)
         public required MapEntity[] Entities;   // The main one last; empty for a road node.
         public PathNode? Node;
         public Vector3 NodeStart;
+        public OccluderSelection? Occluder;
+        public OccluderBox? BoxStart;
         public required TransformTool Tool;
         public required Handle Handle;
         public required Placement[] Starts;
@@ -57,6 +63,7 @@ internal sealed class TransformGizmo(AppState state)
     private Vector3 _cameraPosition, _viewDirection, _rayOrigin, _rayDirection, _pivot;
     private float _length;                  // World length of an arrow at the object's distance.
     private readonly Vector3[] _axes = new Vector3[3];
+    private bool _boxMode;                  // A box occluder: Z ring only, sides resized one by one.
 
     private static readonly Vector4[] AxisColors = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
     private static readonly string[] AxisNames = ["X", "Y", "Z"];
@@ -71,10 +78,12 @@ internal sealed class TransformGizmo(AppState state)
         _hovered = default;
         var entities = state.EditableSelection;
         var node = entities.Count == 0 && state.World.PathNetwork is not null ? state.SelectedPathNode : null;
+        var occluder = entities.Count == 0 && node is null && state.SelectedOccluder is { Box: not null } selected ? selected : null;
         var tool = state.Tool;
-        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Tool != tool))
-            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node);
+        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Tool != tool))
+            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder);
 
+        _boxMode = occluder is not null;
         if (tool == TransformTool.Collision)
             return;
         if (node is not null)
@@ -82,10 +91,15 @@ internal sealed class TransformGizmo(AppState state)
             if (tool != TransformTool.Move || !SetUpFrame(node.Position, null, tool))
                 return;
         }
+        else if (occluder?.Box is { } box)
+        {
+            if (tool == TransformTool.Select || !SetUpFrame(box.Center, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, box.Angle), tool))
+                return;
+        }
         else if (entities.Count == 0 || tool == TransformTool.Select || (tool == TransformTool.Scale && entities.Any(e => e.IsInterior)))
             return;
         else if (!SetUpFrame(entities.Count == 1 ? entities[0].Position : GroupTransform.Pivot(entities.Select(e => e.Position)),
-                entities.Count == 1 ? entities[0] : null, tool))
+                entities.Count == 1 ? entities[0].Orientation : null, tool))
             return;
 
         var io = ImGui.GetIO();
@@ -106,7 +120,7 @@ internal sealed class TransformGizmo(AppState state)
         {
             _hovered = FindHovered(tool, mouse);
             if (_hovered.Kind != Kind.None && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-                BeginDrag(entities, node, tool, _hovered, mouse);
+                BeginDrag(entities, node, occluder, tool, _hovered, mouse);
         }
 
         if (_drag is not null || _hovered.Kind != Kind.None)
@@ -115,7 +129,8 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Frame set-up: camera, projection, mouse ray, size of the handles ---
 
-    private bool SetUpFrame(Vector3 pivot, MapEntity? single, TransformTool tool)
+    // scaleOrientation: the axes of the scale handles (one object or a box occluder), world axes otherwise.
+    private bool SetUpFrame(Vector3 pivot, Quaternion? scaleOrientation, TransformTool tool)
     {
         // Same whole-pixel rectangle as the 3D image (MainForm.SceneViewport).
         var (position, size) = DockLayout.SceneArea;
@@ -133,11 +148,11 @@ internal sealed class TransformGizmo(AppState state)
             return false;
         _length = LengthPixels * 2f * depth * MathF.Tan(camera.FieldOfView * 0.5f) / _size.Y;
 
-        if (tool == TransformTool.Scale && single is { } entity)
+        if (tool == TransformTool.Scale && scaleOrientation is { } orientation)
         {
-            _axes[0] = Vector3.Transform(Vector3.UnitX, entity.Orientation);
-            _axes[1] = Vector3.Transform(Vector3.UnitY, entity.Orientation);
-            _axes[2] = Vector3.Transform(Vector3.UnitZ, entity.Orientation);
+            _axes[0] = Vector3.Transform(Vector3.UnitX, orientation);
+            _axes[1] = Vector3.Transform(Vector3.UnitY, orientation);
+            _axes[2] = Vector3.Transform(Vector3.UnitZ, orientation);
         }
         else
         {
@@ -236,7 +251,7 @@ internal sealed class TransformGizmo(AppState state)
     {
         var best = default(Handle);
         float bestDistance = HoverDistance;
-        for (int a = 0; a < 3; a++)
+        for (int a = _boxMode ? 2 : 0; a < 3; a++)
         {
             for (int i = 0; i < RingSegments; i++)
             {
@@ -280,13 +295,15 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Dragging ---
 
-    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, TransformTool tool, Handle handle, Vector2 mouse)
+    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, TransformTool tool, Handle handle, Vector2 mouse)
     {
         var drag = new Drag
         {
-            Entities = node is null ? [.. entities] : [],
+            Entities = node is null && occluder is null ? [.. entities] : [],
             Node = node,
             NodeStart = node?.Position ?? default,
+            Occluder = occluder,
+            BoxStart = occluder?.Box,
             Tool = tool,
             Handle = handle,
             Starts = [.. entities.Select(Placement.Of)],
@@ -388,6 +405,8 @@ internal sealed class TransformGizmo(AppState state)
                 }
                 float degrees = drag.Angle * 180f / MathF.PI;
                 if (snap) degrees = GizmoMath.Snap(degrees, RotateStep);
+                if (drag.Occluder is { } turned && drag.BoxStart is { } turnedStart)
+                    OccluderMaps.SetBox(turned.File, turnedStart with { Angle = turnedStart.Angle + degrees * MathF.PI / 180f });
                 var turn = Quaternion.CreateFromAxisAngle(axis, degrees * MathF.PI / 180f);
                 for (int i = 0; i < drag.Entities.Length; i++)
                     GroupTransform.Rotate(drag.Starts[i], pivot, turn).ApplyTo(drag.Entities[i]);
@@ -401,6 +420,20 @@ internal sealed class TransformGizmo(AppState state)
                 float factor = drag.Handle.Kind == Kind.ScaleUniform
                     ? 1f + (moved.X - moved.Y) / (2f * LengthPixels) // Right or up: bigger.
                     : 1f + Vector2.Dot(moved, drag.ScreenDirection) / drag.ScreenLength;
+                if (drag.Occluder is { } resized && drag.BoxStart is { } sizeStart)
+                {
+                    var size = sizeStart.Size;
+                    if (drag.Handle.Kind == Kind.ScaleUniform)
+                        size *= MathF.Max(0.01f, factor);
+                    else
+                        size[a] *= MathF.Max(0.01f, factor);
+                    if (snap)
+                        size = new Vector3(GizmoMath.Snap(size.X, BoxSizeStep), GizmoMath.Snap(size.Y, BoxSizeStep), GizmoMath.Snap(size.Z, BoxSizeStep));
+                    size = Vector3.Max(size, new Vector3(MinBoxSide));
+                    OccluderMaps.SetBox(resized.File, sizeStart with { Size = size });
+                    drag.Feedback = $"Taille  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m";
+                    break;
+                }
                 bool changeHorizontal = drag.Handle.Kind == Kind.ScaleUniform || a < 2;
                 bool changeVertical = drag.Handle.Kind == Kind.ScaleUniform || a == 2;
                 if (drag.IsGroup)
@@ -427,7 +460,7 @@ internal sealed class TransformGizmo(AppState state)
     }
 
     private bool FollowsGround(Drag drag) =>
-        state.Settings.FollowGround
+        drag.Occluder is null && state.Settings.FollowGround
         && (drag.Handle.Kind == Kind.Axis && drag.Handle.Axis < 2 || drag.Handle.Kind == Kind.Plane && drag.Handle.Axis == 2);
 
     // Moves the dragged objects by delta; following the ground, the height of each is then taken from the collision
@@ -438,6 +471,8 @@ internal sealed class TransformGizmo(AppState state)
         if (followGround && drag.LastDelta == delta)
             return;
         drag.LastDelta = delta;
+        if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
+            OccluderMaps.SetBox(occluder.File, boxStart with { Center = boxStart.Center + delta });
         if (drag.Node is { } node && state.World.PathNetwork is { } network)
         {
             var target = drag.NodeStart + delta;
@@ -471,6 +506,8 @@ internal sealed class TransformGizmo(AppState state)
 
     private void RestoreStart(Drag drag)
     {
+        if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
+            OccluderMaps.SetBox(occluder.File, boxStart);
         if (drag.Node is { } node)
             state.World.PathNetwork?.MoveNode(node, drag.NodeStart);
         for (int i = 0; i < drag.Entities.Length; i++)
@@ -484,6 +521,25 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is not { } drag)
             return;
         _drag = null;
+        if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
+        {
+            if (!commit)
+            {
+                OccluderMaps.SetBox(occluder.File, boxStart);
+                return;
+            }
+            if (occluder.File.Boxes[occluder.Index] == boxStart)
+                return;
+            // Kept as the game's file will store it.
+            var end = occluder.File.Boxes[occluder.Index].Quantized();
+            OccluderMaps.SetBox(occluder.File, end);
+            if (end != boxStart)
+            {
+                string boxVerb = drag.Tool switch { TransformTool.Rotate => "Tourner", TransformTool.Scale => "Redimensionner", _ => "Déplacer" };
+                state.History.Add(new OccluderBoxEdit(occluder.File, boxStart, end, $"{boxVerb} la boîte d'occlusion {occluder.Index}"));
+            }
+            return;
+        }
         if (drag.Node is { } node)
         {
             if (commit && node.Position != drag.NodeStart && state.World.PathNetwork is { } network)
@@ -587,7 +643,8 @@ internal sealed class TransformGizmo(AppState state)
     private void DrawRotate(ImDrawListPtr drawList)
     {
         // The ring facing the camera most is drawn last (on top).
-        foreach (int a in new[] { 0, 1, 2 }.OrderBy(i => MathF.Abs(Vector3.Dot(_axes[i], _viewDirection))))
+        int[] rings = _boxMode ? [2] : [0, 1, 2];
+        foreach (int a in rings.OrderBy(i => MathF.Abs(Vector3.Dot(_axes[i], _viewDirection))))
         {
             var handle = new Handle(Kind.Ring, a);
             if (!Shown(handle))
@@ -657,7 +714,7 @@ internal sealed class TransformGizmo(AppState state)
         }
     }
 
-    private static bool SameScale(int a, int b) => (a < 2) == (b < 2);
+    private bool SameScale(int a, int b) => _boxMode ? a == b : (a < 2) == (b < 2);
 
     private static void DrawFeedback(ImDrawListPtr drawList, Vector2 position, string text)
     {

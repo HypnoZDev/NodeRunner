@@ -450,6 +450,11 @@ internal sealed class AppState
             Select(null);
             SelectedPathNode = nodeEdit.Node;
         }
+        else if (edit is OccluderBoxEdit boxEdit)
+        {
+            Select(null);
+            SelectedOccluder = new OccluderSelection(boxEdit.File, OcclusionLayerPart.Boxes, boxEdit.Index);
+        }
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;
