@@ -183,6 +183,28 @@ internal sealed class AppState
             Tool = TransformTool.Move;
     }
 
+    // Moves the selected objects of the main selection's interior into its entity set setIndex (-1 = out of any set),
+    // in every copy of the interior; the set is shown so that they stay in sight.
+    public void MoveSelectionToEntitySet(int setIndex)
+    {
+        if (World.Maps is not { } library || Selection?.Interior is not { } instance || setIndex >= instance.EntitySets.Count)
+            return;
+        var target = setIndex >= 0 ? instance.EntitySets[setIndex] : null;
+        var moving = SelectedEntities.Where(e => e.Interior == instance && e.Definition is not null && e.EntitySet != target).ToList();
+        if (moving.Count == 0)
+            return;
+        string setName = target is null ? "" : World.Names?.Describe(target.NameHash) ?? $"0x{target.NameHash:X8}";
+        string what = moving.Count == 1 ? World.Names?.Describe(moving[0].ArchetypeHash) ?? "l'objet" : $"{moving.Count} objets";
+        var edit = EntitySetMoveEdit.Apply(library, moving, setIndex, target is null ? $"Sortir {what} de son entity set" : $"Ranger {what} dans {setName}");
+        History.Add(edit);
+        if (target is not null)
+            library.SetEntitySetActive(target, true);
+        SelectAll(edit.Selection);
+        Notify(target is null
+            ? $"{what} : sorti(s) de l'entity set, toujours affiché(s), dans toutes les copies de l'intérieur (enregistré dans son .ytyp)."
+            : $"{what} : rangé(s) dans l'entity set {setName}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp).");
+    }
+
     // Lift of the point tested against the rooms: an object standing on a floor is just above the room's bottom.
     private const float RoomProbeHeight = 0.3f;
 

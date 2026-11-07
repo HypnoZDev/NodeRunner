@@ -166,4 +166,33 @@ public class YtypWriterTests
         Assert.Equal(7, read.Entities[0].InteriorRoom);
         Assert.Equal(3, back.InteriorEntities.Count);
     }
+
+    private static MapEntity MovedCopy(MapEntity old) => new()
+    {
+        ArchetypeHash = old.ArchetypeHash, Position = old.Position, StoredRotation = old.StoredRotation, Scale = old.Scale,
+        Flags = old.Flags, LodDistance = old.LodDistance, InteriorRoom = old.InteriorRoom, MovedFrom = old,
+    };
+
+    [Fact]
+    public void Moves_objects_into_and_out_of_an_entity_set()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var set = interior.InteriorEntitySets.Single();
+        var library = new MapLibrary();
+        var intoSet = interior.InteriorEntities[2];
+        var outOfSet = set.Entities[1];
+        library.SetDeleted([intoSet, outOfSet], true, countAsDeleted: false);
+        set.AddEntity(MovedCopy(intoSet));
+        interior.AddInteriorEntity(MovedCopy(outOfSet));
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal([100u, 101u, 104u], back.InteriorEntities.Select(e => e.ArchetypeHash));
+        Assert.Equal(-1, back.InteriorEntities[2].InteriorRoom); // Room 7 does not exist in the interior.
+        Assert.Equal(0, back.InteriorEntities[1].InteriorRoom);
+        var read = back.InteriorEntitySets.Single();
+        Assert.Equal([103u, 102u], read.Entities.Select(e => e.ArchetypeHash));
+        Assert.Equal([0, 0], read.Entities.Select(e => e.InteriorRoom));
+        Assert.Equal(2f, read.Entities[1].Position.X);
+    }
 }

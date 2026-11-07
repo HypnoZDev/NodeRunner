@@ -54,7 +54,15 @@ public sealed class Archetype
 }
 
 // An optional group of objects of an interior, placed relative to it (each with its room).
-public sealed record InteriorEntitySet(uint NameHash, IReadOnlyList<MapEntity> Entities);
+public sealed class InteriorEntitySet(uint nameHash, IReadOnlyList<MapEntity> entities)
+{
+    public uint NameHash { get; } = nameHash;
+
+    public IReadOnlyList<MapEntity> Entities { get; private set; } = entities;
+
+    // A new list, not changed in place: background threads may be going through the old one.
+    internal void AddEntity(MapEntity entity) => Entities = [.. Entities, entity];
+}
 
 // A room of an interior: its box, in the interior's space.
 public sealed record InteriorRoom(Vector3 BoundsMin, Vector3 BoundsMax)

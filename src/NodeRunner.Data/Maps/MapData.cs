@@ -91,6 +91,10 @@ public sealed class MapEntity
     // For a definition: its copies placed in the interior instances.
     public IReadOnlyList<MapEntity> Copies => _copies ?? (IReadOnlyList<MapEntity>)[];
 
+    // For a definition moved into or out of an entity set (MapLibrary.MoveToEntitySet): the definition it replaces,
+    // whose file data it keeps.
+    public MapEntity? MovedFrom { get; init; }
+
     // Moves, turns and scales the object (orientation is the world orientation, as Orientation).
     public void SetPlacement(Vector3 position, Quaternion orientation, Vector3 scale)
     {

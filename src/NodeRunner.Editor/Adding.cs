@@ -141,6 +141,52 @@ public sealed class InteriorAddEdit : IEdit
     public void Redo() => _library.SetDeleted(_copies, false);
 }
 
+// Objects of an interior moved into one of its entity sets, or out of their set (MapLibrary.MoveToEntitySet); undone
+// by bringing the old definitions back.
+public sealed class EntitySetMoveEdit : IEdit
+{
+    private readonly MapLibrary _library;
+    private readonly MapEntity[] _old;
+    private readonly MapEntity[] _new;
+    private readonly MapEntity[] _oldPlaced;
+    private readonly MapEntity[] _newPlaced;
+
+    private EntitySetMoveEdit(MapLibrary library, MapEntity[] oldPlaced, MapEntity[] newPlaced, string description)
+    {
+        _library = library;
+        _oldPlaced = oldPlaced;
+        _newPlaced = newPlaced;
+        _old = [.. oldPlaced.SelectMany(p => p.Definition!.Copies)];
+        _new = [.. newPlaced.SelectMany(p => p.Definition!.Copies)];
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => Selection[^1];
+    public IEnumerable<MapEntity> Entities => _old.Concat(_new);
+    public IReadOnlyList<MapEntity> Selection => _newPlaced[0].IsDeleted ? _oldPlaced : _newPlaced;
+
+    // setIndex: as in the instance's EntitySets, -1 = out of any set.
+    public static EntitySetMoveEdit Apply(MapLibrary library, IReadOnlyList<MapEntity> placed, int setIndex, string description)
+    {
+        if (placed.Count == 0)
+            throw new ArgumentException("Nothing to move.", nameof(placed));
+        return new EntitySetMoveEdit(library, [.. placed], [.. placed.Select(p => library.MoveToEntitySet(p, setIndex))], description);
+    }
+
+    public void Undo()
+    {
+        _library.SetDeleted(_new, true, countAsDeleted: false);
+        _library.SetDeleted(_old, false, countAsDeleted: false);
+    }
+
+    public void Redo()
+    {
+        _library.SetDeleted(_old, true, countAsDeleted: false);
+        _library.SetDeleted(_new, false, countAsDeleted: false);
+    }
+}
+
 // An object copied (Ctrl+C): its type, its place in the copied group, how it is turned and scaled.
 public readonly record struct CopiedObject(uint ArchetypeHash, Vector3 Offset, Quaternion Orientation, Vector3 Scale);
 

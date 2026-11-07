@@ -76,11 +76,12 @@ public sealed class MapLibrary
 
     public int DeletedCount { get; private set; }
 
-    public void SetDeleted(IEnumerable<MapEntity> entities, bool deleted)
+    // countAsDeleted: false for objects replaced rather than deleted (moved into or out of an entity set).
+    public void SetDeleted(IEnumerable<MapEntity> entities, bool deleted, bool countAsDeleted = true)
     {
         foreach (var entity in entities)
         {
-            if (entity.IsDeleted != deleted)
+            if (entity.IsDeleted != deleted && countAsDeleted)
                 DeletedCount += deleted ? 1 : -1;
             entity.IsDeleted = deleted;
             // An object of an interior goes from its archetype, with all its copies.
@@ -107,6 +108,56 @@ public sealed class MapLibrary
         }
         StructureVersion++;
         return placed ?? throw new ArgumentException("Interior instance not loaded.", nameof(instance));
+    }
+
+    // Moves an object of an interior into one of the interior's entity sets (setIndex, as in instance.EntitySets), or
+    // out of its set into the interior's always shown objects (-1), in every instance: a new definition replaces the
+    // old one, which is marked deleted. Returns the new copy in placed's instance.
+    public MapEntity MoveToEntitySet(MapEntity placed, int setIndex)
+    {
+        if (placed.Definition is not { } old || placed.Interior is not { } instance
+            || GetArchetype(instance.ArchetypeHash) is not { Kind: ArchetypeKind.Interior } archetype)
+            throw new ArgumentException("Not an object of an interior.", nameof(placed));
+        if (setIndex >= archetype.InteriorEntitySets.Count)
+            throw new ArgumentOutOfRangeException(nameof(setIndex));
+
+        var definition = new MapEntity
+        {
+            ArchetypeHash = old.ArchetypeHash,
+            Position = old.Position,
+            StoredRotation = old.StoredRotation,
+            Scale = old.Scale,
+            Flags = old.Flags,
+            Guid = old.Guid,
+            LodDistance = old.LodDistance,
+            ChildLodDistance = old.ChildLodDistance,
+            LodLevel = old.LodLevel,
+            InteriorRoom = old.InteriorRoom,
+            MovedFrom = old,
+        };
+        definition.IsWindowView = old.IsWindowView;
+        if (setIndex < 0)
+            archetype.AddInteriorEntity(definition);
+        else
+            archetype.InteriorEntitySets[setIndex].AddEntity(definition);
+
+        MapEntity? result = null;
+        foreach (var other in _maps.SelectMany(m => m.Entities).Where(e => e.IsInterior && e.ArchetypeHash == instance.ArchetypeHash))
+        {
+            var copy = definition.PlaceInside(other);
+            if (setIndex < 0)
+                other.InteriorEntities = [.. other.InteriorEntities, copy];
+            else if (setIndex < other.EntitySets.Count)
+            {
+                var set = other.EntitySets[setIndex];
+                copy.EntitySet = set;
+                set.Entities = [.. set.Entities, copy];
+            }
+            if (other == instance)
+                result = copy;
+        }
+        SetDeleted(old.Copies.Append(old), true, countAsDeleted: false);
+        return result ?? throw new ArgumentException("Interior instance not loaded.", nameof(placed));
     }
 
     public void SetEntitySetActive(PlacedEntitySet set, bool active)

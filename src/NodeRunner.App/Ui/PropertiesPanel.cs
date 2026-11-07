@@ -296,13 +296,32 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 Widgets.PropertyText("Salle", entity.InteriorRoom == 0 ? "0 (limbo, vue de l'extérieur)" : $"{entity.InteriorRoom}");
             if (entity.InteriorPortal >= 0)
                 Widgets.PropertyText("Attaché au portail", $"{entity.InteriorPortal}");
-            if (entity.EntitySet is { } set)
-                Widgets.PropertyText("Entity set", names.Describe(set.NameHash), set.IsActive ? null : "Entity set masqué");
+            if (interior.EntitySets.Count > 0)
+                EntitySetChoice(entity, interior, names);
         }
         Widgets.EndProperties();
 
         if (archetype is null)
             ImGui.TextColored(UiTheme.Warning, "Type introuvable dans les fichiers .ytyp.");
+    }
+
+    // The entity set holding an object of an interior, to change: the object goes into another set or out of its set.
+    private void EntitySetChoice(MapEntity entity, MapEntity interior, HashNames names)
+    {
+        const string None = "Aucun (toujours affiché)";
+        var sets = interior.EntitySets;
+        int current = entity.EntitySet is { } set ? sets.ToList().IndexOf(set) : -1;
+        Widgets.Property("Entity set", "Groupe d'objets activé par script. Changer le set range l'objet dans un autre set (ou l'en sort), "
+            + "dans toutes les copies de l'intérieur ; enregistré dans son .ytyp.");
+        string label = current >= 0 ? names.Describe(sets[current].NameHash) + (sets[current].IsActive ? "" : " (masqué)") : None;
+        if (!ImGui.BeginCombo("##entity_set", label, ImGuiComboFlags.HeightLarge))
+            return;
+        for (int i = -1; i < sets.Count; i++)
+        {
+            if (ImGui.Selectable(i < 0 ? None : $"{names.Describe(sets[i].NameHash)}##set{i}", i == current) && i != current)
+                state.MoveSelectionToEntitySet(i);
+        }
+        ImGui.EndCombo();
     }
 
     // The optional groups of objects of an interior: a box per set to show or hide it (not saved: in the game,
