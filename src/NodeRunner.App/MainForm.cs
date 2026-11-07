@@ -897,6 +897,12 @@ internal sealed unsafe partial class MainForm : Form
             BrowseForProject();
         }
 
+        if (_ui.ImportMappingRequested)
+        {
+            _ui.ImportMappingRequested = false;
+            BrowseForMapping();
+        }
+
         if (_ui.CloseProjectRequested)
         {
             _ui.CloseProjectRequested = false;
@@ -956,6 +962,38 @@ internal sealed unsafe partial class MainForm : Form
             "Ouvrir un projet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer == DialogResult.Yes)
             CreateProject(folder, Path.GetFileName(folder), saveAfter: false, exitAfter: false);
+    }
+
+    private void BrowseForMapping()
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Choisis le dossier du mapping : une ressource FiveM (avec fxmanifest.lua) ou un dossier stream.",
+            UseDescriptionForTitle = true,
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK || !ConfirmLeaveChanges())
+            return;
+        NodeRunner.Editor.ImportResult result;
+        try
+        {
+            result = NodeRunner.Editor.MappingImport.Import(dialog.SelectedPath, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            MessageBox.Show(this, $"Le mapping n'a pas pu être importé :\n{ex.Message}", "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        if (_state.OpenProject(result.Project.Folder) is { } error)
+        {
+            MessageBox.Show(this, $"Le projet importé n'a pas pu être ouvert :\n{error}", "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        _ui.ShowProjectPanel();
+        string skipped = result.Skipped.Count == 0 ? "" : $"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n" + string.Join("\n", result.Skipped.Take(10));
+        MessageBox.Show(this,
+            $"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} » :\n{result.Project.Folder}\n\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}",
+            "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     // Before leaving the map shown (other project, closing it): unsaved changes are saved, left, or the action is

@@ -235,7 +235,9 @@ internal sealed class WorldLoader : IDisposable
         try
         {
             progress.Report("Lecture des packs DLC...");
-            var content = GameContent.Load(files, new DlcManifestReader(), selection);
+            // The project's own types, models and textures (a mapping with custom buildings) count as game files.
+            var source = LooseFileOverlay.Over(files, _saveFolder);
+            var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;
 
@@ -271,9 +273,9 @@ internal sealed class WorldLoader : IDisposable
                     PathNetwork = paths;
                 Collisions = collisions;
                 Models = models;
-                ModelReader = new DrawableReader(files);
+                ModelReader = new DrawableReader(source);
                 Textures = textures;
-                TextureReader = new YtdReader(files);
+                TextureReader = new YtdReader(source);
                 Names = names;
                 UserNames = userNames;
                 LoadDuration = clock.Elapsed;

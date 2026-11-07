@@ -131,6 +131,19 @@ internal static class ExportChecker
                 + "Reprenez ses changements dans ce projet, puis retirez le fichier de l'autre projet.", group.ToList()));
         }
 
+        var duplicates = DuplicateGuids.Find(input.Maps.Select(m => (m.FileName, (IEnumerable<MapEntity>)m.Kept)));
+        if (duplicates.Count > 0)
+        {
+            items.Add(new ExportCheckItem(false,
+                $"{duplicates.Count} identifiant(s) (guid) utilisé(s) par plusieurs objets",
+                duplicates.Take(MaxDetails).Select(d => $"0x{d.Guid:X8} : {names.Describe(d.ArchetypeHash)} ({string.Join(", ", d.Files.GroupBy(f => f, StringComparer.OrdinalIgnoreCase).Select(g => g.Count() > 1 ? $"{g.Key} x{g.Count()}" : g.Key))})")
+                    .Concat(duplicates.Count > MaxDetails ? [$"... et {duplicates.Count - MaxDetails} autre(s)"] : [])
+                    .ToList(),
+                "Souvent des objets copiés à la main dans un autre éditeur. Le jeu l'accepte, mais un script ou un outil qui "
+                + "cherche un objet par son guid peut tomber sur le mauvais. Pour corriger : supprimer la copie et la recréer "
+                + "(Ctrl+C / Ctrl+V dans NodeRunner donne un nouveau guid)."));
+        }
+
         // Deleted scenery (now or in an earlier session): compared with the game's file.
         var scenery = new List<string>();
         var sceneryEntities = new List<(MapEntity, Archetype?)>();

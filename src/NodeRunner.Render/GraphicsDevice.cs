@@ -58,6 +58,11 @@ public sealed class GraphicsDevice : IDisposable
         using (var adapter = dxgiDevice.GetAdapter())
         {
             AdapterName = adapter.Description.Description;
+            // The swap chain must come from the factory of the device's own adapter, which differs after the
+            // fallbacks (default adapter, WARP).
+            var parent = adapter.GetParent<IDXGIFactory2>();
+            _factory.Dispose();
+            _factory = parent;
         }
 
         var swapChainDesc = new SwapChainDescription1

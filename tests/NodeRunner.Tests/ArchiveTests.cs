@@ -173,7 +173,7 @@ public class ArchiveTests : IDisposable
             _entries.Add((name, (e, n, block) =>
             {
                 ulong size = compress ? (ulong)stored.Length : 0;
-                BinaryPrimitives.WriteUInt64LittleEndian(e, (ulong)n | size << 16 | (ulong)block << 40);
+                BinaryPrimitives.WriteUInt64LittleEndian(e, (uint)n | size << 16 | (ulong)block << 40);
                 BinaryPrimitives.WriteUInt32LittleEndian(e[8..], (uint)content.Length);
                 BinaryPrimitives.WriteUInt32LittleEndian(e[12..], 0);
             }, stored));
@@ -181,7 +181,7 @@ public class ArchiveTests : IDisposable
 
         public void Resource(string name, byte[] rsc7, uint systemFlags, uint graphicsFlags) => _entries.Add((name, (e, n, block) =>
         {
-            BinaryPrimitives.WriteUInt64LittleEndian(e, (ulong)n | (ulong)rsc7.Length << 16 | ((ulong)block | 0x800000) << 40);
+            BinaryPrimitives.WriteUInt64LittleEndian(e, (uint)n | (ulong)rsc7.Length << 16 | ((ulong)block | 0x800000) << 40);
             BinaryPrimitives.WriteUInt32LittleEndian(e[8..], systemFlags);
             BinaryPrimitives.WriteUInt32LittleEndian(e[12..], graphicsFlags);
         }, rsc7));

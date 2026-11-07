@@ -150,3 +150,30 @@ public static class RemovedEntities
         && (archetype is null || (archetype.Flags & 0x20000000) == 0 && archetype.AssetType != ArchetypeAssetType.Fragment
             && archetype.PhysicsDictionaryHash == 0);
 }
+
+// Objects sharing the same guid in the exported map files (e.g. objects copied by hand in another editor): the game
+// tolerates it, but scripts and tools that find an object by its guid get the wrong one.
+public static class DuplicateGuids
+{
+    public sealed record Duplicate(uint Guid, uint ArchetypeHash, IReadOnlyList<string> Files);
+
+    public static List<Duplicate> Find(IEnumerable<(string FileName, IEnumerable<MapEntity> Entities)> maps)
+    {
+        var seen = new Dictionary<uint, (uint Type, List<string> Files)>();
+        foreach (var (fileName, entities) in maps)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Guid == 0)
+                    continue;
+                if (!seen.TryGetValue(entity.Guid, out var entry))
+                    seen[entity.Guid] = entry = (entity.ArchetypeHash, []);
+                entry.Files.Add(fileName);
+            }
+        }
+        return seen.Where(p => p.Value.Files.Count > 1)
+            .Select(p => new Duplicate(p.Key, p.Value.Type, p.Value.Files))
+            .OrderBy(d => d.Files[0], StringComparer.OrdinalIgnoreCase).ThenBy(d => d.Guid)
+            .ToList();
+    }
+}

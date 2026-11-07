@@ -37,6 +37,9 @@ public sealed class GameContent
 
     private const string MapGroup = "GROUP_MAP";
 
+    // Virtual archive holding the files of the open project (LooseFileOverlay), activated after every pack.
+    public const string LooseFilesRoot = "noderunner_project.rpf";
+
     private readonly IGameFileSystem _files;
     private readonly HashSet<string> _archives = new(StringComparer.OrdinalIgnoreCase);
 
@@ -76,6 +79,8 @@ public sealed class GameContent
         var content = new GameContent(files) { Selection = selection };
         content.AddBaseLayer();
         content.ApplyDlcPacks(reader, selection);
+        if (content._archives.Contains(LooseFilesRoot))
+            content._roots[LooseFilesRoot] = content._sequence++;
         return content;
     }
 

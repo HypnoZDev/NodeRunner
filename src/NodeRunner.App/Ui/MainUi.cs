@@ -22,6 +22,7 @@ internal sealed class MainUi
     private bool _showScene = true;
     private bool _showViewer;
     private bool _showArchives;
+    private bool _showProject;
     private bool _showImGuiDemo;
     private bool _resetLayout;
 
@@ -35,6 +36,7 @@ internal sealed class MainUi
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);
+        _projectPanel = new ProjectPanel(state);
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open);
@@ -62,6 +64,7 @@ internal sealed class MainUi
     }
 
     private readonly ArchivePanel _archivePanel;
+    private readonly ProjectPanel _projectPanel;
     private readonly PropertiesPanel _propertiesPanel;
     private readonly ScenePanel _scenePanel;
     private readonly SearchPalette _searchPalette;
@@ -89,6 +92,14 @@ internal sealed class MainUi
     public ProjectWindow ProjectWindow { get; }
 
     public bool OpenProjectRequested { get; set; }
+
+    public bool ImportMappingRequested { get; set; }
+
+    public void ShowProjectPanel()
+    {
+        _showProject = true;
+        ImGui.SetWindowFocus(ProjectPanel.Title);
+    }
 
     public string? RecentProjectRequested { get; set; }
 
@@ -130,6 +141,7 @@ internal sealed class MainUi
         if (_showProperties) _propertiesPanel.Draw(ref _showProperties);
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
         if (_showArchives) _archivePanel.Draw(ref _showArchives);
+        if (_showProject) _projectPanel.Draw(ref _showProject);
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
         else _state.Viewer.RequestedSize = Vector2.Zero;
         if (_showAbout) DrawAboutWindow();
@@ -288,6 +300,7 @@ internal sealed class MainUi
             ImGui.MenuItem(StatusPanel.Title, null, ref _showStatus);
             ImGui.MenuItem(ViewerPanel.Title, null, ref _showViewer);
             ImGui.MenuItem(ArchivePanel.Title, null, ref _showArchives);
+            ImGui.MenuItem(ProjectPanel.Title, null, ref _showProject);
             if (ImGui.MenuItem("Réinitialiser la disposition des panneaux"))
             {
                 _showLayers = _showScene = _showProperties = _showStatus = true;
@@ -336,6 +349,10 @@ internal sealed class MainUi
             ProjectWindow.Open();
         if (ImGui.MenuItem($"{Icons.FolderOpen}  Ouvrir un projet..."))
             OpenProjectRequested = true;
+        if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Importer un mapping..."))
+            ImportMappingRequested = true;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié.");
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu("Projets récents", recent.Count > 0))
         {
@@ -357,6 +374,8 @@ internal sealed class MainUi
         }
         if (_state.Project is { } project)
         {
+            if (ImGui.MenuItem($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)"))
+                ShowProjectPanel();
             if (ImGui.MenuItem($"{Icons.FolderOpen}  Ouvrir le dossier du projet") && Directory.Exists(project.Folder))
                 System.Diagnostics.Process.Start("explorer.exe", project.Folder);
             if (ImGui.MenuItem($"{Icons.X}  Fermer le projet"))

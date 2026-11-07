@@ -48,6 +48,35 @@ public class GameContentTests
     }
 
     [Fact]
+    public void Project_files_win_over_every_pack_and_keep_maps_out()
+    {
+        var files = BaseGame();
+        AddPack(files);
+        files.AddArchive(@"update\update.rpf\x64\levels\a\models.rpf", "shop.ydr");
+        files.AddArchive($@"{PackRoot}\x64\levels\a\models.rpf", "shop.ydr");
+        string folder = Directory.CreateTempSubdirectory("nr-overlay").FullName;
+        try
+        {
+            File.WriteAllBytes(Path.Combine(folder, "shop.ydr"), [0x52, 0x53, 0x43, 0x37, .. new byte[12]]);
+            File.WriteAllBytes(Path.Combine(folder, "custom.ytyp"), []);
+            File.WriteAllBytes(Path.Combine(folder, "custom.ymap"), []);
+
+            var source = NodeRunner.Data.Native.Archives.LooseFileOverlay.Over(files, folder);
+            var content = GameContent.Load(source, new DlcManifestReader(), new MapSelection(MapVersion.Multiplayer));
+
+            string root = GameContent.LooseFilesRoot;
+            Assert.Equal([$@"{root}\shop.ydr"], content.EnumerateFiles(".ydr"));
+            Assert.Equal([$@"{root}\custom.ytyp"], content.EnumerateFiles(".ytyp"));
+            Assert.DoesNotContain(content.EnumerateFiles(".ymap"), p => p.StartsWith(root));
+            Assert.NotNull(source.GetResourceHeader($@"{root}\shop.ydr"));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Map_change_of_a_pack_only_applies_to_the_multiplayer_map()
     {
         var files = BaseGame();

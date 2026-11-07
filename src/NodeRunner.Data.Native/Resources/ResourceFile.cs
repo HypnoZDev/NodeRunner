@@ -25,14 +25,19 @@ public static class ResourceFile
         return output.ToArray();
     }
 
-    public static (ResourceHeader Header, byte[] Content) Read(ReadOnlySpan<byte> file)
+    public static ResourceHeader ReadHeader(ReadOnlySpan<byte> file)
     {
         if (file.Length < HeaderSize || BinaryPrimitives.ReadUInt32LittleEndian(file) != Magic)
-            throw new InvalidDataException("Ce fichier n'est pas une ressource RSC7.");
-        var header = new ResourceHeader(
+            throw new InvalidDataException("Ce fichier n'est pas une ressource RSC7 (fichier chiffré par FiveM ?).");
+        return new ResourceHeader(
             BinaryPrimitives.ReadInt32LittleEndian(file[4..]),
             BinaryPrimitives.ReadUInt32LittleEndian(file[8..]),
             BinaryPrimitives.ReadUInt32LittleEndian(file[12..]));
+    }
+
+    public static (ResourceHeader Header, byte[] Content) Read(ReadOnlySpan<byte> file)
+    {
+        var header = ReadHeader(file);
         using var input = new MemoryStream(file[HeaderSize..].ToArray());
         using var deflate = new DeflateStream(input, CompressionMode.Decompress);
         using var content = new MemoryStream();
