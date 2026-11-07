@@ -259,6 +259,8 @@ internal sealed class OcclusionLayer : IDisposable
             for (int b = 0; b < file.Boxes.Count; b++)
             {
                 var box = file.Boxes[b];
+                if (file.DeletedBoxes.Contains(b))
+                    continue;
                 float reach = Radius + 0.5f * MathF.Max(box.Size.X, box.Size.Y);
                 if (Vector2.DistanceSquared(new Vector2(box.Center.X, box.Center.Y), center) > reach * reach)
                     continue;
@@ -272,7 +274,7 @@ internal sealed class OcclusionLayer : IDisposable
 
             foreach (var model in file.Occluders.Models)
             {
-                if (!Near(model.Vertices, center))
+                if (file.DeletedModels.Contains(model.Index) || !Near(model.Vertices, center))
                     continue;
                 models.Add((file, model));
                 var v = model.Vertices;

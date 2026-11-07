@@ -591,6 +591,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         ImGui.SameLine();
         if (Widgets.Button($"{Icons.Copy}  Copier la position", state.FormatPosition(center)))
             ImGui.SetClipboardText(state.FormatPosition(center));
+        ImGui.SameLine();
+        if (Widgets.Button($"{Icons.Trash}  Supprimer", "Suppr. Annulable avec Ctrl+Z."))
+        {
+            state.DeleteSelectedOccluder();
+            return;
+        }
 
         if (Widgets.Section(isBox ? "Boîte" : "Maillage", "occluder") && Widgets.BeginProperties("##occluder"))
         {

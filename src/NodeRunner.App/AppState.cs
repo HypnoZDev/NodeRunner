@@ -64,7 +64,7 @@ internal sealed class AppState
     // the map is loaded again.
     public OccluderSelection? SelectedOccluder
     {
-        get => _selectedOccluderLibrary == World.Maps ? _selectedOccluder : null;
+        get => _selectedOccluderLibrary == World.Maps && _selectedOccluder is { } o && !o.File.IsDeleted(o.Kind, o.Index) ? o : null;
         set
         {
             _selectedOccluder = value;
@@ -455,6 +455,11 @@ internal sealed class AppState
             Select(null);
             SelectedOccluder = new OccluderSelection(boxEdit.File, OcclusionLayerPart.Boxes, boxEdit.Index);
         }
+        else if (edit is OccluderPresenceEdit presenceEdit)
+        {
+            Select(null);
+            SelectedOccluder = presenceEdit.Occluders.FirstOrDefault(o => !o.File.IsDeleted(o.Kind, o.Index));
+        }
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;
@@ -462,6 +467,104 @@ internal sealed class AppState
         }
         else if (edit is { Selection.Count: > 0 })
             SelectAll(edit.Selection);
+    }
+
+    // --- Occluders ---
+
+    // Taken off each side of an object's box for its occluder: an occluder must stay inside the walls, or it hides
+    // what is behind them through windows and gaps.
+    public const float OccluderInset = 0.3f;
+
+    public string OccluderFileName => $"{Project?.ResourceName ?? FiveMResource.DefaultName}_occl.ymap";
+
+    // A new 10 m box occluder 25 m in front of the camera, standing on the ground there.
+    public void CreateOccluderBox()
+    {
+        if (OccluderMaps.ProjectFile(World, OccluderFileName) is not { } file)
+            return;
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(forward) : System.Numerics.Vector3.UnitY;
+        var point = Camera.Position + forward * 25f;
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 10f;
+        var size = new System.Numerics.Vector3(10f);
+        var box = new OccluderBox(0, point with { Z = ground + size.Z / 2 }, size, MathF.Atan2(forward.Y, forward.X)).Quantized();
+        AddOccluderBoxes(file, [box], "Nouvelle boîte d'occlusion");
+    }
+
+    // One box occluder per selected object, fitted to its model's box turned like the object (around Z only), a little
+    // smaller. Objects without a model box or almost flat are left out.
+    public void CreateOccluderBoxesFromSelection()
+    {
+        if (World.Maps is not { } library || OccluderMaps.ProjectFile(World, OccluderFileName) is not { } file)
+            return;
+        var boxes = new List<OccluderBox>();
+        int skipped = 0;
+        foreach (var entity in SelectedEntities)
+        {
+            if (FitOccluderBox(entity, library.GetArchetype(entity.ArchetypeHash)) is { } box)
+                boxes.Add(box);
+            else
+                skipped++;
+        }
+        if (boxes.Count == 0)
+        {
+            Notify("aucune boîte créée : objets sans volume (ou trop plats)", warning: true);
+            return;
+        }
+        AddOccluderBoxes(file, boxes, boxes.Count == 1 ? "Boîte d'occlusion sur l'objet" : $"{boxes.Count} boîtes d'occlusion sur les objets");
+        if (skipped > 0)
+            Notify($"{boxes.Count} boîte(s) créée(s), {skipped} objet(s) ignoré(s) (sans volume ou trop plats)", warning: true);
+    }
+
+    public static OccluderBox? FitOccluderBox(MapEntity entity, Archetype? archetype)
+    {
+        if (archetype is null || archetype.BoundsMin == archetype.BoundsMax)
+            return null;
+        var transform = entity.Transform;
+        var xAxis = System.Numerics.Vector3.TransformNormal(System.Numerics.Vector3.UnitX, transform);
+        float angle = MathF.Atan2(xAxis.Y, xAxis.X);
+        float cos = MathF.Cos(angle), sin = MathF.Sin(angle);
+        var min = new System.Numerics.Vector3(float.MaxValue);
+        var max = new System.Numerics.Vector3(float.MinValue);
+        for (int k = 0; k < 8; k++)
+        {
+            var local = new System.Numerics.Vector3(
+                (k & 1) != 0 ? archetype.BoundsMax.X : archetype.BoundsMin.X,
+                (k & 2) != 0 ? archetype.BoundsMax.Y : archetype.BoundsMin.Y,
+                (k & 4) != 0 ? archetype.BoundsMax.Z : archetype.BoundsMin.Z);
+            var world = System.Numerics.Vector3.Transform(local, transform);
+            // In the frame of the box (turned by angle around Z).
+            var p = new System.Numerics.Vector3(world.X * cos + world.Y * sin, -world.X * sin + world.Y * cos, world.Z);
+            min = System.Numerics.Vector3.Min(min, p);
+            max = System.Numerics.Vector3.Max(max, p);
+        }
+        var size = max - min - new System.Numerics.Vector3(2 * OccluderInset);
+        if (size.Z < 1f || size.X < 0.5f || size.Y < 0.5f)
+            return null;
+        var c = (min + max) / 2;
+        var center = new System.Numerics.Vector3(c.X * cos - c.Y * sin, c.X * sin + c.Y * cos, c.Z);
+        return new OccluderBox(0, center, size, angle).Quantized();
+    }
+
+    private void AddOccluderBoxes(OccluderMapFile file, IReadOnlyList<OccluderBox> boxes, string description)
+    {
+        var added = boxes.Select(b => new OccluderSelection(file, OcclusionLayerPart.Boxes, OccluderMaps.AddBox(file, b).Index)).ToList();
+        History.Add(new OccluderPresenceEdit(added, deleted: false, description));
+        SetLayerVisible(OcclusionLayer.LayerName(OcclusionLayerPart.Boxes), true);
+        Select(null);
+        SelectedOccluder = added[^1];
+        Notify(added.Count == 1 ? $"boîte d'occlusion ajoutée à {file.FileName}" : $"{added.Count} boîtes d'occlusion ajoutées à {file.FileName}");
+    }
+
+    public void DeleteSelectedOccluder()
+    {
+        if (SelectedOccluder is not { } occluder)
+            return;
+        OccluderMaps.SetDeleted(occluder.File, occluder.Kind, occluder.Index, true);
+        string what = occluder.Kind == OcclusionLayerPart.Boxes ? "la boîte" : "le maillage";
+        History.Add(new OccluderPresenceEdit([occluder], deleted: true, $"Supprimer {what} d'occlusion {occluder.Index}"));
+        SelectedOccluder = null;
+        Notify($"{what} d'occlusion {occluder.Index} supprimé{(occluder.Kind == OcclusionLayerPart.Boxes ? "e" : "")} de {occluder.File.FileName}");
     }
 
     // --- Collision editing (tool 5) ---

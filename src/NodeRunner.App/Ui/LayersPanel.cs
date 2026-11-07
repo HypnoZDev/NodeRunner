@@ -77,6 +77,14 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             foreach (var part in OcclusionLayer.Parts)
                 LayerRow(OcclusionLayer.LayerName(part), OcclusionLayer.Color(part), OcclusionLayer.Label(part), Widgets.Count(occlusionLayer.Count(part)));
             Widgets.Hint($"Occluders à moins de {OcclusionLayer.Radius:0} m : le jeu ne dessine pas ce qui est caché derrière.", wrap: true);
+            if (Widgets.Button($"{Icons.Box}  Nouvelle boîte", "Boîte de 10 m posée au sol devant la caméra, à ajuster avec les poignées."))
+                state.CreateOccluderBox();
+            ImGui.SameLine();
+            int selected = state.SelectedEntities.Count;
+            if (Widgets.Button($"{Icons.Boxes}  Sur la sélection{(selected > 1 ? $" ({selected})" : "")}",
+                    $"Une boîte par objet sélectionné, ajustée à son modèle et réduite de {AppState.OccluderInset:0.0} m par côté. "
+                    + "Sélectionnez d'abord les bâtiments (calque Occlusion masqué, Ctrl+clic pour plusieurs).", enabled: selected > 0))
+                state.CreateOccluderBoxesFromSelection();
         }
 
         if (Widgets.Section("Cartes de mission (scripts)", "scripted", defaultOpen: false))

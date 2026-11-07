@@ -166,6 +166,8 @@ internal sealed class MainUi
         {
             if (_state.Tool == TransformTool.Collision)
                 _state.DeleteSelectedCollision();
+            else if (_state.SelectedOccluder is not null)
+                _state.DeleteSelectedOccluder();
             else
                 _state.RequestDelete();
         }
@@ -285,6 +287,12 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision.");
             ImGui.Separator();
+            if (ImGui.BeginMenu($"{Icons.ScanEye}  Occlusion"))
+            {
+                DrawOcclusionMenuItems();
+                ImGui.EndMenu();
+            }
+            ImGui.Separator();
             if (ImGui.MenuItem($"{Icons.Search}  Rechercher...", "Ctrl+K"))
                 _searchPalette.Open();
             ImGui.Separator();
@@ -341,6 +349,23 @@ internal sealed class MainUi
         WindowChrome.DrawButtons();
 
         ImGui.EndMainMenuBar();
+    }
+
+    private void DrawOcclusionMenuItems()
+    {
+        if (ImGui.MenuItem($"{Icons.Box}  Nouvelle boîte d'occlusion"))
+            _state.CreateOccluderBox();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip("Boîte de 10 m posée au sol devant la caméra, dans le fichier d'occlusion du projet. À ajuster avec les poignées.");
+        int selected = _state.SelectedEntities.Count;
+        if (ImGui.MenuItem(selected > 1 ? $"{Icons.Boxes}  Boîtes d'occlusion sur les {selected} objets sélectionnés" : $"{Icons.Boxes}  Boîte d'occlusion sur l'objet sélectionné",
+                null, false, selected > 0))
+            _state.CreateOccluderBoxesFromSelection();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip($"Une boîte par objet, ajustée à son modèle et réduite de {AppState.OccluderInset:0.0} m par côté pour rester dans les murs.");
+        var occluder = _state.SelectedOccluder;
+        if (ImGui.MenuItem($"{Icons.Trash}  Supprimer l'occluder sélectionné", "Suppr", false, occluder is not null))
+            _state.DeleteSelectedOccluder();
     }
 
     private void DrawProjectMenuItems()
