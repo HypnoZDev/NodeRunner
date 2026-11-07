@@ -366,6 +366,27 @@ internal sealed class SettingsWindow(AppState state)
                     ImGui.EndCombo();
                 }
 
+                Widgets.Property("Couleur d'accent", "Couleur des boutons principaux, de la sélection, des liens et des cases cochées. Bleu = couleur d'origine.");
+                foreach (var (name, rgb) in UiTheme.Accents)
+                {
+                    var color = UiTheme.Rgb(rgb);
+                    bool isCurrent = settings.AccentColor == rgb;
+                    if (rgb != UiTheme.Accents[0].Rgb)
+                        ImGui.SameLine(0f, 6f);
+                    ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, isCurrent ? 2f : 0f);
+                    ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.Text);
+                    if (ImGui.ColorButton($"{name}##accent_{rgb:X6}", color, ImGuiColorEditFlags.NoTooltip, new Vector2(22f, 22f)))
+                    {
+                        settings.AccentColor = rgb;
+                        state.SaveSettings();
+                        UiTheme.SetAccent(rgb, applyNextFrame: true);
+                    }
+                    ImGui.PopStyleColor();
+                    ImGui.PopStyleVar();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(name);
+                }
+
                 Widgets.Property("Transparence", "Laisse voir un peu le fond d'écran de Windows à travers les panneaux, comme les fenêtres de Windows 11 (effet Mica, seulement quand la fenêtre est active). 0 % = interface opaque.");
                 if (!MainForm.BackdropSupported)
                     ImGui.TextColored(UiTheme.TextFaint, "Windows 11 (22H2 ou plus récent) requis");

@@ -260,6 +260,7 @@ internal sealed unsafe partial class MainForm : Form
         io.NativePtr->IniFilename = (byte*)Marshal.StringToCoTaskMemUTF8(Path.Combine(_state.Paths.ConfigDirectory, "imgui.ini"));
         _ = Handle; // The window may not be shown yet (start-up screen): its handle comes before the 3D surface's.
         UiTheme.LoadFonts(io, DisplayScale());
+        UiTheme.SetAccent(_state.Settings.AccentColor);
         UiTheme.Apply();
 
         _graphics = new GraphicsDevice(_surface.Handle, _surface.ClientSize.Width, _surface.ClientSize.Height, _backdrop, _state.Settings.GraphicsCard);
@@ -443,6 +444,7 @@ internal sealed unsafe partial class MainForm : Form
         _cameraController.MovementKeys = _state.Settings.MovementKeys;
         _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
 
+        UiTheme.ApplyPending();
         ImGui.NewFrame();
         _ui.Draw();
         DrawCollisionRectangle();

@@ -30,9 +30,36 @@ internal static unsafe class UiTheme
     public static readonly Vector4 TextMuted = Rgb(0x9A9CA5);
     public static readonly Vector4 TextFaint = Rgb(0x666870);
 
-    public static readonly Vector4 Accent = Rgb(0x4C8DFF);
-    public static readonly Vector4 AccentHovered = Rgb(0x6AA1FF);
-    public static readonly Vector4 AccentText = Rgb(0x8AB6FF);
+    // Accent colour (setting): buttons, selection, links.
+    public static Vector4 Accent { get; private set; } = Rgb(DefaultAccent);
+    public static Vector4 AccentHovered { get; private set; } = Rgb(0x6AA1FF);
+    public static Vector4 AccentText { get; private set; } = Rgb(0x8AB6FF);
+
+    public const uint DefaultAccent = 0x4C8DFF;
+
+    public static readonly (string Name, uint Rgb)[] Accents =
+    [
+        ("Bleu", DefaultAccent),
+        ("Cyan", 0x2EB8D0),
+        ("Vert", 0x3DBE7C),
+        ("Violet", 0x9A7BFF),
+        ("Rose", 0xEE5E9C),
+        ("Orange", 0xF28A3C),
+        ("Rouge", 0xE5534B),
+        ("Or", 0xD9A93E),
+    ];
+
+    // Changes the accent colour; Apply then gives it to the interface (applyNextFrame: at the start of the next frame,
+    // not in the middle of one, where pushed colours would bring the old ones back).
+    public static void SetAccent(uint rgb, bool applyNextFrame = false)
+    {
+        _applyPending |= applyNextFrame;
+        var color = Rgb(rgb);
+        var white = Vector4.One;
+        Accent = color;
+        AccentHovered = Vector4.Lerp(color, white, 0.18f) with { W = 1f };
+        AccentText = Vector4.Lerp(color, white, 0.38f) with { W = 1f };
+    }
     public static readonly Vector4 Success = Rgb(0x5BD08A);
     public static readonly Vector4 Warning = Rgb(0xF2B657);
     public static readonly Vector4 Error = Rgb(0xF27474);
@@ -111,6 +138,16 @@ internal static unsafe class UiTheme
     private const float IconOffsetY = 2f;
     private const float SmallIconSize = 14f;
     private const float SmallIconOffsetY = 2f;
+
+    private static bool _applyPending;
+
+    public static void ApplyPending()
+    {
+        if (!_applyPending)
+            return;
+        _applyPending = false;
+        Apply();
+    }
 
     public static void Apply()
     {

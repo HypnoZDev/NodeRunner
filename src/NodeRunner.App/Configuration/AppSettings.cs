@@ -30,6 +30,9 @@ public sealed class AppSettings
     // Video memory for the models, in MB; 0 = automatic (70 % of what Windows grants NodeRunner).
     public int ModelMemoryMb { get; set; }
 
+    // Accent colour of the interface (0xRRGGBB).
+    public uint AccentColor { get; set; } = 0x4C8DFF;
+
     // Mouse look speed of the camera (1 = default).
     public float MouseSensitivity { get; set; } = 1f;
 
