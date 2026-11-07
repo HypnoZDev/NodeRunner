@@ -269,4 +269,50 @@ public class YtypWriterTests
         Assert.True(portal.SameAs(back.InteriorPortals.Single()));
         Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
     }
+
+    [Fact]
+    public void Adds_and_removes_rooms_and_portals()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var library = new MapLibrary();
+        library.AddArchetype(interior);
+        var original = library.GetLayout(InteriorName);
+
+        int room = library.AddRoom(InteriorName, new InteriorRoom(new Vector3(-10), new Vector3(10)) { Name = "hall", Flags = 0x40 });
+        Assert.Equal(1, room);
+        interior.InteriorEntities[2].SetInteriorPlace(1, -1);
+        interior.InteriorEntitySets[0].Entities[0].SetInteriorPlace(1, -1);
+        Vector3[] corners = [new(1, 0, 2), new(2, 0, 2), new(2, 0, 0), new(1, 0, 0)];
+        int portal = library.AddPortal(InteriorName, new InteriorPortal(1, 0, 0x40) { Corners = corners });
+        Assert.Equal(1, portal);
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal(["", "hall"], back.InteriorRooms.Select(r => r.Name));
+        Assert.Equal(0x40u, back.InteriorRooms[1].Flags);
+        Assert.Equal(2, back.InteriorPortals.Count);
+        Assert.Equal(corners, back.InteriorPortals[1].Corners);
+        Assert.Equal((1, 0), (back.InteriorPortals[1].RoomFrom, back.InteriorPortals[1].RoomTo));
+        Assert.Equal([-1, 0, 1], back.InteriorEntities.Select(e => e.InteriorRoom));
+        Assert.Equal([1, 7], back.InteriorEntitySets.Single().Entities.Select(e => e.InteriorRoom));
+
+        // The room removed: its portals too, its objects back in the limbo.
+        var withRoom = library.GetLayout(InteriorName);
+        library.RemoveRoom(InteriorName, 1);
+        Assert.Empty(interior.InteriorPortals);
+        back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Single(back.InteriorRooms);
+        Assert.Empty(back.InteriorPortals);
+        Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
+        Assert.Equal([0, 7], back.InteriorEntitySets.Single().Entities.Select(e => e.InteriorRoom));
+
+        // Undone: as before.
+        library.SetLayout(InteriorName, withRoom);
+        Assert.Equal(1, interior.InteriorEntities[2].InteriorRoom);
+        library.SetLayout(InteriorName, original);
+        back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Single(back.InteriorRooms);
+        Assert.True(back.InteriorPortals.Single().SameAs(interior.InteriorPortals.Single()));
+        Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
+    }
 }

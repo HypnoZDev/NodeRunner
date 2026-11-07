@@ -775,6 +775,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             int objects = archetype.InteriorEntities.Count(e => e.InteriorRoom == index && !e.IsDeleted);
             ImGui.TextColored(UiTheme.TextMuted, objects == 1 ? "1 objet" : $"{objects} objets");
         }
+        if (Widgets.Button($"{Icons.Box}  Ajouter une salle", "Boîte de 4 x 4 x 3 m devant la caméra, dans toutes les copies de l'intérieur."))
+            state.AddRoom(interior);
     }
 
     // A text field whose value is applied when it is released (Enter or click elsewhere); true with the typed text then.
@@ -934,6 +936,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         if (Widgets.Section("Portails de la salle", "room_portals"))
             DrawPortalList(interior, archetype, index);
+        int roomPortals = archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index);
+        if (Widgets.Button($"{Icons.Trash}  Supprimer la salle", "Supprime la salle" + (roomPortals > 0 ? $" et ses {roomPortals} portail(s)" : "")
+                + " ; ses objets vont dans la salle qui les entoure (sinon dans limbo). Suppr fait de même."))
+        {
+            state.DeleteSelectedRoom();
+            return;
+        }
         Widgets.Hint("Change la salle dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
             + "Échap pour désélectionner ; masquez le calque Salles pour sélectionner les objets.", wrap: true);
     }
@@ -1004,6 +1013,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         if (!any)
             Widgets.Hint("Aucun portail : la salle n'est visible depuis nulle part.");
+        if (Widgets.Button($"{Icons.Box}  Ajouter un portail", "Ouverture de 1,2 x 2,2 m en bas du côté de la salle tourné vers la caméra, "
+                + "vers l'extérieur. À placer ensuite sur la porte ou la fenêtre."))
+            state.AddPortal(interior, room);
     }
 
     private void DrawPortal(RoomSelection selected, Archetype archetype, MapLibrary library)
@@ -1155,6 +1167,11 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             uint other = portal.Flags & ~PortalFlags.Aggregate(0u, (all, f) => all | f.Flag);
             if (other != 0)
                 Widgets.Hint($"Autres drapeaux : 0x{other:X}");
+        }
+        if (Widgets.Button($"{Icons.Trash}  Supprimer le portail", "Les objets attachés (portes...) restent, sans portail. Suppr fait de même."))
+        {
+            state.DeleteSelectedPortal();
+            return;
         }
         Widgets.Hint("Change le portail dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
             + "Échap pour désélectionner ; masquez les calques des portails pour sélectionner les objets.", wrap: true);

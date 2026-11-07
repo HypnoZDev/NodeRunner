@@ -54,6 +54,15 @@ public sealed class Archetype
 
     internal void SetPortal(int index, InteriorPortal portal) => _portals = [.. _portals.Select((p, i) => i == index ? portal : p)];
 
+    internal void SetLayout(IReadOnlyList<InteriorRoom> rooms, IReadOnlyList<InteriorPortal> portals)
+    {
+        _rooms = rooms;
+        _portals = portals;
+    }
+
+    // Objects of the interior and of its entity sets (definitions).
+    public IEnumerable<MapEntity> AllInteriorEntities => InteriorEntities.Concat(InteriorEntitySets.SelectMany(s => s.Entities));
+
     // For an interior: optional groups of objects (furniture styles, upgrades of Online properties...), hidden until
     // a script activates them.
     public IReadOnlyList<InteriorEntitySet> InteriorEntitySets { get => _entitySets; init => _entitySets = value; }
@@ -93,6 +102,11 @@ public sealed record InteriorRoom(Vector3 BoundsMin, Vector3 BoundsMax)
     public uint SecondaryTimecycleHash { get; init; }
 
     public int FloorId { get; init; }
+
+    // Position in the file's list of rooms; -1 for a room added since.
+    public int SourceIndex { get; init; } = -1;
+
+    public bool Contains(Vector3 point) => Vector3.Clamp(point, BoundsMin, BoundsMax) == point;
 }
 
 // An opening between two rooms of an interior (room 0 being the outside).
@@ -107,8 +121,12 @@ public sealed record InteriorPortal(int RoomFrom, int RoomTo, uint Flags)
     // Audio occlusion setting, by name hash; 0 = none.
     public uint AudioOcclusionHash { get; init; }
 
-    // Records compare lists by reference: the corners are compared one by one.
-    public bool SameAs(InteriorPortal other) => this with { Corners = [] } == other with { Corners = [] } && Corners.SequenceEqual(other.Corners);
+    // Position in the file's list of portals; -1 for a portal added since.
+    public int SourceIndex { get; init; } = -1;
+
+    // Records compare lists by reference: the corners are compared one by one (the place in the file is left out).
+    public bool SameAs(InteriorPortal other) =>
+        this with { Corners = [], SourceIndex = 0 } == other with { Corners = [], SourceIndex = 0 } && Corners.SequenceEqual(other.Corners);
 }
 
 public enum ArchetypeKind

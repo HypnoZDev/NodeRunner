@@ -1,3 +1,4 @@
+using System.Numerics;
 using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
 using NodeRunner.Data.FileSystem;
@@ -542,11 +543,11 @@ internal sealed class AppState
     private readonly EditHistory _history = new();
     private MapLibrary? _historyLibrary;
 
-    public void Undo() => SelectAfterUndo(History.Undo());
+    public void Undo() => SelectAfterUndo(History.Undo(), undone: true);
 
-    public void Redo() => SelectAfterUndo(History.Redo());
+    public void Redo() => SelectAfterUndo(History.Redo(), undone: false);
 
-    private void SelectAfterUndo(IEdit? edit)
+    private void SelectAfterUndo(IEdit? edit, bool undone)
     {
         if (edit is PathNodeMoveEdit nodeEdit)
         {
@@ -567,6 +568,17 @@ internal sealed class AppState
             SelectRoom(new RoomSelection(roomEdit.Interior, roomEdit.Index));
         else if (edit is PortalEdit portalEdit)
             SelectPortal(new RoomSelection(portalEdit.Interior, portalEdit.Index));
+        else if (edit is InteriorLayoutEdit layoutEdit)
+        {
+            // The room or portal is there again: selected; gone: its interior is.
+            var place = new RoomSelection(layoutEdit.Interior, layoutEdit.Index);
+            if (layoutEdit.Added == undone)
+                Select(layoutEdit.Interior);
+            else if (layoutEdit.IsPortal)
+                SelectPortal(place);
+            else
+                SelectRoom(place);
+        }
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;
@@ -729,6 +741,88 @@ internal sealed class AppState
         SetLayerVisible(OcclusionLayer.LayerName(occluder.Kind), true);
         var (min, max) = occluder.Bounds();
         FocusOn((min + max) / 2, System.Numerics.Vector3.Distance(min, max) / 2);
+    }
+
+    // --- Rooms and portals of interiors ---
+
+    // A room of 4 x 4 x 3 m in front of the camera, in the interior's space; selected.
+    public void AddRoom(MapEntity interior)
+    {
+        if (World.Maps is not { } library || library.GetArchetype(interior.ArchetypeHash) is not { } archetype
+            || !Matrix4x4.Invert(interior.Transform, out var toInterior))
+            return;
+        var center = Vector3.Transform(Camera.Position + Camera.Forward * 6f, toInterior);
+        string name = $"room{archetype.InteriorRooms.Count}";
+        var room = new InteriorRoom(center - new Vector3(2f, 2f, 1f), center + new Vector3(2f, 2f, 2f)) { Name = name };
+        var edit = InteriorLayoutEdit.Apply(library, interior, () => library.AddRoom(interior.ArchetypeHash, room),
+            $"Ajouter la salle {name}", isPortal: false, added: true);
+        History.Add(edit);
+        SelectRoom(new RoomSelection(interior, edit.Index));
+        SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
+        Notify($"Salle {edit.Index} « {name} » ajoutée devant la caméra : ajustez ses coins dans Propriétés, puis ajoutez-lui un portail.");
+    }
+
+    public void DeleteSelectedRoom()
+    {
+        if (SelectedRoom is not { Index: > 0 } selected || World.Maps is not { } library
+            || library.GetArchetype(selected.Interior.ArchetypeHash) is not { } archetype || selected.Index >= archetype.InteriorRooms.Count)
+            return;
+        var room = archetype.InteriorRooms[selected.Index];
+        int portals = archetype.InteriorPortals.Count(p => p.RoomFrom == selected.Index || p.RoomTo == selected.Index);
+        string name = room.Name.Length > 0 ? room.Name : $"{selected.Index}";
+        History.Add(InteriorLayoutEdit.Apply(library, selected.Interior, () =>
+        {
+            library.RemoveRoom(selected.Interior.ArchetypeHash, selected.Index);
+            return selected.Index;
+        }, $"Supprimer la salle {name}", isPortal: false, added: false));
+        Select(selected.Interior);
+        Notify($"Salle « {name} » supprimée{(portals > 0 ? $" avec ses {portals} portail(s)" : "")} ; ses objets vont dans la salle qui les entoure "
+            + "(sinon dans limbo). Ctrl+Z pour annuler.");
+    }
+
+    // A portal of 1.2 x 2.2 m (at most) at the bottom of the side of the room facing the camera, to the outside; selected.
+    public void AddPortal(MapEntity interior, int roomIndex)
+    {
+        if (World.Maps is not { } library || library.GetArchetype(interior.ArchetypeHash) is not { } archetype
+            || roomIndex < 1 || roomIndex >= archetype.InteriorRooms.Count || !Matrix4x4.Invert(interior.Transform, out var toInterior))
+            return;
+        var room = archetype.InteriorRooms[roomIndex];
+        var min = room.BoundsMin;
+        var max = room.BoundsMax;
+        var center = (min + max) / 2;
+        var half = Vector3.Max((max - min) / 2, new Vector3(0.05f));
+        var toCamera = Vector3.Transform(Camera.Position, toInterior) - center;
+        bool alongX = MathF.Abs(toCamera.X) / half.X >= MathF.Abs(toCamera.Y) / half.Y;
+        float width = MathF.Min(1.2f, 2 * (alongX ? half.Y : half.X) - 0.2f) / 2;
+        float bottom = min.Z;
+        float top = MathF.Min(min.Z + 2.2f, max.Z - 0.05f);
+        Vector3[] corners = alongX
+            ? [new(toCamera.X >= 0 ? max.X : min.X, center.Y - width, top), new(toCamera.X >= 0 ? max.X : min.X, center.Y + width, top),
+               new(toCamera.X >= 0 ? max.X : min.X, center.Y + width, bottom), new(toCamera.X >= 0 ? max.X : min.X, center.Y - width, bottom)]
+            : [new(center.X - width, toCamera.Y >= 0 ? max.Y : min.Y, top), new(center.X + width, toCamera.Y >= 0 ? max.Y : min.Y, top),
+               new(center.X + width, toCamera.Y >= 0 ? max.Y : min.Y, bottom), new(center.X - width, toCamera.Y >= 0 ? max.Y : min.Y, bottom)];
+        var portal = new InteriorPortal(roomIndex, 0, 0) { Corners = corners };
+        var edit = InteriorLayoutEdit.Apply(library, interior, () => library.AddPortal(interior.ArchetypeHash, portal),
+            $"Ajouter un portail à la salle {roomIndex}", isPortal: true, added: true);
+        History.Add(edit);
+        SelectPortal(new RoomSelection(interior, edit.Index));
+        SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.OutsidePortals), true);
+        Notify($"Portail {edit.Index} ajouté sur le côté de la salle face à la caméra, vers l'extérieur : placez ses coins sur l'ouverture "
+            + "et choisissez les salles qu'il relie.");
+    }
+
+    public void DeleteSelectedPortal()
+    {
+        if (SelectedPortal is not { } selected || World.Maps is not { } library
+            || library.GetArchetype(selected.Interior.ArchetypeHash) is not { } archetype || selected.Index >= archetype.InteriorPortals.Count)
+            return;
+        History.Add(InteriorLayoutEdit.Apply(library, selected.Interior, () =>
+        {
+            library.RemovePortal(selected.Interior.ArchetypeHash, selected.Index);
+            return selected.Index;
+        }, $"Supprimer le portail {selected.Index}", isPortal: true, added: false));
+        Select(selected.Interior);
+        Notify($"Portail {selected.Index} supprimé. Ctrl+Z pour annuler.");
     }
 
     public void DeleteSelectedOccluder()

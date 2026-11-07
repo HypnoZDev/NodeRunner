@@ -24,7 +24,7 @@ internal static class InteriorFileSaver
                 var interiors = library.InteriorsInFile(path);
                 if (interiors.Count == 0 || Source(files, library, path) is not { } source || files.GetResourceHeader(path) is not { } header)
                     throw new InvalidDataException("fichier du jeu introuvable");
-                var written = writer.Write(source, interiors, NeedsEntitySetInfo(source, interiors) ? EntitySetInfo(files, library) : null);
+                var written = writer.Write(source, interiors, Borrowed(files, library, YtypWriter.MissingStructures(source, interiors)));
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
                 Verify(file, interiors);
 
@@ -56,21 +56,26 @@ internal static class InteriorFileSaver
         }
     }
 
-    private static bool NeedsEntitySetInfo(byte[] source, List<Archetype> interiors) =>
-        interiors.Any(i => i.InteriorEntitySets.Count > 0) && YtypWriter.EntitySetInfo(source) is null;
-
-    // The description of entity sets, from the first game .ytyp that has sets.
-    private static Data.Native.Resources.MetaDocument.StructureInfo? EntitySetInfo(Data.FileSystem.GameContent files, MapLibrary library)
+    // Descriptions of the structures the file lacks (a first entity set or portal), from the first game .ytyp that has them.
+    private static List<Data.Native.Resources.MetaDocument.StructureInfo>? Borrowed(Data.FileSystem.GameContent files, MapLibrary library,
+        IReadOnlyList<uint> missing)
     {
+        if (missing.Count == 0)
+            return null;
+        var found = new List<Data.Native.Resources.MetaDocument.StructureInfo>();
         foreach (uint hash in library.GetInteriorArchetypeHashes())
         {
-            if (library.GetArchetype(hash) is not { InteriorEntitySets.Count: > 0 } || library.GetArchetypeFile(hash) is not { } file
-                || Source(files, library, file) is not { } source)
+            if (library.GetArchetypeFile(hash) is not { } file || Source(files, library, file) is not { } source)
                 continue;
-            if (YtypWriter.EntitySetInfo(source) is { } info)
-                return info;
+            foreach (uint structure in missing)
+            {
+                if (found.All(f => f.NameHash != structure) && YtypWriter.Structure(source, structure) is { } info)
+                    found.Add(info);
+            }
+            if (found.Count == missing.Count)
+                break;
         }
-        return null;
+        return found;
     }
 
     private static void Verify(byte[] file, List<Archetype> interiors)

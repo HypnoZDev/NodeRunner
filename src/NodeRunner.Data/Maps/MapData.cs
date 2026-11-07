@@ -163,9 +163,24 @@ public sealed class MapEntity
 
     public MapData? Map { get; internal set; }
 
-    public int InteriorRoom { get; init; } = -1;
+    public int InteriorRoom { get => _interiorRoom; init => _interiorRoom = value; }
+    private int _interiorRoom = -1;
 
-    public int InteriorPortal { get; init; } = -1;
+    public int InteriorPortal { get => _interiorPortal; init => _interiorPortal = value; }
+    private int _interiorPortal = -1;
+
+    // For a definition: its room and portal (renumbered when rooms or portals of the interior are added or removed),
+    // and those of its copies.
+    internal void SetInteriorPlace(int room, int portal)
+    {
+        _interiorRoom = room;
+        _interiorPortal = portal;
+        foreach (var copy in _copies ?? [])
+        {
+            copy._interiorRoom = room;
+            copy._interiorPortal = portal;
+        }
+    }
 
     // For an object inside an interior: a simplified view of the surroundings, only seen through the windows from
     // inside.

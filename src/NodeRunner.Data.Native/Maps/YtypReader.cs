@@ -52,6 +52,7 @@ public sealed class YtypReader : IMapTypesReader
     internal const int RoomTimecycle = 68;
     internal const int RoomSecondaryTimecycle = 72;
     internal const int RoomFlags = 76;
+    internal const int RoomPortalCount = 80;
     internal const int RoomFloorId = 84;
     internal const int RoomExteriorVisibilityDepth = 88;
     internal const int RoomAttachedObjects = 96;
@@ -135,6 +136,7 @@ public sealed class YtypReader : IMapTypesReader
                 TimecycleHash = d.UInt32(r + RoomTimecycle),
                 SecondaryTimecycleHash = d.UInt32(r + RoomSecondaryTimecycle),
                 FloorId = (int)d.UInt32(r + RoomFloorId),
+                SourceIndex = i,
             });
             AttachObjects(meta, r + RoomAttachedObjects, roomOf, i);
         }
@@ -156,6 +158,7 @@ public sealed class YtypReader : IMapTypesReader
                 MirrorPriority = (int)d.UInt32(p + PortalMirrorPriority),
                 Opacity = (int)d.UInt32(p + PortalOpacity),
                 AudioOcclusionHash = d.UInt32(p + PortalAudioOcclusion),
+                SourceIndex = i,
             });
             AttachObjects(meta, p + PortalAttachedObjects, portalOf, i);
         }

@@ -10,12 +10,14 @@ public sealed class YtypWriter : IMapTypesWriter
 {
     private const int PointerSize = 8;
     private const uint StringStructure = 0x10; // Blocks of characters.
+    private const uint UIntStructure = 0x15; // Blocks of numbers (lists of objects of the rooms).
+    private const uint CornerStructure = 0x33; // Blocks of 4 floats (corners of the portals).
 
     public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors) => Write(source, interiors, null);
 
-    // entitySetInfo: the description of an entity set (EntitySetInfo of another .ytyp), needed when a set is created
-    // in a file that has none.
-    public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors, MetaDocument.StructureInfo? entitySetInfo)
+    // borrowed: descriptions of structures taken from other .ytyp files (Structure), needed when an entity set or a
+    // portal is created in a file that has none (MissingStructures).
+    public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors, IReadOnlyList<MetaDocument.StructureInfo>? borrowed)
     {
         var document = MetaDocument.Read(source);
         int root = document.RootBlock;
@@ -34,7 +36,7 @@ public sealed class YtypWriter : IMapTypesWriter
                 throw new InvalidDataException("Les entity sets de l'intérieur ne sont pas ceux du fichier.");
             if (setCount < interior.InteriorEntitySets.Count)
             {
-                (setBlock, setOffset) = AppendEntitySets(document, item, setBlock, setOffset, setCount, interior.InteriorEntitySets.Count, entitySetInfo);
+                (setBlock, setOffset) = AppendEntitySets(document, item, setBlock, setOffset, setCount, interior.InteriorEntitySets.Count, borrowed);
                 setCount = interior.InteriorEntitySets.Count;
             }
             for (int s = 0; s < setCount; s++)
@@ -48,27 +50,110 @@ public sealed class YtypWriter : IMapTypesWriter
                 CollectOriginals(document, PointerItems(document, (setBlock, setOffset + s * YtypReader.EntitySetSize), YtypReader.EntitySetEntities),
                     interior.InteriorEntitySets[s].Entities, originals);
 
-            WriteRooms(document, item, interior.InteriorRooms);
-            WritePortals(document, item, interior.InteriorPortals);
-            WriteInteriorEntities(document, item, interior.InteriorEntities, originals);
+            // Rooms or portals added or removed: their lists are rebuilt, and the objects of each room or portal listed
+            // again from the objects' own room and portal.
+            Layout? layout = null;
+            if (LayoutChanged(document, item, interior))
+            {
+                int itemCount = Array(document, item, YtypReader.InteriorEntities).Count;
+                layout = new Layout(Owners(document, item, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, itemCount),
+                    Owners(document, item, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, itemCount),
+                    [.. interior.InteriorRooms.Select(r => r.SourceIndex)], [.. interior.InteriorPortals.Select(p => p.SourceIndex)]);
+            }
+            WriteRooms(document, item, interior, layout is not null, borrowed);
+            WritePortals(document, item, interior.InteriorPortals, layout is not null, borrowed);
+            WriteInteriorEntities(document, item, interior.InteriorEntities, originals, layout);
             for (int s = 0; s < setCount; s++)
-                WriteEntitySet(document, item, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities, originals);
+                WriteEntitySet(document, item, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities, originals,
+                    layout is not null ? interior.InteriorRooms.Count : -1);
         }
 
         var (content, pageFlags) = document.Write();
         return new MapFileContent(content, pageFlags);
     }
 
-    // The description of entity sets in a .ytyp, null if it has none.
-    public static MetaDocument.StructureInfo? EntitySetInfo(ReadOnlySpan<byte> source) =>
-        MetaDocument.Read(source).FindStructure(YtypReader.EntitySetStructure);
+    // The description of a structure in a .ytyp, null if it has none.
+    public static MetaDocument.StructureInfo? Structure(ReadOnlySpan<byte> source, uint structure) =>
+        MetaDocument.Read(source).FindStructure(structure);
+
+    // The structures the interiors need that the file does not describe (to borrow from another .ytyp).
+    public static IReadOnlyList<uint> MissingStructures(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors)
+    {
+        var document = MetaDocument.Read(source);
+        var needed = new List<uint>();
+        if (interiors.Any(i => i.InteriorEntitySets.Count > 0))
+            needed.Add(YtypReader.EntitySetStructure);
+        if (interiors.Any(i => i.InteriorRooms.Count > 0))
+            needed.Add(YtypReader.RoomStructure);
+        if (interiors.Any(i => i.InteriorPortals.Count > 0))
+            needed.Add(YtypReader.PortalStructure);
+        return [.. needed.Where(n => document.FindStructure(n) is null)];
+    }
+
+    private static void RequireStructure(MetaDocument document, uint structure, IReadOnlyList<MetaDocument.StructureInfo>? borrowed, string what)
+    {
+        if (document.FindStructure(structure) is null)
+            document.Structures.Add(borrowed?.FirstOrDefault(b => b.NameHash == structure)
+                                    ?? throw new InvalidDataException($"description des {what} introuvable (aucun autre .ytyp n'en a)"));
+    }
+
+    // The file's room (or portal) of each object of the interior, by index in its list of objects (-1: none).
+    private sealed record Layout(int[] FileRooms, int[] FilePortals, int[] RoomSources, int[] PortalSources);
+
+    private static bool LayoutChanged(MetaDocument document, (int Block, int Offset) interior, Archetype archetype) =>
+        Array(document, interior, YtypReader.InteriorRooms).Count != archetype.InteriorRooms.Count
+        || Array(document, interior, YtypReader.InteriorPortals).Count != archetype.InteriorPortals.Count
+        || archetype.InteriorRooms.Select((r, i) => r.SourceIndex != i).Any(c => c)
+        || archetype.InteriorPortals.Select((p, i) => p.SourceIndex != i).Any(c => c);
+
+    private static int[] Owners(MetaDocument document, (int Block, int Offset) interior, int field, int size, int objectsField, int itemCount)
+    {
+        var owners = new int[itemCount];
+        System.Array.Fill(owners, -1);
+        var (block, offset, count) = Array(document, interior, field);
+        for (int r = 0; r < count; r++)
+        {
+            var (listBlock, listOffset, listCount) = Array(document, (block, offset + r * size), objectsField);
+            for (int i = 0; i < listCount; i++)
+            {
+                uint index = BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[listBlock].Data.AsSpan(listOffset + i * 4));
+                if (index < owners.Length)
+                    owners[index] = r;
+            }
+        }
+        return owners;
+    }
+
+    // A new array of rooms or portals: the file's ones (by SourceIndex) and new ones made from a template (an item of
+    // the file, its name and lists cleared). Returns its place.
+    private static (int Block, int Offset) Rebuild(MetaDocument document, (int Block, int Offset) interior, int field, int size, uint structure,
+        IReadOnlyList<int> sources, int[] cleared)
+    {
+        var (block, offset, count) = Array(document, interior, field);
+        var template = new byte[size];
+        if (count > 0)
+            document.Blocks[block].Data.AsSpan(offset + (count > 1 ? size : 0), size).CopyTo(template);
+        foreach (int c in cleared)
+            template.AsSpan(c, 12).Clear();
+        var data = new byte[sources.Count * size];
+        for (int i = 0; i < sources.Count; i++)
+        {
+            int source = sources[i];
+            if (source >= count)
+                throw new InvalidDataException("Les salles ou portails de l'intérieur ne sont pas ceux du fichier.");
+            (source >= 0 ? document.Blocks[block].Data.AsSpan(offset + source * size, size) : template).CopyTo(data.AsSpan(i * size));
+        }
+        int newBlock = document.Blocks.Count;
+        document.Blocks.Add(new MetaDocument.Block(structure, data));
+        SetArray(document, interior, field, newBlock, 0, sources.Count);
+        return (newBlock, 0);
+    }
 
     // The interior's sets in a new block: the file's ones, then empty new ones (named by the caller).
     private static (int Block, int Offset) AppendEntitySets(MetaDocument document, (int Block, int Offset) interior, int block, int offset,
-        int fileCount, int count, MetaDocument.StructureInfo? info)
+        int fileCount, int count, IReadOnlyList<MetaDocument.StructureInfo>? borrowed)
     {
-        if (document.FindStructure(YtypReader.EntitySetStructure) is null)
-            document.Structures.Add(info ?? throw new InvalidDataException("description des entity sets introuvable (aucun autre .ytyp n'en a)"));
+        RequireStructure(document, YtypReader.EntitySetStructure, borrowed, "entity sets");
         var data = new byte[count * YtypReader.EntitySetSize];
         if (fileCount > 0)
             document.Blocks[block].Data.AsSpan(offset, fileCount * YtypReader.EntitySetSize).CopyTo(data);
@@ -121,9 +206,18 @@ public sealed class YtypWriter : IMapTypesWriter
     }
 
     // Box, name and settings of each room; their objects are written with the objects.
-    private static void WriteRooms(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<InteriorRoom> rooms)
+    private static void WriteRooms(MetaDocument document, (int Block, int Offset) interior, Archetype archetype, bool rebuild,
+        IReadOnlyList<MetaDocument.StructureInfo>? borrowed)
     {
+        var rooms = archetype.InteriorRooms;
         var (block, offset, count) = Array(document, interior, YtypReader.InteriorRooms);
+        if (rebuild)
+        {
+            RequireStructure(document, YtypReader.RoomStructure, borrowed, "salles");
+            (block, offset) = Rebuild(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomStructure,
+                [.. rooms.Select(r => r.SourceIndex)], [YtypReader.RoomName, YtypReader.RoomAttachedObjects]);
+            count = rooms.Count;
+        }
         if (count != rooms.Count)
             throw new InvalidDataException("Les salles de l'intérieur ne sont pas celles du fichier.");
         for (int r = 0; r < count; r++)
@@ -138,15 +232,46 @@ public sealed class YtypWriter : IMapTypesWriter
             BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.RoomFlags), room.Flags);
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomFloorId), room.FloorId);
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomExteriorVisibilityDepth), room.ExteriorVisibilityDepth);
+            int index = r;
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomPortalCount),
+                archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index));
             if (ReadString(document, (block, o + YtypReader.RoomName)) != room.Name)
                 WriteString(document, (block, o + YtypReader.RoomName), room.Name);
         }
     }
 
     // Corners, rooms and settings of each portal; their objects are written with the objects.
-    private static void WritePortals(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<InteriorPortal> portals)
+    private static void WritePortals(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<InteriorPortal> portals, bool rebuild,
+        IReadOnlyList<MetaDocument.StructureInfo>? borrowed)
     {
         var (block, offset, count) = Array(document, interior, YtypReader.InteriorPortals);
+        if (rebuild && portals.Count > 0)
+        {
+            uint cornerStructure = CornerStructure;
+            if (count > 0 && Array(document, (block, offset), YtypReader.PortalCorners) is { Count: > 0 } first)
+                cornerStructure = document.Blocks[first.Block].Structure;
+            RequireStructure(document, YtypReader.PortalStructure, borrowed, "portails");
+            (block, offset) = Rebuild(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalStructure,
+                [.. portals.Select(p => p.SourceIndex)], [YtypReader.PortalCorners, YtypReader.PortalAttachedObjects]);
+            count = portals.Count;
+            // New portals: their own block of corners (the 4th float is padding).
+            for (int p = 0; p < count; p++)
+            {
+                if (portals[p].SourceIndex >= 0)
+                    continue;
+                var corners = new byte[portals[p].Corners.Count * 16];
+                for (int c = 0; c < portals[p].Corners.Count; c++)
+                    WriteFloat(corners, c * 16 + 12, float.NaN);
+                int cornerBlock = document.Blocks.Count;
+                document.Blocks.Add(new MetaDocument.Block(cornerStructure, corners));
+                SetArray(document, (block, offset + p * YtypReader.PortalSize), YtypReader.PortalCorners, cornerBlock, 0, portals[p].Corners.Count);
+            }
+        }
+        else if (rebuild)
+        {
+            SetArray(document, interior, YtypReader.InteriorPortals, -1, 0, 0);
+            count = 0;
+        }
         if (count != portals.Count)
             throw new InvalidDataException("Les portails de l'intérieur ne sont pas ceux du fichier.");
         for (int p = 0; p < count; p++)
@@ -200,18 +325,26 @@ public sealed class YtypWriter : IMapTypesWriter
     // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
     // The rooms and portals list their objects by index, renumbered.
     private static void WriteInteriorEntities(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<MapEntity> entities,
-        Dictionary<MapEntity, byte[]> originals)
+        Dictionary<MapEntity, byte[]> originals, Layout? layout)
     {
         var items = PointerItems(document, interior, YtypReader.InteriorEntities);
         int fileCount = WriteEntities(document, items, entities);
 
         var newIndex = new int[items.Count];
         var kept = new List<(int Block, int Offset)>();
+        // Room and portal of each kept item, with the layout: the object's own, or the file's one for other items.
+        var places = new List<(int Room, int Portal)>();
         int entity = 0;
         for (int i = 0; i < items.Count; i++)
         {
             bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
             bool keep = !isEntity || !entities[entity].IsDeleted;
+            if (keep && layout is not null)
+            {
+                places.Add(isEntity ? (entities[entity].InteriorRoom, entities[entity].InteriorPortal)
+                    : (System.Array.IndexOf(layout.RoomSources, layout.FileRooms[i]) is var room && layout.FileRooms[i] >= 0 ? room : -1,
+                       System.Array.IndexOf(layout.PortalSources, layout.FilePortals[i]) is var portal && layout.FilePortals[i] >= 0 ? portal : -1));
+            }
             if (isEntity)
                 entity++;
             newIndex[i] = keep ? kept.Count : -1;
@@ -219,7 +352,7 @@ public sealed class YtypWriter : IMapTypesWriter
                 kept.Add(items[i]);
         }
         var added = entities.Skip(fileCount).Where(e => !e.IsDeleted).ToList();
-        if (kept.Count == items.Count && added.Count == 0)
+        if (kept.Count == items.Count && added.Count == 0 && layout is null)
             return;
 
         var additions = new List<(int Index, int Room)>();
@@ -231,15 +364,54 @@ public sealed class YtypWriter : IMapTypesWriter
         }
 
         WritePointers(document, interior, YtypReader.InteriorEntities, kept);
-        Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex, additions);
-        Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex, []);
+        if (layout is null)
+        {
+            Renumber(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, newIndex, additions);
+            Renumber(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, newIndex, []);
+            return;
+        }
+        places.AddRange(added.Select(e => (e.InteriorRoom, e.InteriorPortal)));
+        WriteOwnerLists(document, interior, YtypReader.InteriorRooms, YtypReader.RoomSize, YtypReader.RoomAttachedObjects, [.. places.Select(p => p.Room)]);
+        WriteOwnerLists(document, interior, YtypReader.InteriorPortals, YtypReader.PortalSize, YtypReader.PortalAttachedObjects, [.. places.Select(p => p.Portal)]);
+    }
+
+    // The objects of each room (or portal), listed again from each object's own room (or portal).
+    private static void WriteOwnerLists(MetaDocument document, (int Block, int Offset) interior, int field, int size, int objectsField, int[] ownerOf)
+    {
+        var (block, offset, count) = Array(document, interior, field);
+        for (int r = 0; r < count; r++)
+        {
+            var list = new List<uint>();
+            for (int i = 0; i < ownerOf.Length; i++)
+            {
+                if (ownerOf[i] == r)
+                    list.Add((uint)i);
+            }
+            WriteList(document, (block, offset + r * size), objectsField, list);
+        }
+    }
+
+    // Replaces a list of numbers, in place when it does not grow, otherwise in a new block.
+    private static void WriteList(MetaDocument document, (int Block, int Offset) owner, int field, List<uint> list)
+    {
+        var (listBlock, listOffset, listCount) = Array(document, owner, field);
+        if (list.Count > listCount)
+        {
+            listBlock = document.Blocks.Count;
+            listOffset = 0;
+            document.Blocks.Add(new MetaDocument.Block(UIntStructure, new byte[list.Count * 4]));
+        }
+        for (int i = 0; i < list.Count; i++)
+            BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[listBlock].Data.AsSpan(listOffset + i * 4), list[i]);
+        SetArray(document, owner, field, listBlock, listOffset, list.Count);
     }
 
     // The objects of an entity set, those deleted left out along with their room in the set's list of rooms (same
     // index as the pointer).
     // Objects added to the set are appended, with their room.
+    // roomCount: with rooms added or removed, the objects' own rooms replace the file's ones (odd values kept); -1 otherwise.
     private static void WriteEntitySet(MetaDocument document, (int Block, int Offset) interior, (int Block, int Offset) set,
-        IReadOnlyList<MapEntity> entities, Dictionary<MapEntity, byte[]> originals)
+        IReadOnlyList<MapEntity> entities, Dictionary<MapEntity, byte[]> originals, int roomCount)
     {
         var items = PointerItems(document, set, YtypReader.EntitySetEntities);
         int fileCount = WriteEntities(document, items, entities);
@@ -252,16 +424,18 @@ public sealed class YtypWriter : IMapTypesWriter
         {
             bool isEntity = document.Blocks[items[i].Block].Structure == YmapReader.EntityStructure;
             bool keep = !isEntity || !entities[entity].IsDeleted;
+            int own = isEntity ? entities[entity].InteriorRoom : -1;
             if (isEntity)
                 entity++;
             if (!keep)
                 continue;
             kept.Add(items[i]);
             if (i < locationCount)
-                rooms.Add(BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4)));
+                rooms.Add(own >= 0 && own < roomCount ? (uint)own
+                    : BinaryPrimitives.ReadUInt32LittleEndian(document.Blocks[locationBlock].Data.AsSpan(locationOffset + i * 4)));
         }
         var added = entities.Skip(fileCount).Where(e => !e.IsDeleted).ToList();
-        if (kept.Count == items.Count && added.Count == 0)
+        if (kept.Count == items.Count && added.Count == 0 && roomCount < 0)
             return;
 
         if (added.Count > 0)

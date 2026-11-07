@@ -224,6 +224,103 @@ public sealed class MapLibrary
         RoomVersion++;
     }
 
+    // Rooms, portals and the room and portal of each object of an interior (to undo adding or removing one).
+    public InteriorLayout GetLayout(uint interiorHash)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        return new InteriorLayout(archetype.InteriorRooms, archetype.InteriorPortals,
+            [.. archetype.AllInteriorEntities.Select(e => (e, e.InteriorRoom, e.InteriorPortal))]);
+    }
+
+    public void SetLayout(uint interiorHash, InteriorLayout layout)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        archetype.SetLayout(layout.Rooms, layout.Portals);
+        foreach (var (entity, room, portal) in layout.Places)
+            entity.SetInteriorPlace(room, portal);
+        RoomVersion++;
+    }
+
+    // Appends a room to an interior; returns its index.
+    public int AddRoom(uint interiorHash, InteriorRoom room)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        archetype.SetLayout([.. archetype.InteriorRooms, room with { SourceIndex = -1 }], archetype.InteriorPortals);
+        RoomVersion++;
+        return archetype.InteriorRooms.Count - 1;
+    }
+
+    // Removes a room (not the limbo, 0) with its portals; its objects go to the smallest other room around them, or to
+    // the limbo. The following rooms are renumbered.
+    public void RemoveRoom(uint interiorHash, int index)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        if (index < 1 || index >= archetype.InteriorRooms.Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        for (int p = archetype.InteriorPortals.Count - 1; p >= 0; p--)
+        {
+            var portal = archetype.InteriorPortals[p];
+            if (portal.RoomFrom == index || portal.RoomTo == index)
+                RemovePortalAt(archetype, p);
+        }
+        var others = archetype.InteriorRooms.Select((r, i) => (Room: r, Index: i)).Where(r => r.Index > 0 && r.Index != index)
+            .OrderBy(r => Volume(r.Room)).ToList();
+        int Shift(int room) => room > index ? room - 1 : room;
+        foreach (var entity in archetype.AllInteriorEntities)
+        {
+            int room = entity.InteriorRoom;
+            if (room == index)
+                room = others.FirstOrDefault(r => r.Room.Contains(entity.Position)) is { Room: not null } around ? around.Index : 0;
+            if (room != entity.InteriorRoom || room > index)
+                entity.SetInteriorPlace(Shift(room), entity.InteriorPortal);
+        }
+        archetype.SetLayout([.. archetype.InteriorRooms.Where((_, i) => i != index)],
+            [.. archetype.InteriorPortals.Select(p => p with { RoomFrom = Shift(p.RoomFrom), RoomTo = Shift(p.RoomTo) })]);
+        RoomVersion++;
+    }
+
+    // Appends a portal to an interior; returns its index.
+    public int AddPortal(uint interiorHash, InteriorPortal portal)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        archetype.SetLayout(archetype.InteriorRooms, [.. archetype.InteriorPortals, portal with { SourceIndex = -1 }]);
+        RoomVersion++;
+        return archetype.InteriorPortals.Count - 1;
+    }
+
+    // Removes a portal; the objects attached to it (doors...) are no longer attached to any. The following portals are
+    // renumbered.
+    public void RemovePortal(uint interiorHash, int index)
+    {
+        var archetype = InteriorArchetype(interiorHash);
+        if (index < 0 || index >= archetype.InteriorPortals.Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        RemovePortalAt(archetype, index);
+        RoomVersion++;
+    }
+
+    private static void RemovePortalAt(Archetype archetype, int index)
+    {
+        foreach (var entity in archetype.AllInteriorEntities)
+        {
+            int portal = entity.InteriorPortal;
+            if (portal >= index)
+                entity.SetInteriorPlace(entity.InteriorRoom, portal == index ? -1 : portal - 1);
+        }
+        archetype.SetLayout(archetype.InteriorRooms, [.. archetype.InteriorPortals.Where((_, i) => i != index)]);
+    }
+
+    private static float Volume(InteriorRoom room)
+    {
+        var size = room.BoundsMax - room.BoundsMin;
+        return MathF.Abs(size.X * size.Y * size.Z);
+    }
+
+    internal void AddArchetype(Archetype archetype) => _archetypes[archetype.NameHash] = archetype;
+
+    private Archetype InteriorArchetype(uint interiorHash) =>
+        GetArchetype(interiorHash) is { Kind: ArchetypeKind.Interior } archetype ? archetype : throw new ArgumentException("Not an interior.", nameof(interiorHash));
+
     public void SetEntitySetActive(PlacedEntitySet set, bool active)
     {
         if (set.IsActive == active)
@@ -584,3 +681,7 @@ public sealed class MapLibrary
         map.NameHash == Hashing.Joaat.Hash(Path.GetFileNameWithoutExtension(path));
 
 }
+
+// Rooms, portals and the room and portal of each object of an interior, at one moment.
+public sealed record InteriorLayout(IReadOnlyList<InteriorRoom> Rooms, IReadOnlyList<InteriorPortal> Portals,
+    IReadOnlyList<(MapEntity Entity, int Room, int Portal)> Places);

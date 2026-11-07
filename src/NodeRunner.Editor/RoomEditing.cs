@@ -60,3 +60,31 @@ public sealed class PortalEdit(MapLibrary library, MapEntity interior, int index
 
     public void Redo() => library.SetPortal(Interior.ArchetypeHash, Index, after);
 }
+
+// A room or portal added to an interior or removed from it (objects and other portals renumbered), in every instance.
+public sealed class InteriorLayoutEdit(MapLibrary library, MapEntity interior, InteriorLayout before, InteriorLayout after, string description,
+    bool isPortal, int index, bool added) : IEdit, IInteriorEdit
+{
+    public MapEntity Interior { get; } = interior;
+
+    public string Description { get; } = description;
+    public MapEntity? Subject => Interior;
+    public IEnumerable<MapEntity> Entities => [];
+
+    // The room or portal added or removed.
+    public bool IsPortal { get; } = isPortal;
+    public int Index { get; } = index;
+    public bool Added { get; } = added;
+
+    // Runs the change (which returns the index of the room or portal) and returns the step to record.
+    public static InteriorLayoutEdit Apply(MapLibrary library, MapEntity interior, Func<int> change, string description, bool isPortal, bool added)
+    {
+        var before = library.GetLayout(interior.ArchetypeHash);
+        int index = change();
+        return new InteriorLayoutEdit(library, interior, before, library.GetLayout(interior.ArchetypeHash), description, isPortal, index, added);
+    }
+
+    public void Undo() => library.SetLayout(Interior.ArchetypeHash, before);
+
+    public void Redo() => library.SetLayout(Interior.ArchetypeHash, after);
+}

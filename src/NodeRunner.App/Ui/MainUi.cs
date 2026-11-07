@@ -168,6 +168,10 @@ internal sealed class MainUi
                 _state.DeleteSelectedCollision();
             else if (_state.SelectedOccluder is not null)
                 _state.DeleteSelectedOccluder();
+            else if (_state.SelectedRoom is not null)
+                _state.DeleteSelectedRoom();
+            else if (_state.SelectedPortal is not null)
+                _state.DeleteSelectedPortal();
             else
                 _state.RequestDelete();
         }
