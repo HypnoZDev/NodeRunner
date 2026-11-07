@@ -8,17 +8,17 @@ namespace NodeRunner.Data.Native.Maps;
 public sealed class YtypReader : IMapTypesReader
 {
     // Structure name hashes as they appear in the files.
-    private const uint MapTypesStructure = 3649811809;
+    internal const uint MapTypesStructure = 3649811809;
     private const uint BaseArchetypeStructure = 2195127427;
     private const uint TimeArchetypeStructure = 1991296364;
-    private const uint InteriorArchetypeStructure = 273704021;
+    internal const uint InteriorArchetypeStructure = 273704021;
 
     private const int BaseArchetypeSize = 144;
     private const int OldBaseArchetypeSize = 128; // Older layout without asset type and asset name.
     private const int InteriorArchetypeSize = 240; // A base archetype followed by interior-specific fields.
 
     // CMapTypes fields.
-    private const int TypesArchetypes = 24;
+    internal const int TypesArchetypes = 24;
     private const int TypesName = 40;
 
     // CBaseArchetypeDef fields.
@@ -28,7 +28,7 @@ public sealed class YtypReader : IMapTypesReader
     private const int ArchBoundsMax = 48;
     private const int ArchSphereCenter = 64;
     private const int ArchSphereRadius = 80;
-    private const int ArchName = 88;
+    internal const int ArchName = 88;
     private const int ArchTextureDictionary = 92;
     private const int ArchDrawableDictionary = 100;
     private const int ArchPhysicsDictionary = 104;
@@ -36,10 +36,10 @@ public sealed class YtypReader : IMapTypesReader
     private const int ArchAssetName = 112;
 
     // CMloArchetypeDef fields.
-    private const int InteriorEntities = 152;
+    internal const int InteriorEntities = 152;
     private const int InteriorRooms = 168;
     private const int InteriorPortals = 184;
-    private const int InteriorEntitySets = 200;
+    internal const int InteriorEntitySets = 200;
 
     // CMloRoomDef and CMloPortalDef.
     private const uint RoomStructure = 186126833;
@@ -60,10 +60,10 @@ public sealed class YtypReader : IMapTypesReader
 
     // CMloEntitySet: name, room of each object, objects.
     private const uint EntitySetStructure = 3601308153;
-    private const int EntitySetSize = 48;
+    internal const int EntitySetSize = 48;
     private const int EntitySetName = 8;
     private const int EntitySetLocations = 16;
-    private const int EntitySetEntities = 32;
+    internal const int EntitySetEntities = 32;
 
     public MapTypes Read(ReadOnlySpan<byte> data)
     {

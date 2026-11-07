@@ -102,3 +102,10 @@ public interface IMapTypesReader
 {
     MapTypes Read(ReadOnlySpan<byte> data);
 }
+
+public interface IMapTypesWriter
+{
+    // Builds the decompressed content of a .ytyp from source (the file the interiors were read from): placement of
+    // the objects of each interior and of its entity sets; everything else is kept.
+    MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors);
+}
