@@ -141,20 +141,50 @@ internal sealed class OcclusionLayer : IDisposable
                 var v = model.Vertices;
                 var indices = model.Indices;
                 for (int t = 0; t + 2 < indices.Count; t += 3)
-                {
-                    var a = v[indices[t]];
-                    var b = v[indices[t + 1]];
-                    var c = v[indices[t + 2]];
-                    modelSurfaces.AddTriangle(a, b, c, modelFill);
-                    modelLines.AddLine(a, b, modelColor);
-                    modelLines.AddLine(b, c, modelColor);
-                    modelLines.AddLine(c, a, modelColor);
-                }
+                    modelSurfaces.AddTriangle(v[indices[t]], v[indices[t + 1]], v[indices[t + 2]], modelFill);
+                foreach (var (from, to) in FeatureEdges(v, indices))
+                    modelLines.AddLine(from, to, modelColor);
             }
         }
 
         return new BuildResult(library, lines, surfaces, boxCount, modelCount);
     }
+
+    // Edges worth an outline: on the border of the mesh, or between faces at an angle (corners of walls, roof edges).
+    // Edges inside a flat surface are left out, as are duplicates.
+    private static IEnumerable<(Vector3 From, Vector3 To)> FeatureEdges(IReadOnlyList<Vector3> vertices, IReadOnlyList<byte> indices)
+    {
+        var edges = new Dictionary<(Vector3, Vector3), (Vector3 Normal, int Faces, bool Sharp)>();
+        for (int t = 0; t + 2 < indices.Count; t += 3)
+        {
+            var p = new[] { Snap(vertices[indices[t]]), Snap(vertices[indices[t + 1]]), Snap(vertices[indices[t + 2]]) };
+            var normal = Vector3.Cross(p[1] - p[0], p[2] - p[0]);
+            if (normal.LengthSquared() < 1e-8f)
+                continue;
+            normal = Vector3.Normalize(normal);
+            for (int k = 0; k < 3; k++)
+            {
+                var key = Key(p[k], p[(k + 1) % 3]);
+                if (!edges.TryGetValue(key, out var edge))
+                    edges[key] = (normal, 1, false);
+                else
+                    edges[key] = (edge.Normal, edge.Faces + 1, edge.Sharp || MathF.Abs(Vector3.Dot(edge.Normal, normal)) < SharpCosine);
+            }
+        }
+        foreach (var (key, edge) in edges)
+        {
+            if (edge.Faces == 1 || edge.Sharp)
+                yield return key;
+        }
+    }
+
+    // About 20 degrees.
+    private const float SharpCosine = 0.94f;
+
+    private static Vector3 Snap(Vector3 v) => new(MathF.Round(v.X, 2), MathF.Round(v.Y, 2), MathF.Round(v.Z, 2));
+
+    private static (Vector3, Vector3) Key(Vector3 a, Vector3 b) =>
+        (a.X, a.Y, a.Z).CompareTo((b.X, b.Y, b.Z)) <= 0 ? (a, b) : (b, a);
 
     // Whether the mesh's footprint reaches the circle around the camera.
     private static bool Near(IReadOnlyList<Vector3> vertices, Vector2 center)
