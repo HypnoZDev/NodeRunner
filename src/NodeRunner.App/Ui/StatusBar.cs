@@ -71,7 +71,16 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
                 Item(Icons.Check, notice.Text, UiTheme.Success);
         }
 
-        if (state.History.HasUnsavedChanges)
+        if (state.Online.Session is { IsOver: false } session)
+        {
+            Separator();
+            string host = session.Participants.Count > 0 ? session.Participants[0] : "l'hôte";
+            Item(Icons.Users, session.Role == Editor.Online.SessionRole.Host
+                ? $"Session Online : {session.Participants.Count} participant(s)"
+                : $"Session Online de {host} : c'est {host} qui enregistre", UiTheme.Accent);
+        }
+
+        if (state.History.HasUnsavedChanges && !state.Online.IsGuest)
         {
             Separator();
             Item(Icons.Save, $"Modifications non enregistrées ({state.PendingSaveText}) : Ctrl+S", UiTheme.Warning);

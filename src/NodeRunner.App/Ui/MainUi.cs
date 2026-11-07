@@ -25,6 +25,7 @@ internal sealed class MainUi
     private bool _showProject;
     private bool _showImGuiDemo;
     private bool _resetLayout;
+    private readonly OnlineWindow _onlineWindow;
 
     public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, ModelLayer modelLayer)
     {
@@ -39,7 +40,8 @@ internal sealed class MainUi
         _projectPanel = new ProjectPanel(state);
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
-        _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open);
+        _onlineWindow = new OnlineWindow(state);
+        _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle);
         _errorWindow = new ErrorWindow(state, modelLayer, collisionLayer, navMeshLayer);
         _statusBar = new StatusBar(state, modelLayer, _errorWindow.Open);
         _viewportOverlay = new ViewportOverlay(state, cameraController);
@@ -128,6 +130,7 @@ internal sealed class MainUi
 
     public void Draw()
     {
+        _state.Online.Update();
         HandleShortcuts();
         DrawMenuBar();
         // The bars first: the panels and the 3D view share what is left of the window.
@@ -152,6 +155,7 @@ internal sealed class MainUi
         ProjectWindow.Draw();
         _deleteWindow.Draw();
         _settingsWindow.Draw();
+        _onlineWindow.Draw();
         _errorWindow.Draw();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
         _searchPalette.Draw(); // Last: above the panels.
@@ -246,6 +250,8 @@ internal sealed class MainUi
                 SaveRequested = true;
             if (ImGui.MenuItem($"{Icons.Package}  Exporter en ressource FiveM..."))
                 _exportWindow.Open();
+            if (ImGui.MenuItem($"{Icons.Users}  Online...", null, _onlineWindow.IsOpen))
+                _onlineWindow.Toggle();
             ImGui.Separator();
             if (ImGui.MenuItem("Choisir le dossier de GTA V..."))
                 BrowseGameFolderRequested = true;

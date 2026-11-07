@@ -25,6 +25,11 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
 
     public void Open()
     {
+        if (state.Online.IsGuest)
+        {
+            state.Notify("Session Online : seul l'hôte exporte le projet.", warning: true);
+            return;
+        }
         _open = true;
         _name = state.ExportResourceName;
         _result = null;

@@ -543,11 +543,25 @@ internal sealed class AppState
     private readonly EditHistory _history = new();
     private MapLibrary? _historyLibrary;
 
-    public void Undo() => SelectAfterUndo(History.Undo(), undone: true);
+    public void Undo() => UndoOrRedo(undo: true);
 
-    public void Redo() => SelectAfterUndo(History.Redo(), undone: false);
+    public void Redo() => UndoOrRedo(undo: false);
 
-    private void SelectAfterUndo(IEdit? edit, bool undone)
+    // In an online session, a guest asks the host, which undoes the session's last change for everyone.
+    private void UndoOrRedo(bool undo)
+    {
+        if (Online.IsGuest)
+        {
+            if (!(undo ? History.CanUndo : History.CanRedo))
+                return;
+            if (!Online.Session!.RequestUndo(undo))
+                Notify("Patientez : la session se synchronise.", warning: true);
+            return;
+        }
+        SelectAfterUndo(undo ? History.Undo() : History.Redo(), undone: undo);
+    }
+
+    internal void SelectAfterUndo(IEdit? edit, bool undone)
     {
         if (edit is PathNodeMoveEdit nodeEdit)
         {
@@ -1102,6 +1116,11 @@ internal sealed class AppState
 
     public void SaveMaps()
     {
+        if (Online.IsGuest)
+        {
+            LastSave = ("Session Online : seul l'hôte enregistre le projet.", false, DateTime.Now);
+            return;
+        }
         if (SaveFolder is not { } folder)
             return;
         var maps = MapsToSave;
@@ -1202,6 +1221,8 @@ internal sealed class AppState
     // Opens the project of a folder (holding projet.json) and loads its map.
     public string? OpenProject(string folder)
     {
+        if (Online.Blocks() is { } blocked)
+            return blocked;
         MapProject project;
         try
         {
@@ -1218,6 +1239,8 @@ internal sealed class AppState
     // Creates a project in a folder and opens it.
     public string? CreateProject(string folder, string name)
     {
+        if (Online.Blocks() is { } blocked)
+            return blocked;
         bool reload = Project is not null || MapProject.HasMapFiles(folder);
         MapProject project;
         try
@@ -1238,6 +1261,11 @@ internal sealed class AppState
     {
         if (Project is null)
             return;
+        if (Online.Blocks() is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
         Project = null;
         Settings.ProjectFolder = null;
         SaveSettings();
@@ -1288,6 +1316,11 @@ internal sealed class AppState
     {
         if (Settings.MapVersion == version && Settings.LastDlcPack == lastPack)
             return;
+        if (Online.Blocks() is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
         Settings.MapVersion = version;
         Settings.LastDlcPack = lastPack;
         SaveSettings();
@@ -1363,7 +1396,11 @@ internal sealed class AppState
         Paths = paths;
         Settings = settings;
         World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName) };
+        Online = new NodeRunner.App.Online.OnlineController(this);
     }
+
+    // NodeRunner Online: session with other computers on the same map.
+    public NodeRunner.App.Online.OnlineController Online { get; }
 
     // Optional names file of the user, in the data folder (one name per line, as CodeWalker's strings.txt).
     public const string UserNamesFileName = "strings.txt";

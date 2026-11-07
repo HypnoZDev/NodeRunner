@@ -979,6 +979,11 @@ internal sealed unsafe partial class MainForm : Form
     {
         if (_state.PendingSaveCount == 0)
             return true;
+        if (_state.Online.IsGuest)
+        {
+            _state.Notify("Session Online : c'est l'hôte qui enregistre le projet.", warning: true);
+            return false;
+        }
         if (_state.Project is null)
         {
             _ui.ProjectWindow.Open(saveAfter: true);
@@ -1197,6 +1202,19 @@ internal sealed unsafe partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
+        // A guest's changes belong to the host's project: nothing to save here.
+        if (!e.Cancel && _state.Online.IsGuest)
+        {
+            _state.Online.Leave();
+            return;
+        }
+        AskToSaveOnClose(e);
+        if (!e.Cancel)
+            _state.Online.Leave();
+    }
+
+    private void AskToSaveOnClose(FormClosingEventArgs e)
+    {
         if (e.Cancel || _deviceLost || !_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
             return;
         var answer = MessageBox.Show(this,

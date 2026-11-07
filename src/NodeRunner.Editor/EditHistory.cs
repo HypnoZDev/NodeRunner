@@ -41,11 +41,20 @@ public sealed class EditHistory
 
     public void MarkSaved() => _savedTop = NextUndo;
 
+    // Raised after a change is recorded, undone or redone (an online session sends it to the others).
+    public event Action<IEdit>? Added;
+    public event Action<IEdit>? Undone;
+    public event Action<IEdit>? Redone;
+
     public void Add(IEdit edit)
     {
         _done.Add(edit);
         _undone.Clear();
+        Added?.Invoke(edit);
     }
+
+    // Forgets the undone changes (they can no longer be redone).
+    public void ClearRedo() => _undone.Clear();
 
     public IEdit? Undo()
     {
@@ -55,6 +64,7 @@ public sealed class EditHistory
         _done.RemoveAt(_done.Count - 1);
         edit.Undo();
         _undone.Add(edit);
+        Undone?.Invoke(edit);
         return edit;
     }
 
@@ -66,6 +76,7 @@ public sealed class EditHistory
         _undone.RemoveAt(_undone.Count - 1);
         edit.Redo();
         _done.Add(edit);
+        Redone?.Invoke(edit);
         return edit;
     }
 

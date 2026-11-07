@@ -14,7 +14,7 @@ public class OnlineEditTests
     private const uint InteriorHash = 0x500;
     private static readonly Quaternion Quarter = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
 
-    private sealed record World(MapLibrary Library, CollisionEdits Collisions, PathNetwork Paths, EditHistory History)
+    internal sealed record World(MapLibrary Library, CollisionEdits Collisions, PathNetwork Paths, EditHistory History)
     {
         public EditContext Context => new() { Library = Library, Collisions = Collisions, Paths = Paths };
         public MapData Map => Library.Maps[0];
@@ -26,7 +26,7 @@ public class OnlineEditTests
 
     // A LOD with two buildings, a bench, two instances of an interior (objects, an entity set, two rooms, a portal),
     // two road nodes.
-    private static World Build()
+    internal static World Build(EditHistory? history = null)
     {
         var interior = new Archetype
         {
@@ -62,11 +62,11 @@ public class OnlineEditTests
             Nodes = [new PathNode { Id = new(5, 0), Position = new(1, 2, 3) }, new PathNode { Id = new(5, 1), Position = new(4, 5, 6) }],
             Links = [],
         });
-        return new World(library, new CollisionEdits(), paths, new EditHistory());
+        return new World(library, new CollisionEdits(), paths, history ?? new EditHistory());
     }
 
     // Everything an edit can change, in a fixed order, numbers written exactly.
-    private static string Snapshot(World w)
+    internal static string Snapshot(World w)
     {
         var text = new StringBuilder();
         static string F(float v) => v.ToString("R", CultureInfo.InvariantCulture);

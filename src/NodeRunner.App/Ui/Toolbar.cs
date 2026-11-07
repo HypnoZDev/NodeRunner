@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Bar under the menu: project (with its menu), game folder, save, undo / redo, map version (multiplayer or story
 // mode) and "map after this DLC", ground grid, global search (Ctrl+K).
-internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action browseGameFolder, Action openSearch, Action save, Action export)
+internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action browseGameFolder, Action openSearch, Action save, Action export, Action toggleOnline)
 {
     private const float PaddingY = 5f;
 
@@ -36,7 +36,9 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         string saveTip = state.Project is { } project
             ? $"Enregistrer les fichiers modifiés dans le projet « {project.Name} » (Ctrl+S)"
             : "Enregistrer les fichiers modifiés (Ctrl+S) : un projet sera créé d'abord";
-        if (Widgets.IconButton(Icons.Save, "save", saveTip, history.HasUnsavedChanges, active: false))
+        if (state.Online.IsGuest)
+            saveTip = "Session Online : c'est l'hôte qui enregistre le projet.";
+        if (Widgets.IconButton(Icons.Save, "save", saveTip, history.HasUnsavedChanges && !state.Online.IsGuest, active: false))
             save();
         ImGui.SameLine();
         if (Widgets.IconButton(Icons.Package, "export", "Exporter en ressource FiveM (fxmanifest.lua + YMAP dans « stream »)", state.MapsToExport.Count > 0 || state.PathAreasToSave.Count > 0 || state.InteriorFilesToExport.Count > 0 || !state.OccluderEdits.IsEmpty))
@@ -70,9 +72,12 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
             openSearch();
 
         Widgets.ToolbarSeparator();
-        Widgets.ToolbarButton(Icons.Users, "Online (bientôt)",
-            "NodeRunner Online : bientôt disponible.\nCréez une session, donnez le code NRS-XXXX à vos collègues (jusqu'à 5 personnes)\net modifiez la carte ensemble, le projet restant sur le PC de l'hôte.",
-            enabled: false);
+        var online = state.Online;
+        string onlineLabel = online.Session is { IsOver: false } session ? $"Online · {session.Participants.Count}" : online.IsPreparing ? "Online..." : "Online";
+        if (Widgets.ToolbarButton(Icons.Users, onlineLabel,
+                "NodeRunner Online : modifier la carte à plusieurs (jusqu'à 5 personnes), le projet restant sur le PC de l'hôte.",
+                active: online.IsActive))
+            toggleOnline();
     }
 
     private void DrawProject()

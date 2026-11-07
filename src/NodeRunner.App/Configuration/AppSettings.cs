@@ -52,6 +52,11 @@ public sealed class AppSettings
 
     public string? ExportResourceName { get; set; }
 
+    // NodeRunner Online: name shown to the others, last address joined.
+    public string? OnlineName { get; set; }
+
+    public string? OnlineAddress { get; set; }
+
     public bool ShowGrid { get; set; } = true;
 
     public bool FollowGround { get; set; }
