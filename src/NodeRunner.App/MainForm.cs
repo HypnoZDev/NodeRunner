@@ -419,6 +419,7 @@ internal sealed unsafe partial class MainForm : Form
         _lastFrameTime = now;
 
         // Cap the step so a long pause (dialog box, window drag) doesn't teleport the camera.
+        _cameraController.Sensitivity = Math.Clamp(_state.Settings.MouseSensitivity, MinMouseSensitivity, MaxMouseSensitivity);
         _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
 
         ImGui.NewFrame();
@@ -1303,6 +1304,9 @@ internal sealed unsafe partial class MainForm : Form
     // --- Win32: Windows 11 backdrop (Mica) behind the interface (22H2+, see WindowAlpha) ---
 
     public const float MaxTransparency = 0.5f;
+
+    public const float MinMouseSensitivity = 0.2f;
+    public const float MaxMouseSensitivity = 3f;
 
     public static bool BackdropSupported => Environment.OSVersion.Version.Build >= 22621;
 

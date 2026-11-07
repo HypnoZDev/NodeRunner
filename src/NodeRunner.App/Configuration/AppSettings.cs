@@ -18,6 +18,9 @@ public sealed class AppSettings
 
     public bool VSync { get; set; } = true;
 
+    // Mouse look speed of the camera (1 = default).
+    public float MouseSensitivity { get; set; } = 1f;
+
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 

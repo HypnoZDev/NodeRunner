@@ -19,6 +19,9 @@ internal sealed class CameraController
 
     public float Speed { get; set; } = 50f;
 
+    // Multiplies the mouse look speed (1 = default).
+    public float Sensitivity { get; set; } = 1f;
+
     public bool IsLooking => _looking;
 
     public void Attach(Control control)
@@ -58,8 +61,9 @@ internal sealed class CameraController
 
     public void Update(Camera camera, float deltaTime)
     {
-        camera.Yaw -= _pendingLook.X * MouseSensitivity;
-        camera.Pitch -= _pendingLook.Y * MouseSensitivity;
+        float sensitivity = MouseSensitivity * Sensitivity;
+        camera.Yaw -= _pendingLook.X * sensitivity;
+        camera.Pitch -= _pendingLook.Y * sensitivity;
         _pendingLook = Vector2.Zero;
 
         // Don't move while the user is typing in an ImGui text field.

@@ -126,6 +126,21 @@ internal sealed class SettingsWindow(AppState state)
         }
 
         ImGui.Dummy(new Vector2(0, 4));
+        if (Widgets.Section("Caméra", "settings_camera"))
+        {
+            if (Widgets.BeginProperties("##camera_grid", 0.42f))
+            {
+                Widgets.Property("Sensibilité de la souris", "Vitesse à laquelle la caméra tourne quand on bouge la souris avec le clic droit enfoncé. 100 % = réglage d'origine. Double-clic pour taper une valeur.");
+                ImGui.SetNextItemWidth(-1f);
+                float sensitivity = settings.MouseSensitivity * 100f;
+                if (ImGui.SliderFloat("##mouse_sensitivity", ref sensitivity, MainForm.MinMouseSensitivity * 100f, MainForm.MaxMouseSensitivity * 100f, "%.0f %%", ImGuiSliderFlags.Logarithmic))
+                    settings.MouseSensitivity = sensitivity / 100f;
+                SaveWhenReleased();
+                Widgets.EndProperties();
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0, 4));
         if (Widgets.Section("Interface", "settings_interface"))
         {
             if (Widgets.BeginProperties("##interface_grid", 0.42f))
