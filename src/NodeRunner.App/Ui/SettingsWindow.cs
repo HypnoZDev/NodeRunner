@@ -143,6 +143,14 @@ internal sealed class SettingsWindow(AppState state)
                 if (ImGui.SliderFloat("##field_of_view", ref fov, MainForm.MinFieldOfView, MainForm.MaxFieldOfView, "%.0f°"))
                     settings.FieldOfView = fov;
                 SaveWhenReleased();
+
+                Widgets.Property("Inverser l'axe vertical", "Pousser la souris vers le haut fait regarder vers le bas, comme dans un simulateur de vol.");
+                bool invertY = settings.InvertMouseY;
+                if (ImGui.Checkbox("##invert_mouse_y", ref invertY))
+                {
+                    settings.InvertMouseY = invertY;
+                    state.SaveSettings();
+                }
                 Widgets.EndProperties();
             }
         }

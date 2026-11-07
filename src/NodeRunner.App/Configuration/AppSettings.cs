@@ -24,6 +24,8 @@ public sealed class AppSettings
     // Vertical field of view of the 3D view, in degrees.
     public float FieldOfView { get; set; } = 60f;
 
+    public bool InvertMouseY { get; set; }
+
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 

@@ -22,6 +22,9 @@ internal sealed class CameraController
     // Multiplies the mouse look speed (1 = default).
     public float Sensitivity { get; set; } = 1f;
 
+    // Moving the mouse up looks down, as in a flight simulator.
+    public bool InvertY { get; set; }
+
     public bool IsLooking => _looking;
 
     public void Attach(Control control)
@@ -63,7 +66,7 @@ internal sealed class CameraController
     {
         float sensitivity = MouseSensitivity * Sensitivity;
         camera.Yaw -= _pendingLook.X * sensitivity;
-        camera.Pitch -= _pendingLook.Y * sensitivity;
+        camera.Pitch -= _pendingLook.Y * sensitivity * (InvertY ? -1f : 1f);
         _pendingLook = Vector2.Zero;
 
         // Don't move while the user is typing in an ImGui text field.
