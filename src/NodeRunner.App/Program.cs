@@ -61,10 +61,10 @@ internal static class Program
     {
         if (Interlocked.Exchange(ref _crashing, 1) == 1)
             return;
-        ErrorLog.Add("Plantage", ex);
+        ErrorLog.Add(L("Plantage"), ex);
         string? report = ErrorReport.WriteCrashFile(_state, ex);
-        string where = report is null ? "" : $"\n\nUn rapport a été enregistré ici :\n{report}\n\nEnvoie ce fichier au développeur (Discord, GitHub) pour qu'il corrige le problème.";
-        MessageBox.Show($"{Name} a rencontré une erreur et doit se fermer :\n\n{ex.Message}{where}",
+        string where = report is null ? "" : L($"\n\nUn rapport a été enregistré ici :\n{report}\n\nEnvoie ce fichier au développeur (Discord, GitHub) pour qu'il corrige le problème.");
+        MessageBox.Show(L($"{Name} a rencontré une erreur et doit se fermer :\n\n{ex.Message}{where}"),
             Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
         if (report is not null)
         {

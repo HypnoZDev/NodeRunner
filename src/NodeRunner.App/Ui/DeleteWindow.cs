@@ -46,32 +46,32 @@ internal sealed class DeleteWindow(AppState state)
     {
         var names = state.World.Names ?? new HashNames();
         bool group = plan.Targets.Count > 1;
-        string name = group ? $"les {plan.Targets.Count} objets sélectionnés" : names.Describe(plan.Target.ArchetypeHash);
+        string name = group ? L($"les {plan.Targets.Count} objets sélectionnés") : names.Describe(plan.Target.ArchetypeHash);
 
         ImGui.PushFont(UiTheme.SemiboldFont);
-        ImGui.TextUnformatted(Widgets.Fit($"Supprimer {name} ?", ImGui.GetContentRegionAvail().X));
+        ImGui.TextUnformatted(Widgets.Fit(L($"Supprimer {name} ?"), ImGui.GetContentRegionAvail().X));
         ImGui.PopFont();
-        Widgets.Hint(group ? "Une seule étape d'annulation pour tout le groupe." : $"{LevelName(plan.Target)} · {MapName(plan.Target)}");
+        Widgets.Hint(group ? L("Une seule étape d'annulation pour tout le groupe.") : $"{LevelName(plan.Target)} · {MapName(plan.Target)}");
         ImGui.Dummy(new Vector2(0, 4));
 
         if (Widgets.BeginProperties("##delete", 0.40f))
         {
-            Widgets.PropertyText("Objets supprimés", $"{plan.Entities.Count}");
+            Widgets.PropertyText(L("Objets supprimés"), $"{plan.Entities.Count}");
             if (group)
-                ListRows("Sélection", "Les objets choisis.", plan.Targets, names);
-            ListRows("Versions détaillées", "Remplacent les objets de près (enfants dans la chaîne LOD) : elles partent avec eux.", plan.Children, names);
-            ListRows("Versions simplifiées", "Ne représentaient que ces objets de loin (parents LOD sans autre enfant) : elles partent aussi.", plan.Parents, names);
-            ListRows("Reste", "Représente aussi d'autres objets : reste visible de loin.", plan.KeptParents, names);
-            ListRows("Autres copies", "Le même objet dans les autres exemplaires de cet intérieur : il est défini une seule fois, dans son .ytyp.", plan.Copies, names);
+                ListRows(L("Sélection"), L("Les objets choisis."), plan.Targets, names);
+            ListRows(L("Versions détaillées"), L("Remplacent les objets de près (enfants dans la chaîne LOD) : elles partent avec eux."), plan.Children, names);
+            ListRows(L("Versions simplifiées"), L("Ne représentaient que ces objets de loin (parents LOD sans autre enfant) : elles partent aussi."), plan.Parents, names);
+            ListRows(L("Reste"), L("Représente aussi d'autres objets : reste visible de loin."), plan.KeptParents, names);
+            ListRows(L("Autres copies"), L("Le même objet dans les autres exemplaires de cet intérieur : il est défini une seule fois, dans son .ytyp."), plan.Copies, names);
             var maps = plan.Maps.Select(m => m.FilePath is { } p ? Path.GetFileName(p) : "?").Order().ToList();
             if (maps.Count > 0)
-                Widgets.PropertyText("YMAP modifiés", string.Join(", ", maps.Take(3)) + (maps.Count > 3 ? $" (+{maps.Count - 3})" : ""),
+                Widgets.PropertyText(L("YMAP modifiés"), string.Join(", ", maps.Take(3)) + (maps.Count > 3 ? $" (+{maps.Count - 3})" : ""),
                     string.Join("\n", maps));
             var types = plan.Entities.Select(e => e.Interior).OfType<MapEntity>()
                 .Select(i => state.World.Maps?.GetArchetypeFile(i.ArchetypeHash)).OfType<string>()
                 .Select(Path.GetFileName).Distinct().Order().ToList();
             if (types.Count > 0)
-                Widgets.PropertyText("YTYP modifiés", string.Join(", ", types));
+                Widgets.PropertyText(L("YTYP modifiés"), string.Join(", ", types));
             Widgets.EndProperties();
         }
 
@@ -80,25 +80,25 @@ internal sealed class DeleteWindow(AppState state)
             ImGui.Dummy(new Vector2(0, 2));
             ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X);
             ImGui.TextColored(UiTheme.Warning, plan.KeptParents.Count == 1
-                ? $"{Icons.TriangleAlert}  {names.Describe(kept.ArchetypeHash)} ({LevelName(kept)}) reste : "
-                    + (group ? "il représente aussi d'autres objets, une partie de la sélection restera donc visible de loin."
-                        : "il représente aussi d'autres objets, celui-ci restera donc visible de loin.")
-                : $"{Icons.TriangleAlert}  {plan.KeptParents.Count} versions simplifiées restent : elles représentent aussi d'autres objets, "
-                    + "une partie de la sélection restera donc visible de loin.");
+                ? L($"{Icons.TriangleAlert}  {names.Describe(kept.ArchetypeHash)} ({LevelName(kept)}) reste : ")
+                    + (group ? L("il représente aussi d'autres objets, une partie de la sélection restera donc visible de loin.")
+                        : L("il représente aussi d'autres objets, celui-ci restera donc visible de loin."))
+                : L($"{Icons.TriangleAlert}  {plan.KeptParents.Count} versions simplifiées restent : elles représentent aussi d'autres objets, ")
+                    + L("une partie de la sélection restera donc visible de loin."));
             ImGui.PopTextWrapPos();
         }
         ImGui.Dummy(new Vector2(0, 2));
-        Widgets.Hint("Collision : celle du décor (bâtiments, sol...) est dans des fichiers .ybn, pas encore modifiés : "
-            + "en jeu, elle peut rester à la place de l'objet. Les props ont leur propre collision et partent avec lui.", wrap: true);
-        Widgets.Hint("Annulable (Ctrl+Z). Les fichiers ne changent qu'à l'enregistrement (Ctrl+S).", wrap: true);
+        Widgets.Hint(L("Collision : celle du décor (bâtiments, sol...) est dans des fichiers .ybn, pas encore modifiés : ")
+            + L("en jeu, elle peut rester à la place de l'objet. Les props ont leur propre collision et partent avec lui."), wrap: true);
+        Widgets.Hint(L("Annulable (Ctrl+Z). Les fichiers ne changent qu'à l'enregistrement (Ctrl+S)."), wrap: true);
         ImGui.Dummy(new Vector2(0, 6));
 
         float width = (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2f;
-        string label = plan.Entities.Count == 1 ? $"{Icons.Trash}  Supprimer" : $"{Icons.Trash}  Supprimer ({plan.Entities.Count} objets)";
-        if (Widgets.Button(label, "Entrée", width) || ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false))
+        string label = plan.Entities.Count == 1 ? L($"{Icons.Trash}  Supprimer") : L($"{Icons.Trash}  Supprimer ({plan.Entities.Count} objets)");
+        if (Widgets.Button(label, L("Entrée"), width) || ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false))
             state.ConfirmDelete();
         ImGui.SameLine();
-        if (Widgets.Button("Annuler", "Échap", width) || ImGui.IsKeyPressed(ImGuiKey.Escape, false))
+        if (Widgets.Button(L("Annuler"), L("Échap"), width) || ImGui.IsKeyPressed(ImGuiKey.Escape, false))
             state.CancelDelete();
     }
 
@@ -111,11 +111,11 @@ internal sealed class DeleteWindow(AppState state)
         for (int i = 0; i < entities.Count && i < MaxListed; i++)
         {
             var entity = entities[i];
-            if (Widgets.Link($"{names.Describe(entity.ArchetypeHash)} ({LevelName(entity)})##{label}{i}", "Aller voir cet objet"))
+            if (Widgets.Link($"{names.Describe(entity.ArchetypeHash)} ({LevelName(entity)})##{label}{i}", L("Aller voir cet objet")))
                 state.FocusOn(entity);
         }
         if (entities.Count > MaxListed)
-            Widgets.Hint($"... et {entities.Count - MaxListed} autres");
+            Widgets.Hint(L($"... et {entities.Count - MaxListed} autres"));
         ImGui.EndGroup();
     }
 
@@ -124,7 +124,7 @@ internal sealed class DeleteWindow(AppState state)
     private static string LevelName(MapEntity entity) => entity.LodLevel switch
     {
         LodLevel.Hd => "HD",
-        LodLevel.OrphanHd => "HD sans LOD",
+        LodLevel.OrphanHd => L("HD sans LOD"),
         LodLevel.Lod => "LOD",
         var level => level.ToString().ToUpperInvariant(),
     };

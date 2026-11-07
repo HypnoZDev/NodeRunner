@@ -90,10 +90,10 @@ internal static class ExportChecker
             if (ConflictScanner.NonCategoryFolders(root, exportFolder) is { Count: > 0 } plain)
             {
                 items.Add(new ExportCheckItem(true,
-                    $"FiveM ne trouvera pas la ressource : « {string.Join("\\", plain)} » n'est pas un dossier de catégorie",
+                    L($"FiveM ne trouvera pas la ressource : « {string.Join("\\", plain)} » n'est pas un dossier de catégorie"),
                     [target],
-                    "Dans le dossier « resources », FiveM n'ouvre que les dossiers entre crochets (ex. [maps]) : renommez "
-                    + $"le dossier en « [{plain[^1]}] », ou exportez directement dans « resources »."));
+                    L("Dans le dossier « resources », FiveM n'ouvre que les dossiers entre crochets (ex. [maps]) : renommez ")
+                    + L($"le dossier en « [{plain[^1]}] », ou exportez directement dans « resources ».")));
             }
             // An earlier export of this project to another folder: one remark, not a conflict per file.
             var copies = ConflictScanner.FindOtherCopies(root, target, input.ResourceName);
@@ -101,51 +101,51 @@ internal static class ExportChecker
             {
                 items.Add(new ExportCheckItem(true,
                     copies.Count == 1
-                        ? $"Une ancienne exportation de « {input.ResourceName} » se trouve dans un autre dossier"
-                        : $"{copies.Count} anciennes exportations de « {input.ResourceName} » se trouvent dans d'autres dossiers",
+                        ? L($"Une ancienne exportation de « {input.ResourceName} » se trouve dans un autre dossier")
+                        : L($"{copies.Count} anciennes exportations de « {input.ResourceName} » se trouvent dans d'autres dossiers"),
                     copies,
-                    "Le dossier d'export a changé depuis la dernière exportation : le serveur aurait deux ressources du même nom. "
-                    + "Supprimez l'ancienne copie, ou choisissez le même dossier d'export qu'avant."));
+                    L("Le dossier d'export a changé depuis la dernière exportation : le serveur aurait deux ressources du même nom. ")
+                    + L("Supprimez l'ancienne copie, ou choisissez le même dossier d'export qu'avant.")));
             }
             ownFolders = [target, .. copies];
             var conflicts = ConflictScanner.ScanResources(root, ownFolders, fileNames);
             foreach (var group in conflicts.GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
             {
                 items.Add(new ExportCheckItem(true,
-                    $"{group.Key} est aussi livré par {Owners(group, "la ressource", "les ressources")}",
+                    L($"{group.Key} est aussi livré par {Owners(group, L("la ressource"), L("les ressources"))}"),
                     group.Select(c => c.Path).ToList(),
-                    "FiveM ne charge qu'une version d'un même YMAP : les changements de l'une des deux ressources seront perdus "
-                    + "(objets en double, suppression annulée...). Reprenez ses changements dans ce projet, puis retirez le "
-                    + "fichier de l'autre ressource.", group.ToList()));
+                    L("FiveM ne charge qu'une version d'un même YMAP : les changements de l'une des deux ressources seront perdus ")
+                    + L("(objets en double, suppression annulée...). Reprenez ses changements dans ce projet, puis retirez le ")
+                    + L("fichier de l'autre ressource."), group.ToList()));
             }
             scanned = conflicts.Count;
-            summary = $"Dossier analysé : {root}";
+            summary = L($"Dossier analysé : {root}");
         }
         else
         {
-            summary = "Choisissez le dossier « resources » du serveur pour y chercher les conflits.";
+            summary = L("Choisissez le dossier « resources » du serveur pour y chercher les conflits.");
         }
 
         foreach (var group in ConflictScanner.ScanProjects(input.OtherProjects, fileNames).GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
         {
             items.Add(new ExportCheckItem(true,
-                $"{group.Key} est aussi modifié par {Owners(group, "le projet", "les projets")}",
+                L($"{group.Key} est aussi modifié par {Owners(group, L("le projet"), L("les projets"))}"),
                 group.Select(c => c.Path).ToList(),
-                "Si les deux projets sont installés sur le même serveur, un seul des deux fichiers sera chargé. "
-                + "Reprenez ses changements dans ce projet, puis retirez le fichier de l'autre projet.", group.ToList()));
+                L("Si les deux projets sont installés sur le même serveur, un seul des deux fichiers sera chargé. ")
+                + L("Reprenez ses changements dans ce projet, puis retirez le fichier de l'autre projet."), group.ToList()));
         }
 
         var duplicates = DuplicateGuids.Find(input.Maps.Select(m => (m.FileName, (IEnumerable<MapEntity>)m.Kept)));
         if (duplicates.Count > 0)
         {
             items.Add(new ExportCheckItem(false,
-                $"{duplicates.Count} identifiant(s) (guid) utilisé(s) par plusieurs objets",
-                duplicates.Take(MaxDetails).Select(d => $"0x{d.Guid:X8} : {names.Describe(d.ArchetypeHash)} ({string.Join(", ", d.Files.GroupBy(f => f, StringComparer.OrdinalIgnoreCase).Select(g => g.Count() > 1 ? $"{g.Key} x{g.Count()}" : g.Key))})")
-                    .Concat(duplicates.Count > MaxDetails ? [$"... et {duplicates.Count - MaxDetails} autre(s)"] : [])
+                L($"{duplicates.Count} identifiant(s) (guid) utilisé(s) par plusieurs objets"),
+                duplicates.Take(MaxDetails).Select(d => L($"0x{d.Guid:X8} : {names.Describe(d.ArchetypeHash)} ({string.Join(", ", d.Files.GroupBy(f => f, StringComparer.OrdinalIgnoreCase).Select(g => g.Count() > 1 ? $"{g.Key} x{g.Count()}" : g.Key))})"))
+                    .Concat(duplicates.Count > MaxDetails ? [L($"... et {duplicates.Count - MaxDetails} autre(s)")] : [])
                     .ToList(),
-                "Souvent des objets copiés à la main dans un autre éditeur. Le jeu l'accepte, mais un script ou un outil qui "
-                + "cherche un objet par son guid peut tomber sur le mauvais. Pour corriger : supprimer la copie et la recréer "
-                + "(Ctrl+C / Ctrl+V dans NodeRunner donne un nouveau guid)."));
+                L("Souvent des objets copiés à la main dans un autre éditeur. Le jeu l'accepte, mais un script ou un outil qui ")
+                + L("cherche un objet par son guid peut tomber sur le mauvais. Pour corriger : supprimer la copie et la recréer ")
+                + L("(Ctrl+C / Ctrl+V dans NodeRunner donne un nouveau guid).")));
         }
 
         // Deleted scenery (now or in an earlier session): compared with the game's file.
@@ -192,10 +192,10 @@ internal static class ExportChecker
             foreach (var group in collisionConflicts.GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
             {
                 items.Add(new ExportCheckItem(true,
-                    $"{group.Key} (collision) est aussi livré par {Owners(group, "la ressource", "les ressources")}",
+                    L($"{group.Key} (collision) est aussi livré par {Owners(group, L("la ressource"), L("les ressources"))}"),
                     group.Select(c => c.Path).ToList(),
-                    "FiveM ne charge qu'une version de ce fichier de collision : décochez-le plus bas, ou retirez-le de "
-                    + "l'autre ressource."));
+                    L("FiveM ne charge qu'une version de ce fichier de collision : décochez-le plus bas, ou retirez-le de ")
+                    + L("l'autre ressource.")));
             }
             scanned += collisionConflicts.Count;
         }
@@ -209,47 +209,47 @@ internal static class ExportChecker
             foreach (var group in occlusionConflicts.GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
             {
                 items.Add(new ExportCheckItem(true,
-                    $"{group.Key} (occlusion) est aussi livré par {Owners(group, "la ressource", "les ressources")}",
+                    L($"{group.Key} (occlusion) est aussi livré par {Owners(group, L("la ressource"), L("les ressources"))}"),
                     group.Select(c => c.Path).ToList(),
-                    "FiveM ne charge qu'une version de ce fichier d'occlusion : décochez-le plus bas, ou retirez-le de "
-                    + "l'autre ressource."));
+                    L("FiveM ne charge qu'une version de ce fichier d'occlusion : décochez-le plus bas, ou retirez-le de ")
+                    + L("l'autre ressource.")));
             }
             scanned += occlusionConflicts.Count;
         }
         if (occlusionCuts.Count > 0)
         {
             items.Add(new ExportCheckItem(false,
-                $"Occlusion retirée de {occlusionCuts.Count} fichier(s) (voir plus bas)",
+                L($"Occlusion retirée de {occlusionCuts.Count} fichier(s) (voir plus bas)"),
                 Limit(occlusionCuts.Select(c => c.FileName).ToList()),
-                "Le jeu ne dessine pas ce qui est caché derrière un « occluder » : laissé à la place d'un bâtiment supprimé, "
-                + "il ferait des trous dans le décor derrière lui. Ceux qui touchent ces bâtiments sont retirés."));
+                L("Le jeu ne dessine pas ce qui est caché derrière un « occluder » : laissé à la place d'un bâtiment supprimé, ")
+                + L("il ferait des trous dans le décor derrière lui. Ceux qui touchent ces bâtiments sont retirés.")));
         }
         if (scenery.Count > 0)
         {
-            string objects = scenery.Count == 1 ? "1 objet du décor supprimé" : $"{scenery.Count} objets du décor supprimés";
+            string objects = scenery.Count == 1 ? L("1 objet du décor supprimé") : L($"{scenery.Count} objets du décor supprimés");
             items.Add(cuts.Count > 0
                 ? new ExportCheckItem(false,
-                    $"{objects} : collision retirée de {cuts.Count} fichier(s) .ybn (voir plus bas)",
+                    L($"{objects} : collision retirée de {cuts.Count} fichier(s) .ybn (voir plus bas)"),
                     Limit(scenery),
-                    "Leur collision est dans les fichiers .ybn de la zone, partagés avec les voisins : seuls les morceaux "
-                    + "situés dans la boîte de ces objets sont retirés, le sol est gardé. Vérifiez l'aperçu dans la vue 3D.")
+                    L("Leur collision est dans les fichiers .ybn de la zone, partagés avec les voisins : seuls les morceaux ")
+                    + L("situés dans la boîte de ces objets sont retirés, le sol est gardé. Vérifiez l'aperçu dans la vue 3D."))
                 : new ExportCheckItem(true,
-                    $"{objects} : leur collision reste en jeu",
+                    L($"{objects} : leur collision reste en jeu"),
                     Limit([.. scenery, .. collisionErrors]),
-                    "Aucun morceau de collision n'a été trouvé dans leur boîte (collisions non chargées ou fichiers illisibles) : "
-                    + "un mur invisible peut rester à leur place."));
+                    L("Aucun morceau de collision n'a été trouvé dans leur boîte (collisions non chargées ou fichiers illisibles) : ")
+                    + L("un mur invisible peut rester à leur place.")));
         }
         if (input.StillSeenFromFar.Count > 0)
         {
             items.Add(new ExportCheckItem(false,
-                input.StillSeenFromFar.Count == 1 ? "1 objet supprimé reste visible de loin" : $"{input.StillSeenFromFar.Count} objets supprimés restent visibles de loin",
+                input.StillSeenFromFar.Count == 1 ? L("1 objet supprimé reste visible de loin") : L($"{input.StillSeenFromFar.Count} objets supprimés restent visibles de loin"),
                 Limit(input.StillSeenFromFar),
-                "Leur version simplifiée (LOD) représente aussi d'autres objets : elle est gardée."));
+                L("Leur version simplifiée (LOD) représente aussi d'autres objets : elle est gardée.")));
         }
 
         CheckOccluders(world, names, items);
 
-        summary = $"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}";
+        summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);
     }
 
@@ -305,7 +305,7 @@ internal static class ExportChecker
         }
 
         var issues = OccluderCheck.Run(boxes, others.Select(s => s.Box!).ToList(), buildings, interiors, paths);
-        string Name(OccluderSelection s) => $"{s.File.FileName} : boîte {s.Index}";
+        string Name(OccluderSelection s) => L($"{s.File.FileName} : boîte {s.Index}");
         void Add(OccluderIssueKind kind, bool problem, string one, string several, string advice, Func<OccluderIssue, string> detail)
         {
             var found = issues.Where(i => i.Kind == kind).ToList();
@@ -315,23 +315,23 @@ internal static class ExportChecker
                 Limit(found.Select(detail).ToList()), advice, Occluders: found.Take(MaxDetails).Select(i => checkedBoxes[i.Box]).ToList()));
         }
 
-        Add(OccluderIssueKind.InsideInterior, false, "1 boîte d'occlusion empiète sur un intérieur (MLO)", "boîtes d'occlusion empiètent sur un intérieur (MLO)",
-            "Le jeu ne dessine pas ce qui est derrière une boîte : vus de dehors (porte ouverte, fenêtres), les objets de "
-            + "l'intérieur peuvent disparaître. Si l'intérieur se voit de dehors, réduisez la boîte pour qu'elle reste hors de ses pièces.",
-            i => $"{Name(checkedBoxes[i.Box])} (intérieur {names.Describe((uint)i.Other)})");
-        Add(OccluderIssueKind.OutsideBuildings, true, "1 boîte d'occlusion dépasse des bâtiments", "boîtes d'occlusion dépassent des bâtiments",
-            "Une partie de la boîte est dans le vide (rue, cour, ciel) : ce qui se trouve derrière disparaîtra en jeu alors qu'on "
-            + "devrait le voir. Gardez la boîte à l'intérieur des murs, et vérifiez avec Calques > Occlusion > « Aperçu comme le jeu ».",
+        Add(OccluderIssueKind.InsideInterior, false, L("1 boîte d'occlusion empiète sur un intérieur (MLO)"), L("boîtes d'occlusion empiètent sur un intérieur (MLO)"),
+            L("Le jeu ne dessine pas ce qui est derrière une boîte : vus de dehors (porte ouverte, fenêtres), les objets de ")
+            + L("l'intérieur peuvent disparaître. Si l'intérieur se voit de dehors, réduisez la boîte pour qu'elle reste hors de ses pièces."),
+            i => L($"{Name(checkedBoxes[i.Box])} (intérieur {names.Describe((uint)i.Other)})"));
+        Add(OccluderIssueKind.OutsideBuildings, true, L("1 boîte d'occlusion dépasse des bâtiments"), L("boîtes d'occlusion dépassent des bâtiments"),
+            L("Une partie de la boîte est dans le vide (rue, cour, ciel) : ce qui se trouve derrière disparaîtra en jeu alors qu'on ")
+            + L("devrait le voir. Gardez la boîte à l'intérieur des murs, et vérifiez avec Calques > Occlusion > « Aperçu comme le jeu »."),
             i => Name(checkedBoxes[i.Box]));
-        Add(OccluderIssueKind.AcrossPath, true, "1 boîte d'occlusion sur une route ou un trottoir", "boîtes d'occlusion sur une route ou un trottoir",
-            "Des véhicules ou des piétons du jeu passent dans la boîte : elle est sûrement à côté du bâtiment au lieu d'être dedans.",
+        Add(OccluderIssueKind.AcrossPath, true, L("1 boîte d'occlusion sur une route ou un trottoir"), L("boîtes d'occlusion sur une route ou un trottoir"),
+            L("Des véhicules ou des piétons du jeu passent dans la boîte : elle est sûrement à côté du bâtiment au lieu d'être dedans."),
             i => Name(checkedBoxes[i.Box]));
-        Add(OccluderIssueKind.TooSmall, false, "1 boîte d'occlusion trop petite", "boîtes d'occlusion trop petites",
-            "Moins de 4 m² sur sa plus grande face : elle ne cache presque rien. Agrandissez-la ou supprimez-la.",
+        Add(OccluderIssueKind.TooSmall, false, L("1 boîte d'occlusion trop petite"), L("boîtes d'occlusion trop petites"),
+            L("Moins de 4 m² sur sa plus grande face : elle ne cache presque rien. Agrandissez-la ou supprimez-la."),
             i => Name(checkedBoxes[i.Box]));
-        Add(OccluderIssueKind.Duplicate, false, "1 boîte d'occlusion en double", "boîtes d'occlusion en double",
-            "Elle est presque entièrement dans une autre boîte : elle ne cache rien de plus. Supprimez-la.",
-            i => $"{Name(checkedBoxes[i.Box])} (dans {Name(i.Other >= 0 ? checkedBoxes[(int)i.Other] : others[(int)(-1 - i.Other)])})");
+        Add(OccluderIssueKind.Duplicate, false, L("1 boîte d'occlusion en double"), L("boîtes d'occlusion en double"),
+            L("Elle est presque entièrement dans une autre boîte : elle ne cache rien de plus. Supprimez-la."),
+            i => L($"{Name(checkedBoxes[i.Box])} (dans {Name(i.Other >= 0 ? checkedBoxes[(int)i.Other] : others[(int)(-1 - i.Other)])})"));
     }
 
     private static string Owners(IEnumerable<MapConflict> conflicts, string one, string several)
@@ -341,5 +341,5 @@ internal static class ExportChecker
     }
 
     private static List<string> Limit(List<string> lines) =>
-        lines.Count <= MaxDetails ? lines : [.. lines.Take(MaxDetails), $"... et {lines.Count - MaxDetails} autres"];
+        lines.Count <= MaxDetails ? lines : [.. lines.Take(MaxDetails), L($"... et {lines.Count - MaxDetails} autres")];
 }

@@ -198,7 +198,7 @@ internal sealed class AppState
         PendingDeletion = null;
         string name = plan.Targets.Count > 1 ? $"{plan.Targets.Count} objets"
             : World.Names?.Describe(plan.Target.ArchetypeHash) ?? $"0x{plan.Target.ArchetypeHash:X8}";
-        History.Add(DeleteEdit.Apply(library, plan, $"Supprimer {name}"));
+        History.Add(DeleteEdit.Apply(library, plan, L($"Supprimer {name}")));
         Select(null);
     }
 
@@ -224,9 +224,9 @@ internal sealed class AppState
         if (GroundPosition(entity, archetype) is { } onCollision)
             entity.SetPlacement(onCollision, entity.Orientation, entity.Scale);
         string name = World.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
-        if (AddToInterior(library, [entity], $"Ajouter {name}") is not { } inside)
+        if (AddToInterior(library, [entity], L($"Ajouter {name}")) is not { } inside)
         {
-            History.Add(AddEdit.Apply(library, map, entity, $"Ajouter {name}"));
+            History.Add(AddEdit.Apply(library, map, entity, L($"Ajouter {name}")));
             inside = [entity];
         }
         SelectAll(inside);
@@ -246,14 +246,14 @@ internal sealed class AppState
             return;
         string setName = target is null ? "" : World.Names?.Describe(target.NameHash) ?? $"0x{target.NameHash:X8}";
         string what = moving.Count == 1 ? World.Names?.Describe(moving[0].ArchetypeHash) ?? "l'objet" : $"{moving.Count} objets";
-        var edit = EntitySetMoveEdit.Apply(library, moving, setIndex, target is null ? $"Sortir {what} de son entity set" : $"Ranger {what} dans {setName}");
+        var edit = EntitySetMoveEdit.Apply(library, moving, setIndex, target is null ? L($"Sortir {what} de son entity set") : L($"Ranger {what} dans {setName}"));
         History.Add(edit);
         if (target is not null)
             library.SetEntitySetActive(target, true);
         SelectAll(edit.Selection);
         Notify(target is null
-            ? $"{what} : sorti(s) de l'entity set, toujours affiché(s), dans toutes les copies de l'intérieur (enregistré dans son .ytyp)."
-            : $"{what} : rangé(s) dans l'entity set {setName}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp).");
+            ? L($"{what} : sorti(s) de l'entity set, toujours affiché(s), dans toutes les copies de l'intérieur (enregistré dans son .ytyp).")
+            : L($"{what} : rangé(s) dans l'entity set {setName}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp)."));
     }
 
     // Puts the selected objects of the main selection's interior in a room (0 = limbo), or with AutomaticRoom each in
@@ -270,16 +270,16 @@ internal sealed class AppState
         var changing = objects.Select((e, i) => (Entity: e, Room: rooms[i])).Where(c => c.Entity.InteriorRoom != c.Room).ToList();
         if (changing.Count == 0)
         {
-            Notify(objects.Count == 1 ? "L'objet est déjà dans cette salle." : "Les objets sont déjà dans ces salles.");
+            Notify(objects.Count == 1 ? L("L'objet est déjà dans cette salle.") : L("Les objets sont déjà dans ces salles."));
             return;
         }
         string what = changing.Count == 1 ? World.Names?.Describe(changing[0].Entity.ArchetypeHash) ?? "l'objet" : $"{changing.Count} objets";
         string RoomLabel(int r) => r == 0 ? "limbo" : archetype.InteriorRooms[r].Name is { Length: > 0 } name ? name : $"salle {r}";
-        string target = changing.Select(c => c.Room).Distinct().Count() == 1 ? RoomLabel(changing[0].Room) : "leurs salles";
-        var edit = EntityRoomEdit.Apply(library, [.. changing.Select(c => c.Entity)], [.. changing.Select(c => c.Room)], $"Mettre {what} dans {target}");
+        string target = changing.Select(c => c.Room).Distinct().Count() == 1 ? RoomLabel(changing[0].Room) : L("leurs salles");
+        var edit = EntityRoomEdit.Apply(library, [.. changing.Select(c => c.Entity)], [.. changing.Select(c => c.Room)], L($"Mettre {what} dans {target}"));
         History.Add(edit);
         SelectAll(edit.Selection);
-        Notify($"{what} : dans {target}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S).");
+        Notify(L($"{what} : dans {target}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S)."));
     }
 
     public const int AutomaticRoom = -2;
@@ -305,7 +305,7 @@ internal sealed class AppState
             var edit = InteriorAddEdit.Apply(library, instance, definitions, description);
             History.Add(edit);
             string roomName = archetype.InteriorRooms[room].Name;
-            Notify($"Ajouté à l'intérieur {World.Names?.Describe(instance.ArchetypeHash) ?? ""} (salle {roomName}) : enregistré dans son .ytyp, dans toutes ses copies.");
+            Notify(L($"Ajouté à l'intérieur {World.Names?.Describe(instance.ArchetypeHash) ?? ""} (salle {roomName}) : enregistré dans son .ytyp, dans toutes ses copies."));
             return edit.Selection;
         }
         return null;
@@ -347,7 +347,7 @@ internal sealed class AppState
             return;
         if (World.Collisions is null)
         {
-            Notify("Les collisions ne sont pas encore chargées.", warning: true);
+            Notify(L("Les collisions ne sont pas encore chargées."), warning: true);
             return;
         }
 
@@ -369,28 +369,28 @@ internal sealed class AppState
         }
 
         string Name(MapEntity e) => World.Names?.Describe(e.ArchetypeHash) ?? $"0x{e.ArchetypeHash:X8}";
-        string missing = withoutGround == 0 ? "" : $" Aucune collision sous {withoutGround} objet{(withoutGround > 1 ? "s" : "")}.";
+        string missing = withoutGround == 0 ? "" : L($" Aucune collision sous {withoutGround} objet(s).");
         if (moved.Count == 0)
         {
             if (withoutGround == entities.Count)
                 Notify(CollisionQuery.Errors.Count > 0
-                    ? $"Collision illisible sous {Name(entities[^1])} : {CollisionQuery.Errors[0]}"
-                    : entities.Count == 1 ? $"Aucune collision sous {Name(entities[0])}." : "Aucune collision sous les objets sélectionnés.", warning: true);
+                    ? L($"Collision illisible sous {Name(entities[^1])} : {CollisionQuery.Errors[0]}")
+                    : entities.Count == 1 ? L($"Aucune collision sous {Name(entities[0])}.") : L("Aucune collision sous les objets sélectionnés."), warning: true);
             else
-                Notify((entities.Count == 1 ? $"{Name(entities[0])} est déjà posé au sol." : "Les objets sont déjà posés au sol.") + missing, withoutGround > 0);
+                Notify((entities.Count == 1 ? L($"{Name(entities[0])} est déjà posé au sol.") : L("Les objets sont déjà posés au sol.")) + missing, withoutGround > 0);
             return;
         }
 
         if (entities.Count == 1)
         {
             var (entity, height) = moved[0];
-            History.Add(new PlacementEdit(entity, before[0], Placement.Of(entity), $"Poser au sol {Name(entity)}"));
-            Notify($"{Name(entity)} posé au sol ({(height < 0 ? "descendu" : "monté")} de {MathF.Abs(height):0.00} m).");
+            History.Add(new PlacementEdit(entity, before[0], Placement.Of(entity), L($"Poser au sol {Name(entity)}")));
+            Notify(L($"{Name(entity)} posé au sol ({(height < 0 ? L("descendu") : L("monté"))} de {MathF.Abs(height):0.00} m)."));
             return;
         }
         // One step for the whole selection (objects already on the ground included: they keep their place).
-        History.Add(new GroupPlacementEdit(entities, before, [.. entities.Select(Placement.Of)], $"Poser au sol {entities.Count} objets"));
-        Notify($"{moved.Count} objet{(moved.Count > 1 ? "s posés" : " posé")} au sol sur {entities.Count}.{missing}", withoutGround > 0);
+        History.Add(new GroupPlacementEdit(entities, before, [.. entities.Select(Placement.Of)], L($"Poser au sol {entities.Count} objets")));
+        Notify(L($"{moved.Count} objet(s) posé(s) au sol sur {entities.Count}.{missing}"), withoutGround > 0);
     }
 
     public CopyFormat CopyFormat
@@ -422,14 +422,14 @@ internal sealed class AppState
         var copied = selected.Where(e => !e.IsInterior).ToList();
         if (copied.Count == 0)
         {
-            Notify("Les intérieurs (MLO) ne peuvent pas encore être copiés.", warning: true);
+            Notify(L("Les intérieurs (MLO) ne peuvent pas encore être copiés."), warning: true);
             return;
         }
         Copied = ObjectCopy.Copy(copied, library.GetArchetype);
-        string skipped = copied.Count < selected.Count ? " (intérieurs non copiés)" : "";
+        string skipped = copied.Count < selected.Count ? L(" (intérieurs non copiés)") : "";
         Notify(copied.Count == 1
-            ? $"{World.Names?.Describe(copied[0].ArchetypeHash) ?? "Objet"} copié{skipped}. Ctrl+V pour le coller au centre de la vue."
-            : $"{copied.Count} objets copiés{skipped}. Ctrl+V pour les coller au centre de la vue.");
+            ? L($"{World.Names?.Describe(copied[0].ArchetypeHash) ?? L("Objet")} copié{skipped}. Ctrl+V pour le coller au centre de la vue.")
+            : L($"{copied.Count} objets copiés{skipped}. Ctrl+V pour les coller au centre de la vue."));
     }
 
     public bool PasteRequest { get; set; }
@@ -443,10 +443,10 @@ internal sealed class AppState
             return;
         var pasted = ObjectCopy.Paste(Copied, ground, library.GetArchetype);
         string name = pasted.Count == 1 ? World.Names?.Describe(pasted[0].ArchetypeHash) ?? $"0x{pasted[0].ArchetypeHash:X8}" : $"{pasted.Count} objets";
-        if (AddToInterior(library, pasted, $"Coller {name}") is { } inside)
+        if (AddToInterior(library, pasted, L($"Coller {name}")) is { } inside)
             pasted = inside;
         else
-            History.Add(AddEdit.Apply(library, map, pasted, $"Coller {name}"));
+            History.Add(AddEdit.Apply(library, map, pasted, L($"Coller {name}")));
         SelectAll(pasted);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
@@ -459,11 +459,11 @@ internal sealed class AppState
     {
         string fileName = Path.GetFileName(otherFile);
         if (World.Maps is not { } library || World.Content is not { } content)
-            return ("La carte n'est pas chargée.", false, []);
+            return (L("La carte n'est pas chargée."), false, []);
         var map = library.Maps.FirstOrDefault(m => !m.IsCustom && m.FilePath is { } p
             && string.Equals(Path.GetFileName(p), fileName, StringComparison.OrdinalIgnoreCase));
         if (map?.FilePath is not { } gamePath || content.ReadFile(gamePath) is not { } gameBytes)
-            return ($"{fileName} n'est pas un YMAP de la carte chargée.", false, []);
+            return (L($"{fileName} n'est pas un YMAP de la carte chargée."), false, []);
 
         MergePlan plan;
         try
@@ -475,23 +475,23 @@ internal sealed class AppState
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return ($"Lecture impossible de {otherFile} : {ex.Message}", false, []);
+            return (L($"Lecture impossible de {otherFile} : {ex.Message}"), false, []);
         }
 
         var names = World.Names;
         var conflicts = plan.Conflicts
-            .Select(c => $"{names?.Describe(c.ArchetypeHash) ?? $"0x{c.ArchetypeHash:X8}"} ({c.Position.X:0.0}, {c.Position.Y:0.0}, {c.Position.Z:0.0}) : {c.Reason}")
+            .Select(c => L($"{names?.Describe(c.ArchetypeHash) ?? $"0x{c.ArchetypeHash:X8}"} ({c.Position.X:0.0}, {c.Position.Y:0.0}, {c.Position.Z:0.0}) : {c.Reason}"))
             .ToList();
         if (plan.IsEmpty)
-            return (plan.Conflicts.Count == 0 ? $"Rien à reprendre : {fileName} a déjà tous les changements de « {owner} »."
-                : $"Rien à reprendre de « {owner} » sans conflit.", plan.Conflicts.Count == 0, conflicts);
+            return (plan.Conflicts.Count == 0 ? L($"Rien à reprendre : {fileName} a déjà tous les changements de « {owner} ».")
+                : L($"Rien à reprendre de « {owner} » sans conflit."), plan.Conflicts.Count == 0, conflicts);
 
         MapData? addTo = null;
         var added = new List<MapEntity>();
         if (plan.Additions.Count > 0)
         {
             if ((addTo = ProjectMap(library)) is null)
-                return ("Ouvre ou crée d'abord un projet : les objets ajoutés par l'autre version vont dans le YMAP du projet.", false, conflicts);
+                return (L("Ouvre ou crée d'abord un projet : les objets ajoutés par l'autre version vont dans le YMAP du projet."), false, conflicts);
             foreach (var (hash, placement) in plan.Additions)
             {
                 var entity = Adding.NewEntity(hash, library.GetArchetype(hash), placement.Position, placement.Orientation);
@@ -499,17 +499,17 @@ internal sealed class AppState
                 added.Add(entity);
             }
         }
-        History.Add(MergeEdit.Apply(library, plan, addTo, added, $"Reprendre les changements de « {owner} » ({fileName})"));
+        History.Add(MergeEdit.Apply(library, plan, addTo, added, L($"Reprendre les changements de « {owner} » ({fileName})")));
 
         var parts = new List<string>();
         if (plan.Moves.Count > 0)
-            parts.Add($"{plan.Moves.Count} déplacé(s)");
+            parts.Add(L($"{plan.Moves.Count} déplacé(s)"));
         if (plan.Deletions.Count > 0)
-            parts.Add($"{plan.Deletions.Count} supprimé(s)");
+            parts.Add(L($"{plan.Deletions.Count} supprimé(s)"));
         if (plan.Additions.Count > 0)
-            parts.Add($"{plan.Additions.Count} ajouté(s) au YMAP du projet");
-        string text = $"Changements de « {owner} » repris dans {fileName} : {string.Join(", ", parts)}."
-            + (conflicts.Count > 0 ? $" {conflicts.Count} conflit(s) : ta version est gardée." : "");
+            parts.Add(L($"{plan.Additions.Count} ajouté(s) au YMAP du projet"));
+        string text = L($"Changements de « {owner} » repris dans {fileName} : {string.Join(", ", parts)}.")
+            + (conflicts.Count > 0 ? L($" {conflicts.Count} conflit(s) : ta version est gardée.") : "");
         Notify(text, conflicts.Count > 0);
         return (text, true, conflicts);
     }
@@ -519,7 +519,7 @@ internal sealed class AppState
     {
         if (Project is not { } project)
         {
-            Notify("Ouvre ou crée d'abord un projet : les objets ajoutés vont dans le YMAP du projet.", warning: true);
+            Notify(L("Ouvre ou crée d'abord un projet : les objets ajoutés vont dans le YMAP du projet."), warning: true);
             return null;
         }
         bool named = project.AddedMapName is not null;
@@ -591,7 +591,7 @@ internal sealed class AppState
             if (!(undo ? History.CanUndo : History.CanRedo))
                 return;
             if (!Online.Session!.RequestUndo(undo))
-                Notify("Patientez : la session se synchronise.", warning: true);
+                Notify(L("Patientez : la session se synchronise."), warning: true);
             return;
         }
         SelectAfterUndo(undo ? History.Undo() : History.Redo(), undone: undo);
@@ -653,7 +653,7 @@ internal sealed class AppState
         float ground = GroundHeightAt(point) ?? Camera.Position.Z - 10f;
         var size = new System.Numerics.Vector3(10f);
         var box = new OccluderBox(0, point with { Z = ground + size.Z / 2 }, size, MathF.Atan2(forward.Y, forward.X)).Quantized();
-        AddOccluderBoxes(file, [box], "Nouvelle boîte d'occlusion");
+        AddOccluderBoxes(file, [box], L("Nouvelle boîte d'occlusion"));
     }
 
     // Box occluders inside each selected object (OccluderFit): inside the walls of its collision, one per closed
@@ -696,22 +696,22 @@ internal sealed class AppState
         }
         var notes = new List<string>();
         if (mloEmpty > 0)
-            notes.Add($"{mloEmpty} intérieur(s) sans mur extérieur plein");
+            notes.Add(L($"{mloEmpty} intérieur(s) sans mur extérieur plein"));
         if (open > 0)
-            notes.Add($"{open} objet(s) qui ne sont pas des bâtiments fermés");
+            notes.Add(L($"{open} objet(s) qui ne sont pas des bâtiments fermés"));
         if (skipped > 0)
-            notes.Add($"{skipped} objet(s) sans volume ou trop plat(s)");
+            notes.Add(L($"{skipped} objet(s) sans volume ou trop plat(s)"));
         if (fromModel > 0)
-            notes.Add($"{fromModel} objet(s) sans collision ni modèle lisible : boîte du modèle");
+            notes.Add(L($"{fromModel} objet(s) sans collision ni modèle lisible : boîte du modèle"));
         if (boxes.Count == 0)
         {
-            Notify($"aucune boîte créée : {string.Join(", ", notes)}", warning: true);
+            Notify(L($"aucune boîte créée : {string.Join(", ", notes)}"), warning: true);
             return;
         }
-        AddOccluderBoxes(file, boxes, mlo > 0 ? $"{boxes.Count} boîtes d'occlusion dans les murs de l'intérieur"
-            : boxes.Count == 1 ? "Boîte d'occlusion sur l'objet" : $"{boxes.Count} boîtes d'occlusion sur les objets");
+        AddOccluderBoxes(file, boxes, mlo > 0 ? L($"{boxes.Count} boîtes d'occlusion dans les murs de l'intérieur")
+            : boxes.Count == 1 ? L("Boîte d'occlusion sur l'objet") : L($"{boxes.Count} boîtes d'occlusion sur les objets"));
         if (notes.Count > 0)
-            Notify($"{boxes.Count} boîte(s) créée(s) ; {string.Join(", ", notes)}", warning: true);
+            Notify(L($"{boxes.Count} boîte(s) créée(s) ; {string.Join(", ", notes)}"), warning: true);
     }
 
     // The interior's own collision, in its local space.
@@ -779,7 +779,7 @@ internal sealed class AppState
         SetLayerVisible(OcclusionLayer.LayerName(OcclusionLayerPart.Boxes), true);
         Select(null);
         SelectedOccluder = added[^1];
-        Notify(added.Count == 1 ? $"boîte d'occlusion ajoutée à {file.FileName}" : $"{added.Count} boîtes d'occlusion ajoutées à {file.FileName}");
+        Notify(added.Count == 1 ? L($"boîte d'occlusion ajoutée à {file.FileName}") : L($"{added.Count} boîtes d'occlusion ajoutées à {file.FileName}"));
     }
 
     // Selects an occluder, shows its layer and moves the camera in front of it.
@@ -806,11 +806,11 @@ internal sealed class AppState
         string name = $"room{archetype.InteriorRooms.Count}";
         var room = new InteriorRoom(center - new Vector3(2f, 2f, 1f), center + new Vector3(2f, 2f, 2f)) { Name = name };
         var edit = InteriorLayoutEdit.Apply(library, interior, () => library.AddRoom(interior.ArchetypeHash, room),
-            $"Ajouter la salle {name}", isPortal: false, added: true);
+            L($"Ajouter la salle {name}"), isPortal: false, added: true);
         History.Add(edit);
         SelectRoom(new RoomSelection(interior, edit.Index));
         SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
-        Notify($"Salle {edit.Index} « {name} » ajoutée devant la caméra : ajustez ses coins dans Propriétés, puis ajoutez-lui un portail.");
+        Notify(L($"Salle {edit.Index} « {name} » ajoutée devant la caméra : ajustez ses coins dans Propriétés, puis ajoutez-lui un portail."));
     }
 
     public void DeleteSelectedRoom()
@@ -825,10 +825,10 @@ internal sealed class AppState
         {
             library.RemoveRoom(selected.Interior.ArchetypeHash, selected.Index);
             return selected.Index;
-        }, $"Supprimer la salle {name}", isPortal: false, added: false));
+        }, L($"Supprimer la salle {name}"), isPortal: false, added: false));
         Select(selected.Interior);
-        Notify($"Salle « {name} » supprimée{(portals > 0 ? $" avec ses {portals} portail(s)" : "")} ; ses objets vont dans la salle qui les entoure "
-            + "(sinon dans limbo). Ctrl+Z pour annuler.");
+        Notify(L($"Salle « {name} » supprimée{(portals > 0 ? L($" avec ses {portals} portail(s)") : "")} ; ses objets vont dans la salle qui les entoure ")
+            + L("(sinon dans limbo). Ctrl+Z pour annuler."));
     }
 
     // A portal of 1.2 x 2.2 m (at most) at the bottom of the side of the room facing the camera, to the outside; selected.
@@ -854,12 +854,12 @@ internal sealed class AppState
                new(center.X + width, toCamera.Y >= 0 ? max.Y : min.Y, bottom), new(center.X - width, toCamera.Y >= 0 ? max.Y : min.Y, bottom)];
         var portal = new InteriorPortal(roomIndex, 0, 0) { Corners = corners };
         var edit = InteriorLayoutEdit.Apply(library, interior, () => library.AddPortal(interior.ArchetypeHash, portal),
-            $"Ajouter un portail à la salle {roomIndex}", isPortal: true, added: true);
+            L($"Ajouter un portail à la salle {roomIndex}"), isPortal: true, added: true);
         History.Add(edit);
         SelectPortal(new RoomSelection(interior, edit.Index));
         SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.OutsidePortals), true);
-        Notify($"Portail {edit.Index} ajouté sur le côté de la salle face à la caméra, vers l'extérieur : placez ses coins sur l'ouverture "
-            + "et choisissez les salles qu'il relie.");
+        Notify(L($"Portail {edit.Index} ajouté sur le côté de la salle face à la caméra, vers l'extérieur : placez ses coins sur l'ouverture ")
+            + L("et choisissez les salles qu'il relie."));
     }
 
     public void DeleteSelectedPortal()
@@ -871,9 +871,9 @@ internal sealed class AppState
         {
             library.RemovePortal(selected.Interior.ArchetypeHash, selected.Index);
             return selected.Index;
-        }, $"Supprimer le portail {selected.Index}", isPortal: true, added: false));
+        }, L($"Supprimer le portail {selected.Index}"), isPortal: true, added: false));
         Select(selected.Interior);
-        Notify($"Portail {selected.Index} supprimé. Ctrl+Z pour annuler.");
+        Notify(L($"Portail {selected.Index} supprimé. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedOccluder()
@@ -881,10 +881,12 @@ internal sealed class AppState
         if (SelectedOccluder is not { } occluder)
             return;
         OccluderMaps.SetDeleted(occluder.File, occluder.Kind, occluder.Index, true);
-        string what = occluder.Kind == OcclusionLayerPart.Boxes ? "la boîte" : "le maillage";
-        History.Add(new OccluderPresenceEdit([occluder], deleted: true, $"Supprimer {what} d'occlusion {occluder.Index}"));
+        bool box = occluder.Kind == OcclusionLayerPart.Boxes;
+        History.Add(new OccluderPresenceEdit([occluder], deleted: true,
+            box ? L($"Supprimer la boîte d'occlusion {occluder.Index}") : L($"Supprimer le maillage d'occlusion {occluder.Index}")));
         SelectedOccluder = null;
-        Notify($"{what} d'occlusion {occluder.Index} supprimé{(occluder.Kind == OcclusionLayerPart.Boxes ? "e" : "")} de {occluder.File.FileName}");
+        Notify(box ? L($"Boîte d'occlusion {occluder.Index} supprimée de {occluder.File.FileName}")
+            : L($"Maillage d'occlusion {occluder.Index} supprimé de {occluder.File.FileName}"));
     }
 
     // --- Collision editing (tool 5) ---
@@ -920,7 +922,7 @@ internal sealed class AppState
         Apply(CollisionEdit.Remove(CollisionEdits, [.. _selectedCollision]));
         int count = _selectedCollision.Count;
         SelectCollision([], CollisionSelectMode.Replace);
-        Notify(count == 1 ? "1 surface de collision supprimée" : $"{count} surfaces de collision supprimées");
+        Notify(count == 1 ? L("1 surface de collision supprimée") : L($"{count} surfaces de collision supprimées"));
     }
 
     public void SetSelectedCollisionMaterial(byte material)
@@ -1044,7 +1046,7 @@ internal sealed class AppState
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
-            Diagnostics.ErrorLog.Add("Projet", $"{OccluderEdits.FileName} illisible : {ex.Message}", ex);
+            Diagnostics.ErrorLog.Add(L("Projet"), L($"{OccluderEdits.FileName} illisible : {ex.Message}"), ex);
         }
         OccluderMaps.UseSaved(edits);
         World.OccluderFileNames = edits.StreamFileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1103,7 +1105,7 @@ internal sealed class AppState
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
             {
-                Diagnostics.ErrorLog.Add("Projet", $"{CollisionEditsFileName} illisible : {ex.Message}", ex);
+                Diagnostics.ErrorLog.Add(L("Projet"), L($"{CollisionEditsFileName} illisible : {ex.Message}"), ex);
             }
         }
         _savedCollisionRevision = CollisionEdits.Revision;
@@ -1143,18 +1145,18 @@ internal sealed class AppState
 
     // "2 YMAP", "2 YMAP, 1 YND".
     public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count)
-        + (InteriorFilesToSave.Count is var interiors and > 0 ? $", {interiors} YTYP" : "")
-        + (CollisionsPending ? $", {CollisionEdits.Files.Count} YBN" : "")
-        + (OccludersPending ? $", {OccluderEdits.StreamFileNames.Count()} YMAP d'occlusion" : "");
+        + (InteriorFilesToSave.Count is var interiors and > 0 ? L($", {interiors} YTYP") : "")
+        + (CollisionsPending ? L($", {CollisionEdits.Files.Count} YBN") : "")
+        + (OccludersPending ? L($", {OccluderEdits.StreamFileNames.Count()} YMAP d'occlusion") : "");
 
     public static string FilesText(int maps, int paths) =>
-        paths == 0 ? $"{maps} YMAP" : maps == 0 ? $"{paths} YND" : $"{maps} YMAP, {paths} YND";
+        paths == 0 ? $"{maps} YMAP" : maps == 0 ? $"{paths} YND" : L($"{maps} YMAP, {paths} YND");
 
     public void SaveMaps()
     {
         if (Online.IsGuest)
         {
-            LastSave = ("Session Online : seul l'hôte enregistre le projet.", false, DateTime.Now);
+            LastSave = (L("Session Online : seul l'hôte enregistre le projet."), false, DateTime.Now);
             return;
         }
         if (SaveFolder is not { } folder)
@@ -1181,13 +1183,13 @@ internal sealed class AppState
             History.MarkSaved();
             int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
             int typeFiles = report.Saved.Count(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase));
-            string text = FilesText(report.Saved.Count - pathFiles - typeFiles, pathFiles) + (typeFiles > 0 ? $", {typeFiles} YTYP" : "");
-            LastSave = ($"{text} enregistré(s) dans le projet « {Project!.Name} »", true, DateTime.Now);
+            string text = FilesText(report.Saved.Count - pathFiles - typeFiles, pathFiles) + (typeFiles > 0 ? L($", {typeFiles} YTYP") : "");
+            LastSave = (L($"{text} enregistré(s) dans le projet « {Project!.Name} »"), true, DateTime.Now);
         }
         else
         {
-            LastSave = ($"Échec de l'enregistrement : {string.Join(" ; ", report.Errors)}", false, DateTime.Now);
-            Diagnostics.ErrorLog.Add("Enregistrement", string.Join(" ; ", report.Errors));
+            LastSave = (L($"Échec de l'enregistrement : {string.Join(" ; ", report.Errors)}"), false, DateTime.Now);
+            Diagnostics.ErrorLog.Add(L("Enregistrement"), string.Join(" ; ", report.Errors));
         }
     }
 
@@ -1215,8 +1217,8 @@ internal sealed class AppState
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
-            ProjectError = $"Projet introuvable ou illisible ({folder}) : {ex.Message}";
-            Diagnostics.ErrorLog.Add("Projet", ProjectError, ex);
+            ProjectError = L($"Projet introuvable ou illisible ({folder}) : {ex.Message}");
+            Diagnostics.ErrorLog.Add(L("Projet"), ProjectError, ex);
             Settings.ProjectFolder = null;
             SaveSettings();
         }
@@ -1406,8 +1408,8 @@ internal sealed class AppState
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ProjectError = $"projet.json non enregistré : {ex.Message}";
-            Diagnostics.ErrorLog.Add("Projet", ProjectError, ex);
+            ProjectError = L($"projet.json non enregistré : {ex.Message}");
+            Diagnostics.ErrorLog.Add(L("Projet"), ProjectError, ex);
         }
     }
 
@@ -1455,7 +1457,7 @@ internal sealed class AppState
 
         var found = GameInstallLocator.CreateDefault().FindAll();
 
-        var manual = GameFolderValidator.TryCreate(Settings.GameFolder, "Choix manuel");
+        var manual = GameFolderValidator.TryCreate(Settings.GameFolder, L("Choix manuel"));
         Game = manual
                ?? found.FirstOrDefault(i => i.Edition == GameEdition.Legacy)
                ?? found.FirstOrDefault();
@@ -1467,7 +1469,7 @@ internal sealed class AppState
 
     public bool TrySetManualGameFolder(string folder)
     {
-        var install = GameFolderValidator.TryCreate(folder, "Choix manuel");
+        var install = GameFolderValidator.TryCreate(folder, L("Choix manuel"));
         if (install is null)
             return false;
 

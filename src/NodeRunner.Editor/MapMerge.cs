@@ -53,7 +53,7 @@ public static class MapMerge
                 if (weDeleted)
                     plan.AlreadyThere++;
                 else if (weMoved)
-                    plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, "déplacé ici, supprimé dans l'autre version"));
+                    plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, L("déplacé ici, supprimé dans l'autre version")));
                 else if (mine!.CanEdit)
                     plan.Deletions.Add(mine);
             }
@@ -61,13 +61,13 @@ public static class MapMerge
             {
                 var theirPlacement = Placement.Of(other!);
                 if (weDeleted)
-                    plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, "supprimé ici, déplacé dans l'autre version"));
+                    plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, L("supprimé ici, déplacé dans l'autre version")));
                 else if (weMoved)
                 {
                     if (Same(Placement.Of(mine!), theirPlacement))
                         plan.AlreadyThere++;
                     else
-                        plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, "déplacé différemment dans les deux versions"));
+                        plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, L("déplacé différemment dans les deux versions")));
                 }
                 else if (mine!.CanEdit)
                     plan.Moves.Add((mine, theirPlacement));

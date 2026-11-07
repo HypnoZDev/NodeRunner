@@ -23,7 +23,7 @@ internal static class InteriorFileSaver
             {
                 var interiors = library.InteriorsInFile(path);
                 if (interiors.Count == 0 || Source(files, library, path) is not { } source || files.GetResourceHeader(path) is not { } header)
-                    throw new InvalidDataException("fichier du jeu introuvable");
+                    throw new InvalidDataException(L("fichier du jeu introuvable"));
                 var written = writer.Write(source, interiors, Borrowed(files, library, YtypWriter.MissingStructures(source, interiors)));
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
                 Verify(file, interiors);
@@ -84,23 +84,23 @@ internal static class InteriorFileSaver
         foreach (var interior in interiors)
         {
             var read = written.Archetypes.FirstOrDefault(a => a.NameHash == interior.NameHash)
-                       ?? throw new InvalidDataException("vérification échouée (intérieur absent)");
+                       ?? throw new InvalidDataException(L("vérification échouée (intérieur absent)"));
             var expected = interior.InteriorEntities.Where(e => !e.IsDeleted).Concat(interior.InteriorEntitySets.SelectMany(s => s.Entities).Where(e => !e.IsDeleted)).ToList();
             var actual = read.InteriorEntities.Concat(read.InteriorEntitySets.SelectMany(s => s.Entities)).ToList();
             if (expected.Count != actual.Count
                 || expected.Zip(actual).Any(p => Vector3.Distance(p.First.Position, p.Second.Position) > Tolerance))
-                throw new InvalidDataException("vérification échouée (position des objets)");
+                throw new InvalidDataException(L("vérification échouée (position des objets)"));
             if (read.InteriorRooms.Count != interior.InteriorRooms.Count
                 || read.InteriorRooms.Zip(interior.InteriorRooms).Any(p => p.First.Name != p.Second.Name || p.First.Flags != p.Second.Flags
                     || p.First.TimecycleHash != p.Second.TimecycleHash || p.First.SecondaryTimecycleHash != p.Second.SecondaryTimecycleHash
                     || Vector3.Distance(p.First.BoundsMin, p.Second.BoundsMin) > Tolerance || Vector3.Distance(p.First.BoundsMax, p.Second.BoundsMax) > Tolerance))
-                throw new InvalidDataException("vérification échouée (salles)");
+                throw new InvalidDataException(L("vérification échouée (salles)"));
             if (read.InteriorPortals.Count != interior.InteriorPortals.Count
                 || read.InteriorPortals.Zip(interior.InteriorPortals).Any(p => p.First.RoomFrom != p.Second.RoomFrom || p.First.RoomTo != p.Second.RoomTo
                     || p.First.Flags != p.Second.Flags || p.First.Opacity != p.Second.Opacity || p.First.MirrorPriority != p.Second.MirrorPriority
                     || p.First.AudioOcclusionHash != p.Second.AudioOcclusionHash || p.First.Corners.Count != p.Second.Corners.Count
                     || p.First.Corners.Zip(p.Second.Corners).Any(c => Vector3.Distance(c.First, c.Second) > Tolerance)))
-                throw new InvalidDataException("vérification échouée (portails)");
+                throw new InvalidDataException(L("vérification échouée (portails)"));
         }
     }
 }

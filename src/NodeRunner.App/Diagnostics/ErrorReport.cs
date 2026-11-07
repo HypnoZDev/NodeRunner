@@ -18,64 +18,64 @@ internal static class ErrorReport
         var world = state.World;
         var lists = new List<ProblemList>();
         if (state.ProjectError is { } projectError)
-            lists.Add(new("Projet", [projectError], null));
+            lists.Add(new(L("Projet"), [projectError], null));
         if (world.Files is { Errors.Count: > 0 } files)
-            lists.Add(new("Archives illisibles", files.Errors, null));
+            lists.Add(new(L("Archives illisibles"), files.Errors, null));
         if (world.PathNetwork is { Errors.Count: > 0 } network)
-            lists.Add(new("Pathnodes illisibles", network.Errors, null));
+            lists.Add(new(L("Pathnodes illisibles"), network.Errors, null));
         if (world.Content is { Errors.Count: > 0 } content)
-            lists.Add(new("Problèmes de DLC", content.Errors, null));
+            lists.Add(new(L("Problèmes de DLC"), content.Errors, null));
         if (world.Maps is { SavedMapErrors.Count: > 0 } savedMaps)
-            lists.Add(new("Fichiers enregistrés non repris", savedMaps.SavedMapErrors, "La version du jeu est affichée à leur place."));
+            lists.Add(new(L("Fichiers enregistrés non repris"), savedMaps.SavedMapErrors, L("La version du jeu est affichée à leur place.")));
         if (OccluderMaps.Errors is { Count: > 0 } occluderErrors)
-            lists.Add(new("Occlusion enregistrée non reprise", occluderErrors, "Les occluders du jeu sont affichés à leur place."));
+            lists.Add(new(L("Occlusion enregistrée non reprise"), occluderErrors, L("Les occluders du jeu sont affichés à leur place.")));
         if (world.Maps is { Errors.Count: > 0 } maps)
-            lists.Add(new("Fichiers de carte ignorés", maps.Errors, "Fichiers dans un autre format (XML, PSO), pas encore lus."));
+            lists.Add(new(L("Fichiers de carte ignorés"), maps.Errors, L("Fichiers dans un autre format (XML, PSO), pas encore lus.")));
         if (world.Textures is { Errors.Count: > 0 } textures)
-            lists.Add(new("Liens de textures illisibles", textures.Errors, null));
+            lists.Add(new(L("Liens de textures illisibles"), textures.Errors, null));
         if (modelLayer is { Errors.Count: > 0 })
-            lists.Add(new("Modèles ou textures illisibles", modelLayer.Errors, null));
+            lists.Add(new(L("Modèles ou textures illisibles"), modelLayer.Errors, null));
         if (world.Collisions is { Errors.Count: > 0 } collisionCatalog)
-            lists.Add(new("Fichiers cache illisibles", collisionCatalog.Errors, "Les collisions qu'ils situent ne sont pas affichées."));
+            lists.Add(new(L("Fichiers cache illisibles"), collisionCatalog.Errors, L("Les collisions qu'ils situent ne sont pas affichées.")));
         if (collisionLayer is { Errors.Count: > 0 })
-            lists.Add(new("Collisions illisibles", collisionLayer.Errors, null));
+            lists.Add(new(L("Collisions illisibles"), collisionLayer.Errors, null));
         if (navMeshLayer is { Errors.Count: > 0 })
-            lists.Add(new("Cases de navmesh illisibles", navMeshLayer.Errors, null));
+            lists.Add(new(L("Cases de navmesh illisibles"), navMeshLayer.Errors, null));
         if (world.Scenarios is { Errors.Count: > 0 } scenarios)
-            lists.Add(new("Fichiers de scénarios ignorés", scenarios.Errors, null));
+            lists.Add(new(L("Fichiers de scénarios ignorés"), scenarios.Errors, null));
         return lists;
     }
 
     public static string Build(AppState? state, IReadOnlyList<ProblemList> problems, Exception? fatal = null)
     {
         var text = new StringBuilder();
-        text.AppendLine($"=== Rapport {Program.Name} {Program.Version} ===");
-        text.AppendLine($"Date : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        text.AppendLine($"Windows : {Environment.OSVersion.Version} ({RuntimeInformation.OSArchitecture}), .NET {Environment.Version}");
+        text.AppendLine(L($"=== Rapport {Program.Name} {Program.Version} ==="));
+        text.AppendLine(L($"Date : {DateTime.Now:yyyy-MM-dd HH:mm:ss}"));
+        text.AppendLine(L($"Windows : {Environment.OSVersion.Version} ({RuntimeInformation.OSArchitecture}), .NET {Environment.Version}"));
         long totalMemory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-        text.AppendLine($"Mémoire : {totalMemory / (1024 * 1024 * 1024.0):0.0} Go au total, "
-            + $"{Environment.WorkingSet / (1024 * 1024 * 1024.0):0.0} Go utilisés par {Program.Name}");
+        text.AppendLine(L($"Mémoire : {totalMemory / (1024 * 1024 * 1024.0):0.0} Go au total, ")
+            + L($"{Environment.WorkingSet / (1024 * 1024 * 1024.0):0.0} Go utilisés par {Program.Name}"));
         if (state is not null)
         {
-            text.AppendLine($"Carte graphique : {state.AdapterName}");
-            text.AppendLine($"Échelle de l'interface : {(state.Settings.UiScale <= 0 ? "auto" : $"{state.Settings.UiScale:0}%")}");
-            text.AppendLine($"Dossier des données : {Anonymize(state.Paths.DataDirectory)}");
+            text.AppendLine(L($"Carte graphique : {state.AdapterName}"));
+            text.AppendLine(L($"Échelle de l'interface : {(state.Settings.UiScale <= 0 ? "auto" : $"{state.Settings.UiScale:0}%")}"));
+            text.AppendLine(L($"Dossier des données : {Anonymize(state.Paths.DataDirectory)}"));
             AppendGame(text, state);
-            text.AppendLine($"Carte : {state.Settings.MapVersion}, DLC : {state.Settings.LastDlcPack ?? "tous"}");
-            text.AppendLine($"État du chargement : {state.World.Status}");
-            text.AppendLine($"Projet : {(state.Project is { } project ? project.Name : "aucun")}");
+            text.AppendLine(L($"Carte : {state.Settings.MapVersion}, DLC : {state.Settings.LastDlcPack ?? "tous"}"));
+            text.AppendLine(L($"État du chargement : {state.World.Status}"));
+            text.AppendLine(L($"Projet : {(state.Project is { } project ? project.Name : "aucun")}"));
         }
 
         if (fatal is not null)
         {
             text.AppendLine();
-            text.AppendLine("--- Plantage ---");
+            text.AppendLine(L("--- Plantage ---"));
             text.AppendLine(Anonymize(fatal.ToString()));
         }
 
         var errors = ErrorLog.Snapshot();
         text.AppendLine();
-        text.AppendLine($"--- Erreurs ({errors.Count}) ---");
+        text.AppendLine(L($"--- Erreurs ({errors.Count}) ---"));
         foreach (var error in errors)
         {
             text.AppendLine($"[{error.Time:HH:mm:ss}] {error.Where} : {Anonymize(error.Message)}");
@@ -90,7 +90,7 @@ internal static class ErrorReport
             foreach (var item in list.Items.Take(30))
                 text.AppendLine(Anonymize(item));
             if (list.Items.Count > 30)
-                text.AppendLine($"... et {list.Items.Count - 30} autres");
+                text.AppendLine(L($"... et {list.Items.Count - 30} autres"));
         }
         return text.ToString();
     }
@@ -99,26 +99,26 @@ internal static class ErrorReport
     {
         if (state.Game is not { } game)
         {
-            text.AppendLine("GTA V : introuvable");
+            text.AppendLine(L("GTA V : introuvable"));
             return;
         }
-        text.AppendLine($"GTA V : {Anonymize(game.FolderPath)} ({game.Edition}, trouvé via : {game.Source}, plateforme probable : {Store(game.FolderPath)})");
+        text.AppendLine(L($"GTA V : {Anonymize(game.FolderPath)} ({game.Edition}, trouvé via : {game.Source}, plateforme probable : {Store(game.FolderPath)})"));
         string exeName = game.Edition == GameEdition.Enhanced ? GameFolderValidator.EnhancedExecutable : GameFolderValidator.LegacyExecutable;
         string exePath = Path.Combine(game.FolderPath, exeName);
         try
         {
             var info = FileVersionInfo.GetVersionInfo(exePath);
-            text.AppendLine($"{exeName} : version {info.FileVersion}, {new FileInfo(exePath).Length:N0} octets");
+            text.AppendLine(L($"{exeName} : version {info.FileVersion}, {new FileInfo(exePath).Length:N0} octets"));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            text.AppendLine($"{exeName} : illisible ({ex.Message})");
+            text.AppendLine(L($"{exeName} : illisible ({ex.Message})"));
         }
         if (state.World.Keys is { } keys)
         {
-            text.AppendLine($"Clés des archives : {(keys.UsedSource is { } source ? $"ouvertes par {source}" : "non ouvertes")}");
+            text.AppendLine(L($"Clés des archives : {(keys.UsedSource is { } source ? L($"ouvertes par {source}") : L("non ouvertes"))}"));
             if (keys.Attempts.Count > 0)
-                text.AppendLine($"  essais : {string.Join(" ; ", keys.Attempts)}");
+                text.AppendLine(L($"  essais : {string.Join(" ; ", keys.Attempts)}"));
         }
     }
 

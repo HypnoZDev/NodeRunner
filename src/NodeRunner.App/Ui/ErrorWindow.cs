@@ -40,27 +40,27 @@ internal sealed class ErrorWindow(AppState state, ModelLayer modelLayer, Collisi
 
         ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 588f);
         if (errors.Count == 0)
-            ImGui.TextColored(UiTheme.Success, $"{Icons.Check}  Aucune erreur depuis le lancement.");
+            ImGui.TextColored(UiTheme.Success, L($"{Icons.Check}  Aucune erreur depuis le lancement."));
         else
-            ImGui.TextColored(UiTheme.Error, $"{Icons.TriangleAlert}  {errors.Count} erreur(s) depuis le lancement.");
-        Widgets.Hint("En cas de problème, copie le rapport et envoie-le au développeur (Discord, GitHub). "
-            + "Il ne contient aucun fichier du jeu ni ton nom d'utilisateur Windows.", wrap: true);
+            ImGui.TextColored(UiTheme.Error, L($"{Icons.TriangleAlert}  {errors.Count} erreur(s) depuis le lancement."));
+        Widgets.Hint(L("En cas de problème, copie le rapport et envoie-le au développeur (Discord, GitHub). ")
+            + L("Il ne contient aucun fichier du jeu ni ton nom d'utilisateur Windows."), wrap: true);
         ImGui.PopTextWrapPos();
         ImGui.Spacing();
 
-        if (Widgets.PrimaryButton($"{Icons.Copy}  Copier le rapport"))
+        if (Widgets.PrimaryButton(L($"{Icons.Copy}  Copier le rapport")))
         {
             ImGui.SetClipboardText(ErrorReport.Build(state, problems));
             _copiedAt = DateTime.Now;
         }
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.Trash}  Vider la liste", enabled: errors.Count > 0))
+        if (Widgets.Button(L($"{Icons.Trash}  Vider la liste"), enabled: errors.Count > 0))
             ErrorLog.Clear();
         if ((DateTime.Now - _copiedAt).TotalSeconds < 4)
         {
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
-            ImGui.TextColored(UiTheme.Success, $"{Icons.Check}  Rapport copié : colle-le dans ton message (Ctrl+V).");
+            ImGui.TextColored(UiTheme.Success, L($"{Icons.Check}  Rapport copié : colle-le dans ton message (Ctrl+V)."));
         }
 
         if (errors.Count > 0)
@@ -81,7 +81,7 @@ internal sealed class ErrorWindow(AppState state, ModelLayer modelLayer, Collisi
                     ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X + ImGui.GetCursorPosX() - 4f);
                     ImGui.TextColored(UiTheme.Error, error.Message);
                     ImGui.PopTextWrapPos();
-                    if (error.Details is not null && ImGui.TreeNode("Détails"))
+                    if (error.Details is not null && ImGui.TreeNode(L("Détails")))
                     {
                         Widgets.Hint(error.Details, wrap: true);
                         ImGui.TreePop();
@@ -96,8 +96,8 @@ internal sealed class ErrorWindow(AppState state, ModelLayer modelLayer, Collisi
         if (problemCount > 0)
         {
             ImGui.Spacing();
-            Widgets.Hint($"{problemCount} fichier(s) du jeu n'ont pas pu être lus (souvent normal) : détail dans le panneau État > Problèmes, "
-                + "et dans le rapport.", wrap: true);
+            Widgets.Hint(L($"{problemCount} fichier(s) du jeu n'ont pas pu être lus (souvent normal) : détail dans le panneau État > Problèmes, ")
+                + L("et dans le rapport."), wrap: true);
         }
     }
 }

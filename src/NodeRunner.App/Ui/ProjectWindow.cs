@@ -49,10 +49,10 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
     private void DrawContent()
     {
         Widgets.Hint(_saveAfter
-            ? "Les modifications sont enregistrées dans un projet : un dossier par lieu (hôpital, commissariat, garage...), "
-              + "qui donnera une ressource FiveM."
-            : "Un projet = un dossier : les YMAP modifiés (dans « stream »), la version de la carte et le nom de la "
-              + "ressource FiveM. Un projet par lieu (hôpital, commissariat, garage...).", wrap: true);
+            ? L("Les modifications sont enregistrées dans un projet : un dossier par lieu (hôpital, commissariat, garage...), ")
+              + L("qui donnera une ressource FiveM.")
+            : L("Un projet = un dossier : les YMAP modifiés (dans « stream »), la version de la carte et le nom de la ")
+              + L("ressource FiveM. Un projet par lieu (hôpital, commissariat, garage...)."), wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
 
         string location = state.ProjectsFolder;
@@ -63,17 +63,17 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
 
         if (Widgets.BeginProperties("##new_project", 0.28f))
         {
-            Widgets.Property("Nom", "Nom du projet (texte libre), aussi le nom de son dossier");
+            Widgets.Property(L("Nom"), L("Nom du projet (texte libre), aussi le nom de son dossier"));
             if (_focusName)
             {
                 ImGui.SetKeyboardFocusHere();
                 _focusName = false;
             }
             ImGui.SetNextItemWidth(-1);
-            bool enter = ImGui.InputTextWithHint("##project_name", "ex. Hôpital Pillbox", ref _name, 80, ImGuiInputTextFlags.EnterReturnsTrue);
+            bool enter = ImGui.InputTextWithHint("##project_name", L("ex. Hôpital Pillbox"), ref _name, 80, ImGuiInputTextFlags.EnterReturnsTrue);
 
-            Widgets.Property("Emplacement", "Dossier où sont créés les projets (chacun dans son sous-dossier)");
-            if (Widgets.Button($"{Icons.FolderOpen}  Choisir...", "Choisir le dossier des projets"))
+            Widgets.Property(L("Emplacement"), L("Dossier où sont créés les projets (chacun dans son sous-dossier)"));
+            if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir..."), L("Choisir le dossier des projets")))
                 chooseLocation();
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
@@ -83,10 +83,10 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
 
             if (folder is not null)
             {
-                var (text, color) = isProject ? ("un projet existe déjà ici : l'ouvrir ?", UiTheme.Warning)
-                    : occupied ? ("ce dossier existe déjà et n'est pas vide : choisis un autre nom", UiTheme.Error)
-                    : ($"{MapProject.ToFolderName(trimmed)}  ·  ressource « {FiveMResource.ToValidName(trimmed)} »", UiTheme.TextMuted);
-                Widgets.Property("Dossier");
+                var (text, color) = isProject ? (L("un projet existe déjà ici : l'ouvrir ?"), UiTheme.Warning)
+                    : occupied ? (L("ce dossier existe déjà et n'est pas vide : choisis un autre nom"), UiTheme.Error)
+                    : (L($"{MapProject.ToFolderName(trimmed)}  ·  ressource « {FiveMResource.ToValidName(trimmed)} »"), UiTheme.TextMuted);
+                Widgets.Property(L("Dossier"));
                 ImGui.AlignTextToFramePadding();
                 ImGui.TextColored(color, Widgets.Fit(text, ImGui.GetContentRegionAvail().X));
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
@@ -101,13 +101,13 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
         if (state.Project is null && state.History.HasUnsavedChanges)
         {
             ImGui.Dummy(new Vector2(0, 2));
-            Widgets.Hint($"{Icons.Info}  Les modifications en cours ({state.PendingSaveText}) iront dans ce projet.", wrap: true);
+            Widgets.Hint(L($"{Icons.Info}  Les modifications en cours ({state.PendingSaveText}) iront dans ce projet."), wrap: true);
         }
 
         ImGui.Dummy(new Vector2(0, 4));
         if (isProject)
         {
-            if (Widgets.PrimaryButton($"{Icons.FolderOpen}  Ouvrir", 120f))
+            if (Widgets.PrimaryButton(L($"{Icons.FolderOpen}  Ouvrir"), 120f))
             {
                 OpenRequested = folder;
                 _open = false;
@@ -116,12 +116,12 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
         else
         {
             ImGui.BeginDisabled(folder is null || occupied);
-            if (Widgets.PrimaryButton(_saveAfter ? $"{Icons.Save}  Créer et enregistrer" : $"{Icons.Check}  Créer", _saveAfter ? 170f : 120f) && folder is not null)
+            if (Widgets.PrimaryButton(_saveAfter ? L($"{Icons.Save}  Créer et enregistrer") : L($"{Icons.Check}  Créer"), _saveAfter ? 170f : 120f) && folder is not null)
                 Create(folder, trimmed);
             ImGui.EndDisabled();
         }
         ImGui.SameLine();
-        if (Widgets.Button("Annuler", width: 90f))
+        if (Widgets.Button(L("Annuler"), width: 90f))
             _open = false;
     }
 

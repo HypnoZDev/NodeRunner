@@ -12,7 +12,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
 {
     public const string Title = $"{Icons.Package}  Projet###Project";
 
-    private static readonly string[] Filters = ["Tout", "Ajoutés", "Déplacés", "Supprimés"];
+    private static string[] Filters => [L("Tout"), L("Ajoutés"), L("Déplacés"), L("Supprimés")];
 
     private List<ObjectChange> _changes = [];
     private (object? Library, int Structure, object? Top, int Count) _key;
@@ -37,39 +37,39 @@ internal sealed unsafe class ProjectPanel(AppState state)
     {
         if (state.Project is not { } project)
         {
-            Widgets.Hint("Aucun projet ouvert. Fichier > Nouveau projet, Ouvrir un projet ou Importer un mapping.", wrap: true);
+            Widgets.Hint(L("Aucun projet ouvert. Fichier > Nouveau projet, Ouvrir un projet ou Importer un mapping."), wrap: true);
             return;
         }
         if (state.World.Maps is not { } library)
         {
-            Widgets.Hint("En attente du chargement de la carte...");
+            Widgets.Hint(L("En attente du chargement de la carte..."));
             return;
         }
         Update(library);
 
         if (Widgets.BeginProperties("##project_info"))
         {
-            Widgets.PropertyText("Nom", project.Name);
-            Widgets.PropertyText("Dossier", project.Folder);
+            Widgets.PropertyText(L("Nom"), project.Name);
+            Widgets.PropertyText(L("Dossier"), project.Folder);
             int added = _changes.Count(c => c.Kind == ChangeKind.Added);
             int moved = _changes.Count(c => c.Kind == ChangeKind.Moved);
             int deleted = _changes.Count(c => c.Kind == ChangeKind.Deleted);
-            Widgets.PropertyText("Objets", $"{added} ajouté(s), {moved} déplacé(s), {deleted} supprimé(s)");
-            Widgets.PropertyText("YMAP modifiés", _changes.Select(c => c.Map).Distinct().Count().ToString());
+            Widgets.PropertyText(L("Objets"), L($"{added} ajouté(s), {moved} déplacé(s), {deleted} supprimé(s)"));
+            Widgets.PropertyText(L("YMAP modifiés"), _changes.Select(c => c.Map).Distinct().Count().ToString());
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section("Changements sur la carte", "project_changes"))
+        if (Widgets.Section(L("Changements sur la carte"), "project_changes"))
         {
             if (_reading is not null)
-                Widgets.Hint("Comparaison avec les fichiers du jeu...");
+                Widgets.Hint(L("Comparaison avec les fichiers du jeu..."));
             Widgets.Segmented("##project_filter", Filters, ref _filter);
             ImGui.SetNextItemWidth(-float.Epsilon);
-            Widgets.SearchField("##project_search", "Filtrer par objet ou YMAP", ref _search);
+            Widgets.SearchField("##project_search", L("Filtrer par objet ou YMAP"), ref _search);
             DrawTable();
         }
 
-        if (Widgets.Section("Fichiers du projet (stream)", "project_files", defaultOpen: false))
+        if (Widgets.Section(L("Fichiers du projet (stream)"), "project_files", defaultOpen: false))
             DrawFiles(project.StreamFolder, library);
     }
 
@@ -152,7 +152,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
 
         if (rows.Count == 0)
         {
-            Widgets.Hint(_changes.Count == 0 ? "Ce projet ne change encore aucun objet de la carte." : "Aucun changement pour ce filtre.");
+            Widgets.Hint(_changes.Count == 0 ? L("Ce projet ne change encore aucun objet de la carte.") : L("Aucun changement pour ce filtre."));
             return;
         }
 
@@ -160,10 +160,10 @@ internal sealed unsafe class ProjectPanel(AppState state)
                 new Vector2(0, Math.Min(ImGui.GetContentRegionAvail().Y, 420f))))
             return;
         ImGui.TableSetupScrollFreeze(0, 1);
-        ImGui.TableSetupColumn("Changement", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Objet", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn(L("Changement"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(L("Objet"), ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableSetupColumn("YMAP", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(L("Distance"), ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableHeadersRow();
 
         var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
@@ -178,9 +178,9 @@ internal sealed unsafe class ProjectPanel(AppState state)
                 ImGui.PushID(i);
                 var (label, color) = change.Kind switch
                 {
-                    ChangeKind.Added => ("Ajouté", new Vector4(0.40f, 0.80f, 0.45f, 1f)),
-                    ChangeKind.Moved => ("Déplacé", new Vector4(0.95f, 0.65f, 0.25f, 1f)),
-                    _ => ("Supprimé", new Vector4(0.95f, 0.40f, 0.40f, 1f)),
+                    ChangeKind.Added => (L("Ajouté"), new Vector4(0.40f, 0.80f, 0.45f, 1f)),
+                    ChangeKind.Moved => (L("Déplacé"), new Vector4(0.95f, 0.65f, 0.25f, 1f)),
+                    _ => (L("Supprimé"), new Vector4(0.95f, 0.40f, 0.40f, 1f)),
                 };
                 ImGui.PushStyleColor(ImGuiCol.Text, color);
                 if (ImGui.Selectable(label, ReferenceEquals(_selected, change), ImGuiSelectableFlags.SpanAllColumns | ImGuiSelectableFlags.AllowDoubleClick))
@@ -188,8 +188,8 @@ internal sealed unsafe class ProjectPanel(AppState state)
                 ImGui.PopStyleColor();
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip(change.Kind == ChangeKind.Deleted
-                        ? "Clic : aller à l'emplacement de l'objet supprimé"
-                        : "Clic : sélectionner et aller à l'objet");
+                        ? L("Clic : aller à l'emplacement de l'objet supprimé")
+                        : L("Clic : sélectionner et aller à l'objet"));
                 ImGui.PopID();
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(name);
@@ -235,17 +235,17 @@ internal sealed unsafe class ProjectPanel(AppState state)
         }
         if (files.Length == 0)
         {
-            Widgets.Hint("Le dossier stream est vide (rien d'enregistré pour l'instant).");
+            Widgets.Hint(L("Le dossier stream est vide (rien d'enregistré pour l'instant)."));
             return;
         }
         foreach (var group in files.GroupBy(f => Path.GetExtension(f).ToLowerInvariant()).OrderBy(g => g.Key))
         {
             string what = group.Key switch
             {
-                ".ymap" => "YMAP (objets)",
+                ".ymap" => L("YMAP (objets)"),
                 ".ybn" => "collisions",
                 ".ynd" => "pathnodes",
-                ".ytyp" => "types (YTYP)",
+                ".ytyp" => L("types (YTYP)"),
                 ".ymf" => "manifeste",
                 _ => "autres",
             };
@@ -255,7 +255,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
         {
             ImGui.Spacing();
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.95f, 0.65f, 0.25f, 1f));
-            ImGui.TextUnformatted($"{Icons.TriangleAlert}  {library.SavedMapErrors.Count} fichier(s) non repris :");
+            ImGui.TextUnformatted(L($"{Icons.TriangleAlert}  {library.SavedMapErrors.Count} fichier(s) non repris :"));
             ImGui.PopStyleColor();
             foreach (var error in library.SavedMapErrors)
                 Widgets.Hint(error, wrap: true);

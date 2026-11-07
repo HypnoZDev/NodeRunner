@@ -22,7 +22,7 @@ internal static class OccluderFileSaver
             return written;
         if (world.Content is not { } content)
         {
-            report.Errors.Add("carte non chargée : fichiers d'occlusion non écrits");
+            report.Errors.Add(L("carte non chargée : fichiers d'occlusion non écrits"));
             return written;
         }
 
@@ -52,15 +52,15 @@ internal static class OccluderFileSaver
                     if (boxes.Count == 0)
                         continue; // Created boxes all cut under deleted buildings.
                     var template = files.FirstOrDefault(f => !f.IsProject && f.Occluders.Boxes.Count > 0)
-                        ?? throw new InvalidDataException("aucun fichier d'occlusion du jeu utilisable comme modèle");
-                    var source = content.ReadFile(template.GamePath) ?? throw new InvalidDataException("modèle introuvable");
-                    header = content.GetResourceHeader(template.GamePath) ?? throw new InvalidDataException("en-tête du modèle introuvable");
+                        ?? throw new InvalidDataException(L("aucun fichier d'occlusion du jeu utilisable comme modèle"));
+                    var source = content.ReadFile(template.GamePath) ?? throw new InvalidDataException(L("modèle introuvable"));
+                    header = content.GetResourceHeader(template.GamePath) ?? throw new InvalidDataException(L("en-tête du modèle introuvable"));
                     output = writer.BuildOccluders(source, Path.GetFileNameWithoutExtension(name), boxes);
                 }
                 else
                 {
-                    var source = content.ReadFile(file.GamePath) ?? throw new InvalidDataException("fichier du jeu introuvable");
-                    header = content.GetResourceHeader(file.GamePath) ?? throw new InvalidDataException("en-tête de ressource introuvable");
+                    var source = content.ReadFile(file.GamePath) ?? throw new InvalidDataException(L("fichier du jeu introuvable"));
+                    header = content.GetResourceHeader(file.GamePath) ?? throw new InvalidDataException(L("en-tête de ressource introuvable"));
                     output = writer.WriteOccluders(source, boxes, triangles);
                 }
                 var bytes = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | output.SystemPageFlags }, output.Content);
@@ -68,7 +68,7 @@ internal static class OccluderFileSaver
                 // Read back: as many boxes and triangles as expected.
                 var check = writer.ReadOccluders(ResourceFile.Read(bytes).Content);
                 if (check.Boxes.Count != boxes.Count || check.Models.Sum(m => m.TriangleCount) != expectedTriangles)
-                    throw new InvalidDataException("vérification échouée");
+                    throw new InvalidDataException(L("vérification échouée"));
 
                 string target = Path.Combine(folder, name);
                 File.WriteAllBytes(target + ".tmp", bytes);

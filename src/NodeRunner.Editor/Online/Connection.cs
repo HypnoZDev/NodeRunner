@@ -77,7 +77,7 @@ internal sealed class Connection : IDisposable
                 await _stream.ReadExactlyAsync(header);
                 int length = BinaryPrimitives.ReadInt32LittleEndian(header);
                 if (length < 1 || length > MaxFrame)
-                    throw new InvalidDataException("Message invalide.");
+                    throw new InvalidDataException(L("Message invalide."));
                 var body = new byte[length];
                 await _stream.ReadExactlyAsync(body);
                 _received(this, (MessageType)body[0], body[1..]);
@@ -85,7 +85,7 @@ internal sealed class Connection : IDisposable
         }
         catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or EndOfStreamException or InvalidDataException)
         {
-            Close(ex is EndOfStreamException ? "connexion fermée" : ex.Message);
+            Close(ex is EndOfStreamException ? L("connexion fermée") : ex.Message);
         }
     }
 
@@ -113,7 +113,7 @@ internal sealed class Connection : IDisposable
         _closed(this, reason);
     }
 
-    public void Dispose() => Close("fermée");
+    public void Dispose() => Close(L("fermée"));
 }
 
 // Building and reading message data.
@@ -139,7 +139,7 @@ internal static class Payload
     {
         int length = reader.ReadInt32();
         if (length < 0 || length > Connection.MaxFrame)
-            throw new InvalidDataException("Invalid size.");
+            throw new InvalidDataException(L("Invalid size."));
         return reader.ReadBytes(length);
     }
 }

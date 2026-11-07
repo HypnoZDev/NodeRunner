@@ -77,12 +77,12 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
     private void DrawContent()
     {
         ImGui.SetNextItemWidth(-float.Epsilon);
-        if (Widgets.SearchField("##archive_search", "Chercher un fichier (ex. prop_bench, hw1_26, .ymt)", ref _search))
+        if (Widgets.SearchField("##archive_search", L("Chercher un fichier (ex. prop_bench, hw1_26, .ymt)"), ref _search))
             _rowsDirty = true;
 
         if (_tree is null)
         {
-            Widgets.Hint(state.World.Files is null ? "En attente de l'ouverture du jeu..." : "Lecture du contenu des archives...");
+            Widgets.Hint(state.World.Files is null ? L("En attente de l'ouverture du jeu...") : L("Lecture du contenu des archives..."));
             return;
         }
 
@@ -90,8 +90,8 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             BuildRows();
         bool searching = _search.Trim().Length >= 2;
         Widgets.Hint(searching
-            ? (_rows.Count == 0 ? "Aucun fichier" : _rows.Count >= MaxSearchResults ? $"{Widgets.Count(MaxSearchResults)} premiers fichiers" : $"{Widgets.Count(_rows.Count)} fichier(s)")
-            : $"{Widgets.Count(_tree.AllFiles.Count)} fichiers dans les archives du jeu");
+            ? (_rows.Count == 0 ? L("Aucun fichier") : _rows.Count >= MaxSearchResults ? L($"{Widgets.Count(MaxSearchResults)} premiers fichiers") : $"{Widgets.Count(_rows.Count)} fichier(s)")
+            : L($"{Widgets.Count(_tree.AllFiles.Count)} fichiers dans les archives du jeu"));
 
         DrawExtractionProgress();
 
@@ -100,9 +100,9 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
                 new Vector2(0, -infoHeight)))
         {
             ImGui.TableSetupScrollFreeze(0, 1);
-            ImGui.TableSetupColumn("Nom", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Taille", ImGuiTableColumnFlags.WidthFixed, 90f);
-            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 170f);
+            ImGui.TableSetupColumn(L("Nom"), ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn(L("Taille"), ImGuiTableColumnFlags.WidthFixed, 90f);
+            ImGui.TableSetupColumn(L("Type"), ImGuiTableColumnFlags.WidthFixed, 170f);
             ImGui.TableHeadersRow();
 
             var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
@@ -206,7 +206,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             ImGui.TextDisabled($"{Widgets.Count(node.FileCount)} fich.");
         }
         ImGui.TableNextColumn();
-        ImGui.TextDisabled(node.IsFile ? Kind(node.Name) : node.IsArchive ? "Archive RPF" : "Dossier");
+        ImGui.TextDisabled(node.IsFile ? Kind(node.Name) : node.IsArchive ? L("Archive RPF") : L("Dossier"));
         ImGui.PopID();
     }
 
@@ -215,23 +215,23 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         if (node.IsFile)
         {
             string extension = Path.GetExtension(node.Name).ToLowerInvariant();
-            if (extension is ".ydr" or ".yft" && ImGui.MenuItem($"{Icons.Box}  Voir dans la visionneuse"))
+            if (extension is ".ydr" or ".yft" && ImGui.MenuItem(L($"{Icons.Box}  Voir dans la visionneuse")))
                 openInViewer(node.Path);
-            if (extension == ".ymap" && ImGui.MenuItem($"{Icons.MapPinned}  Aller sur la carte"))
+            if (extension == ".ymap" && ImGui.MenuItem(L($"{Icons.MapPinned}  Aller sur la carte")))
                 GoToMap(node);
-            if (IsTextFile(node.Name) && ImGui.MenuItem($"{Icons.File}  Afficher le texte"))
+            if (IsTextFile(node.Name) && ImGui.MenuItem(L($"{Icons.File}  Afficher le texte")))
                 ShowText(node);
-            if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Extraire..."))
+            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Extraire...")))
                 ExtractRequested = node;
         }
-        else if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Extraire le dossier ({Widgets.Count(node.FileCount)} fichiers)...", null, false, _extraction is null))
+        else if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Extraire le dossier ({Widgets.Count(node.FileCount)} fichiers)..."), null, false, _extraction is null))
         {
             ExtractRequested = node;
         }
-        if (ImGui.MenuItem($"{Icons.Copy}  Copier le chemin"))
+        if (ImGui.MenuItem(L($"{Icons.Copy}  Copier le chemin")))
         {
             ImGui.SetClipboardText(node.Path);
-            state.Notify("Chemin copié");
+            state.Notify(L("Chemin copié"));
         }
     }
 
@@ -257,7 +257,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         var map = state.World.Maps?.Maps.FirstOrDefault(m => string.Equals(m.FilePath, node.Path, StringComparison.OrdinalIgnoreCase));
         if (map is null)
         {
-            state.Notify("Ce YMAP n'est pas affiché dans la carte chargée (version remplacée par un DLC, ou carte de mission masquée)", warning: true);
+            state.Notify(L("Ce YMAP n'est pas affiché dans la carte chargée (version remplacée par un DLC, ou carte de mission masquée)"), warning: true);
             return;
         }
         var size = map.EntitiesExtentsMax - map.EntitiesExtentsMin;
@@ -284,15 +284,15 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
                     printable++;
             }
             _text = span.Length > 0 && printable < span.Length * 0.9
-                ? "(Ce fichier n'est pas du texte : données binaires.)"
-                : Encoding.UTF8.GetString(span) + (truncated ? "\n\n(... fichier tronqué à 2 Mo)" : "");
+                ? L("(Ce fichier n'est pas du texte : données binaires.)")
+                : Encoding.UTF8.GetString(span) + (truncated ? L("\n\n(... fichier tronqué à 2 Mo)") : "");
             _textName = node.Path;
             _showText = true;
             ImGui.SetWindowFocus(TextTitle);
         }
         catch (InvalidDataException ex)
         {
-            state.Notify($"Lecture impossible : {ex.Message}", warning: true);
+            state.Notify(L($"Lecture impossible : {ex.Message}"), warning: true);
         }
     }
 
@@ -303,7 +303,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         {
             Widgets.Hint(_textName ?? "");
             ImGui.SameLine();
-            if (Widgets.Button("Copier le texte"))
+            if (Widgets.Button(L("Copier le texte")))
                 ImGui.SetClipboardText(_text);
             ImGui.InputTextMultiline("##archive_text", ref _text, (uint)_text.Length + 1, new Vector2(-1, -1), ImGuiInputTextFlags.ReadOnly);
         }
@@ -318,16 +318,16 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         {
             string details = $"{Kind(node.Name)} · {Size(info.Size)}";
             if (info.StoredSize != info.Size)
-                details += $" ({Size(info.StoredSize)} dans l'archive)";
+                details += L($" ({Size(info.StoredSize)} dans l'archive)");
             if (info.IsResource)
-                details += $" · ressource version {info.ResourceVersion}";
+                details += L($" · ressource version {info.ResourceVersion}");
             if (info.IsEncrypted)
-                details += " · chiffré";
+                details += L(" · chiffré");
             Widgets.Hint(details);
         }
         else
         {
-            Widgets.Hint($"{(node.IsArchive ? "Archive RPF" : "Dossier")} · {Widgets.Count(node.FileCount)} fichiers");
+            Widgets.Hint(L($"{(node.IsArchive ? L("Archive RPF") : L("Dossier"))} · {Widgets.Count(node.FileCount)} fichiers"));
         }
     }
 
@@ -347,7 +347,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
-                state.Notify($"Extraction impossible : {ex.Message}", warning: true);
+                state.Notify(L($"Extraction impossible : {ex.Message}"), warning: true);
             }
             return;
         }
@@ -373,55 +373,55 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             if (task.IsCompletedSuccessfully)
             {
                 var (written, failed) = task.Result;
-                state.Notify(failed == 0 ? $"{_extractionName} : {Widgets.Count(written)} fichiers extraits"
-                    : $"{_extractionName} : {Widgets.Count(written)} fichiers extraits, {Widgets.Count(failed)} illisibles", warning: failed > 0);
+                state.Notify(failed == 0 ? L($"{_extractionName} : {Widgets.Count(written)} fichiers extraits")
+                    : L($"{_extractionName} : {Widgets.Count(written)} fichiers extraits, {Widgets.Count(failed)} illisibles"), warning: failed > 0);
             }
             else
             {
-                state.Notify($"Extraction de {_extractionName} arrêtée", warning: true);
+                state.Notify(L($"Extraction de {_extractionName} arrêtée"), warning: true);
             }
             return;
         }
         var (done, total) = _extractionProgress;
         ImGui.ProgressBar(total == 0 ? 0 : (float)done / total, new Vector2(-90f, 0),
-            $"Extraction de {_extractionName} : {Widgets.Count(done)} / {Widgets.Count(total)}");
+            L($"Extraction de {_extractionName} : {Widgets.Count(done)} / {Widgets.Count(total)}"));
         ImGui.SameLine();
-        if (Widgets.Button("Arrêter", width: 80f))
+        if (Widgets.Button(L("Arrêter"), width: 80f))
             _extractionCancel?.Cancel();
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip($"Vers {_extractionFolder}");
+            ImGui.SetTooltip(L($"Vers {_extractionFolder}"));
     }
 
     private static string Size(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} o",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.#} Ko",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} Mo",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} Go",
+        < 1024 * 1024 => L($"{bytes / 1024.0:0.#} Ko"),
+        < 1024L * 1024 * 1024 => L($"{bytes / (1024.0 * 1024):0.#} Mo"),
+        _ => L($"{bytes / (1024.0 * 1024 * 1024):0.##} Go"),
     };
 
     private static string Kind(string name) => Path.GetExtension(name).ToLowerInvariant() switch
     {
-        ".ydr" => "Modèle",
-        ".ydd" => "Modèles (dictionnaire)",
-        ".yft" => "Modèle (véhicule, cassable)",
-        ".ytd" => "Textures",
-        ".ymap" => "Carte (YMAP)",
-        ".ytyp" => "Types (YTYP)",
-        ".ybn" => "Collision",
-        ".ynv" => "Navmesh",
-        ".ynd" => "Pathnodes",
-        ".ymt" => "Données (YMT)",
-        ".ymf" => "Manifeste (YMF)",
-        ".ycd" => "Animations",
-        ".awc" => "Audio",
-        ".gxt2" => "Textes du jeu",
-        ".ysc" => "Script",
-        ".meta" or ".xml" => "Texte XML",
-        ".txt" => "Texte",
-        ".dat" => "Données",
-        ".rpf" => "Archive RPF",
-        "" => "Fichier",
+        ".ydr" => L("Modèle"),
+        ".ydd" => L("Modèles (dictionnaire)"),
+        ".yft" => L("Modèle (véhicule, cassable)"),
+        ".ytd" => L("Textures"),
+        ".ymap" => L("Carte (YMAP)"),
+        ".ytyp" => L("Types (YTYP)"),
+        ".ybn" => L("Collision"),
+        ".ynv" => L("Navmesh"),
+        ".ynd" => L("Pathnodes"),
+        ".ymt" => L("Données (YMT)"),
+        ".ymf" => L("Manifeste (YMF)"),
+        ".ycd" => L("Animations"),
+        ".awc" => L("Audio"),
+        ".gxt2" => L("Textes du jeu"),
+        ".ysc" => L("Script"),
+        ".meta" or ".xml" => L("Texte XML"),
+        ".txt" => L("Texte"),
+        ".dat" => L("Données"),
+        ".rpf" => L("Archive RPF"),
+        "" => L("Fichier"),
         var other => other[1..].ToUpperInvariant(),
     };
 }

@@ -24,7 +24,7 @@ internal static partial class PathFileSaver
             {
                 if (network.GetArea(areaId) is not { } area || network.FilePath(areaId) is not { } path
                     || files.ReadFile(path) is not { } source || files.GetResourceHeader(path) is not { } header)
-                    throw new InvalidDataException("fichier du jeu introuvable");
+                    throw new InvalidDataException(L("fichier du jeu introuvable"));
                 var file = ResourceFile.Write(header, writer.Write(source, area, network.LinkLength));
                 Verify(file, area);
 
@@ -70,12 +70,12 @@ internal static partial class PathFileSaver
     {
         var written = new YndReader().Read(ResourceFile.Read(file).Content, area.AreaId);
         if (written.Nodes.Count != area.Nodes.Count || written.Links.Count != area.Links.Count)
-            throw new InvalidDataException("vérification échouée (nombre de nœuds)");
+            throw new InvalidDataException(L("vérification échouée (nombre de nœuds)"));
         for (int i = 0; i < written.Nodes.Count; i++)
         {
             var difference = written.Nodes[i].Position - area.Nodes[i].Position;
             if (MathF.Abs(difference.X) > Tolerance || MathF.Abs(difference.Y) > Tolerance || MathF.Abs(difference.Z) > Tolerance)
-                throw new InvalidDataException($"vérification échouée (nœud n° {i}, position hors des limites du format ?)");
+                throw new InvalidDataException(L($"vérification échouée (nœud n° {i}, position hors des limites du format ?)"));
         }
     }
 

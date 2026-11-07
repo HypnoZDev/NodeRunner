@@ -139,12 +139,12 @@ internal static class OccluderMaps
             var file = files.Find(f => string.Equals(f.GamePath, path, StringComparison.OrdinalIgnoreCase));
             if (file is null)
             {
-                _errors.Add($"{name} (occlusion) : fichier du jeu introuvable dans la carte chargée");
+                _errors.Add(L($"{name} (occlusion) : fichier du jeu introuvable dans la carte chargée"));
                 continue;
             }
             if (file.Occluders.Boxes.Count != edit.BoxCount || file.Occluders.Models.Count != edit.ModelCount)
             {
-                _errors.Add($"{name} (occlusion) : le fichier du jeu a changé depuis l'enregistrement");
+                _errors.Add(L($"{name} (occlusion) : le fichier du jeu a changé depuis l'enregistrement"));
                 continue;
             }
             foreach (var (index, box) in edit.Changed ?? [])

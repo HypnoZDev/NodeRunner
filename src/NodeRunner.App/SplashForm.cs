@@ -25,15 +25,15 @@ internal sealed partial class SplashForm : Form
 
     private static readonly (string Prefix, float From, float To)[] Steps =
     [
-        ("Lecture des pathnodes", 0.12f, 0.25f),
-        ("Lecture des scénarios", 0.25f, 0.32f),
-        ("Index des navmesh", 0.32f, 0.36f),
-        ("Lecture des packs DLC", 0.36f, 0.40f),
-        ("Lecture des types d'objets", 0.40f, 0.62f),
-        ("Lecture des objets de la carte", 0.62f, 0.86f),
-        ("Index des modèles 3D", 0.86f, 0.90f),
-        ("Index des textures", 0.90f, 0.94f),
-        ("Index des collisions", 0.94f, 0.99f),
+        (L("Lecture des pathnodes"), 0.12f, 0.25f),
+        (L("Lecture des scénarios"), 0.25f, 0.32f),
+        (L("Index des navmesh"), 0.32f, 0.36f),
+        (L("Lecture des packs DLC"), 0.36f, 0.40f),
+        (L("Lecture des types d'objets"), 0.40f, 0.62f),
+        (L("Lecture des objets de la carte"), 0.62f, 0.86f),
+        (L("Index des modèles 3D"), 0.86f, 0.90f),
+        (L("Index des textures"), 0.90f, 0.94f),
+        (L("Index des collisions"), 0.94f, 0.99f),
     ];
 
     // Drawn in points, then scaled to the display (Windows scale).
@@ -188,7 +188,7 @@ internal sealed partial class SplashForm : Form
         if (done)
         {
             if (now > Timeout && !mapDone)
-                Diagnostics.ErrorLog.Add("Chargement", $"Chargement anormalement long (plus de {Timeout / 60:0} min), arrêté à l'étape : {_world.Status}");
+                Diagnostics.ErrorLog.Add(L("Chargement"), L($"Chargement anormalement long (plus de {Timeout / 60:0} min), arrêté à l'étape : {_world.Status}"));
             // Closed at once (no wait for the bar to reach its end): the main window opens on the loaded view.
             _timer.Stop();
             Close();
@@ -541,7 +541,7 @@ internal sealed partial class SplashForm : Form
     {
         int Alpha(int a) => (int)(a * visible);
         using (var tagline = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0xA8, 0xB2, 0xC8)))
-            g.DrawString("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V.", _taglineFont, tagline, Gutter, 240f);
+            g.DrawString(L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V."), _taglineFont, tagline, Gutter, 240f);
         using (var version = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90)))
             g.DrawString($"v{Program.Version}", _smallFont, version, Design.Width - 66f, 20f);
 
@@ -599,7 +599,7 @@ internal sealed partial class SplashForm : Form
             g.ResetClip();
         }
         using (var notice = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x6A, 0x74, 0x8A)))
-            g.DrawString("Non affilié à Rockstar Games ni à Take-Two Interactive", _smallFont, notice, Gutter, creditsTop + 18f);
+            g.DrawString(L("Non affilié à Rockstar Games ni à Take-Two Interactive"), _smallFont, notice, Gutter, creditsTop + 18f);
 
         // Size of the road network, counted up while it lights.
         if (_map is { } map && reveal > 0f)
@@ -608,7 +608,7 @@ internal sealed partial class SplashForm : Form
             var french = (CultureInfo)CultureInfo.GetCultureInfo("fr-FR").Clone();
             french.NumberFormat.NumberGroupSeparator = " ";
             float count = EaseOut(reveal);
-            string figures = string.Format(french, "{0:N0} nœuds  ·  {1:N0} km de routes", (int)(map.NodeCount * count), map.Kilometres * count);
+            string figures = string.Format(NodeRunner.Editor.Localization.Loc.IsFrench ? french : CultureInfo.InvariantCulture, L("{0:N0} nœuds  ·  {1:N0} km de routes"), (int)(map.NodeCount * count), map.Kilometres * count);
             using var brush = new SolidBrush(Color.FromArgb(Alpha((int)(255 * Math.Min(1f, reveal * 3f))), 0x8A, 0x94, 0xAA));
             float width = g.MeasureString(figures, _smallFont).Width;
             g.DrawString(figures, _smallFont, brush, Design.Width - Gutter - width + 4f, creditsTop + 18f);
@@ -618,7 +618,7 @@ internal sealed partial class SplashForm : Form
     private string StatusText()
     {
         if (_modelsStart is not null)
-            return "Chargement des modèles 3D...";
+            return L("Chargement des modèles 3D...");
         string status = _world.Status;
         int colon = status.IndexOf(" :", StringComparison.Ordinal);
         string step = colon > 0 ? status[..colon] : status.TrimEnd('.');

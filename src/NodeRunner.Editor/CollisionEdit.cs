@@ -39,7 +39,7 @@ public sealed class CollisionEdit : IEdit
 
     public static CollisionEdit Remove(CollisionEdits edits, IReadOnlyList<CollisionPolygon> polygons)
     {
-        var edit = new CollisionEdit(edits, polygons.Count == 1 ? "supprimer une surface de collision" : $"supprimer {polygons.Count} surfaces de collision", polygons);
+        var edit = new CollisionEdit(edits, polygons.Count == 1 ? L("supprimer une surface de collision") : L($"supprimer {polygons.Count} surfaces de collision"), polygons);
         foreach (var (p, _, material) in edit._before)
             edit._after.Add((p, true, material));
         return edit;
@@ -47,7 +47,7 @@ public sealed class CollisionEdit : IEdit
 
     public static CollisionEdit SetMaterial(CollisionEdits edits, IReadOnlyList<CollisionPolygon> polygons, byte material, string name)
     {
-        var edit = new CollisionEdit(edits, $"matériau de collision : {name}", polygons);
+        var edit = new CollisionEdit(edits, L($"matériau de collision : {name}"), polygons);
         foreach (var (p, removed, _) in edit._before)
             edit._after.Add((p, removed, material));
         return edit;

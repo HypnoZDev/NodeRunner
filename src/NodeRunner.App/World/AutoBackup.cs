@@ -118,7 +118,7 @@ internal sealed class AutoBackup
             }
             catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException or KeyNotFoundException or EndOfStreamException or NotSupportedException)
             {
-                Diagnostics.ErrorLog.Add("Copie de secours", $"Modification {applied + 1} non reprise : {ex.Message}");
+                Diagnostics.ErrorLog.Add(L("Copie de secours"), L($"Modification {applied + 1} non reprise : {ex.Message}"));
                 break;
             }
         }
@@ -205,7 +205,7 @@ internal sealed class AutoBackup
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Diagnostics.ErrorLog.Add("Copie de secours", $"Écriture impossible ({file}) : {ex.Message}");
+            Diagnostics.ErrorLog.Add(L("Copie de secours"), L($"Écriture impossible ({file}) : {ex.Message}"));
         }
     }
 

@@ -120,9 +120,9 @@ public sealed class OnlineSession : IDisposable
         if (session._listener is null)
         {
             session.Dispose();
-            throw new IOException($"Aucun port libre ({port} à {port + 9}) : {last?.Message}");
+            throw new IOException(L($"Aucun port libre ({port} à {port + 9}) : {last?.Message}"));
         }
-        session.Status = $"Session ouverte (port {session.Port})";
+        session.Status = L($"Session ouverte (port {session.Port})");
         _ = Task.Run(session.AcceptLoop);
         return session;
     }
@@ -130,7 +130,7 @@ public sealed class OnlineSession : IDisposable
     // Joins the session at address ("192.168.1.20" or "192.168.1.20:47800").
     public static OnlineSession Join(IOnlineDocument doc, string name, string appVersion, string address)
     {
-        var session = new OnlineSession(doc, SessionRole.Guest, name, appVersion) { Status = $"Connexion à {address}..." };
+        var session = new OnlineSession(doc, SessionRole.Guest, name, appVersion) { Status = L($"Connexion à {address}...") };
         var (host, port) = ParseAddress(address);
         _ = Task.Run(async () =>
         {
@@ -144,7 +144,7 @@ public sealed class OnlineSession : IDisposable
             {
                 client.Dispose();
                 session._incoming.Enqueue((null!, MessageType.Closed, System.Text.Encoding.UTF8.GetBytes(
-                    ex is OperationCanceledException ? "l'hôte ne répond pas" : ex.Message)));
+                    ex is OperationCanceledException ? L("l'hôte ne répond pas") : ex.Message)));
                 return;
             }
             var connection = new Connection(client, 0, session.Received, session.Closed);
@@ -225,7 +225,7 @@ public sealed class OnlineSession : IDisposable
             return;
         if ((Role == SessionRole.Host || (_library is not null && !_loading)) && _doc.Context?.Library != _library)
         {
-            End("La carte a été rechargée : session terminée.");
+            End(L("La carte a été rechargée : session terminée."));
             return;
         }
         if (_loading)
@@ -249,9 +249,9 @@ public sealed class OnlineSession : IDisposable
                 or InvalidOperationException or ArgumentException or KeyNotFoundException)
             {
                 if (Role == SessionRole.Host)
-                    Drop(message.Connection, $"message illisible ({ex.Message})");
+                    Drop(message.Connection, L($"message illisible ({ex.Message})"));
                 else
-                    End($"Désynchronisé de l'hôte ({ex.Message}) : rejoignez à nouveau la session.");
+                    End(L($"Désynchronisé de l'hôte ({ex.Message}) : rejoignez à nouveau la session."));
             }
         }
     }
@@ -319,8 +319,8 @@ public sealed class OnlineSession : IDisposable
         string name = CleanName(r.ReadString());
         string? refusal =
             protocol != ProtocolVersion || appVersion != AppVersion || signature != _doc.Codecs.Signature
-                ? $"Versions différentes : l'hôte a NodeRunner {AppVersion}, vous avez {appVersion}. Installez la même version."
-            : Guests().Length + 1 + _joinRequests.Count >= MaxParticipants ? $"Session complète ({MaxParticipants} personnes maximum)."
+                ? L($"Versions différentes : l'hôte a NodeRunner {AppVersion}, vous avez {appVersion}. Installez la même version.")
+            : Guests().Length + 1 + _joinRequests.Count >= MaxParticipants ? L($"Session complète ({MaxParticipants} personnes maximum).")
             : null;
         if (refusal is not null)
         {
@@ -334,7 +334,7 @@ public sealed class OnlineSession : IDisposable
             unique = $"{name} ({i})";
         connection.Name = unique;
         _joinRequests.Add(new JoinRequest(connection.Id, unique, connection.Address));
-        _doc.Notify($"{unique} veut rejoindre la session.");
+        _doc.Notify(L($"{unique} veut rejoindre la session."));
     }
 
     public void Accept(JoinRequest request)
@@ -349,7 +349,7 @@ public sealed class OnlineSession : IDisposable
         _redoLog.Clear();
         SendWelcome(connection);
         UpdateParticipants();
-        _doc.Notify($"{request.Name} a rejoint la session.");
+        _doc.Notify(L($"{request.Name} a rejoint la session."));
     }
 
     public void Refuse(JoinRequest request)
@@ -357,7 +357,7 @@ public sealed class OnlineSession : IDisposable
         _joinRequests.Remove(request);
         if (Find(request.Id) is { } connection)
         {
-            connection.Send(MessageType.Refused, Payload.Build(w => w.Write("L'hôte a refusé votre demande.")));
+            connection.Send(MessageType.Refused, Payload.Build(w => w.Write(L("L'hôte a refusé votre demande."))));
             connection.CloseAfterSending();
         }
     }
@@ -390,7 +390,7 @@ public sealed class OnlineSession : IDisposable
     {
         if (seen != _opCount)
         {
-            Resync(connection, "une autre modification est passée avant");
+            Resync(connection, L("une autre modification est passée avant"));
             return;
         }
         IEdit edit;
@@ -433,7 +433,7 @@ public sealed class OnlineSession : IDisposable
         {
             connection.Accepted = false;
             UpdateParticipants();
-            _doc.Notify($"{connection.Name} a quitté la session.");
+            _doc.Notify(L($"{connection.Name} a quitté la session."));
         }
     }
 
@@ -457,7 +457,7 @@ public sealed class OnlineSession : IDisposable
         switch (type)
         {
             case MessageType.Closed:
-                End(_snapshot is null ? $"Impossible de rejoindre : {System.Text.Encoding.UTF8.GetString(data)}." : "Connexion avec l'hôte perdue.");
+                End(_snapshot is null ? L($"Impossible de rejoindre : {System.Text.Encoding.UTF8.GetString(data)}.") : L("Connexion avec l'hôte perdue."));
                 break;
             case MessageType.Refused:
             case MessageType.Bye:
@@ -468,7 +468,7 @@ public sealed class OnlineSession : IDisposable
                 break;
             case MessageType.Reject:
                 _diverged = true;
-                _doc.Notify($"Synchronisation avec l'hôte ({r.ReadString()})...", warning: true);
+                _doc.Notify(L($"Synchronisation avec l'hôte ({r.ReadString()})..."), warning: true);
                 break;
             case MessageType.Ack:
                 _pending--;
@@ -522,7 +522,7 @@ public sealed class OnlineSession : IDisposable
         _snapshot = new SessionSnapshot(project, zip, fingerprint);
         _loading = true;
         _pending = 0;
-        Status = "Chargement de la carte de l'hôte...";
+        Status = L("Chargement de la carte de l'hôte...");
         _doc.OpenSnapshot(_snapshot);
     }
 
@@ -531,7 +531,7 @@ public sealed class OnlineSession : IDisposable
         _loading = false;
         if (_doc.Fingerprint != _snapshot!.Fingerprint)
         {
-            End($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({_doc.Fingerprint} / {_snapshot.Fingerprint}) : même version de GTA V et mêmes mods nécessaires.");
+            End(L($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({_doc.Fingerprint} / {_snapshot.Fingerprint}) : même version de GTA V et mêmes mods nécessaires."));
             return;
         }
         try
@@ -541,14 +541,14 @@ public sealed class OnlineSession : IDisposable
         }
         catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException or KeyNotFoundException or EndOfStreamException)
         {
-            End($"Impossible de reprendre les modifications de l'hôte : {ex.Message}");
+            End(L($"Impossible de reprendre les modifications de l'hôte : {ex.Message}"));
             return;
         }
         _opCount = _welcomeLog.Count;
         _welcomeLog = [];
         _diverged = false;
         _library = _doc.Context?.Library;
-        Status = "Connecté";
+        Status = L("Connecté");
     }
 
     // Guest: asks the host to undo (or redo) the session's last change; false if it cannot now.
@@ -577,7 +577,7 @@ public sealed class OnlineSession : IDisposable
 
     private IEdit ApplyMessage(byte[] message)
     {
-        var context = _doc.Context ?? throw new InvalidOperationException("La carte n'est pas chargée.");
+        var context = _doc.Context ?? throw new InvalidOperationException(L("La carte n'est pas chargée."));
         var edit = _doc.Codecs.Apply(message, context);
         _doc.History.Add(edit);
         return edit;
@@ -596,7 +596,7 @@ public sealed class OnlineSession : IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            _doc.Notify($"Modification non partagée : {ex.Message}", warning: true);
+            _doc.Notify(L($"Modification non partagée : {ex.Message}"), warning: true);
             return;
         }
         if (Role == SessionRole.Host)
@@ -648,7 +648,7 @@ public sealed class OnlineSession : IDisposable
         name = new string([.. name.Where(c => !char.IsControl(c))]).Trim();
         if (name.Length > 24)
             name = name[..24];
-        return name.Length == 0 ? "Invité" : name;
+        return name.Length == 0 ? L("Invité") : name;
     }
 
     // --- Ending ---
@@ -664,7 +664,7 @@ public sealed class OnlineSession : IDisposable
         _doc.History.Redone -= OnRedone;
         _listener?.Stop();
         _listener = null;
-        var bye = Payload.Build(w => w.Write(Role == SessionRole.Host ? "L'hôte a terminé la session." : "Au revoir."));
+        var bye = Payload.Build(w => w.Write(Role == SessionRole.Host ? L("L'hôte a terminé la session.") : L("Au revoir.")));
         Connection[] all;
         lock (_connections)
             all = [.. _connections];
@@ -675,5 +675,5 @@ public sealed class OnlineSession : IDisposable
         }
     }
 
-    public void Dispose() => End("Session fermée.");
+    public void Dispose() => End(L("Session fermée."));
 }

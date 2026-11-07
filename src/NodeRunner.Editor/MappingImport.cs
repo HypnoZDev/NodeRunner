@@ -45,7 +45,7 @@ public static class MappingImport
         source = Path.GetFullPath(source);
         var (files, duplicates) = FindFiles(source);
         if (files.Count == 0)
-            throw new InvalidDataException("Aucun fichier de carte (.ymap, .ybn, .ytyp...) dans ce dossier.");
+            throw new InvalidDataException(L("Aucun fichier de carte (.ymap, .ybn, .ytyp...) dans ce dossier."));
 
         // A folder named "stream" is not a good project name: take its parent's.
         string name = Path.GetFileName(source);

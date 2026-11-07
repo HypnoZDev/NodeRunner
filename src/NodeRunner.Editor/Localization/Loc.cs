@@ -60,7 +60,6 @@ public static class Loc
         // Piece by piece, between the values: "{0}  Enregistrer" -> "{0}  Save".
         var result = new StringBuilder(key.Length + 8);
         int start = 0;
-        bool any = false;
         while (start <= key.Length)
         {
             int hole = NextHole(key, start, out int holeEnd);
@@ -70,11 +69,10 @@ public static class Loc
                 return null;
             if (hole < 0)
                 break;
-            any = true;
             result.Append(key, hole, holeEnd - hole);
             start = holeEnd;
         }
-        return any || !NeedsWords(key) ? result.ToString() : null;
+        return result.ToString();
     }
 
     // A literal piece: its words looked up without the spaces and punctuation around them.

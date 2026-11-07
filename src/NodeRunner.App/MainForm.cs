@@ -285,10 +285,10 @@ internal sealed unsafe partial class MainForm : Form
             return budget > 0 ? budget * 7 / 10 : long.MaxValue;
         };
         _state.ModelMemoryInfo = () => (_modelLayer.GpuBytes, _modelLayer.MemoryLimit);
-        _state.AdapterName = _graphics.IsSoftware ? $"{_graphics.AdapterName} (rendu logiciel, lent)" : _graphics.AdapterName;
+        _state.AdapterName = _graphics.IsSoftware ? L($"{_graphics.AdapterName} (rendu logiciel, lent)") : _graphics.AdapterName;
         if (_graphics.IsSoftware)
-            Diagnostics.ErrorLog.Add("Carte graphique", "Aucune carte graphique compatible DirectX 11 : affichage en rendu logiciel (lent). "
-                + "Installe ou mets à jour le pilote de ta carte graphique.");
+            Diagnostics.ErrorLog.Add(L("Carte graphique"), L("Aucune carte graphique compatible DirectX 11 : affichage en rendu logiciel (lent). ")
+                + L("Installe ou mets à jour le pilote de ta carte graphique."));
 
         RestoreCamera();
         _surface.Resize += (_, _) => _graphics?.Resize(_surface.ClientSize.Width, _surface.ClientSize.Height);
@@ -392,33 +392,33 @@ internal sealed unsafe partial class MainForm : Form
             return;
         _deviceLost = true;
         string reason = _graphics!.LostReason;
-        Diagnostics.ErrorLog.Add("Carte graphique", $"Carte graphique perdue : {reason}.");
+        Diagnostics.ErrorLog.Add(L("Carte graphique"), L($"Carte graphique perdue : {reason}."));
         BeginInvoke(() => RestartAfterDeviceLost(reason));
     }
 
     private void RestartAfterDeviceLost(string reason)
     {
-        string text = $"La carte graphique ne répond plus ({reason}).\n"
-            + "Cela arrive quand son pilote plante, redémarre ou se met à jour. NodeRunner doit redémarrer pour réafficher la carte.";
+        string text = L($"La carte graphique ne répond plus ({reason}).\n")
+            + L("Cela arrive quand son pilote plante, redémarre ou se met à jour. NodeRunner doit redémarrer pour réafficher la carte.");
         if (_state.History.HasUnsavedChanges && _state.PendingSaveCount > 0)
         {
             string count = _state.PendingSaveText;
             if (_state.Project is null)
             {
                 // No window can be drawn anymore to name a project: the changes go into a new one.
-                string name = $"Récupération {DateTime.Now:yyyy-MM-dd HH-mm}";
+                string name = L($"Récupération {DateTime.Now:yyyy-MM-dd HH-mm}");
                 string folder = Path.Combine(_state.ProjectsFolder, name);
                 if (_state.CreateProject(folder, name) is { } error)
-                    text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées : {error}";
+                    text += L($"\n\nLes modifications ({count}) n'ont pas pu être enregistrées : {error}");
                 else if (SaveMaps())
-                    text += $"\n\nLes modifications ({count}) ont été enregistrées dans le nouveau projet « {name} » :\n{folder}";
+                    text += L($"\n\nLes modifications ({count}) ont été enregistrées dans le nouveau projet « {name} » :\n{folder}");
                 else
-                    text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.";
+                    text += L($"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.");
             }
             else if (SaveMaps())
-                text += $"\n\nLes modifications du projet « {_state.Project.Name} » ({count}) ont été enregistrées.";
+                text += L($"\n\nLes modifications du projet « {_state.Project.Name} » ({count}) ont été enregistrées.");
             else
-                text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.";
+                text += L($"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.");
         }
         MessageBox.Show(this, text, Program.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
         Application.Restart();
@@ -798,7 +798,7 @@ internal sealed unsafe partial class MainForm : Form
         var mode = !control ? CollisionSelectMode.Replace : drag ? CollisionSelectMode.Add : CollisionSelectMode.Toggle;
         _state.SelectCollision(picked, mode);
         if (drag)
-            _state.Notify(picked.Count == 0 ? "aucune surface de collision dans le rectangle" : $"{_state.SelectedCollision.Count} surface(s) de collision sélectionnée(s)", warning: picked.Count == 0);
+            _state.Notify(picked.Count == 0 ? L("aucune surface de collision dans le rectangle") : L($"{_state.SelectedCollision.Count} surface(s) de collision sélectionnée(s)"), warning: picked.Count == 0);
     }
 
     private void PickClickedObject(Rectangle scene)
@@ -876,8 +876,8 @@ internal sealed unsafe partial class MainForm : Form
         {
             hit = under;
             var names = _state.World.Names;
-            _state.Notify($"Recliquez au même endroit pour sélectionner {names?.Describe(overlay.Entity.ArchetypeHash) ?? "l'objet"} "
-                + "(décalque ou ombre posé dessus).");
+            _state.Notify(L($"Recliquez au même endroit pour sélectionner {names?.Describe(overlay.Entity.ArchetypeHash) ?? L("l'objet")} ")
+                + L("(décalque ou ombre posé dessus)."));
         }
         if (hit is { } chosen)
             _clickCycle.Add(chosen.Entity);
@@ -1042,7 +1042,7 @@ internal sealed unsafe partial class MainForm : Form
             return true;
         if (_state.Online.IsGuest)
         {
-            _state.Notify("Session Online : c'est l'hôte qui enregistre le projet.", warning: true);
+            _state.Notify(L("Session Online : c'est l'hôte qui enregistre le projet."), warning: true);
             return false;
         }
         if (_state.Project is null)
@@ -1053,7 +1053,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.SaveMaps();
         if (_state.LastSave is { Success: false } failed)
         {
-            MessageBox.Show(this, failed.Text, "Enregistrement", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, failed.Text, L("Enregistrement"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
         return true;
@@ -1066,7 +1066,7 @@ internal sealed unsafe partial class MainForm : Form
             _ui.ChooseProjectsFolderRequested = false;
             using var dialog = new FolderBrowserDialog
             {
-                Description = "Dossier où créer les projets (chaque projet aura son sous-dossier).",
+                Description = L("Dossier où créer les projets (chaque projet aura son sous-dossier)."),
                 UseDescriptionForTitle = true,
                 InitialDirectory = Directory.Exists(_state.ProjectsFolder) ? _state.ProjectsFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 ShowNewFolderButton = true,
@@ -1124,7 +1124,7 @@ internal sealed unsafe partial class MainForm : Form
             return;
         if (_state.CreateProject(folder, name) is { } error)
         {
-            MessageBox.Show(this, $"Le projet n'a pas pu être créé :\n{error}", "Nouveau projet", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, L($"Le projet n'a pas pu être créé :\n{error}"), L("Nouveau projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         if (saveAfter && !reloads && !SaveMaps())
@@ -1141,7 +1141,7 @@ internal sealed unsafe partial class MainForm : Form
         {
             if (!MapProject.Exists(folder))
                 _state.ForgetRecentProject(folder);
-            MessageBox.Show(this, $"Le projet n'a pas pu être ouvert :\n{error}", "Ouvrir un projet", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, L($"Le projet n'a pas pu être ouvert :\n{error}"), L("Ouvrir un projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -1150,7 +1150,7 @@ internal sealed unsafe partial class MainForm : Form
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Choisis le dossier d'un projet NodeRunner (celui qui contient projet.json).",
+            Description = L("Choisis le dossier d'un projet NodeRunner (celui qui contient projet.json)."),
             UseDescriptionForTitle = true,
             InitialDirectory = Directory.Exists(_state.ProjectsFolder) ? _state.ProjectsFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
@@ -1163,8 +1163,8 @@ internal sealed unsafe partial class MainForm : Form
             return;
         }
         var answer = MessageBox.Show(this,
-            $"« {Path.GetFileName(folder)} » n'est pas un projet NodeRunner.\nEn faire un projet ? Les .ymap qu'il contient seront rangés dans son dossier « stream ».",
-            "Ouvrir un projet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            L($"« {Path.GetFileName(folder)} » n'est pas un projet NodeRunner.\nEn faire un projet ? Les .ymap qu'il contient seront rangés dans son dossier « stream »."),
+            L("Ouvrir un projet"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer == DialogResult.Yes)
             CreateProject(folder, Path.GetFileName(folder), saveAfter: false, exitAfter: false);
     }
@@ -1173,7 +1173,7 @@ internal sealed unsafe partial class MainForm : Form
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Choisis le dossier du mapping : une ressource FiveM (avec fxmanifest.lua) ou un dossier stream.",
+            Description = L("Choisis le dossier du mapping : une ressource FiveM (avec fxmanifest.lua) ou un dossier stream."),
             UseDescriptionForTitle = true,
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
@@ -1186,19 +1186,19 @@ internal sealed unsafe partial class MainForm : Form
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            MessageBox.Show(this, $"Le mapping n'a pas pu être importé :\n{ex.Message}", "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, L($"Le mapping n'a pas pu être importé :\n{ex.Message}"), L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         if (_state.OpenProject(result.Project.Folder) is { } error)
         {
-            MessageBox.Show(this, $"Le projet importé n'a pas pu être ouvert :\n{error}", "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, L($"Le projet importé n'a pas pu être ouvert :\n{error}"), L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         _ui.ShowProjectPanel();
-        string skipped = result.Skipped.Count == 0 ? "" : $"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n" + string.Join("\n", result.Skipped.Take(10));
+        string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
         MessageBox.Show(this,
-            $"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} » :\n{result.Project.Folder}\n\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}",
-            "Importer un mapping", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} » :\n{result.Project.Folder}\n\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}"),
+            L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     // Before leaving the map shown (other project, closing it): unsaved changes are saved, left, or the action is
@@ -1211,11 +1211,11 @@ internal sealed unsafe partial class MainForm : Form
         if (_state.Project is not { } project)
         {
             return MessageBox.Show(this,
-                $"Des modifications ne sont dans aucun projet ({count}) : elles seront perdues.\nContinuer ?",
+                L($"Des modifications ne sont dans aucun projet ({count}) : elles seront perdues.\nContinuer ?"),
                 Program.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
         }
         var answer = MessageBox.Show(this,
-            $"Des modifications du projet « {project.Name} » ne sont pas enregistrées ({count}).\nLes enregistrer d'abord ?",
+            L($"Des modifications du projet « {project.Name} » ne sont pas enregistrées ({count}).\nLes enregistrer d'abord ?"),
             Program.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
         return answer == DialogResult.No || (answer == DialogResult.Yes && SaveMaps());
     }
@@ -1226,9 +1226,9 @@ internal sealed unsafe partial class MainForm : Form
         {
             using var save = new SaveFileDialog
             {
-                Title = $"Extraire {node.Name}",
+                Title = L($"Extraire {node.Name}"),
                 FileName = node.Name,
-                Filter = "Tous les fichiers (*.*)|*.*",
+                Filter = L("Tous les fichiers (*.*)|*.*"),
                 OverwritePrompt = true,
             };
             if (save.ShowDialog(this) == DialogResult.OK)
@@ -1238,7 +1238,7 @@ internal sealed unsafe partial class MainForm : Form
 
         using var dialog = new FolderBrowserDialog
         {
-            Description = $"Dossier où extraire « {node.Name} » ({node.FileCount} fichiers, un dossier de ce nom y sera créé).",
+            Description = L($"Dossier où extraire « {node.Name} » ({node.FileCount} fichiers, un dossier de ce nom y sera créé)."),
             UseDescriptionForTitle = true,
             ShowNewFolderButton = true,
         };
@@ -1250,7 +1250,7 @@ internal sealed unsafe partial class MainForm : Form
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Dossier où créer la ressource FiveM (par exemple le dossier « resources » de ton serveur).",
+            Description = L("Dossier où créer la ressource FiveM (par exemple le dossier « resources » de ton serveur)."),
             UseDescriptionForTitle = true,
             InitialDirectory = _state.ExportFolder ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             ShowNewFolderButton = true,
@@ -1282,7 +1282,7 @@ internal sealed unsafe partial class MainForm : Form
         if (e.Cancel || _deviceLost || !_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
             return;
         var answer = MessageBox.Show(this,
-            $"Des modifications ne sont pas enregistrées ({_state.PendingSaveText}).\nLes enregistrer avant de quitter ?",
+            L($"Des modifications ne sont pas enregistrées ({_state.PendingSaveText}).\nLes enregistrer avant de quitter ?"),
             Program.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
         if (answer == DialogResult.Yes && _state.Project is null)
         {
@@ -1297,13 +1297,13 @@ internal sealed unsafe partial class MainForm : Form
 
     private void OfferRecovery(AutoBackup.Recovery found)
     {
-        string where = _state.Project is { } project ? $"du projet « {project.Name} »" : "faites sans projet";
+        string where = _state.Project is { } project ? L($"du projet « {project.Name} »") : L("faites sans projet");
         var list = found.Descriptions.Take(8).Select(d => $"  • {d}");
-        string more = found.Descriptions.Count > 8 ? $"\n  ... et {found.Descriptions.Count - 8} autre(s)" : "";
+        string more = found.Descriptions.Count > 8 ? L($"\n  ... et {found.Descriptions.Count - 8} autre(s)") : "";
         var answer = MessageBox.Show(this,
-            $"Des modifications {where} n'ont pas été enregistrées (NodeRunner s'est peut-être fermé brusquement).\n"
-            + $"Une copie de secours du {found.Date:dd/MM/yyyy à HH:mm} en contient {found.Messages.Count} :\n\n"
-            + string.Join("\n", list) + more + "\n\nLes reprendre ? (Non = la copie de secours est supprimée)",
+            L($"Des modifications {where} n'ont pas été enregistrées (NodeRunner s'est peut-être fermé brusquement).\n")
+            + L($"Une copie de secours du {found.Date:dd/MM/yyyy à HH:mm} en contient {found.Messages.Count} :\n\n")
+            + string.Join("\n", list) + more + L("\n\nLes reprendre ? (Non = la copie de secours est supprimée)"),
             Program.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
         {
@@ -1312,15 +1312,15 @@ internal sealed unsafe partial class MainForm : Form
         }
         int applied = _state.Backup.Restore();
         _state.Notify(applied == found.Messages.Count
-            ? $"{applied} modification(s) reprise(s) de la copie de secours (pas encore enregistrées : Ctrl+S)"
-            : $"{applied} modification(s) sur {found.Messages.Count} reprise(s) : voir État > problèmes", warning: applied < found.Messages.Count);
+            ? L($"{applied} modification(s) reprise(s) de la copie de secours (pas encore enregistrées : Ctrl+S)")
+            : L($"{applied} modification(s) sur {found.Messages.Count} reprise(s) : voir État > problèmes"), warning: applied < found.Messages.Count);
     }
 
     private void BrowseForGameFolder()
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Choisis le dossier d'installation de GTA V (celui qui contient GTA5.exe).",
+            Description = L("Choisis le dossier d'installation de GTA V (celui qui contient GTA5.exe)."),
             UseDescriptionForTitle = true,
             InitialDirectory = _state.Game?.FolderPath ?? "",
         };
@@ -1331,8 +1331,8 @@ internal sealed unsafe partial class MainForm : Form
         if (!_state.TrySetManualGameFolder(dialog.SelectedPath))
         {
             MessageBox.Show(this,
-                "Ce dossier ne contient ni GTA5.exe ni GTA5_Enhanced.exe.",
-                "Dossier invalide", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                L("Ce dossier ne contient ni GTA5.exe ni GTA5_Enhanced.exe."),
+                L("Dossier invalide"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

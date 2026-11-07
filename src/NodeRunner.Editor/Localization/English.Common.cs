@@ -22,6 +22,7 @@ public static partial class English
         ("Suppr", "Del"),
         ("Fin", "End"),
         ("Oui", "Yes"),
+        ("et", "and"),
         ("Non", "No"),
         ("Origine", "Default"),
         ("Calques", "Layers"),

@@ -3,6 +3,11 @@ using NodeRunner.Editor.Localization;
 
 namespace NodeRunner.Tests;
 
+// Changes the language of the whole process: runs alone, after the other tests.
+[CollectionDefinition(nameof(LocalizationTests), DisableParallelization = true)]
+public class LocalizationCollection;
+
+[Collection(nameof(LocalizationTests))]
 public class LocalizationTests
 {
     [Fact]

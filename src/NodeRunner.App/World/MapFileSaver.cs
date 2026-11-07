@@ -17,7 +17,7 @@ internal static class MapFileSaver
         var report = new Report([], []);
         if (world.Content is not { } content || world.Maps is not { } library)
         {
-            report.Errors.Add("Aucune carte chargée.");
+            report.Errors.Add(L("Aucune carte chargée."));
             return report;
         }
 
@@ -29,7 +29,7 @@ internal static class MapFileSaver
             try
             {
                 if (map.FilePath is null)
-                    throw new InvalidDataException("fichier d'origine inconnu");
+                    throw new InvalidDataException(L("fichier d'origine inconnu"));
                 var extents = MapExtentsCalculator.Compute(map, library.GetArchetype);
                 MapFileContent written;
                 ResourceHeader header;
@@ -43,8 +43,8 @@ internal static class MapFileSaver
                 else
                 {
                     // Starts from the file the map was read from: the user's saved version, or the game's.
-                    var source = map.SavedContent ?? content.ReadFile(map.FilePath) ?? throw new InvalidDataException("fichier d'origine introuvable");
-                    header = content.GetResourceHeader(map.FilePath) ?? throw new InvalidDataException("en-tête de ressource introuvable");
+                    var source = map.SavedContent ?? content.ReadFile(map.FilePath) ?? throw new InvalidDataException(L("fichier d'origine introuvable"));
+                    header = content.GetResourceHeader(map.FilePath) ?? throw new InvalidDataException(L("en-tête de ressource introuvable"));
                     written = writer.Write(source, map, extents);
                 }
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
@@ -87,7 +87,7 @@ internal static class MapFileSaver
             _template = (library, bytes, header);
             return (bytes, header);
         }
-        throw new InvalidDataException("aucun YMAP du jeu utilisable comme modèle");
+        throw new InvalidDataException(L("aucun YMAP du jeu utilisable comme modèle"));
     }
 
     // Reads the new file back as the game data would be, and checks that every object kept is where it should be.
@@ -97,13 +97,13 @@ internal static class MapFileSaver
         var written = new YmapReader().Read(content);
         var kept = map.KeptEntities.ToList();
         if (written.Entities.Count != kept.Count)
-            throw new InvalidDataException("vérification échouée (nombre d'objets)");
+            throw new InvalidDataException(L("vérification échouée (nombre d'objets)"));
         for (int i = 0; i < written.Entities.Count; i++)
         {
             var a = written.Entities[i];
             var b = kept[i];
             if (a.ArchetypeHash != b.ArchetypeHash || a.Position != b.Position || a.StoredRotation != b.StoredRotation || a.Scale.Z != b.Scale.Z)
-                throw new InvalidDataException($"vérification échouée (objet n° {i + 1})");
+                throw new InvalidDataException(L($"vérification échouée (objet n° {i + 1})"));
         }
     }
 }

@@ -13,7 +13,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
 {
     public const string Title = $"{Icons.Box}  Visionneuse###Visionneuse";
 
-    private static readonly string[] Filters = ["Véhicules", "Objets"];
+    private static string[] Filters => [L("Véhicules"), L("Objets")];
     private const float ListWidth = 250f;
 
     private ModelViewer Viewer => state.Viewer;
@@ -94,18 +94,18 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})"]
             : Filters;
         Widgets.Segmented("viewer_filter", labels, ref _filter,
-            ["Tous les véhicules du jeu, DLC compris (nom de spawn)", "Tous les types d'objets de la carte (archétypes)"]);
+            [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)")]);
         ImGui.SetNextItemWidth(-float.Epsilon);
-        Widgets.SearchField("##viewer_search", _filter == 0 ? "Véhicule (ex. adder)" : "Type (ex. prop_bench)", ref _search);
+        Widgets.SearchField("##viewer_search", _filter == 0 ? L("Véhicule (ex. adder)") : L("Type (ex. prop_bench)"), ref _search);
 
         if (_catalog is null)
         {
-            Widgets.Hint(state.World.Maps is null ? "En attente du chargement de la carte..." : "Préparation de la liste...");
+            Widgets.Hint(state.World.Maps is null ? L("En attente du chargement de la carte...") : L("Préparation de la liste..."));
             return;
         }
 
         UpdateRows();
-        Widgets.Hint(_rows.Count == 0 ? "Aucun résultat" : $"{Widgets.Count(_rows.Count)} modèle(s)");
+        Widgets.Hint(_rows.Count == 0 ? L("Aucun résultat") : L($"{Widgets.Count(_rows.Count)} modèle(s)"));
         if (!ImGui.BeginChild("##viewer_rows", Vector2.Zero, ImGuiChildFlags.None))
         {
             ImGui.EndChild();
@@ -182,13 +182,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
             pos.Y += ImGui.GetTextLineHeight() + 2;
             ImGui.PopFont();
         }
-        string? status = Viewer.IsLoading ? $"{Icons.LoaderCircle}  Chargement..."
-            : Viewer.Error is { } error ? $"{Icons.TriangleAlert}  Impossible d'afficher ce modèle : {error}"
-            : Viewer.Item is null ? "Choisis un véhicule ou un objet dans la liste." : null;
+        string? status = Viewer.IsLoading ? L($"{Icons.LoaderCircle}  Chargement...")
+            : Viewer.Error is { } error ? L($"{Icons.TriangleAlert}  Impossible d'afficher ce modèle : {error}")
+            : Viewer.Item is null ? L("Choisis un véhicule ou un objet dans la liste.") : null;
         if (status is not null)
             drawList.AddText(pos, Widgets.Col(Viewer.Error is not null ? UiTheme.Error : UiTheme.TextMuted), status);
         drawList.AddText(new Vector2(min.X + 12, max.Y - ImGui.GetTextLineHeight() - 8), Widgets.Col(UiTheme.TextFaint),
-            "Clic gauche glissé : tourner · molette : zoom · double-clic : vue par défaut");
+            L("Clic gauche glissé : tourner · molette : zoom · double-clic : vue par défaut"));
 
         DrawInfo();
     }
@@ -215,31 +215,31 @@ internal sealed unsafe class ViewerPanel(AppState state)
             return;
         var s = Viewer.Size;
         ImGui.AlignTextToFramePadding();
-        ImGui.TextColored(UiTheme.TextMuted, $"{s.X:0.0} x {s.Y:0.0} x {s.Z:0.0} m · {Widgets.Count(Viewer.TriangleCount)} triangles · "
-            + $"{Viewer.MeshCount} maillage(s) · {Viewer.TextureCount} texture(s)"
-            + (Viewer.MissingTextureCount > 0 ? $", {Viewer.MissingTextureCount} introuvable(s)" : ""));
+        ImGui.TextColored(UiTheme.TextMuted, L($"{s.X:0.0} x {s.Y:0.0} x {s.Z:0.0} m · {Widgets.Count(Viewer.TriangleCount)} triangles · ")
+            + L($"{Viewer.MeshCount} maillage(s) · {Viewer.TextureCount} texture(s)")
+            + (Viewer.MissingTextureCount > 0 ? L($", {Viewer.MissingTextureCount} introuvable(s)") : ""));
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-            ImGui.SetTooltip($"Fichier : {item.Location.Path}"
-                + (Viewer.MissingTextureCount > 0 ? $"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}" : ""));
+            ImGui.SetTooltip(L($"Fichier : {item.Location.Path}")
+                + (Viewer.MissingTextureCount > 0 ? L($"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}") : ""));
 
         bool canPlace = item.Kind == ViewerKind.Object && state.World.Maps is not null;
-        float buttons = ImGui.CalcTextSize("Copier le nom").X + ImGui.CalcTextSize("Vue par défaut").X + 80f
-                        + (canPlace ? ImGui.CalcTextSize("Placer").X + 50f : 0f);
+        float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + ImGui.CalcTextSize(L("Vue par défaut")).X + 80f
+                        + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
         if (canPlace)
         {
-            if (Widgets.PrimaryButton($"{Icons.MapPinned}  Placer"))
+            if (Widgets.PrimaryButton(L($"{Icons.MapPinned}  Placer")))
                 state.PlaceRequest = item.ArchetypeHash;
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(state.Project is null
-                    ? "Ajouter cet objet à la carte : ouvre ou crée d'abord un projet."
-                    : $"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler.");
+                    ? L("Ajouter cet objet à la carte : ouvre ou crée d'abord un projet.")
+                    : L($"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler."));
             ImGui.SameLine();
         }
-        if (Widgets.Button($"{Icons.Camera}  Vue par défaut", "Revenir à la vue de départ (double-clic sur l'image)"))
+        if (Widgets.Button(L($"{Icons.Camera}  Vue par défaut"), L("Revenir à la vue de départ (double-clic sur l'image)")))
             Viewer.ResetView();
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.Copy}  Copier le nom", item.Kind == ViewerKind.Vehicle ? "Nom de spawn du véhicule (ex. pour un script FiveM)" : "Nom du type d'objet"))
+        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), item.Kind == ViewerKind.Vehicle ? L("Nom de spawn du véhicule (ex. pour un script FiveM)") : L("Nom du type d'objet")))
             ImGui.SetClipboardText(item.Name);
     }
 }

@@ -33,7 +33,7 @@ internal sealed class WorldLoader : IDisposable
 
     public bool IsBusy { get; private set; }
 
-    public string Status { get; private set; } = "Aucune donnée chargée.";
+    public string Status { get; private set; } = L("Aucune donnée chargée.");
 
     public string? Error { get; private set; }
 
@@ -125,7 +125,7 @@ internal sealed class WorldLoader : IDisposable
         if (game is null)
         {
             IsBusy = false;
-            Status = "Aucune donnée chargée.";
+            Status = L("Aucune donnée chargée.");
             return;
         }
 
@@ -133,12 +133,12 @@ internal sealed class WorldLoader : IDisposable
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (openFiles is not null)
         {
-            Status = "Changement de version de la carte...";
+            Status = L("Changement de version de la carte...");
             Task.Run(() => LoadMaps(openFiles, selection, hidden, generation, clock));
         }
         else
         {
-            Status = "Ouverture des archives du jeu...";
+            Status = L("Ouverture des archives du jeu...");
             Task.Run(() => LoadInBackground(game, selection, hidden, generation, clock));
         }
     }
@@ -173,22 +173,22 @@ internal sealed class WorldLoader : IDisposable
                 return; // Another installation was selected meanwhile.
             }
 
-            progress.Report("Lecture des pathnodes...");
+            progress.Report(L("Lecture des pathnodes..."));
             var network = PathNetwork.Load(files, new YndReader(), progress);
             if (!Publish(generation, () => PathNetwork = network))
                 return;
 
-            progress.Report("Lecture des scénarios...");
+            progress.Report(L("Lecture des scénarios..."));
             var scenarios = ScenarioSet.Load(files, new ScenarioRegionReader(), progress);
             if (!Publish(generation, () => Scenarios = scenarios))
                 return;
 
-            progress.Report("Lecture de l'eau...");
+            progress.Report(L("Lecture de l'eau..."));
             var water = WaterMap.Load(files);
             if (!Publish(generation, () => Water = water))
                 return;
 
-            progress.Report("Index des navmesh...");
+            progress.Report(L("Index des navmesh..."));
             var navMeshes = NavMeshCatalog.Create(files, new YnvReader());
             if (!Publish(generation, () => NavMeshes = navMeshes))
                 return;
@@ -239,28 +239,28 @@ internal sealed class WorldLoader : IDisposable
         var progress = new Progress(this, generation);
         try
         {
-            progress.Report("Lecture des packs DLC...");
+            progress.Report(L("Lecture des packs DLC..."));
             // The project's own types, models and textures (a mapping with custom buildings) count as game files.
             var source = LooseFileOverlay.Over(files, _saveFolder);
             var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;
 
-            progress.Report("Lecture des objets de la carte...");
+            progress.Report(L("Lecture des objets de la carte..."));
             var savedErrors = new List<string>();
             var saved = ReadSavedMaps(_saveFolder, OccluderFileNames, savedErrors);
             var maps = MapLibrary.Load(content, new YtypReader(), new YmapReader(), progress, hiddenScriptedMaps, saved);
             maps.SavedMapErrors.AddRange(savedErrors);
 
-            progress.Report("Index des modèles 3D...");
+            progress.Report(L("Index des modèles 3D..."));
             var models = ModelCatalog.Create(content);
 
-            progress.Report("Index des textures...");
+            progress.Report(L("Index des textures..."));
             var textures = TextureCatalog.Create(content, new GtxdReader());
             var names = HashNames.FromFileNames(content, maps.GetArchetypeHashes());
             var userNames = ReadUserNames(names);
 
-            progress.Report("Index des collisions...");
+            progress.Report(L("Index des collisions..."));
             var collisions = CollisionCatalog.Create(content, new YbnReader(files), new MapCacheReader(),
                 maps.GetInteriorArchetypeHashes());
 
@@ -285,7 +285,7 @@ internal sealed class WorldLoader : IDisposable
                 UserNames = userNames;
                 LoadDuration = clock.Elapsed;
                 IsBusy = false;
-                Status = $"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.";
+                Status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
             }
         }
         catch (Exception ex)
@@ -302,8 +302,8 @@ internal sealed class WorldLoader : IDisposable
                 return;
             Error = ex.Message;
             IsBusy = false;
-            Diagnostics.ErrorLog.Add("Chargement de la carte", ex);
-            Status = $"Échec du chargement : {ex.Message}";
+            Diagnostics.ErrorLog.Add(L("Chargement de la carte"), ex);
+            Status = L($"Échec du chargement : {ex.Message}");
         }
     }
 

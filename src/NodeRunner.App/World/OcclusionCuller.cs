@@ -50,7 +50,7 @@ internal sealed class OcclusionCuller
             }
             else
             {
-                Diagnostics.ErrorLog.Add("Aperçu de l'occlusion", finished.Exception!.GetBaseException());
+                Diagnostics.ErrorLog.Add(L("Aperçu de l'occlusion"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN);
             }
         }

@@ -61,12 +61,12 @@ internal sealed class ModelViewer : IDisposable
     {
         var errors = new List<string>();
         if (reader is null)
-            return new Loaded(item, null, [], ["aucune carte chargée"]);
+            return new Loaded(item, null, [], [L("aucune carte chargée")]);
         try
         {
             var model = reader.ReadModels(item.Location.Path).GetValueOrDefault(item.Location.ModelHash);
             if (model is null)
-                return new Loaded(item, null, [], ["modèle introuvable dans le fichier"]);
+                return new Loaded(item, null, [], [L("modèle introuvable dans le fichier")]);
             ResolvedTexture?[][] textures = [];
             if (catalog is not null && textureReader is not null)
             {
@@ -170,7 +170,7 @@ internal sealed class ModelViewer : IDisposable
         _model = renderer.Upload(data, meshTextures);
         if (_model is null)
         {
-            Error = "modèle vide";
+            Error = L("modèle vide");
             return;
         }
 

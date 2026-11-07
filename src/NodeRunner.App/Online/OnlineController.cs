@@ -64,7 +64,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            Session?.End($"Impossible d'écrire le projet de l'hôte ({folder}) : {ex.Message}");
+            Session?.End(L($"Impossible d'écrire le projet de l'hôte ({folder}) : {ex.Message}"));
             return;
         }
         _waitingFor = state.World.Maps;
@@ -72,7 +72,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         string? error = state.OpenProject(folder);
         _openingSnapshot = false;
         if (error is not null)
-            Session?.End($"Projet de l'hôte illisible : {error}");
+            Session?.End(L($"Projet de l'hôte illisible : {error}"));
     }
 
     public void Applied(IEdit edit, string author, SessionAction action)
@@ -84,8 +84,8 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         }
         state.Notify(action switch
         {
-            SessionAction.Undo => $"{author} a annulé : {edit.Description}",
-            SessionAction.Redo => $"{author} a rétabli : {edit.Description}",
+            SessionAction.Undo => L($"{author} a annulé : {edit.Description}"),
+            SessionAction.Redo => L($"{author} a rétabli : {edit.Description}"),
             _ => $"{author} : {edit.Description}",
         });
     }
@@ -103,12 +103,12 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             return;
         if (state.Project is not { } project)
         {
-            LastError = "Ouvrez ou créez d'abord un projet : la session partage le projet ouvert.";
+            LastError = L("Ouvrez ou créez d'abord un projet : la session partage le projet ouvert.");
             return;
         }
         if (state.World is not { Maps: not null, IsBusy: false })
         {
-            LastError = "Attendez la fin du chargement de la carte.";
+            LastError = L("Attendez la fin du chargement de la carte.");
             return;
         }
         if (state.PendingSaveCount > 0 || state.OccludersPending)
@@ -142,11 +142,11 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             ZipFile.CreateFromDirectory(project.Folder, zip, CompressionLevel.Fastest, includeBaseDirectory: false);
             var snapshot = new SessionSnapshot(project.Name, zip.ToArray(), Fingerprint);
             Session = OnlineSession.Host(this, Name, Version, snapshot);
-            state.Notify($"Session ouverte : donnez votre adresse à vos collègues (port {Session.Port}).");
+            state.Notify(L($"Session ouverte : donnez votre adresse à vos collègues (port {Session.Port})."));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            LastError = $"Impossible d'ouvrir la session : {ex.Message}";
+            LastError = L($"Impossible d'ouvrir la session : {ex.Message}");
         }
     }
 
@@ -157,7 +157,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             return;
         if (string.IsNullOrWhiteSpace(address))
         {
-            LastError = "Entrez l'adresse de l'hôte.";
+            LastError = L("Entrez l'adresse de l'hôte.");
             return;
         }
         // The guest's own work is kept: saved in its project, or the join is refused.
@@ -165,7 +165,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         {
             if (state.Project is null)
             {
-                LastError = "Vous avez des modifications non enregistrées : enregistrez-les dans un projet (Ctrl+S) avant de rejoindre.";
+                LastError = L("Vous avez des modifications non enregistrées : enregistrez-les dans un projet (Ctrl+S) avant de rejoindre.");
                 return;
             }
             state.SaveMaps();
@@ -183,7 +183,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     public void Leave()
     {
-        Session?.End(IsHost ? "Session terminée." : "Vous avez quitté la session.");
+        Session?.End(IsHost ? L("Session terminée.") : L("Vous avez quitté la session."));
         _preparing = false;
     }
 
@@ -203,7 +203,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     {
         if (_openingSnapshot || !IsActive)
             return null;
-        return "Pas pendant une session Online : quittez-la d'abord (bouton Online).";
+        return L("Pas pendant une session Online : quittez-la d'abord (bouton Online).");
     }
 
     // Every frame.

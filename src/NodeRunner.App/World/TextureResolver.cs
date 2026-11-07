@@ -72,7 +72,7 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
                 // Any error: the models using this dictionary are still shown, without its textures.
                 error = $"{Path.GetFileName(p)} : {ex.Message}";
                 if (ex is not (InvalidDataException or IOException))
-                    Diagnostics.ErrorLog.Add($"Textures {Path.GetFileName(p)}", ex);
+                    Diagnostics.ErrorLog.Add(L($"Textures {Path.GetFileName(p)}"), ex);
                 return new Dictionary<uint, TextureData>(); // Remembered so it is not read again.
             }
         });

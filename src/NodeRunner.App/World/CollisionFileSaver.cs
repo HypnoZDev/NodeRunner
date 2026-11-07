@@ -25,7 +25,7 @@ internal static class CollisionFileSaver
             return;
         if (world.Collisions is not { } catalog)
         {
-            report.Errors.Add("collisions non chargées : fichiers .ybn non écrits");
+            report.Errors.Add(L("collisions non chargées : fichiers .ybn non écrits"));
             return;
         }
 
@@ -37,7 +37,7 @@ internal static class CollisionFileSaver
             {
                 if (catalog.Edit(path, removed, materials) is not { } bytes)
                 {
-                    report.Errors.Add($"{name} : fichier du jeu introuvable");
+                    report.Errors.Add(L($"{name} : fichier du jeu introuvable"));
                     continue;
                 }
                 // Read back: a file the game could not read must never replace a good one.

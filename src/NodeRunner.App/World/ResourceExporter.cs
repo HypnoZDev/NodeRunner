@@ -35,7 +35,7 @@ internal static class ResourceExporter
         string occluderFileName, IReadOnlyList<string> interiorFiles)
     {
         if (Inspect(resourceFolder) == TargetState.Foreign)
-            return new MapFileSaver.Report([], ["ce dossier existe déjà et n'a pas été créé par NodeRunner"]);
+            return new MapFileSaver.Report([], [L("ce dossier existe déjà et n'a pas été créé par NodeRunner")]);
 
         string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
         try
@@ -47,7 +47,7 @@ internal static class ResourceExporter
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new MapFileSaver.Report([], [$"impossible de vider {stream} : {ex.Message}"]);
+            return new MapFileSaver.Report([], [L($"impossible de vider {stream} : {ex.Message}")]);
         }
 
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
