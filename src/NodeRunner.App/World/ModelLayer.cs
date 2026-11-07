@@ -18,9 +18,10 @@ internal sealed class ModelLayer : IDisposable
 
     private const float RebuildDistance = 15f;
     private const int MaxPendingReads = 32;
-    private const int UploadTriangleBudgetPerFrame = 300_000;
-    private const long UploadTextureBytesBudgetPerFrame = 48L << 20;
+    private const int MaxUploadsPerFrame = 64;
     private const double UnusedModelLifetime = 15.0;
+    // Over the video memory budget: models out of the list to draw are released sooner.
+    private const double UnusedModelLifetimeLowMemory = 2.0;
     private const int RecentFileCacheSize = 24;
 
     private readonly Dictionary<ModelLocation, GpuModel?> _models = new();
@@ -38,6 +39,8 @@ internal sealed class ModelLayer : IDisposable
     private volatile int _generation;
     private volatile IModelReader? _reader;
     private volatile TextureResolver? _resolver;
+    private volatile ModelRenderer? _renderer;
+    private long _gpuBytes;
     private MapLibrary? _library;
     private ModelCatalog? _catalog;
     private List<VisibleEntity> _visible = new();
@@ -77,9 +80,18 @@ internal sealed class ModelLayer : IDisposable
     private readonly List<DrawnEntity> _drawn = new();
     private readonly HashSet<MapEntity> _selectedSet = new();
 
-    // A model read by the background thread (null if the file has none), with the texture of each mesh.
-    private sealed record LoadedModel(
-        ModelLocation Location, int Generation, ModelData? Model, ResolvedTexture?[][] Textures, List<string> Errors);
+    // A model read and put on the GPU by a background thread (null if the file has none), with the texture of each
+    // mesh; Created: the textures it put on the GPU (those not there yet).
+    private sealed record LoadedModel(ModelLocation Location, int Generation, PreparedModel? Model, TextureKey?[][] Textures,
+        Dictionary<TextureKey, GpuTexture?> Created, List<string> Errors)
+    {
+        public void Dispose()
+        {
+            Model?.Dispose();
+            foreach (var texture in Created.Values)
+                texture?.Dispose();
+        }
+    }
 
     // A texture on the GPU (null if its format is not supported) and the number of loaded models using it.
     private sealed class SharedTexture(GpuTexture? texture)
@@ -94,7 +106,12 @@ internal sealed class ModelLayer : IDisposable
     public int LoadedModelCount => _models.Count(m => m.Value is not null);
     public int LoadedTextureCount => _textures.Count;
     public int PendingModelCount => _pending.Count;
-    public long GpuBytes => _models.Values.Sum(m => m?.ByteSize ?? 0) + _textures.Values.Sum(t => t.Texture?.ByteSize ?? 0);
+    public long GpuBytes => _gpuBytes;
+
+    // Video memory the models may use (bytes, asked about once a second), null = no limit.
+    public Func<long>? MemoryBudget { get; set; }
+
+    public long MemoryLimit { get; private set; } = long.MaxValue;
 
     public List<string> Errors { get; } = new();
     private readonly HashSet<string> _errorSet = new();
@@ -111,6 +128,7 @@ internal sealed class ModelLayer : IDisposable
                 ? new TextureResolver(textures, textureReader)
                 : null;
         }
+        _renderer = renderer;
         if (_library is null || _catalog is null)
             return;
 
@@ -363,22 +381,40 @@ internal sealed class ModelLayer : IDisposable
             _requests.Writer.TryWrite((location, _generation));
     }
 
+    // Only puts in place what the reading threads already sent to the GPU: cheap, the frame doesn't stutter.
     private void UploadArrivedModels(ModelRenderer renderer)
     {
-        int triangleBudget = UploadTriangleBudgetPerFrame;
-        long textureBudget = UploadTextureBytesBudgetPerFrame;
-        while (triangleBudget > 0 && textureBudget > 0 && _results.TryDequeue(out var result))
+        for (int n = 0; n < MaxUploadsPerFrame && _results.TryDequeue(out var result); n++)
         {
             if (result.Generation != _generation)
+            {
+                result.Dispose();
                 continue;
+            }
             _pending.Remove(result.Location);
-            if (result.Textures.Any(mesh => mesh.Any(r => r is { Data: null } && !_textures.ContainsKey(r.Key))))
+            if (result.Textures.Any(mesh => mesh.Any(k => k is { } key && !result.Created.ContainsKey(key) && !_textures.ContainsKey(key))))
+            {
+                result.Dispose();
                 continue; // A texture found on the GPU was released meanwhile: the model is asked for again.
+            }
             foreach (var error in result.Errors)
             {
                 // The same model may be read again after being released: its errors are listed once.
                 if (_errorSet.Add(error))
                     Errors.Add(error);
+            }
+
+            // Another thread may have sent the same texture meanwhile: one copy is kept.
+            foreach (var (key, created) in result.Created)
+            {
+                if (_textures.ContainsKey(key))
+                {
+                    created?.Dispose();
+                    continue;
+                }
+                _textures[key] = new SharedTexture(created);
+                _texturesOnGpu[key] = 0;
+                _gpuBytes += created?.ByteSize ?? 0;
             }
 
             // A null entry means "no model": remembered so it is not requested again.
@@ -392,28 +428,23 @@ internal sealed class ModelLayer : IDisposable
                     textures[i] = new GpuTexture?[result.Textures[i].Length];
                     for (int t = 0; t < textures[i].Length; t++)
                     {
-                        if (result.Textures[i][t] is not { } resolved)
+                        if (result.Textures[i][t] is not { } key)
                             continue;
-                        if (!_textures.TryGetValue(resolved.Key, out var shared))
-                        {
-                            _textures[resolved.Key] = shared = new SharedTexture(renderer.UploadTexture(resolved.Data!));
-                            _texturesOnGpu[resolved.Key] = 0;
-                            textureBudget -= resolved.Data!.Data.Length;
-                        }
+                        var shared = _textures[key];
                         textures[i][t] = shared.Texture;
-                        if (!keys.Contains(resolved.Key))
+                        if (!keys.Contains(key))
                         {
                             shared.Users++;
-                            keys.Add(resolved.Key);
+                            keys.Add(key);
                         }
                     }
                 }
                 _modelTextures[result.Location] = keys.ToArray();
-                model = renderer.Upload(result.Model, textures);
+                model = renderer.Finish(result.Model, textures);
+                _gpuBytes += model.ByteSize;
             }
             _models[result.Location] = model;
             _lastUsed[result.Location] = _clock.Elapsed.TotalSeconds;
-            triangleBudget -= result.Model?.TriangleCount ?? 0;
         }
     }
 
@@ -430,14 +461,31 @@ internal sealed class ModelLayer : IDisposable
             .ToList();
         foreach (var location in unused)
             ReleaseModel(location);
+        if (MemoryBudget is not null)
+            MemoryLimit = MemoryBudget();
+        if (enabled && MemoryLimit is var budget && _gpuBytes > budget)
+        {
+            // Oldest first, never those of the list to draw (they would be read again at once).
+            foreach (var location in _lastUsed.Where(kv => now - kv.Value > UnusedModelLifetimeLowMemory)
+                         .OrderBy(kv => kv.Value).Select(kv => kv.Key).ToList())
+            {
+                if (_gpuBytes <= budget)
+                    break;
+                ReleaseModel(location);
+                unused.Add(location);
+            }
+        }
         if (unused.Count > 0)
             _drawn.Clear(); // May refer to released models: rebuilt at the next frame drawn.
     }
 
     private void ReleaseModel(ModelLocation location)
     {
-        if (_models.Remove(location, out var model))
-            model?.Dispose();
+        if (_models.Remove(location, out var model) && model is not null)
+        {
+            _gpuBytes -= model.ByteSize;
+            model.Dispose();
+        }
         _lastUsed.Remove(location);
         if (!_modelTextures.Remove(location, out var keys))
             return;
@@ -446,6 +494,7 @@ internal sealed class ModelLayer : IDisposable
             if (_textures.TryGetValue(key, out var shared) && --shared.Users <= 0)
             {
                 _texturesOnGpu.TryRemove(key, out _);
+                _gpuBytes -= shared.Texture?.ByteSize ?? 0;
                 shared.Texture?.Dispose();
                 _textures.Remove(key);
             }
@@ -458,28 +507,48 @@ internal sealed class ModelLayer : IDisposable
         {
             await foreach (var (location, generation) in _requests.Reader.ReadAllAsync(_stop.Token))
             {
-                var (reader, resolver) = (_reader, _resolver);
-                if (generation != _generation || reader is null)
+                var (reader, resolver, renderer) = (_reader, _resolver, _renderer);
+                if (generation != _generation || reader is null || renderer is null)
                     continue;
                 var errors = new List<string>();
+                PreparedModel? prepared = null;
+                var created = new Dictionary<TextureKey, GpuTexture?>();
                 try
                 {
                     // .ydd files hold many models: the last few files read are kept.
                     var models = _recentFiles.Get(location.Path, reader.ReadModels);
                     var model = models.GetValueOrDefault(location.ModelHash);
-                    var textures = model is not null && resolver is not null
-                        ? resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey)
-                        : [];
-                    _results.Enqueue(new LoadedModel(location, generation, model, textures, errors));
+                    TextureKey?[][] keys = [];
+                    if (model is not null && (prepared = renderer.Prepare(model)) is not null && resolver is not null)
+                    {
+                        var resolved = resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey);
+                        keys = new TextureKey?[resolved.Length][];
+                        for (int i = 0; i < resolved.Length; i++)
+                        {
+                            keys[i] = new TextureKey?[resolved[i].Length];
+                            for (int t = 0; t < resolved[i].Length; t++)
+                            {
+                                if (resolved[i][t] is not { } texture)
+                                    continue;
+                                keys[i][t] = texture.Key;
+                                if (texture.Data is not null && !created.ContainsKey(texture.Key))
+                                    created[texture.Key] = renderer.UploadTexture(texture.Data);
+                            }
+                        }
+                    }
+                    _results.Enqueue(new LoadedModel(location, generation, prepared, keys, created, errors));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    prepared?.Dispose();
+                    foreach (var texture in created.Values)
+                        texture?.Dispose();
                     // Any error, not only the expected ones: an exception escaping this loop would stop it for good,
                     // and no detailed model would load anymore (the map would stay on its LOD models).
                     errors.Add($"{Path.GetFileName(location.Path)} : {ex.Message}");
                     if (ex is not (InvalidDataException or IOException))
                         Diagnostics.ErrorLog.Add($"Modèle {Path.GetFileName(location.Path)}", ex);
-                    _results.Enqueue(new LoadedModel(location, generation, null, [], errors));
+                    _results.Enqueue(new LoadedModel(location, generation, null, [], [], errors));
                 }
             }
         }
@@ -501,6 +570,9 @@ internal sealed class ModelLayer : IDisposable
         _models.Clear();
         _textures.Clear();
         _texturesOnGpu.Clear();
+        _gpuBytes = 0;
+        while (_results.TryDequeue(out var result))
+            result.Dispose();
         _modelTextures.Clear();
         _lastUsed.Clear();
         _pending.Clear();

@@ -16,18 +16,22 @@ namespace NodeRunner.Render;
 public sealed unsafe class ModelRenderer : IDisposable
 {
     private const string ShaderSource = @"
-cbuffer Constants : register(b0)
+// Same for every object of a pass.
+cbuffer Frame : register(b0)
 {
     float4x4 ViewProjection;
-    float4x4 World;
-    float4 Tint;
     float4 LightDirection;
-    uint4 PickId; // x: number of the object, for picking.
     float4 SunColor;
     float4 SkyAmbient;
     float4 GroundAmbient;
     float4 FogColor;   // a: 1 = fog on.
     float4 CameraFog;  // xyz: camera position, w: distance at which the fog hides everything.
+};
+cbuffer Object : register(b2)
+{
+    float4x4 World;
+    float4 Tint;
+    uint4 PickId;      // x: number of the object, for picking.
     float4 Emission;   // x: how much the mesh gives off its own light (0 = only lit by the sun).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
@@ -194,19 +198,24 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 }";
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct Constants
+    private struct FrameConstants
     {
         public Matrix4x4 ViewProjection;
-        public Matrix4x4 World;
-        public Vector4 Tint;
         public Vector4 LightDirection;
-        public uint PickId;
-        private readonly uint _padding1, _padding2, _padding3;
         public Vector4 SunColor;
         public Vector4 SkyAmbient;
         public Vector4 GroundAmbient;
         public Vector4 FogColor;
         public Vector4 CameraFog;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ObjectConstants
+    {
+        public Matrix4x4 World;
+        public Vector4 Tint;
+        public uint PickId;
+        private readonly uint _padding1, _padding2, _padding3;
         public Vector4 Emission;
         public Vector4 Terrain;
     }
@@ -258,7 +267,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11PixelShader _pickCutoutPixelShader;
     private readonly ID3D11PixelShader _pickTranslucentPixelShader;
     private readonly ID3D11InputLayout _inputLayout;
-    private readonly ID3D11Buffer _constantBuffer;
+    private readonly ID3D11Buffer _frameBuffer;
+    private readonly ID3D11Buffer _objectBuffer;
     private readonly ID3D11Buffer _shadowConstantBuffer;
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11RasterizerState _shadowRasterizerState;
@@ -302,8 +312,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         ];
         _inputLayout = device.CreateInputLayout(layout, vsBytecode.Span);
 
-        _constantBuffer = device.CreateBuffer(new BufferDescription(
-            (uint)sizeof(Constants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        _frameBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(FrameConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        _objectBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(ObjectConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
         _shadowConstantBuffer = device.CreateBuffer(new BufferDescription(
             (uint)sizeof(ShadowConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
 
@@ -417,42 +429,76 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     public GpuTexture? UploadTexture(TextureData texture) => GpuTexture.Create(_device, texture);
 
     // Copies a model to the GPU (all its meshes in one vertex and one index buffer).
-    public GpuModel? Upload(ModelData model, IReadOnlyList<GpuTexture?[]> meshTextures)
-    {
-        var vertices = new List<ModelVertex>();
-        var indices = new List<ushort>();
-        var parts = new List<GpuModel.Part>();
+    public GpuModel? Upload(ModelData model, IReadOnlyList<GpuTexture?[]> meshTextures) =>
+        Prepare(model) is { } prepared ? Finish(prepared, meshTextures) : null;
 
+    // The GPU buffers of a model, without its textures. Safe on any thread (the device is free-threaded): the heavy
+    // part of an upload, kept off the drawing loop.
+    public PreparedModel? Prepare(ModelData model)
+    {
+        int vertexCount = 0, indexCount = 0;
+        foreach (var mesh in model.Meshes)
+        {
+            if (mesh.Indices.Length == 0 || mesh.Positions.Length == 0)
+                continue;
+            vertexCount += mesh.Positions.Length;
+            indexCount += mesh.Indices.Length;
+        }
+        if (indexCount == 0)
+            return null;
+
+        var vertices = new ModelVertex[vertexCount];
+        var indices = new ushort[indexCount];
+        var ranges = new List<PreparedModel.Range>();
+        int v = 0, x = 0;
         for (int m = 0; m < model.Meshes.Count; m++)
         {
             var mesh = model.Meshes[m];
             if (mesh.Indices.Length == 0 || mesh.Positions.Length == 0)
                 continue;
-            var textures = m < meshTextures.Count ? meshTextures[m] : [];
-            var texture = textures.Length > 0 ? textures[0] : null;
             var terrain = mesh.Terrain;
-            GpuTexture?[]? layers = terrain is null ? null : textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray();
-            parts.Add(new GpuModel.Part(indices.Count, mesh.Indices.Length, vertices.Count, texture, mesh.BlendMode, mesh.Emission,
-                layers, terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored));
+            ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
+                terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
-                vertices.Add(new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
-                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? Vector2.Zero));
+                vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
+                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? Vector2.Zero);
             }
-            indices.AddRange(mesh.Indices);
+            mesh.Indices.CopyTo(indices, x);
+            x += mesh.Indices.Length;
         }
 
-        if (parts.Count == 0)
-            return null;
+        var vertexBuffer = _device.CreateBuffer(vertices,
+            new BufferDescription((uint)(vertices.Length * sizeof(ModelVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
+        ID3D11Buffer indexBuffer;
+        try
+        {
+            indexBuffer = _device.CreateBuffer(indices,
+                new BufferDescription((uint)(indices.Length * sizeof(ushort)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
+        }
+        catch
+        {
+            vertexBuffer.Dispose();
+            throw;
+        }
+        return new PreparedModel(vertexBuffer, indexBuffer, ranges.ToArray(), indexCount / 3,
+            (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L);
+    }
 
-        var vertexBuffer = _device.CreateBuffer(
-            CollectionsMarshal.AsSpan(vertices),
-            new BufferDescription((uint)(vertices.Count * sizeof(ModelVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
-        var indexBuffer = _device.CreateBuffer(
-            CollectionsMarshal.AsSpan(indices),
-            new BufferDescription((uint)(indices.Count * sizeof(ushort)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
-
-        return new GpuModel(vertexBuffer, indexBuffer, parts.ToArray(), indices.Count / 3, vertices.Count * sizeof(ModelVertex) + indices.Count * 2);
+    // Puts the textures on a prepared model (on the drawing thread); the model then owns its buffers.
+    public GpuModel Finish(PreparedModel prepared, IReadOnlyList<GpuTexture?[]> meshTextures)
+    {
+        var parts = new GpuModel.Part[prepared.Ranges.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            var r = prepared.Ranges[i];
+            var textures = r.Mesh < meshTextures.Count ? meshTextures[r.Mesh] : [];
+            var texture = textures.Length > 0 ? textures[0] : null;
+            GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
+            parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
+                r.TerrainMode, r.VertexColored);
+        }
+        return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize);
     }
 
     // Sets the shaders and states shared by every model.
@@ -463,14 +509,23 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_vertexShader);
-        _context.VSSetConstantBuffer(0, _constantBuffer);
-        _context.PSSetConstantBuffer(0, _constantBuffer);
+        BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
         _context.OMSetBlendState(translucent ? _translucentBlendState : _blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.OMSetDepthStencilState(translucent ? _translucentDepthStencilState : _depthStencilState, 0);
         _context.RSSetState(_rasterizerState);
         SetShadows(Shadows);
+    }
+
+    // Frame constants written again at the first model of the pass (the lighting or camera may have changed).
+    private void BindConstants()
+    {
+        _frameWritten = false;
+        _context.VSSetConstantBuffer(0, _frameBuffer);
+        _context.PSSetConstantBuffer(0, _frameBuffer);
+        _context.VSSetConstantBuffer(2, _objectBuffer);
+        _context.PSSetConstantBuffer(2, _objectBuffer);
     }
 
     private void SetShadows(ShadowMaps? shadows)
@@ -508,8 +563,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_vertexShader);
-        _context.VSSetConstantBuffer(0, _constantBuffer);
-        _context.PSSetConstantBuffer(0, _constantBuffer);
+        BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
@@ -610,29 +664,38 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 
     private void SetModel(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, Vector3 tint, uint pickId)
     {
-        var constants = new Constants
+        if (!_frameWritten || viewProjection != _frameViewProjection)
         {
-            ViewProjection = viewProjection,
-            World = world,
-            Tint = new Vector4(tint, 1f),
-            LightDirection = new Vector4(Lighting.SunDirection, 0f),
-            PickId = pickId,
-            SunColor = new Vector4(Lighting.SunColor, 0f),
-            SkyAmbient = new Vector4(Lighting.SkyAmbient, 0f),
-            GroundAmbient = new Vector4(Lighting.GroundAmbient, 0f),
-            FogColor = new Vector4(Lighting.Horizon, Lighting.FogDistance > 0f ? 1f : 0f),
-            CameraFog = new Vector4(CameraPosition, MathF.Max(Lighting.FogDistance, 1f)),
-        };
-        _constants = constants;
+            var frame = new FrameConstants
+            {
+                ViewProjection = viewProjection,
+                LightDirection = new Vector4(Lighting.SunDirection, 0f),
+                SunColor = new Vector4(Lighting.SunColor, 0f),
+                SkyAmbient = new Vector4(Lighting.SkyAmbient, 0f),
+                GroundAmbient = new Vector4(Lighting.GroundAmbient, 0f),
+                FogColor = new Vector4(Lighting.Horizon, Lighting.FogDistance > 0f ? 1f : 0f),
+                CameraFog = new Vector4(CameraPosition, MathF.Max(Lighting.FogDistance, 1f)),
+            };
+            var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
+            Unsafe.Write((void*)frameMap.DataPointer, frame);
+            _context.Unmap(_frameBuffer, 0);
+            _frameViewProjection = viewProjection;
+            _frameWritten = true;
+        }
+
+        _constants = new ObjectConstants { World = world, Tint = new Vector4(tint, 1f), PickId = pickId };
         WriteConstants();
 
         _context.IASetVertexBuffer(0, model.VertexBuffer, (uint)sizeof(ModelVertex));
         _context.IASetIndexBuffer(model.IndexBuffer, Format.R16_UInt, 0);
     }
 
+    private bool _frameWritten;
+    private Matrix4x4 _frameViewProjection;
+
     // Constants of the model being drawn: only the emission and the terrain settings change from one mesh to the
     // next.
-    private Constants _constants;
+    private ObjectConstants _constants;
 
     private void SetMesh(float emission, Vector4 terrain)
     {
@@ -645,9 +708,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 
     private void WriteConstants()
     {
-        var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
+        var map = _context.Map(_objectBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, _constants);
-        _context.Unmap(_constantBuffer, 0);
+        _context.Unmap(_objectBuffer, 0);
     }
 
     public void Dispose()
@@ -662,7 +725,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _depthStencilState.Dispose();
         _rasterizerState.Dispose();
         _doubleSidedRasterizerState.Dispose();
-        _constantBuffer.Dispose();
+        _frameBuffer.Dispose();
+        _objectBuffer.Dispose();
         _shadowConstantBuffer.Dispose();
         _shadowRasterizerState.Dispose();
         _shadowDepthStencilState.Dispose();
@@ -719,5 +783,43 @@ public sealed class GpuModel : IDisposable
     {
         VertexBuffer.Dispose();
         IndexBuffer.Dispose();
+    }
+}
+
+// A model's GPU buffers made off the drawing thread (ModelRenderer.Prepare), waiting for its textures. Disposed if
+// it is dropped before ModelRenderer.Finish.
+public sealed class PreparedModel : IDisposable
+{
+    internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
+        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored);
+
+    private ID3D11Buffer? _vertexBuffer;
+    private ID3D11Buffer? _indexBuffer;
+
+    internal PreparedModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Range[] ranges, int triangleCount, long byteSize)
+    {
+        _vertexBuffer = vertexBuffer;
+        _indexBuffer = indexBuffer;
+        Ranges = ranges;
+        TriangleCount = triangleCount;
+        ByteSize = byteSize;
+    }
+
+    internal Range[] Ranges { get; }
+
+    public int TriangleCount { get; }
+
+    public long ByteSize { get; }
+
+    internal ID3D11Buffer TakeVertexBuffer() => Interlocked.Exchange(ref _vertexBuffer, null)
+        ?? throw new InvalidOperationException("Model already finished.");
+
+    internal ID3D11Buffer TakeIndexBuffer() => Interlocked.Exchange(ref _indexBuffer, null)
+        ?? throw new InvalidOperationException("Model already finished.");
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _vertexBuffer, null)?.Dispose();
+        Interlocked.Exchange(ref _indexBuffer, null)?.Dispose();
     }
 }

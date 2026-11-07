@@ -210,6 +210,29 @@ public sealed class GraphicsDevice : IDisposable
     // The window cannot be seen (covered, locked screen): drawing can slow down.
     public bool IsOccluded { get; private set; }
 
+    // Video memory this program may use (bytes): what Windows grants it right now (less when other programs need the
+    // card), else the card's own memory, or half of the shared memory for a graphics chip without its own; 0 if unknown.
+    public long VideoMemoryBudget()
+    {
+        try
+        {
+            using var dxgiDevice = Device.QueryInterface<IDXGIDevice>();
+            using var adapter = dxgiDevice.GetAdapter();
+            using (var adapter3 = adapter.QueryInterfaceOrNull<IDXGIAdapter3>())
+            {
+                if (adapter3 is not null && adapter3.QueryVideoMemoryInfo(0, MemorySegmentGroup.Local).Budget is > 0 and var budget)
+                    return (long)budget;
+            }
+            var description = adapter.Description;
+            long dedicated = (long)(nuint)description.DedicatedVideoMemory;
+            return dedicated >= 512L << 20 ? dedicated : Math.Max(dedicated, (long)(nuint)description.SharedSystemMemory / 2);
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            return 0;
+        }
+    }
+
     // True once Windows has taken the GPU away (driver crash, update or restart, card removed): nothing can be drawn
     // with this device anymore, and every resource would have to be created again.
     public bool IsLost => Device.DeviceRemovedReason.Failure;

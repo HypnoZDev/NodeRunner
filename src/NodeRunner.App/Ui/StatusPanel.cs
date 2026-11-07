@@ -150,7 +150,8 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
             Widgets.PropertyText("Objets dessinés", $"{Widgets.Count(modelLayer.DrawnObjectCount)} / {Widgets.Count(modelLayer.NearbyObjectCount)}{loading}");
             Widgets.PropertyText("Triangles", Widgets.Count(modelLayer.DrawnTriangleCount));
             Widgets.PropertyText("En mémoire", $"{Widgets.Count(modelLayer.LoadedModelCount)} modèles · {Widgets.Count(modelLayer.LoadedTextureCount)} textures");
-            Widgets.PropertyText("Mémoire vidéo", $"{modelLayer.GpuBytes / (1024 * 1024)} Mo");
+            string limit = modelLayer.MemoryLimit is > 0 and < long.MaxValue and var max ? $" / {max / (1024 * 1024)} Mo" : "";
+            Widgets.PropertyText("Mémoire vidéo", $"{modelLayer.GpuBytes / (1024 * 1024)} Mo{limit}");
         }
         if (state.World.NavMeshes is not null)
             Widgets.PropertyText("Triangles du navmesh", Widgets.Count(navMeshLayer.TriangleCount));
