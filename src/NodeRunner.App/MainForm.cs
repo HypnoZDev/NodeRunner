@@ -965,6 +965,9 @@ internal sealed unsafe partial class MainForm : Form
 
     private void HandleUiRequests()
     {
+        _state.Backup.Update(_clock.Elapsed.TotalSeconds);
+        if (_state.Backup.Found is { } found)
+            OfferRecovery(found);
         WindowChrome.IsMaximized = WindowState == FormWindowState.Maximized;
         if (WindowChrome.MinimizeRequested)
         {
@@ -1247,7 +1250,10 @@ internal sealed unsafe partial class MainForm : Form
         }
         AskToSaveOnClose(e);
         if (!e.Cancel)
+        {
             _state.Online.Leave();
+            _state.Backup.Discard(); // Saved, or given up on purpose.
+        }
     }
 
     private void AskToSaveOnClose(FormClosingEventArgs e)
@@ -1266,6 +1272,27 @@ internal sealed unsafe partial class MainForm : Form
         }
         if (answer == DialogResult.Cancel || (answer == DialogResult.Yes && !SaveMaps()))
             e.Cancel = true;
+    }
+
+    private void OfferRecovery(AutoBackup.Recovery found)
+    {
+        string where = _state.Project is { } project ? $"du projet « {project.Name} »" : "faites sans projet";
+        var list = found.Descriptions.Take(8).Select(d => $"  • {d}");
+        string more = found.Descriptions.Count > 8 ? $"\n  ... et {found.Descriptions.Count - 8} autre(s)" : "";
+        var answer = MessageBox.Show(this,
+            $"Des modifications {where} n'ont pas été enregistrées (NodeRunner s'est peut-être fermé brusquement).\n"
+            + $"Une copie de secours du {found.Date:dd/MM/yyyy à HH:mm} en contient {found.Messages.Count} :\n\n"
+            + string.Join("\n", list) + more + "\n\nLes reprendre ? (Non = la copie de secours est supprimée)",
+            Program.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (answer != DialogResult.Yes)
+        {
+            _state.Backup.Decline();
+            return;
+        }
+        int applied = _state.Backup.Restore();
+        _state.Notify(applied == found.Messages.Count
+            ? $"{applied} modification(s) reprise(s) de la copie de secours (pas encore enregistrées : Ctrl+S)"
+            : $"{applied} modification(s) sur {found.Messages.Count} reprise(s) : voir État > problèmes", warning: applied < found.Messages.Count);
     }
 
     private void BrowseForGameFolder()

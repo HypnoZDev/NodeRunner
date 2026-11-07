@@ -177,6 +177,22 @@ internal sealed class SettingsWindow(AppState state)
                 Widgets.Property("Crans d'échelle", "Pas des cubes d'échelle quand on maintient Ctrl.");
                 settings.SnapScale = StepCombo("##snap_scale", settings.SnapScale, ScaleSteps, "{0}");
 
+                Widgets.Property("Copie de secours", "Toutes les X minutes, les modifications pas encore enregistrées sont copiées à part (dossier data\\secours, jamais dans le projet). Si NodeRunner se ferme brusquement, il propose de les reprendre au prochain chargement du projet.");
+                ImGui.SetNextItemWidth(-1f);
+                string backupText = settings.BackupMinutes > 0f ? $"Toutes les {settings.BackupMinutes:0} min" : "Désactivée";
+                if (ImGui.BeginCombo("##backup_minutes", backupText))
+                {
+                    foreach (float minutes in BackupSteps)
+                    {
+                        if (ImGui.Selectable(minutes > 0f ? $"Toutes les {minutes:0} min" : "Désactivée", MathF.Abs(settings.BackupMinutes - minutes) < 0.01f))
+                        {
+                            settings.BackupMinutes = minutes;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+
                 Widgets.Property("Format de copie", "Format des positions copiées (Copier vector3 / vector4, listes d'objets, scripts d'entity sets) : Lua pour les scripts FiveM, JSON, ou C#. Aussi dans Propriétés > menu « ... ».");
                 ImGui.SetNextItemWidth(-1f);
                 if (ImGui.BeginCombo("##copy_format", NodeRunner.Editor.PositionText.FormatName(state.CopyFormat)))
@@ -251,6 +267,8 @@ internal sealed class SettingsWindow(AppState state)
             }
         }
     }
+
+    private static readonly float[] BackupSteps = [0f, 1f, 2f, 5f, 10f, 15f];
 
     private static readonly float[] MoveSteps = [0.05f, 0.1f, 0.25f, 0.5f, 1f, 2f, 5f, 10f];
     private static readonly float[] RotateSteps = [1f, 5f, 10f, 15f, 22.5f, 30f, 45f, 90f];

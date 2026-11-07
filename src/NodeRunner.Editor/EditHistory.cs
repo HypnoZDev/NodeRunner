@@ -39,6 +39,11 @@ public sealed class EditHistory
 
     private IEdit? _savedTop;
 
+    // Changes done (oldest first), and the last one saved (null: none, or the history started from the saved files).
+    public IReadOnlyList<IEdit> Done => _done;
+
+    public IEdit? SavedTop => _savedTop;
+
     public void MarkSaved() => _savedTop = NextUndo;
 
     // Raised after a change is recorded, undone or redone (an online session sends it to the others).

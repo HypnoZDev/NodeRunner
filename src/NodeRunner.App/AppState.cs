@@ -1428,7 +1428,11 @@ internal sealed class AppState
         Settings = settings;
         World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName) };
         Online = new NodeRunner.App.Online.OnlineController(this);
+        Backup = new AutoBackup(this);
     }
+
+    // Rescue copy of the unsaved changes (data/secours).
+    public AutoBackup Backup { get; }
 
     // NodeRunner Online: session with other computers on the same map.
     public NodeRunner.App.Online.OnlineController Online { get; }

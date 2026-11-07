@@ -33,6 +33,9 @@ public sealed class AppSettings
     public float SnapRotate { get; set; } = 15f;
     public float SnapScale { get; set; } = 0.1f;
 
+    // Rescue copy of the unsaved changes every N minutes (data/secours); 0 = never.
+    public float BackupMinutes { get; set; } = 2f;
+
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 
