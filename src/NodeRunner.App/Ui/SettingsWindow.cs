@@ -166,6 +166,21 @@ internal sealed class SettingsWindow(AppState state)
         }
 
         ImGui.Dummy(new Vector2(0, 4));
+        if (Widgets.Section("Édition", "settings_edition"))
+        {
+            if (Widgets.BeginProperties("##edition_grid", 0.42f))
+            {
+                Widgets.Property("Crans de déplacement", "Pas des poignées 3D quand on maintient Ctrl : déplacement des objets, des nœuds, des salles et portails, taille des boîtes d'occlusion.");
+                settings.SnapMove = StepCombo("##snap_move", settings.SnapMove, MoveSteps, "{0} m");
+                Widgets.Property("Crans de rotation", "Pas des anneaux de rotation quand on maintient Ctrl.");
+                settings.SnapRotate = StepCombo("##snap_rotate", settings.SnapRotate, RotateSteps, "{0}°");
+                Widgets.Property("Crans d'échelle", "Pas des cubes d'échelle quand on maintient Ctrl.");
+                settings.SnapScale = StepCombo("##snap_scale", settings.SnapScale, ScaleSteps, "{0}");
+                Widgets.EndProperties();
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0, 4));
         if (Widgets.Section("Interface", "settings_interface"))
         {
             if (Widgets.BeginProperties("##interface_grid", 0.42f))
@@ -222,6 +237,30 @@ internal sealed class SettingsWindow(AppState state)
                 Widgets.EndProperties();
             }
         }
+    }
+
+    private static readonly float[] MoveSteps = [0.05f, 0.1f, 0.25f, 0.5f, 1f, 2f, 5f, 10f];
+    private static readonly float[] RotateSteps = [1f, 5f, 10f, 15f, 22.5f, 30f, 45f, 90f];
+    private static readonly float[] ScaleSteps = [0.01f, 0.05f, 0.1f, 0.25f, 0.5f, 1f];
+
+    // A list of preset steps; returns the chosen one (saved at once).
+    private float StepCombo(string id, float value, float[] steps, string format)
+    {
+        static string Text(float step, string format) => string.Format(format, step.ToString("0.##", System.Globalization.CultureInfo.GetCultureInfo("fr-FR")));
+        ImGui.SetNextItemWidth(-1f);
+        if (ImGui.BeginCombo(id, Text(value, format)))
+        {
+            foreach (float step in steps)
+            {
+                if (ImGui.Selectable(Text(step, format), MathF.Abs(step - value) < 1e-4f))
+                {
+                    value = step;
+                    state.SaveSettings();
+                }
+            }
+            ImGui.EndCombo();
+        }
+        return value;
     }
 
     private static readonly float[] UiScales = [1f, 1.25f, 1.5f, 1.75f, 2f, 2.25f, 2.5f, 3f];

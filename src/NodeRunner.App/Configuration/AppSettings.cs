@@ -28,6 +28,11 @@ public sealed class AppSettings
 
     public NodeRunner.App.Input.MovementKeys MovementKeys { get; set; }
 
+    // Steps of the 3D handles while Ctrl is held: metres, degrees, scale.
+    public float SnapMove { get; set; } = 0.5f;
+    public float SnapRotate { get; set; } = 15f;
+    public float SnapScale { get; set; } = 0.1f;
+
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 

@@ -13,7 +13,7 @@ internal sealed class RoomGizmo(AppState state)
 {
     private const float HoverDistance = 10f;   // Pixels.
     private const float ArrowPixels = 55f;
-    private const float SnapStep = 0.25f;      // Metres, with Ctrl.
+    private float SnapStep => MathF.Max(state.Settings.SnapMove, 0.01f); // Metres, with Ctrl.
     private const float MinSize = 0.1f;
 
     private enum Part { None, Face, Center, Arrow, Corner, Edge }

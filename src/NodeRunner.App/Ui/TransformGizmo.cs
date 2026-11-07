@@ -16,12 +16,13 @@ internal sealed class TransformGizmo(AppState state)
     private const float RingRatio = 0.85f;     // Ring radius, relative to the arrow length.
     private const float HoverDistance = 7f;    // Pixels.
     private const int RingSegments = 72;
-    private const float MoveStep = 0.5f;       // Metres, with Ctrl.
-    private const float RotateStep = 15f;      // Degrees, with Ctrl.
-    private const float ScaleStep = 0.1f;      // With Ctrl.
+    // Ctrl steps (Edition settings).
+    private float MoveStep => MathF.Max(state.Settings.SnapMove, 0.01f);
+    private float RotateStep => MathF.Max(state.Settings.SnapRotate, 0.1f);
+    private float ScaleStep => MathF.Max(state.Settings.SnapScale, 0.001f);
     private const float MinScale = 0.01f;
     private const float MinBoxSide = 0.25f;     // Metres: the precision of a box occluder in the game's files.
-    private const float BoxSizeStep = 0.5f;     // Metres, with Ctrl.
+    private float BoxSizeStep => MoveStep;
 
     private enum Kind { None, Axis, Plane, Ring, ScaleAxis, ScaleUniform }
 
@@ -514,7 +515,7 @@ internal sealed class TransformGizmo(AppState state)
             drag.Starts[i].ApplyTo(drag.Entities[i]);
     }
 
-    private static float ScaleValue(float value, bool snap) => MathF.Max(MinScale, snap ? GizmoMath.Snap(value, ScaleStep) : value);
+    private float ScaleValue(float value, bool snap) => MathF.Max(MinScale, snap ? GizmoMath.Snap(value, ScaleStep) : value);
 
     private void EndDrag(bool commit)
     {
