@@ -494,8 +494,21 @@ internal sealed class AppState
         if (World.Maps is not { } library || OccluderMaps.ProjectFile(World, OccluderFileName) is not { } file)
             return;
         var boxes = new List<OccluderBox>();
-        int fromModel = 0, open = 0, skipped = 0;
-        foreach (var entity in SelectedEntities)
+        int fromModel = 0, open = 0, skipped = 0, mlo = 0, mloEmpty = 0;
+        // An interior, or an object inside one, gets boxes in the outer walls of the interior: a box filling it would
+        // hide what is in its rooms.
+        foreach (var interior in SelectedEntities.Select(e => e.IsInterior ? e : e.Interior).OfType<MapEntity>().Distinct())
+        {
+            if (library.GetArchetype(interior.ArchetypeHash) is not { } archetype)
+                continue;
+            var walls = MloOccluders.Fit(interior, archetype, InteriorCollision(interior));
+            boxes.AddRange(walls);
+            if (walls.Count > 0)
+                mlo++;
+            else
+                mloEmpty++;
+        }
+        foreach (var entity in SelectedEntities.Where(e => !e.IsInterior && e.Interior is null))
         {
             switch (FitOccluderBoxes(entity, library.GetArchetype(entity.ArchetypeHash)))
             {
@@ -513,6 +526,8 @@ internal sealed class AppState
             }
         }
         var notes = new List<string>();
+        if (mloEmpty > 0)
+            notes.Add($"{mloEmpty} intérieur(s) sans mur extérieur plein");
         if (open > 0)
             notes.Add($"{open} objet(s) qui ne sont pas des bâtiments fermés");
         if (skipped > 0)
@@ -524,9 +539,25 @@ internal sealed class AppState
             Notify($"aucune boîte créée : {string.Join(", ", notes)}", warning: true);
             return;
         }
-        AddOccluderBoxes(file, boxes, boxes.Count == 1 ? "Boîte d'occlusion sur l'objet" : $"{boxes.Count} boîtes d'occlusion sur les objets");
+        AddOccluderBoxes(file, boxes, mlo > 0 ? $"{boxes.Count} boîtes d'occlusion dans les murs de l'intérieur"
+            : boxes.Count == 1 ? "Boîte d'occlusion sur l'objet" : $"{boxes.Count} boîtes d'occlusion sur les objets");
         if (notes.Count > 0)
             Notify($"{boxes.Count} boîte(s) créée(s) ; {string.Join(", ", notes)}", warning: true);
+    }
+
+    // The interior's own collision, in its local space.
+    private Data.Collisions.CollisionMesh? InteriorCollision(MapEntity interior)
+    {
+        if (World.Collisions is not { } catalog || catalog.FindInteriorFile(interior.ArchetypeHash) is not { } path)
+            return null;
+        try
+        {
+            return catalog.Read(path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            return null;
+        }
     }
 
     private OccluderFitResult? FitOccluderBoxes(MapEntity entity, Archetype? archetype)

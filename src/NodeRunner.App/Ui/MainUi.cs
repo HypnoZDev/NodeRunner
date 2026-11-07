@@ -362,7 +362,8 @@ internal sealed class MainUi
                 null, false, selected > 0))
             _state.CreateOccluderBoxesFromSelection();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Une boîte par bâtiment fermé, à l'intérieur des murs de la collision (sinon dans la boîte du modèle).");
+            ImGui.SetTooltip("Une boîte par bâtiment fermé, à l'intérieur des murs de la collision (sinon dans la boîte du modèle). "
+                + "Pour un intérieur (MLO) : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres.");
         var occluder = _state.SelectedOccluder;
         if (ImGui.MenuItem($"{Icons.Trash}  Supprimer l'occluder sélectionné", "Suppr", false, occluder is not null))
             _state.DeleteSelectedOccluder();

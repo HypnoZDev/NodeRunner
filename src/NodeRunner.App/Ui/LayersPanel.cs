@@ -97,6 +97,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             int selected = state.SelectedEntities.Count;
             if (Widgets.Button($"{Icons.Boxes}  Sur la sélection{(selected > 1 ? $" ({selected})" : "")}",
                     "Pour chaque objet sélectionné : une boîte à l'intérieur de chaque bâtiment fermé de sa collision, sinon dans la boîte de son modèle. "
+                    + "Pour un intérieur (MLO) ou un objet dedans : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres. "
                     + "Sélectionnez d'abord les bâtiments (calque Occlusion masqué, Ctrl+clic pour plusieurs).", enabled: selected > 0))
                 state.CreateOccluderBoxesFromSelection();
         }
