@@ -83,6 +83,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         else if (state.SelectedPathNode is { } node && state.World.PathNetwork is { } network)
             DrawPathNode(node, network);
+        else if (state.SelectedOccluder is { } occluder)
+            DrawOccluder(occluder);
         else
         {
             ImGui.Dummy(new Vector2(0, 6));
@@ -503,6 +505,49 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (ImGui.IsItemDeactivatedAfterEdit() && node.Position != _nodeEditStart)
                 state.History.Add(new PathNodeMoveEdit(network, node, _nodeEditStart, node.Position, $"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}"));
         }
+    }
+
+    private void DrawOccluder(OccluderSelection occluder)
+    {
+        var (min, max) = occluder.Bounds();
+        var size = max - min;
+        var center = occluder.Center;
+        bool isBox = occluder.Box is not null;
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted($"{Icons.ScanEye}  {(isBox ? "Boîte d'occlusion" : "Maillage d'occlusion")} {occluder.Index}");
+        ImGui.PopFont();
+        Widgets.Hint($"{Icons.File}  {occluder.File.FileName}");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(occluder.File.GamePath);
+        if (Widgets.Button($"{Icons.Crosshair}  Aller à l'occluder"))
+            state.FocusOn(center, MathF.Max(size.Length() / 2, 5f));
+        ImGui.SameLine();
+        if (Widgets.Button($"{Icons.Copy}  Copier la position", state.FormatPosition(center)))
+            ImGui.SetClipboardText(state.FormatPosition(center));
+
+        if (Widgets.Section(isBox ? "Boîte" : "Maillage", "occluder") && Widgets.BeginProperties("##occluder"))
+        {
+            if (occluder.Box is { } box)
+            {
+                Widgets.PropertyText("Centre", $"{box.Center.X:0.##}, {box.Center.Y:0.##}, {box.Center.Z:0.##}", "Mètres. Précision du format : 25 cm.");
+                Widgets.PropertyText("Taille", $"{box.Size.X:0.##} x {box.Size.Y:0.##} x {box.Size.Z:0.##} m", "Longueur x largeur x hauteur.");
+                float degrees = box.Angle * 180f / MathF.PI;
+                Widgets.PropertyText("Rotation Z", $"{(degrees + 360f) % 360f:0.#}°", "Une boîte d'occlusion ne tourne qu'autour de l'axe vertical.");
+            }
+            else if (occluder.Model is { } model)
+            {
+                Widgets.PropertyText("Triangles", Widgets.Count(model.TriangleCount));
+                Widgets.PropertyText("Sommets", Widgets.Count(model.Vertices.Count), "255 au plus par maillage.");
+                Widgets.PropertyText("Emprise", $"{size.X:0} x {size.Y:0} x {size.Z:0} m");
+                Widgets.PropertyText("Centre", $"{center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
+            }
+            Widgets.PropertyText("Fichier", occluder.File.FileName, occluder.File.GamePath);
+            var occluders = occluder.File.Occluders;
+            Widgets.PropertyText("Dans ce fichier", $"{occluders.Boxes.Count} boîte(s), {occluders.Models.Count} maillage(s)");
+            Widgets.EndProperties();
+        }
+        Widgets.Hint("Le jeu ne dessine pas ce qui est caché derrière un occluder. Échap pour désélectionner ; "
+            + "masquez le calque Occlusion pour sélectionner les bâtiments.", wrap: true);
     }
 
     private void DrawPathNode(PathNode node, PathNetwork network)

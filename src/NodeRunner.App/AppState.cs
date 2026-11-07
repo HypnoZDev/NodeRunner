@@ -60,10 +60,26 @@ internal sealed class AppState
     private Data.Paths.PathNode? _selectedNode;
     private Data.Paths.PathNetwork? _selectedNodeNetwork;
 
+    // A box or a mesh of an occluder map file selected in the 3D view (an object selection clears it). Forgotten when
+    // the map is loaded again.
+    public OccluderSelection? SelectedOccluder
+    {
+        get => _selectedOccluderLibrary == World.Maps ? _selectedOccluder : null;
+        set
+        {
+            _selectedOccluder = value;
+            _selectedOccluderLibrary = World.Maps;
+        }
+    }
+
+    private OccluderSelection? _selectedOccluder;
+    private MapLibrary? _selectedOccluderLibrary;
+
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
         SelectedPathNode = null;
+        SelectedOccluder = null;
         if (entity is not null)
             _selection.Add(entity);
         _selectionLibrary = World.Maps;

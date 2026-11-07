@@ -524,6 +524,8 @@ internal sealed unsafe partial class MainForm : Form
         DrawSelectionBox(lines, viewProjection);
         if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
+        if (_state.SelectedOccluder is { } selectedOccluder)
+            _occlusionLayer.DrawSelected(lines, selectedOccluder, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
@@ -751,6 +753,14 @@ internal sealed unsafe partial class MainForm : Form
         {
             _state.Select(null);
             _state.SelectedPathNode = node;
+            return;
+        }
+        // Occluders next, while their layer is shown: they sit inside the buildings that would be picked instead.
+        if (!control && _occlusionLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height),
+                p => _state.IsLayerVisible(OcclusionLayer.LayerName(p))) is { } occluder)
+        {
+            _state.Select(null);
+            _state.SelectedOccluder = occluder;
             return;
         }
         if (!_state.IsLayerVisible(ModelLayer.LayerName))
