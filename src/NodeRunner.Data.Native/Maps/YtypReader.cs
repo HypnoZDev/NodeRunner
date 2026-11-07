@@ -46,11 +46,14 @@ public sealed class YtypReader : IMapTypesReader
     private const uint PortalStructure = 2572186314;
     internal const int RoomSize = 112;
     internal const int PortalSize = 64;
-    private const int RoomName = 8;
-    private const int RoomBoundsMin = 32;
-    private const int RoomBoundsMax = 48;
-    private const int RoomFlags = 76;
-    private const int RoomExteriorVisibilityDepth = 88;
+    internal const int RoomName = 8;
+    internal const int RoomBoundsMin = 32;
+    internal const int RoomBoundsMax = 48;
+    internal const int RoomTimecycle = 68;
+    internal const int RoomSecondaryTimecycle = 72;
+    internal const int RoomFlags = 76;
+    internal const int RoomFloorId = 84;
+    internal const int RoomExteriorVisibilityDepth = 88;
     internal const int RoomAttachedObjects = 96;
     private const int PortalRoomFrom = 8;
     private const int PortalRoomTo = 12;
@@ -126,6 +129,9 @@ public sealed class YtypReader : IMapTypesReader
                 Name = meta.String(r + RoomName),
                 Flags = d.UInt32(r + RoomFlags),
                 ExteriorVisibilityDepth = (int)d.UInt32(r + RoomExteriorVisibilityDepth),
+                TimecycleHash = d.UInt32(r + RoomTimecycle),
+                SecondaryTimecycleHash = d.UInt32(r + RoomSecondaryTimecycle),
+                FloorId = (int)d.UInt32(r + RoomFloorId),
             });
             AttachObjects(meta, r + RoomAttachedObjects, roomOf, i);
         }

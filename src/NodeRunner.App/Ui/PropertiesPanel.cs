@@ -78,6 +78,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
                 && Widgets.Section($"Entity sets ({interior.EntitySets.Count})", "entity_sets"))
                 DrawEntitySets(interior, library, names);
+            if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } roomsOf
+                && library.GetArchetype(roomsOf.ArchetypeHash) is { } interiorType
+                && Widgets.Section($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})", "rooms", defaultOpen: false))
+                DrawRoomList(roomsOf, interiorType);
             if (Widgets.Section("Réglages", "flags", defaultOpen: false))
                 DrawFlags(entity, library);
         }
@@ -85,6 +89,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             DrawPathNode(node, network);
         else if (state.SelectedOccluder is { } occluder)
             DrawOccluder(occluder);
+        else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
+                 && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
+            DrawRoom(room, roomInterior, roomLibrary);
         else
         {
             ImGui.Dummy(new Vector2(0, 6));
@@ -727,6 +734,224 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         Widgets.Hint("Le jeu ne dessine pas ce qui est caché derrière un occluder. Échap pour désélectionner ; "
             + "masquez le calque Occlusion pour sélectionner les bâtiments.", wrap: true);
+    }
+
+    // Room flags (CMloRoomDef), as named by the community tools.
+    private static readonly (uint Flag, string Text, string Tooltip)[] RoomFlags =
+    [
+        (0x1, "Figer les véhicules", "Les véhicules de la salle ne bougent plus (freeze vehicles)."),
+        (0x2, "Figer les piétons", "Les piétons de la salle ne bougent plus (freeze peds)."),
+        (0x4, "Sans lumière du soleil", "Le soleil n'éclaire pas la salle (no directional light)."),
+        (0x8, "Sans lumières extérieures", "Les lumières du dehors n'éclairent pas la salle (no exterior lights)."),
+        (0x10, "Forcer le figeage", "Force freeze."),
+        (0x20, "Moins de véhicules", "Moins de véhicules générés autour (reduce cars)."),
+        (0x40, "Moins de piétons", "Moins de piétons générés autour (reduce peds)."),
+        (0x80, "Forcer la lumière du soleil", "Le soleil éclaire la salle même à l'intérieur (force directional light on)."),
+        (0x100, "Ne pas dessiner l'extérieur", "Le dehors n'est pas dessiné depuis cette salle, même par les fenêtres (don't render exterior)."),
+        (0x200, "Miroir visible", "Un miroir peut être visible depuis cette salle (mirror potentially visible)."),
+    ];
+
+    private InteriorRoom? _roomEditStart;
+    private readonly Dictionary<string, string> _textBuffers = new();
+
+    // The rooms of an interior, each one can be selected (and edited) in turn.
+    private void DrawRoomList(MapEntity interior, Archetype archetype)
+    {
+        Widgets.Hint("Boîtes qui découpent l'intérieur : le jeu ne dessine une salle que si elle est visible par un portail. "
+            + "Cliquez une salle pour la modifier.", wrap: true);
+        for (int r = 1; r < archetype.InteriorRooms.Count; r++)
+        {
+            var room = archetype.InteriorRooms[r];
+            int index = r;
+            if (Widgets.Link($"{r} · {(room.Name.Length > 0 ? room.Name : "(sans nom)")}##room{r}", "Sélectionner cette salle"))
+            {
+                state.SelectRoom(new RoomSelection(interior, index));
+                state.SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
+            }
+            ImGui.SameLine();
+            int objects = archetype.InteriorEntities.Count(e => e.InteriorRoom == index && !e.IsDeleted);
+            ImGui.TextColored(UiTheme.TextMuted, objects == 1 ? "1 objet" : $"{objects} objets");
+        }
+    }
+
+    // A text field whose value is applied when it is released (Enter or click elsewhere); true with the typed text then.
+    private bool CommitText(string id, string current, string hint, out string committed)
+    {
+        if (!_textBuffers.TryGetValue(id, out var buffer))
+            buffer = current;
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint(id, hint, ref buffer, 96);
+        if (ImGui.IsItemActive())
+            _textBuffers[id] = buffer;
+        else
+            _textBuffers.Remove(id);
+        committed = buffer.Trim();
+        return ImGui.IsItemDeactivatedAfterEdit();
+    }
+
+    private void DrawRoom(RoomSelection selected, Archetype archetype, MapLibrary library)
+    {
+        var names = state.World.Names ?? new HashNames();
+        var interior = selected.Interior;
+        int index = selected.Index;
+        var room = archetype.InteriorRooms[index];
+        var center = Vector3.Transform((room.BoundsMin + room.BoundsMax) / 2, interior.Transform);
+
+        void Change(InteriorRoom after, string description)
+        {
+            if (after != archetype.InteriorRooms[index])
+                state.History.Add(RoomEdit.Apply(library, interior, index, after, description));
+        }
+
+        // Live change while a field is dragged; one undo step when it is released.
+        void Track(InteriorRoom before, string description)
+        {
+            if (ImGui.IsItemActivated())
+                _roomEditStart = before;
+            if (ImGui.IsItemDeactivatedAfterEdit() && _roomEditStart is { } start)
+            {
+                var end = archetype.InteriorRooms[index];
+                if (end != start)
+                    state.History.Add(new RoomEdit(library, interior, index, start, end, description));
+                _roomEditStart = null;
+            }
+        }
+
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted($"{Icons.House}  Salle {index} : {(room.Name.Length > 0 ? room.Name : "(sans nom)")}");
+        ImGui.PopFont();
+        Widgets.Hint($"{Icons.File}  {names.Describe(interior.ArchetypeHash)} · {Path.GetFileName(library.GetArchetypeFile(interior.ArchetypeHash) ?? "")}");
+        if (Widgets.Button($"{Icons.Crosshair}  Aller à la salle"))
+            state.FocusOn(center, MathF.Max((room.BoundsMax - room.BoundsMin).Length() / 2, 4f));
+        ImGui.SameLine();
+        if (Widgets.Button($"{Icons.House}  Sélectionner l'intérieur"))
+        {
+            state.Select(interior);
+            return;
+        }
+
+        if (index == 0)
+        {
+            Widgets.Hint("Salle 0 (limbo) : elle représente l'extérieur de l'intérieur, elle n'a pas de boîte à modifier.", wrap: true);
+            return;
+        }
+
+        if (Widgets.Section("Salle", "room") && Widgets.BeginProperties("##room"))
+        {
+            Widgets.Property("Nom", "Nom de la salle dans le .ytyp (lettres, chiffres, _ et -). Entrée pour valider.");
+            if (CommitText($"##room_name{interior.ArchetypeHash}_{index}", room.Name, "nom de la salle", out var name) && name != room.Name)
+            {
+                string clean = new(name.Replace(' ', '_').Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
+                if (clean.Length == 0)
+                    state.Notify("Nom de salle vide ou sans lettre valide : non changé.", warning: true);
+                else
+                    Change(room with { Name = clean }, $"Renommer la salle {index}");
+            }
+
+            Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
+            float width = Widgets.SplitWidth(3);
+            Widgets.Property("Coin min", "Coin bas de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z).");
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                var current = archetype.InteriorRooms[index];
+                var min = current.BoundsMin;
+                float value = min[i];
+                if (Widgets.AxisField($"##room_min{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+                {
+                    min[i] = MathF.Min(value, current.BoundsMax[i] - 0.1f);
+                    library.SetRoom(interior.ArchetypeHash, index, current with { BoundsMin = min });
+                }
+                Track(current, $"Redimensionner la salle {index}");
+            }
+            Widgets.Property("Coin max", "Coin haut de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z).");
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                var current = archetype.InteriorRooms[index];
+                var max = current.BoundsMax;
+                float value = max[i];
+                if (Widgets.AxisField($"##room_max{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+                {
+                    max[i] = MathF.Max(value, current.BoundsMin[i] + 0.1f);
+                    library.SetRoom(interior.ArchetypeHash, index, current with { BoundsMax = max });
+                }
+                Track(current, $"Redimensionner la salle {index}");
+            }
+            room = archetype.InteriorRooms[index];
+            var size = room.BoundsMax - room.BoundsMin;
+            Widgets.PropertyText("Taille", $"{size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m");
+
+            Widgets.Property("Timecycle", "Réglage de lumière et de couleurs de la salle (timecycle modifier), par son nom (ex. int_gasstation). "
+                + "Vide = aucun. Entrée pour valider.");
+            if (CommitText($"##room_tc{interior.ArchetypeHash}_{index}", TimecycleText(room.TimecycleHash, names), "aucun", out var timecycle)
+                && ParseTimecycle(timecycle, names) is { } tcHash && tcHash != room.TimecycleHash)
+                Change(room with { TimecycleHash = tcHash }, $"Timecycle de la salle {index}");
+            Widgets.Property("Timecycle secondaire", "Deuxième réglage de lumière, mélangé au premier. Vide = aucun.");
+            if (CommitText($"##room_tc2{interior.ArchetypeHash}_{index}", TimecycleText(room.SecondaryTimecycleHash, names), "aucun", out var secondary)
+                && ParseTimecycle(secondary, names) is { } tc2Hash && tc2Hash != room.SecondaryTimecycleHash)
+                Change(room with { SecondaryTimecycleHash = tc2Hash }, $"Timecycle secondaire de la salle {index}");
+
+            Widgets.Property("Étage", "Numéro d'étage de la salle (floor id), 0 le plus souvent. Entrée pour valider.");
+            {
+                int floor = room.FloorId;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt("##room_floor", ref floor, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                    Change(room with { FloorId = floor }, $"Étage de la salle {index}");
+            }
+            Widgets.Property("Profondeur de l'extérieur", "Nombre de portails à traverser au plus pour voir l'extérieur depuis cette salle "
+                + "(exterior visibility depth) ; -1 = réglage du jeu. Entrée pour valider.");
+            {
+                int depth = room.ExteriorVisibilityDepth;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt("##room_depth", ref depth, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                    Change(room with { ExteriorVisibilityDepth = Math.Max(-1, depth) }, $"Profondeur de l'extérieur de la salle {index}");
+            }
+
+            room = archetype.InteriorRooms[index];
+            int portals = archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index);
+            int objects = archetype.InteriorEntities.Count(e => e.InteriorRoom == index && !e.IsDeleted);
+            Widgets.PropertyText("Contenu", $"{portals} portail(s), {objects} objet(s)");
+            Widgets.EndProperties();
+        }
+
+        if (Widgets.Section("Réglages de la salle", "room_flags"))
+        {
+            foreach (var (flag, text, tooltip) in RoomFlags)
+            {
+                bool on = (room.Flags & flag) != 0;
+                if (ImGui.Checkbox($"{text}##room_flag{flag:X}", ref on))
+                    Change(room with { Flags = on ? room.Flags | flag : room.Flags & ~flag }, $"{(on ? "Activer" : "Désactiver")} « {text} » (salle {index})");
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                    ImGui.SetTooltip(tooltip);
+            }
+            uint other = room.Flags & ~RoomFlags.Aggregate(0u, (all, f) => all | f.Flag);
+            if (other != 0)
+                Widgets.Hint($"Autres drapeaux : 0x{other:X}");
+        }
+        Widgets.Hint("Change la salle dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
+            + "Échap pour désélectionner ; masquez le calque Salles pour sélectionner les objets.", wrap: true);
+    }
+
+    private static string TimecycleText(uint hash, HashNames names) =>
+        hash == 0 ? "" : names.TryGet(hash) ?? $"0x{hash:X8}";
+
+    // A typed timecycle name (or hash, 0x...): its hash, 0 for none; null when the text is not valid.
+    private uint? ParseTimecycle(string text, HashNames names)
+    {
+        text = text.Trim().Trim('"', '\'');
+        if (text.Length == 0)
+            return 0;
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && uint.TryParse(text[2..], System.Globalization.NumberStyles.HexNumber, null, out uint hex))
+            return hex;
+        if (text.Any(char.IsWhiteSpace))
+        {
+            state.Notify("Nom de timecycle invalide (espaces).", warning: true);
+            return null;
+        }
+        names.Add(text);
+        return Joaat.Hash(text);
     }
 
     private void DrawPathNode(PathNode node, PathNetwork network)

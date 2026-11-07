@@ -1,3 +1,4 @@
+using System.Numerics;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Resources;
@@ -82,8 +83,13 @@ internal static class InteriorFileSaver
             var expected = interior.InteriorEntities.Where(e => !e.IsDeleted).Concat(interior.InteriorEntitySets.SelectMany(s => s.Entities).Where(e => !e.IsDeleted)).ToList();
             var actual = read.InteriorEntities.Concat(read.InteriorEntitySets.SelectMany(s => s.Entities)).ToList();
             if (expected.Count != actual.Count
-                || expected.Zip(actual).Any(p => System.Numerics.Vector3.Distance(p.First.Position, p.Second.Position) > Tolerance))
+                || expected.Zip(actual).Any(p => Vector3.Distance(p.First.Position, p.Second.Position) > Tolerance))
                 throw new InvalidDataException("vérification échouée (position des objets)");
+            if (read.InteriorRooms.Count != interior.InteriorRooms.Count
+                || read.InteriorRooms.Zip(interior.InteriorRooms).Any(p => p.First.Name != p.Second.Name || p.First.Flags != p.Second.Flags
+                    || p.First.TimecycleHash != p.Second.TimecycleHash || p.First.SecondaryTimecycleHash != p.Second.SecondaryTimecycleHash
+                    || Vector3.Distance(p.First.BoundsMin, p.Second.BoundsMin) > Tolerance || Vector3.Distance(p.First.BoundsMax, p.Second.BoundsMax) > Tolerance))
+                throw new InvalidDataException("vérification échouée (salles)");
         }
     }
 }

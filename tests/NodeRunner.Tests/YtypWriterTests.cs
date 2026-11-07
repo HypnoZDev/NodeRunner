@@ -214,4 +214,27 @@ public class YtypWriterTests
         Assert.Equal([100u], back.InteriorEntitySets[1].Entities.Select(e => e.ArchetypeHash));
         Assert.Equal([101u, 102u], back.InteriorEntities.Select(e => e.ArchetypeHash));
     }
+
+    [Fact]
+    public void Changes_a_room()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        var room = interior.InteriorRooms[0] with
+        {
+            Name = "kitchen", BoundsMin = new Vector3(-1, -2, -3), BoundsMax = new Vector3(4, 5, 6), Flags = 0x104,
+            TimecycleHash = 0xAAAA, SecondaryTimecycleHash = 0xBBBB, FloorId = 2, ExteriorVisibilityDepth = 1,
+        };
+        interior.SetRoom(0, room);
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.Equal(room, back.InteriorRooms.Single());
+        Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
+
+        // Renamed again: a shorter name, then none.
+        var again = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content);
+        Assert.Equal("kitchen", again.Archetypes.Single().InteriorRooms[0].Name);
+        interior.SetRoom(0, room with { Name = "" });
+        Assert.Equal("", new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single().InteriorRooms[0].Name);
+    }
 }

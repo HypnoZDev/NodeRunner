@@ -188,7 +188,7 @@ public sealed class EntitySetMoveEdit : IEdit
 }
 
 // An entity set created in an interior, or renamed; changes the interior's archetype file (.ytyp), no map file.
-public sealed class EntitySetEdit : IEdit
+public sealed class EntitySetEdit : IEdit, IInteriorEdit
 {
     private readonly MapLibrary _library;
     private readonly InteriorEntitySet? _created;

@@ -203,6 +203,18 @@ public sealed class MapLibrary
         }
     }
 
+    // Incremented when a room of an interior changes (SetRoom): only the rooms' display depends on it.
+    public int RoomVersion { get; private set; }
+
+    // Replaces a room of an interior (box, name, settings), shared by every instance.
+    public void SetRoom(uint interiorHash, int index, InteriorRoom room)
+    {
+        if (GetArchetype(interiorHash) is not { } archetype || index < 0 || index >= archetype.InteriorRooms.Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        archetype.SetRoom(index, room);
+        RoomVersion++;
+    }
+
     public void SetEntitySetActive(PlacedEntitySet set, bool active)
     {
         if (set.IsActive == active)

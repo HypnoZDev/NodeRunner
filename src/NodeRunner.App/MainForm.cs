@@ -769,6 +769,13 @@ internal sealed unsafe partial class MainForm : Form
             _state.SelectedOccluder = occluder;
             return;
         }
+        // Then rooms, while their layer is shown (portals: not selectable yet, the click goes to the objects).
+        if (!control && _roomLayer.Pick(viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
+                new Vector2(scene.Width, scene.Height), p => _state.IsLayerVisible(RoomLayer.LayerName(p))) is { Room: { } room })
+        {
+            _state.SelectRoom(new RoomSelection(room.Interior, room.Index));
+            return;
+        }
         if (!_state.IsLayerVisible(ModelLayer.LayerName))
             return;
         var picked = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);

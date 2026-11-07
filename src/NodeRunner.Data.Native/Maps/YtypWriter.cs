@@ -9,6 +9,7 @@ namespace NodeRunner.Data.Native.Maps;
 public sealed class YtypWriter : IMapTypesWriter
 {
     private const int PointerSize = 8;
+    private const uint StringStructure = 0x10; // Blocks of characters.
 
     public MapFileContent Write(ReadOnlySpan<byte> source, IReadOnlyList<Archetype> interiors) => Write(source, interiors, null);
 
@@ -47,6 +48,7 @@ public sealed class YtypWriter : IMapTypesWriter
                 CollectOriginals(document, PointerItems(document, (setBlock, setOffset + s * YtypReader.EntitySetSize), YtypReader.EntitySetEntities),
                     interior.InteriorEntitySets[s].Entities, originals);
 
+            WriteRooms(document, item, interior.InteriorRooms);
             WriteInteriorEntities(document, item, interior.InteriorEntities, originals);
             for (int s = 0; s < setCount; s++)
                 WriteEntitySet(document, item, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities, originals);
@@ -56,8 +58,6 @@ public sealed class YtypWriter : IMapTypesWriter
         return new MapFileContent(content, pageFlags);
     }
 
-    // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
-    // The rooms and portals list their objects by index, renumbered.
     // The description of entity sets in a .ytyp, null if it has none.
     public static MetaDocument.StructureInfo? EntitySetInfo(ReadOnlySpan<byte> source) =>
         MetaDocument.Read(source).FindStructure(YtypReader.EntitySetStructure);
@@ -119,6 +119,59 @@ public sealed class YtypWriter : IMapTypesWriter
         return placed;
     }
 
+    // Box, name and settings of each room; their objects are written with the objects.
+    private static void WriteRooms(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<InteriorRoom> rooms)
+    {
+        var (block, offset, count) = Array(document, interior, YtypReader.InteriorRooms);
+        if (count != rooms.Count)
+            throw new InvalidDataException("Les salles de l'intérieur ne sont pas celles du fichier.");
+        for (int r = 0; r < count; r++)
+        {
+            var room = rooms[r];
+            int o = offset + r * YtypReader.RoomSize;
+            var data = document.Blocks[block].Data;
+            WriteVector3(data, o + YtypReader.RoomBoundsMin, room.BoundsMin);
+            WriteVector3(data, o + YtypReader.RoomBoundsMax, room.BoundsMax);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.RoomTimecycle), room.TimecycleHash);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.RoomSecondaryTimecycle), room.SecondaryTimecycleHash);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.RoomFlags), room.Flags);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomFloorId), room.FloorId);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomExteriorVisibilityDepth), room.ExteriorVisibilityDepth);
+            if (ReadString(document, (block, o + YtypReader.RoomName)) != room.Name)
+                WriteString(document, (block, o + YtypReader.RoomName), room.Name);
+        }
+    }
+
+    private static string ReadString(MetaDocument document, (int Block, int Offset) field)
+    {
+        var (block, offset, count) = Array(document, field, 0);
+        if (count == 0)
+            return "";
+        var data = document.Blocks[block].Data.AsSpan(offset, count);
+        int end = data.IndexOf((byte)0);
+        return System.Text.Encoding.ASCII.GetString(end >= 0 ? data[..end] : data);
+    }
+
+    // A new block of characters, with its terminating zero (not counted, but in the capacity, as in the game's files).
+    private static void WriteString(MetaDocument document, (int Block, int Offset) field, string text)
+    {
+        var span = document.Blocks[field.Block].Data.AsSpan(field.Offset);
+        if (text.Length == 0)
+        {
+            span[..12].Clear();
+            return;
+        }
+        var bytes = new byte[text.Length + 1];
+        System.Text.Encoding.ASCII.GetBytes(text, bytes);
+        int block = document.Blocks.Count;
+        document.Blocks.Add(new MetaDocument.Block(StringStructure, bytes));
+        BinaryPrimitives.WriteUInt64LittleEndian(span, MetaDocument.Pointer(block, 0));
+        BinaryPrimitives.WriteUInt16LittleEndian(span[8..], (ushort)text.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[10..], (ushort)bytes.Length);
+    }
+
+    // The interior's objects: those deleted left out, those added (after the file's ones) appended, each in its room.
+    // The rooms and portals list their objects by index, renumbered.
     private static void WriteInteriorEntities(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<MapEntity> entities,
         Dictionary<MapEntity, byte[]> originals)
     {

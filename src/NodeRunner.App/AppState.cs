@@ -75,11 +75,32 @@ internal sealed class AppState
     private OccluderSelection? _selectedOccluder;
     private MapLibrary? _selectedOccluderLibrary;
 
+    // A room of an interior selected in the 3D view or in the interior's properties (an object selection clears it).
+    public RoomSelection? SelectedRoom
+    {
+        get => _selectedRoomLibrary == World.Maps && _selectedRoom is { Interior.IsDeleted: false } room ? room : null;
+        private set
+        {
+            _selectedRoom = value;
+            _selectedRoomLibrary = World.Maps;
+        }
+    }
+
+    private RoomSelection? _selectedRoom;
+    private MapLibrary? _selectedRoomLibrary;
+
+    public void SelectRoom(RoomSelection room)
+    {
+        Select(null);
+        SelectedRoom = room;
+    }
+
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
         SelectedPathNode = null;
         SelectedOccluder = null;
+        SelectedRoom = null;
         if (entity is not null)
             _selection.Add(entity);
         _selectionLibrary = World.Maps;
@@ -521,6 +542,8 @@ internal sealed class AppState
             Select(null);
             SelectedOccluder = presenceEdit.Occluders.FirstOrDefault(o => !o.File.IsDeleted(o.Kind, o.Index));
         }
+        else if (edit is RoomEdit roomEdit)
+            SelectRoom(new RoomSelection(roomEdit.Interior, roomEdit.Index));
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;
@@ -809,7 +832,7 @@ internal sealed class AppState
     // Archetype files (.ytyp) to write when saving: those of the interiors whose objects were moved in this session.
     public IReadOnlyList<string> InteriorFilesToSave => World.Maps is { } library
         ? History.All.SelectMany(e => e.Entities).Select(e => e.Interior).OfType<MapEntity>()
-            .Concat(History.All.OfType<EntitySetEdit>().Select(e => e.Interior))
+            .Concat(History.All.OfType<IInteriorEdit>().Select(e => e.Interior))
             .Select(i => library.GetArchetypeFile(i.ArchetypeHash)).OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
         : [];

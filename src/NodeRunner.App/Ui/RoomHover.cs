@@ -6,7 +6,7 @@ using NodeRunner.Data.Hashing;
 namespace NodeRunner.App.Ui;
 
 // While the "Rooms and portals" layer is shown: the room or portal under the mouse in the 3D view is outlined, with
-// its details next to the mouse.
+// its details next to the mouse. The selected room is outlined in any case.
 internal sealed class RoomHover(AppState state, RoomLayer layer)
 {
     private static readonly int[] BoxEdges = [0, 1, 1, 3, 3, 2, 2, 0, 4, 5, 5, 7, 7, 6, 6, 4, 0, 4, 1, 5, 2, 6, 3, 7];
@@ -16,6 +16,10 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
 
     public void Update(bool blocked)
     {
+        if (!SetUpView())
+            return;
+        DrawSelected();
+
         bool showRooms = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms));
         bool showInner = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.InnerPortals));
         bool showOutside = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.OutsidePortals));
@@ -24,84 +28,67 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
         var io = ImGui.GetIO();
         if (io.WantCaptureMouse || ImGui.IsMouseDown(ImGuiMouseButton.Right))
             return;
+        var mouse = io.MousePos;
+        if (mouse.X < _origin.X || mouse.Y < _origin.Y || mouse.X >= _origin.X + _size.X || mouse.Y >= _origin.Y + _size.Y
+            || MouseRay(mouse) is not { } ray)
+            return;
 
+        var (room, portal) = layer.Pick(ray.Origin, ray.Direction, p => state.IsLayerVisible(RoomLayer.LayerName(p)));
+        if (portal is not null)
+            ShowPortal(portal);
+        else if (room is not null)
+            Show(room);
+    }
+
+    private bool SetUpView()
+    {
         var (position, size) = DockLayout.SceneArea;
         _origin = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
         _size = new Vector2(MathF.Max(1f, MathF.Round(size.X)), MathF.Max(1f, MathF.Round(size.Y)));
-        var mouse = io.MousePos;
-        if (mouse.X < _origin.X || mouse.Y < _origin.Y || mouse.X >= _origin.X + _size.X || mouse.Y >= _origin.Y + _size.Y)
-            return;
-
-        var camera = state.Camera;
-        _viewProjection = camera.ViewProjection(_size.X / _size.Y);
-        if (!Matrix4x4.Invert(_viewProjection, out var inverse))
-            return;
-        // Mouse ray: from the camera through the mouse on the near plane (depth 1 with the reversed-Z projection).
-        var ndc = new Vector2((mouse.X - _origin.X) / _size.X * 2f - 1f, 1f - (mouse.Y - _origin.Y) / _size.Y * 2f);
-        var near = Vector4.Transform(new Vector4(ndc, 1f, 1f), inverse);
-        var direction = Vector3.Normalize(new Vector3(near.X, near.Y, near.Z) / near.W - camera.Position);
-
-        PortalBox? portal = null;
-        float portalDistance = float.MaxValue;
-        foreach (var candidate in layer.Portals)
-        {
-            if (!(candidate.LeadsOutside ? showOutside : showInner))
-                continue;
-            if (Hit(candidate.Corners, camera.Position, direction) is { } distance && distance < portalDistance)
-            {
-                portal = candidate;
-                portalDistance = distance;
-            }
-        }
-        if (portal is not null)
-        {
-            ShowPortal(portal);
-            return;
-        }
-        if (!showRooms)
-            return;
-
-        RoomBox? best = null;
-        float bestEntry = float.MaxValue;
-        foreach (var room in layer.Rooms)
-        {
-            if (Entry(room, camera.Position, direction) is not { } entry)
-                continue;
-            if (entry < bestEntry - 0.01f || MathF.Abs(entry - bestEntry) <= 0.01f && room.Volume < best!.Volume)
-            {
-                best = room;
-                bestEntry = entry;
-            }
-        }
-        if (best is not null)
-            Show(best);
+        _viewProjection = state.Camera.ViewProjection(_size.X / _size.Y);
+        return Matrix4x4.Invert(_viewProjection, out _);
     }
 
-    private static float? Hit(Vector3[] corners, Vector3 origin, Vector3 direction)
+    // The ray from the camera through a point of the 3D view (screen pixels).
+    private (Vector3 Origin, Vector3 Direction)? MouseRay(Vector2 mouse)
     {
-        for (int c = 1; c + 1 < corners.Length; c++)
+        if (!Matrix4x4.Invert(_viewProjection, out var inverse))
+            return null;
+        // From the camera through the mouse on the near plane (depth 1 with the reversed-Z projection).
+        var ndc = new Vector2((mouse.X - _origin.X) / _size.X * 2f - 1f, 1f - (mouse.Y - _origin.Y) / _size.Y * 2f);
+        var near = Vector4.Transform(new Vector4(ndc, 1f, 1f), inverse);
+        var camera = state.Camera.Position;
+        return (camera, Vector3.Normalize(new Vector3(near.X, near.Y, near.Z) / near.W - camera));
+    }
+
+    // The selected room, from its current box (changes show while a field is dragged).
+    private void DrawSelected()
+    {
+        if (state.SelectedRoom is not { } selected || state.World.Maps?.GetArchetype(selected.Interior.ArchetypeHash) is not { } archetype
+            || selected.Index >= archetype.InteriorRooms.Count)
+            return;
+        var room = archetype.InteriorRooms[selected.Index];
+        DrawBox(room.BoundsMin, room.BoundsMax, selected.Interior.Transform, Widgets.Col(UiTheme.Accent), 3f);
+    }
+
+    private void DrawBox(Vector3 min, Vector3 max, Matrix4x4 transform, uint color, float thickness)
+    {
+        var draw = ImGui.GetBackgroundDrawList();
+        draw.PushClipRect(_origin, _origin + _size, true);
+        var screen = new Vector2[8];
+        var visible = new bool[8];
+        for (int i = 0; i < 8; i++)
         {
-            // Möller-Trumbore on each triangle of the fan, both faces.
-            var a = corners[0];
-            var e1 = corners[c] - a;
-            var e2 = corners[c + 1] - a;
-            var p = Vector3.Cross(direction, e2);
-            float det = Vector3.Dot(e1, p);
-            if (MathF.Abs(det) < 1e-8f)
-                continue;
-            var t0 = origin - a;
-            float u = Vector3.Dot(t0, p) / det;
-            if (u < 0f || u > 1f)
-                continue;
-            var q = Vector3.Cross(t0, e1);
-            float v = Vector3.Dot(direction, q) / det;
-            if (v < 0f || u + v > 1f)
-                continue;
-            float t = Vector3.Dot(e2, q) / det;
-            if (t > 0f)
-                return t;
+            var corner = new Vector3((i & 1) != 0 ? max.X : min.X, (i & 2) != 0 ? max.Y : min.Y, (i & 4) != 0 ? max.Z : min.Z);
+            visible[i] = TryProject(Vector3.Transform(corner, transform), out screen[i]);
         }
-        return null;
+        for (int e = 0; e < BoxEdges.Length; e += 2)
+        {
+            int a = BoxEdges[e], b = BoxEdges[e + 1];
+            if (visible[a] && visible[b])
+                draw.AddLine(screen[a], screen[b], color, thickness);
+        }
+        draw.PopClipRect();
     }
 
     private void ShowPortal(PortalBox portal)
@@ -133,55 +120,9 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
 
     private static string Side(int room, string name) => room == 0 ? "l'extérieur" : $"la salle {name}";
 
-    // Distance along the ray at which it enters the room's box (0 when the camera is inside), null if it misses.
-    private static float? Entry(RoomBox room, Vector3 origin, Vector3 direction)
-    {
-        if (!Matrix4x4.Invert(room.Transform, out var toRoom))
-            return null;
-        var o = Vector3.Transform(origin, toRoom);
-        var d = Vector3.TransformNormal(direction, toRoom);
-        float enter = 0f, exit = float.MaxValue;
-        for (int axis = 0; axis < 3; axis++)
-        {
-            float oa = o[axis], da = d[axis], min = room.Room.BoundsMin[axis], max = room.Room.BoundsMax[axis];
-            if (MathF.Abs(da) < 1e-6f)
-            {
-                if (oa < min || oa > max)
-                    return null;
-                continue;
-            }
-            float t1 = (min - oa) / da, t2 = (max - oa) / da;
-            if (t1 > t2)
-                (t1, t2) = (t2, t1);
-            enter = MathF.Max(enter, t1);
-            exit = MathF.Min(exit, t2);
-            if (enter > exit)
-                return null;
-        }
-        return enter;
-    }
-
     private void Show(RoomBox room)
     {
-        var draw = ImGui.GetBackgroundDrawList();
-        draw.PushClipRect(_origin, _origin + _size, true);
-        var min = room.Room.BoundsMin;
-        var max = room.Room.BoundsMax;
-        var screen = new Vector2[8];
-        var visible = new bool[8];
-        for (int i = 0; i < 8; i++)
-        {
-            var corner = new Vector3((i & 1) != 0 ? max.X : min.X, (i & 2) != 0 ? max.Y : min.Y, (i & 4) != 0 ? max.Z : min.Z);
-            visible[i] = TryProject(Vector3.Transform(corner, room.Transform), out screen[i]);
-        }
-        uint color = Widgets.Col(new Vector4(0.9f, 0.7f, 1f, 1f));
-        for (int e = 0; e < BoxEdges.Length; e += 2)
-        {
-            int a = BoxEdges[e], b = BoxEdges[e + 1];
-            if (visible[a] && visible[b])
-                draw.AddLine(screen[a], screen[b], color, 2f);
-        }
-        draw.PopClipRect();
+        DrawBox(room.Room.BoundsMin, room.Room.BoundsMax, room.Transform, Widgets.Col(new Vector4(0.9f, 0.7f, 1f, 1f)), 2f);
 
         var names = state.World.Names ?? new HashNames();
         string name = room.Room.Name.Length > 0 ? room.Room.Name : "(sans nom)";
@@ -191,6 +132,7 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
         ImGui.TextColored(UiTheme.TextMuted, $"{room.PortalCount} portails · {room.ObjectCount} objets");
         if (room.Room.HidesExterior)
             ImGui.TextColored(UiTheme.TextMuted, "L'extérieur n'est pas dessiné depuis cette salle");
+        ImGui.TextColored(UiTheme.TextFaint, "Clic : sélectionner la salle");
         ImGui.EndTooltip();
     }
 

@@ -44,7 +44,10 @@ public sealed class Archetype
     // A new list, not changed in place: background threads may be going through the old one.
     internal void AddInteriorEntity(MapEntity entity) => _interiorEntities = [.. _interiorEntities, entity];
 
-    public IReadOnlyList<InteriorRoom> InteriorRooms { get; init; } = [];
+    public IReadOnlyList<InteriorRoom> InteriorRooms { get => _rooms; init => _rooms = value; }
+    private IReadOnlyList<InteriorRoom> _rooms = [];
+
+    internal void SetRoom(int index, InteriorRoom room) => _rooms = [.. _rooms.Select((r, i) => i == index ? room : r)];
 
     public IReadOnlyList<InteriorPortal> InteriorPortals { get; init; } = [];
 
@@ -79,7 +82,14 @@ public sealed record InteriorRoom(Vector3 BoundsMin, Vector3 BoundsMax)
     // surroundings, seen through the windows (e.g. the psychiatrist's office, v_psycheoffice).
     public bool HidesExterior => (Flags & 0x100) != 0;
 
-    public int ExteriorVisibilityDepth { get; init; }
+    public int ExteriorVisibilityDepth { get; init; } = -1;
+
+    // Light and colour settings (timecycle modifier) applied inside the room, by name hash; 0 = none.
+    public uint TimecycleHash { get; init; }
+
+    public uint SecondaryTimecycleHash { get; init; }
+
+    public int FloorId { get; init; }
 }
 
 // An opening between two rooms of an interior (room 0 being the outside).
