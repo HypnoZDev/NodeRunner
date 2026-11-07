@@ -299,15 +299,36 @@ internal sealed class ModelLayer : IDisposable
 
     // The object seen at pixel (x, y) of the last frame drawn, null if none: the objects are drawn again into buffer,
     // each with its number (back buffer to rebind afterwards).
-    public MapEntity? Pick(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y)
+    public MapEntity? Pick(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y) =>
+        PickHit(renderer, buffer, viewProjection, width, height, x, y, null)?.Entity;
+
+    // The object at pixel (x, y), leaving out some objects (those already picked there), with the 3D point clicked and
+    // whether the object is only an overlay (decal, painted shadow, glass).
+    public (MapEntity Entity, Vector3 Point, bool Overlay)? PickHit(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection,
+        int width, int height, int x, int y, IReadOnlySet<MapEntity>? exclude)
     {
         buffer.Begin(width, height);
         renderer.BeginPick();
         for (int i = 0; i < _drawn.Count; i++)
-            renderer.DrawPick(_drawn[i].Model, _drawn[i].Transform, viewProjection, (uint)(i + 1));
+        {
+            if (exclude is null || !exclude.Contains(_drawn[i].Entity))
+                renderer.DrawPick(_drawn[i].Model, _drawn[i].Transform, viewProjection, (uint)(i + 1));
+        }
 
         uint number = buffer.Read(x, y);
-        return number >= 1 && number <= _drawn.Count ? _drawn[(int)number - 1].Entity : null;
+        if (number < 1 || number > _drawn.Count)
+            return null;
+        var drawn = _drawn[(int)number - 1];
+        float depth = buffer.ReadDepth(x, y);
+        var point = Vector3.Zero;
+        if (depth > 0f && Matrix4x4.Invert(viewProjection, out var inverse))
+        {
+            var clip = new Vector4((x + 0.5f) / width * 2f - 1f, 1f - (y + 0.5f) / height * 2f, depth, 1f);
+            var world = Vector4.Transform(clip, inverse);
+            if (Math.Abs(world.W) > 1e-12f)
+                point = new Vector3(world.X, world.Y, world.Z) / world.W;
+        }
+        return (drawn.Entity, point, drawn.Model.IsOverlay);
     }
 
     // The 3D point of the drawn models at pixel (x, y) of the view, null if none is there (sky).

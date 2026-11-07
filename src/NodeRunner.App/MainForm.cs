@@ -787,16 +787,50 @@ internal sealed unsafe partial class MainForm : Form
         }
         if (!_state.IsLayerVisible(ModelLayer.LayerName))
             return;
-        var picked = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);
+        int x = click.X - scene.X, y = click.Y - scene.Y;
         // Ctrl+click adds the object to the selection or removes it; Ctrl+click on the sky keeps the selection.
         if (control)
         {
-            if (picked is not null)
-                _state.ToggleSelect(picked);
+            if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, x, y) is { } toggled)
+                _state.ToggleSelect(toggled);
+            return;
         }
-        else
-            _state.Select(picked);
+
+        // Clicked again at the same place: the next object behind those already picked there.
+        var camera = (_state.Camera.Position, _state.Camera.Forward);
+        bool again = _clickCycle.Count > 0 && Math.Abs(click.X - _cycleClick.X) <= 4 && Math.Abs(click.Y - _cycleClick.Y) <= 4
+                     && camera == _cycleCamera && _state.Selection == _clickCycle[^1];
+        if (again && _modelLayer.PickHit(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, x, y, _clickCycle.ToHashSet()) is { } next)
+        {
+            _clickCycle.Add(next.Entity);
+            _state.Select(next.Entity);
+            return;
+        }
+
+        _clickCycle.Clear();
+        _cycleClick = click;
+        _cycleCamera = camera;
+        var hit = _modelLayer.PickHit(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, x, y, null);
+        // A decal or painted shadow laid on a surface: the surface right under it first (a second click takes the decal).
+        if (hit is { Overlay: true } overlay
+            && _modelLayer.PickHit(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, x, y, new HashSet<Data.Maps.MapEntity> { overlay.Entity }) is { } under
+            && Vector3.Distance(under.Point, overlay.Point) < OverlayDepth)
+        {
+            hit = under;
+            var names = _state.World.Names;
+            _state.Notify($"Recliquez au même endroit pour sélectionner {names?.Describe(overlay.Entity.ArchetypeHash) ?? "l'objet"} "
+                + "(décalque ou ombre posé dessus).");
+        }
+        if (hit is { } chosen)
+            _clickCycle.Add(chosen.Entity);
+        _state.Select(hit?.Entity);
     }
+
+    // Objects picked one after the other by clicking again at the same place (front first).
+    private readonly List<Data.Maps.MapEntity> _clickCycle = [];
+    private Point _cycleClick;
+    private (Vector3, Vector3) _cycleCamera;
+    private const float OverlayDepth = 0.5f; // Metres: a decal lies on the surface it covers.
 
     // An object asked to be added (viewer "Placer"), or copied objects to paste (Ctrl+V): put on the ground at the
     // centre of the 3D view, or 15 m in front of the camera when nothing is there (sky, models hidden).

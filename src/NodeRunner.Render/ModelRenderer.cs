@@ -753,6 +753,9 @@ public enum ModelPass
 
 public sealed class GpuModel : IDisposable
 {
+    // Only see-through parts: a decal or a painted shadow laid on another surface, or a pane of glass.
+    public bool IsOverlay { get; }
+
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored);
@@ -763,6 +766,7 @@ public sealed class GpuModel : IDisposable
         IndexBuffer = indexBuffer;
         Parts = parts;
         HasTranslucentParts = parts.Any(p => p.BlendMode == MeshBlendMode.Translucent);
+        IsOverlay = parts.Length > 0 && parts.All(p => p.BlendMode == MeshBlendMode.Translucent);
         HasWaterParts = parts.Any(p => p.BlendMode == MeshBlendMode.Water);
         TriangleCount = triangleCount;
         ByteSize = byteSize;
