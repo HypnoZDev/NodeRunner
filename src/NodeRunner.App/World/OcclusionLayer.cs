@@ -20,6 +20,7 @@ internal sealed class OcclusionLayer : IDisposable
 
     private const float RebuildDistance = 60f;
     private const float SurfaceAlpha = 0.22f;
+    private const float HiddenOpacity = 0.45f;
 
     public static readonly IReadOnlyList<OcclusionLayerPart> Parts = Enum.GetValues<OcclusionLayerPart>();
 
@@ -92,10 +93,11 @@ internal sealed class OcclusionLayer : IDisposable
         {
             if (!isVisible((OcclusionLayerPart)i))
                 continue;
+            // Occluders sit inside the walls they stand for: shown through the scene, paler there.
             if (_surfaces[i] is { } surface)
-                renderer.Draw(surface, viewProjection, cameraPosition, Radius * 1.2f);
+                renderer.DrawXRay(surface, viewProjection, cameraPosition, Radius * 1.2f, HiddenOpacity);
             if (_lines[i] is { } lines)
-                renderer.Draw(lines, viewProjection, cameraPosition, Radius * 1.2f);
+                renderer.DrawXRay(lines, viewProjection, cameraPosition, Radius * 1.2f, HiddenOpacity);
         }
     }
 

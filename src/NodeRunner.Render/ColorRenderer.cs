@@ -19,6 +19,7 @@ cbuffer Constants : register(b0)
     float4x4 ViewProjection;
     float3 CameraPosition;
     float FadeDistance; // 0 = no fade
+    float Opacity;
 };
 struct VS_INPUT { float3 pos : POSITION; float4 col : COLOR0; };
 struct PS_INPUT { float4 pos : SV_POSITION; float4 col : COLOR0; float3 world : TEXCOORD0; };
@@ -35,6 +36,7 @@ PS_INPUT VS(VS_INPUT input)
 float4 PS(PS_INPUT input) : SV_Target
 {
     float4 col = input.col;
+    col.a *= Opacity;
     if (FadeDistance > 0)
         col.a *= saturate(1.0f - distance(input.world, CameraPosition) / FadeDistance);
     return col;
@@ -46,6 +48,8 @@ float4 PS(PS_INPUT input) : SV_Target
         public Matrix4x4 ViewProjection;
         public Vector3 CameraPosition;
         public float FadeDistance;
+        public float Opacity;
+        private Vector3 _padding;
     }
 
     private readonly ID3D11Device _device;
@@ -61,6 +65,7 @@ float4 PS(PS_INPUT input) : SV_Target
     private readonly ID3D11DepthStencilState _depthStencilState;
     private readonly ID3D11DepthStencilState _translucentDepthState;
     private readonly ID3D11DepthStencilState _onTopDepthState;
+    private readonly ID3D11DepthStencilState _hiddenDepthState;
 
     private ID3D11Buffer? _vertexBuffer;
     private int _vertexBufferCapacity;
@@ -131,6 +136,15 @@ float4 PS(PS_INPUT input) : SV_Target
             DepthFunc = ComparisonFunction.Always,
             StencilEnable = false,
         });
+
+        // Only what is behind the scene (reversed Z: farther = smaller depth).
+        _hiddenDepthState = device.CreateDepthStencilState(new DepthStencilDescription
+        {
+            DepthEnable = true,
+            DepthWriteMask = DepthWriteMask.Zero,
+            DepthFunc = ComparisonFunction.Less,
+            StencilEnable = false,
+        });
     }
 
     public int PendingLineCount => _batch.LineCount;
@@ -179,14 +193,22 @@ float4 PS(PS_INPUT input) : SV_Target
         DrawVertexBuffer(mesh.Buffer, mesh.VertexCount, mesh.IsTriangles, viewProjection, cameraPosition, fadeDistance);
     }
 
+    // Draws the mesh normally, then the parts hidden behind the scene at hiddenOpacity: seen through walls.
+    public void DrawXRay(ColorMesh mesh, Matrix4x4 viewProjection, Vector3 cameraPosition, float fadeDistance, float hiddenOpacity)
+    {
+        DrawVertexBuffer(mesh.Buffer, mesh.VertexCount, mesh.IsTriangles, viewProjection, cameraPosition, fadeDistance);
+        DrawVertexBuffer(mesh.Buffer, mesh.VertexCount, mesh.IsTriangles, viewProjection, cameraPosition, fadeDistance, _hiddenDepthState, hiddenOpacity);
+    }
+
     private void DrawVertexBuffer(ID3D11Buffer buffer, int vertexCount, bool triangles, Matrix4x4 viewProjection, Vector3 cameraPosition,
-        float fadeDistance, ID3D11DepthStencilState? depthState = null)
+        float fadeDistance, ID3D11DepthStencilState? depthState = null, float opacity = 1f)
     {
         var constants = new Constants
         {
             ViewProjection = viewProjection,
             CameraPosition = cameraPosition,
             FadeDistance = fadeDistance,
+            Opacity = opacity,
         };
         var cbMap = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)cbMap.DataPointer, constants);
@@ -227,6 +249,7 @@ float4 PS(PS_INPUT input) : SV_Target
         _depthStencilState.Dispose();
         _translucentDepthState.Dispose();
         _onTopDepthState.Dispose();
+        _hiddenDepthState.Dispose();
         _rasterizerState.Dispose();
         _blendState.Dispose();
         _constantBuffer.Dispose();
