@@ -324,10 +324,11 @@ internal sealed unsafe partial class MainForm : Form
         {
             DrawFrame();
         }
-        catch (SharpGen.Runtime.SharpGenException) when (_graphics.IsLost)
+        catch (SharpGen.Runtime.SharpGenException) when (_graphics?.IsLost == true)
         {
         }
-        if (_graphics.IsLost)
+        // The close button of the title bar disposes everything during DrawFrame.
+        if (_graphics?.IsLost == true)
             OnDeviceLost();
     }
 
