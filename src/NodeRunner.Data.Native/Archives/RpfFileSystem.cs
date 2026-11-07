@@ -45,35 +45,55 @@ public sealed class RpfFileSystem : IGameFileSystem
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // Opened in order (disk numbers), read on a few threads, merged in order: a later archive wins, as before.
+        var opened = new (string Relative, int Disk, string? Error)[paths.Count];
         for (int i = 0; i < paths.Count; i++)
         {
-            string relative = paths[i];
-            progress?.Report($"Lecture des archives ({i} / {paths.Count}) : {relative}");
-            SafeFileHandle handle;
             try
             {
-                handle = File.OpenHandle(Path.Combine(root, relative), FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                    FileOptions.RandomAccess);
+                _disks.Add(File.OpenHandle(Path.Combine(root, paths[i]), FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+                    FileOptions.RandomAccess));
+                opened[i] = (paths[i], _disks.Count - 1, null);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _errors.Add($"{relative} : {ex.Message}");
-                continue;
+                opened[i] = (paths[i], -1, $"{paths[i]} : {ex.Message}");
             }
+        }
 
-            int disk = _disks.Count;
-            _disks.Add(handle);
+        var read = new (Dictionary<string, RpfEntry> Files, List<string> Archives, string? Error)[paths.Count];
+        int done = 0;
+        // Few threads: enough for an SSD, and a hard disk is not made to jump between too many places at once.
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 1, 4) };
+        Parallel.For(0, paths.Count, options, i =>
+        {
+            var (relative, disk, error) = opened[i];
             var files = new Dictionary<string, RpfEntry>(StringComparer.OrdinalIgnoreCase);
             var archives = new List<string>();
-            try
+            if (error is null)
             {
-                long length = RandomAccess.GetLength(handle);
-                RpfArchive.Read(handle, disk, 0, Path.GetFileName(relative), (uint)length, relative, keys, files, archives);
+                try
+                {
+                    var handle = _disks[disk];
+                    long length = RandomAccess.GetLength(handle);
+                    RpfArchive.Read(handle, disk, 0, Path.GetFileName(relative), (uint)length, relative, keys, files, archives);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // A damaged (or badly modded) archive is skipped whole, as if it were absent.
+                    error = $"{relative} : {ex.Message}";
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            read[i] = (files, archives, error);
+            int count = Interlocked.Increment(ref done);
+            progress?.Report($"Lecture des archives ({count} / {paths.Count}) : {relative}");
+        });
+
+        foreach (var (files, archives, error) in read)
+        {
+            if (error is not null)
             {
-                // A damaged (or badly modded) archive is skipped whole, as if it were absent.
-                _errors.Add($"{relative} : {ex.Message}");
+                _errors.Add(error);
                 continue;
             }
             foreach (var (path, entry) in files)
