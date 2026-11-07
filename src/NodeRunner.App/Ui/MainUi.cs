@@ -45,6 +45,7 @@ internal sealed class MainUi
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);
+        _roomGizmo = new RoomGizmo(state);
         _deleteWindow = new DeleteWindow(state);
         _settingsWindow = new SettingsWindow(state);
     }
@@ -77,6 +78,7 @@ internal sealed class MainUi
     private readonly ViewerPanel _viewerPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
+    private readonly RoomGizmo _roomGizmo;
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
     private readonly ErrorWindow _errorWindow;
@@ -120,9 +122,9 @@ internal sealed class MainUi
 
     public bool IsSearchOpen => _searchPalette.IsOpen;
 
-    public bool IsGizmoHovered => _gizmo.IsHovered;
+    public bool IsGizmoHovered => _gizmo.IsHovered || _roomGizmo.IsHovered;
 
-    public bool IsGizmoDragging => _gizmo.IsDragging;
+    public bool IsGizmoDragging => _gizmo.IsDragging || _roomGizmo.IsDragging;
 
     public void Draw()
     {
@@ -134,7 +136,8 @@ internal sealed class MainUi
         DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title);
         _resetLayout = false;
         _gizmo.Update(blocked: _searchPalette.IsOpen);
-        _roomHover.Update(blocked: _searchPalette.IsOpen || _gizmo.IsHovered || _gizmo.IsDragging);
+        _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
+        _roomGizmo.Update(blocked: _searchPalette.IsOpen);
         _viewportOverlay.Draw();
         if (_showLayers) DrawLayersWindow();
         if (_showScene) _scenePanel.Draw(ref _showScene);
@@ -160,7 +163,7 @@ internal sealed class MainUi
             _searchPalette.Open();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.S))
             SaveRequested = true;
-        if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || _gizmo.IsDragging || _state.PendingDeletion is not null)
+        if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || IsGizmoDragging || _state.PendingDeletion is not null)
             return;
         if (ImGui.IsKeyPressed(ImGuiKey.Delete, false))
         {
