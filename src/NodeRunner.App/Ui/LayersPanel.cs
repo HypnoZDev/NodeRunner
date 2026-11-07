@@ -69,7 +69,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             foreach (var part in RoomLayer.Parts)
                 LayerRow(RoomLayer.LayerName(part), RoomLayer.Color(part), RoomLayer.Label(part),
                     part == RoomLayerPart.Rooms ? Widgets.Count(roomLayer.Rooms.Count) : null);
-            Widgets.Hint($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle pour voir son nom, cliquez-la pour la modifier.", wrap: true);
+            Widgets.Hint($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle ou un portail pour voir ses détails, cliquez dessus pour le modifier.", wrap: true);
         }
 
         if (LayerSection("Occlusion", "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))

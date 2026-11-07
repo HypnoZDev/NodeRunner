@@ -49,7 +49,10 @@ public sealed class Archetype
 
     internal void SetRoom(int index, InteriorRoom room) => _rooms = [.. _rooms.Select((r, i) => i == index ? room : r)];
 
-    public IReadOnlyList<InteriorPortal> InteriorPortals { get; init; } = [];
+    public IReadOnlyList<InteriorPortal> InteriorPortals { get => _portals; init => _portals = value; }
+    private IReadOnlyList<InteriorPortal> _portals = [];
+
+    internal void SetPortal(int index, InteriorPortal portal) => _portals = [.. _portals.Select((p, i) => i == index ? portal : p)];
 
     // For an interior: optional groups of objects (furniture styles, upgrades of Online properties...), hidden until
     // a script activates them.
@@ -96,6 +99,16 @@ public sealed record InteriorRoom(Vector3 BoundsMin, Vector3 BoundsMax)
 public sealed record InteriorPortal(int RoomFrom, int RoomTo, uint Flags)
 {
     public IReadOnlyList<Vector3> Corners { get; init; } = [];
+
+    public int MirrorPriority { get; init; }
+
+    public int Opacity { get; init; }
+
+    // Audio occlusion setting, by name hash; 0 = none.
+    public uint AudioOcclusionHash { get; init; }
+
+    // Records compare lists by reference: the corners are compared one by one.
+    public bool SameAs(InteriorPortal other) => this with { Corners = [] } == other with { Corners = [] } && Corners.SequenceEqual(other.Corners);
 }
 
 public enum ArchetypeKind

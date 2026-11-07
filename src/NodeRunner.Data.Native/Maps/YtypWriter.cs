@@ -49,6 +49,7 @@ public sealed class YtypWriter : IMapTypesWriter
                     interior.InteriorEntitySets[s].Entities, originals);
 
             WriteRooms(document, item, interior.InteriorRooms);
+            WritePortals(document, item, interior.InteriorPortals);
             WriteInteriorEntities(document, item, interior.InteriorEntities, originals);
             for (int s = 0; s < setCount; s++)
                 WriteEntitySet(document, item, (setBlock, setOffset + s * YtypReader.EntitySetSize), interior.InteriorEntitySets[s].Entities, originals);
@@ -139,6 +140,32 @@ public sealed class YtypWriter : IMapTypesWriter
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YtypReader.RoomExteriorVisibilityDepth), room.ExteriorVisibilityDepth);
             if (ReadString(document, (block, o + YtypReader.RoomName)) != room.Name)
                 WriteString(document, (block, o + YtypReader.RoomName), room.Name);
+        }
+    }
+
+    // Corners, rooms and settings of each portal; their objects are written with the objects.
+    private static void WritePortals(MetaDocument document, (int Block, int Offset) interior, IReadOnlyList<InteriorPortal> portals)
+    {
+        var (block, offset, count) = Array(document, interior, YtypReader.InteriorPortals);
+        if (count != portals.Count)
+            throw new InvalidDataException("Les portails de l'intérieur ne sont pas ceux du fichier.");
+        for (int p = 0; p < count; p++)
+        {
+            var portal = portals[p];
+            int o = offset + p * YtypReader.PortalSize;
+            var data = document.Blocks[block].Data;
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalRoomFrom), (uint)portal.RoomFrom);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalRoomTo), (uint)portal.RoomTo);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalFlags), portal.Flags);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalMirrorPriority), (uint)portal.MirrorPriority);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalOpacity), (uint)portal.Opacity);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.PortalAudioOcclusion), portal.AudioOcclusionHash);
+            // Corners: 16 bytes each (the 4th float is padding, kept).
+            var (cornerBlock, cornerOffset, cornerCount) = Array(document, (block, o), YtypReader.PortalCorners);
+            if (cornerCount != portal.Corners.Count)
+                throw new InvalidDataException("Les coins du portail ne sont pas ceux du fichier.");
+            for (int c = 0; c < cornerCount; c++)
+                WriteVector3(document.Blocks[cornerBlock].Data, cornerOffset + c * 16, portal.Corners[c]);
         }
     }
 

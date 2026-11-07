@@ -31,7 +31,7 @@ internal sealed record PortalBox(MapEntity Interior, int Index, InteriorPortal P
     public bool LeadsOutside => Portal.RoomFrom == 0 || Portal.RoomTo == 0;
 }
 
-// A room of an interior selected for editing; the change goes to every instance of the interior.
+// A room (or a portal) of an interior selected for editing; the change goes to every instance of the interior.
 internal sealed record RoomSelection(MapEntity Interior, int Index);
 
 // Rooms and portals of the interiors (MLO) near the camera: the box of each room (room 0, "limbo", stands for the

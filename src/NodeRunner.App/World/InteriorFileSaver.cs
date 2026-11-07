@@ -90,6 +90,12 @@ internal static class InteriorFileSaver
                     || p.First.TimecycleHash != p.Second.TimecycleHash || p.First.SecondaryTimecycleHash != p.Second.SecondaryTimecycleHash
                     || Vector3.Distance(p.First.BoundsMin, p.Second.BoundsMin) > Tolerance || Vector3.Distance(p.First.BoundsMax, p.Second.BoundsMax) > Tolerance))
                 throw new InvalidDataException("vérification échouée (salles)");
+            if (read.InteriorPortals.Count != interior.InteriorPortals.Count
+                || read.InteriorPortals.Zip(interior.InteriorPortals).Any(p => p.First.RoomFrom != p.Second.RoomFrom || p.First.RoomTo != p.Second.RoomTo
+                    || p.First.Flags != p.Second.Flags || p.First.Opacity != p.Second.Opacity || p.First.MirrorPriority != p.Second.MirrorPriority
+                    || p.First.AudioOcclusionHash != p.Second.AudioOcclusionHash || p.First.Corners.Count != p.Second.Corners.Count
+                    || p.First.Corners.Zip(p.Second.Corners).Any(c => Vector3.Distance(c.First, c.Second) > Tolerance)))
+                throw new InvalidDataException("vérification échouée (portails)");
         }
     }
 }

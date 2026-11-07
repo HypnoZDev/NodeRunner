@@ -43,7 +43,7 @@ public sealed class YtypReader : IMapTypesReader
 
     // CMloRoomDef and CMloPortalDef.
     internal const uint RoomStructure = 186126833;
-    private const uint PortalStructure = 2572186314;
+    internal const uint PortalStructure = 2572186314;
     internal const int RoomSize = 112;
     internal const int PortalSize = 64;
     internal const int RoomName = 8;
@@ -55,10 +55,13 @@ public sealed class YtypReader : IMapTypesReader
     internal const int RoomFloorId = 84;
     internal const int RoomExteriorVisibilityDepth = 88;
     internal const int RoomAttachedObjects = 96;
-    private const int PortalRoomFrom = 8;
-    private const int PortalRoomTo = 12;
-    private const int PortalFlags = 16;
-    private const int PortalCorners = 32;
+    internal const int PortalRoomFrom = 8;
+    internal const int PortalRoomTo = 12;
+    internal const int PortalFlags = 16;
+    internal const int PortalMirrorPriority = 20;
+    internal const int PortalOpacity = 24;
+    internal const int PortalAudioOcclusion = 28;
+    internal const int PortalCorners = 32;
     internal const int PortalAttachedObjects = 48;
 
     // CMloEntitySet: name, room of each object, objects.
@@ -150,6 +153,9 @@ public sealed class YtypReader : IMapTypesReader
             portals.Add(new InteriorPortal((int)d.UInt32(p + PortalRoomFrom), (int)d.UInt32(p + PortalRoomTo), d.UInt32(p + PortalFlags))
             {
                 Corners = corners,
+                MirrorPriority = (int)d.UInt32(p + PortalMirrorPriority),
+                Opacity = (int)d.UInt32(p + PortalOpacity),
+                AudioOcclusionHash = d.UInt32(p + PortalAudioOcclusion),
             });
             AttachObjects(meta, p + PortalAttachedObjects, portalOf, i);
         }

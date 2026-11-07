@@ -95,12 +95,33 @@ internal sealed class AppState
         SelectedRoom = room;
     }
 
+    // A portal of an interior, selected the same way as a room.
+    public RoomSelection? SelectedPortal
+    {
+        get => _selectedPortalLibrary == World.Maps && _selectedPortal is { Interior.IsDeleted: false } portal ? portal : null;
+        private set
+        {
+            _selectedPortal = value;
+            _selectedPortalLibrary = World.Maps;
+        }
+    }
+
+    private RoomSelection? _selectedPortal;
+    private MapLibrary? _selectedPortalLibrary;
+
+    public void SelectPortal(RoomSelection portal)
+    {
+        Select(null);
+        SelectedPortal = portal;
+    }
+
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
         SelectedPathNode = null;
         SelectedOccluder = null;
         SelectedRoom = null;
+        SelectedPortal = null;
         if (entity is not null)
             _selection.Add(entity);
         _selectionLibrary = World.Maps;
@@ -544,6 +565,8 @@ internal sealed class AppState
         }
         else if (edit is RoomEdit roomEdit)
             SelectRoom(new RoomSelection(roomEdit.Interior, roomEdit.Index));
+        else if (edit is PortalEdit portalEdit)
+            SelectPortal(new RoomSelection(portalEdit.Interior, portalEdit.Index));
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;

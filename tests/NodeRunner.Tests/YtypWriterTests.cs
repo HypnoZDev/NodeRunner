@@ -12,7 +12,7 @@ public class YtypWriterTests
     private const uint InteriorName = 0x1234;
 
     // A .ytyp holding one interior with three objects, the last two in its room, and an entity set of two objects
-    // (rooms 0 and 7).
+    // (rooms 0 and 7), and a portal of four corners.
     private static byte[] Sample()
     {
         var document = new MetaDocument { Name = "sample", RootBlock = 0 };
@@ -27,6 +27,7 @@ public class YtypWriterTests
         Structure(YmapReader.EntityStructure, YmapReader.EntitySize);
         Structure(YtypReader.RoomStructure, YtypReader.RoomSize);
         Structure(YtypReader.EntitySetStructure, YtypReader.EntitySetSize);
+        Structure(YtypReader.PortalStructure, YtypReader.PortalSize);
 
         void Array(byte[] data, int field, int block, int offset, int count)
         {
@@ -62,6 +63,17 @@ public class YtypWriterTests
         for (int i = 0; i < 2; i++)
             BinaryPrimitives.WriteUInt64LittleEndian(setPointers.AsSpan(i * 8), MetaDocument.Pointer(4, (3 + i) * YmapReader.EntitySize));
 
+        Array(interior, YtypReader.InteriorPortals, 10, 0, 1);
+        var portal = new byte[YtypReader.PortalSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(portal.AsSpan(YtypReader.PortalRoomTo), 1);
+        Array(portal, YtypReader.PortalCorners, 11, 0, 4);
+        var corners = new byte[4 * 16];
+        for (int c = 0; c < 4; c++)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(corners.AsSpan(c * 16), c);
+            BinaryPrimitives.WriteSingleLittleEndian(corners.AsSpan(c * 16 + 12), float.NaN);
+        }
+
         var entities = new byte[5 * YmapReader.EntitySize];
         for (int i = 0; i < 5; i++)
         {
@@ -83,6 +95,8 @@ public class YtypWriterTests
         document.Blocks.Add(new MetaDocument.Block(YtypReader.EntitySetStructure, set));
         document.Blocks.Add(new MetaDocument.Block(PointerBlock + 1, setRooms));
         document.Blocks.Add(new MetaDocument.Block(PointerBlock, setPointers));
+        document.Blocks.Add(new MetaDocument.Block(YtypReader.PortalStructure, portal));
+        document.Blocks.Add(new MetaDocument.Block(0x33, corners));
         return document.Write().Content;
     }
 
@@ -236,5 +250,23 @@ public class YtypWriterTests
         Assert.Equal("kitchen", again.Archetypes.Single().InteriorRooms[0].Name);
         interior.SetRoom(0, room with { Name = "" });
         Assert.Equal("", new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single().InteriorRooms[0].Name);
+    }
+
+    [Fact]
+    public void Changes_a_portal()
+    {
+        var source = Sample();
+        var interior = new YtypReader().Read(source).Archetypes.Single();
+        Assert.Equal([0f, 1f, 2f, 3f], interior.InteriorPortals.Single().Corners.Select(c => c.X));
+        var portal = interior.InteriorPortals[0] with
+        {
+            RoomFrom = 1, RoomTo = 0, Flags = 0x2040, Opacity = 127, MirrorPriority = 1, AudioOcclusionHash = 0xCCCC,
+            Corners = [new Vector3(1, 2, 3), new Vector3(4, 5, 6), new Vector3(7, 8, 9), new Vector3(-1, -2, -3)],
+        };
+        interior.SetPortal(0, portal);
+
+        var back = new YtypReader().Read(new YtypWriter().Write(source, [interior]).Content).Archetypes.Single();
+        Assert.True(portal.SameAs(back.InteriorPortals.Single()));
+        Assert.Equal([-1, 0, 0], back.InteriorEntities.Select(e => e.InteriorRoom));
     }
 }

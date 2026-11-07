@@ -203,7 +203,7 @@ public sealed class MapLibrary
         }
     }
 
-    // Incremented when a room of an interior changes (SetRoom): only the rooms' display depends on it.
+    // Incremented when a room or a portal of an interior changes (SetRoom, SetPortal): only the rooms' display depends on it.
     public int RoomVersion { get; private set; }
 
     // Replaces a room of an interior (box, name, settings), shared by every instance.
@@ -212,6 +212,15 @@ public sealed class MapLibrary
         if (GetArchetype(interiorHash) is not { } archetype || index < 0 || index >= archetype.InteriorRooms.Count)
             throw new ArgumentOutOfRangeException(nameof(index));
         archetype.SetRoom(index, room);
+        RoomVersion++;
+    }
+
+    // Replaces a portal of an interior (corners, rooms, settings), shared by every instance.
+    public void SetPortal(uint interiorHash, int index, InteriorPortal portal)
+    {
+        if (GetArchetype(interiorHash) is not { } archetype || index < 0 || index >= archetype.InteriorPortals.Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        archetype.SetPortal(index, portal);
         RoomVersion++;
     }
 

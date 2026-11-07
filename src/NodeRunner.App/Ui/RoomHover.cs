@@ -6,7 +6,7 @@ using NodeRunner.Data.Hashing;
 namespace NodeRunner.App.Ui;
 
 // While the "Rooms and portals" layer is shown: the room or portal under the mouse in the 3D view is outlined, with
-// its details next to the mouse. The selected room is outlined in any case.
+// its details next to the mouse. The selected room or portal is outlined in any case.
 internal sealed class RoomHover(AppState state, RoomLayer layer)
 {
     private static readonly int[] BoxEdges = [0, 1, 1, 3, 3, 2, 2, 0, 4, 5, 5, 7, 7, 6, 6, 4, 0, 4, 1, 5, 2, 6, 3, 7];
@@ -19,6 +19,7 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
         if (!SetUpView())
             return;
         DrawSelected();
+        DrawSelectedPortal();
 
         bool showRooms = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms));
         bool showInner = state.IsLayerVisible(RoomLayer.LayerName(RoomLayerPart.InnerPortals));
@@ -71,6 +72,39 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
         DrawBox(room.BoundsMin, room.BoundsMax, selected.Interior.Transform, Widgets.Col(UiTheme.Accent), 3f);
     }
 
+    // The selected portal, from its current corners, with its first corner marked (corners are numbered from it).
+    private void DrawSelectedPortal()
+    {
+        if (state.SelectedPortal is not { } selected || state.World.Maps?.GetArchetype(selected.Interior.ArchetypeHash) is not { } archetype
+            || selected.Index >= archetype.InteriorPortals.Count)
+            return;
+        var corners = archetype.InteriorPortals[selected.Index].Corners;
+        if (corners.Count < 2)
+            return;
+        var draw = ImGui.GetBackgroundDrawList();
+        draw.PushClipRect(_origin, _origin + _size, true);
+        uint color = Widgets.Col(UiTheme.Accent);
+        var screen = new Vector2[corners.Count];
+        var visible = new bool[corners.Count];
+        for (int i = 0; i < corners.Count; i++)
+            visible[i] = TryProject(Vector3.Transform(corners[i], selected.Interior.Transform), out screen[i]);
+        for (int i = 0; i < corners.Count; i++)
+        {
+            int next = (i + 1) % corners.Count;
+            if (visible[i] && visible[next])
+                draw.AddLine(screen[i], screen[next], color, 3f);
+        }
+        for (int i = 0; i < corners.Count; i++)
+        {
+            if (!visible[i])
+                continue;
+            draw.AddCircleFilled(screen[i], 7f, Widgets.Col(UiTheme.Accent));
+            var label = $"{i + 1}";
+            draw.AddText(screen[i] - ImGui.CalcTextSize(label) / 2, 0xFF000000, label);
+        }
+        draw.PopClipRect();
+    }
+
     private void DrawBox(Vector3 min, Vector3 max, Matrix4x4 transform, uint color, float thickness)
     {
         var draw = ImGui.GetBackgroundDrawList();
@@ -115,6 +149,7 @@ internal sealed class RoomHover(AppState state, RoomLayer layer)
         if (portal.ObjectCount > 0)
             ImGui.TextColored(UiTheme.TextMuted, portal.ObjectCount == 1 ? "1 objet attaché (porte...)" : $"{portal.ObjectCount} objets attachés (portes...)");
         ImGui.TextColored(UiTheme.TextFaint, $"Drapeaux : 0x{portal.Portal.Flags:X}");
+        ImGui.TextColored(UiTheme.TextFaint, "Clic : sélectionner le portail");
         ImGui.EndTooltip();
     }
 

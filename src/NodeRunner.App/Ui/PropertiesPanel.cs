@@ -92,6 +92,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
                  && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
             DrawRoom(room, roomInterior, roomLibrary);
+        else if (state.SelectedPortal is { } portal && state.World.Maps is { } portalLibrary
+                 && portalLibrary.GetArchetype(portal.Interior.ArchetypeHash) is { } portalInterior && portal.Index < portalInterior.InteriorPortals.Count)
+            DrawPortal(portal, portalInterior, portalLibrary);
         else
         {
             ImGui.Dummy(new Vector2(0, 6));
@@ -929,6 +932,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (other != 0)
                 Widgets.Hint($"Autres drapeaux : 0x{other:X}");
         }
+        if (Widgets.Section("Portails de la salle", "room_portals"))
+            DrawPortalList(interior, archetype, index);
         Widgets.Hint("Change la salle dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
             + "Échap pour désélectionner ; masquez le calque Salles pour sélectionner les objets.", wrap: true);
     }
@@ -952,6 +957,207 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         names.Add(text);
         return Joaat.Hash(text);
+    }
+
+    // Portal flags (CMloPortalDef), as named by the community tools.
+    private static readonly (uint Flag, string Text, string Tooltip)[] PortalFlags =
+    [
+        (0x1, "Sens unique", "On ne voit à travers le portail que dans un sens (one way)."),
+        (0x2, "Relie un autre intérieur", "Le portail mène à un autre intérieur collé à celui-ci (link interior)."),
+        (0x4, "Miroir", "Le portail est un miroir : il montre la salle en reflet (mirror)."),
+        (0x8, "Ignorer le timecycle", "Le réglage de lumière de la salle n'est pas appliqué à travers le portail (ignore modifier)."),
+        (0x10, "Miroir haute qualité", "Miroir dessiné avec les effets coûteux (mirror using expensive shaders)."),
+        (0x20, "Basse qualité seulement", "Seulement pour les modèles de basse qualité (low LOD only)."),
+        (0x40, "Se ferme avec la porte", "Quand la porte attachée est fermée, ce qui est derrière n'est plus dessiné (allow closing)."),
+        (0x80, "Miroir : voit le soleil", "Le reflet est éclairé par le soleil (mirror can see directional)."),
+        (0x100, "Miroir : traverse les portails", "Le reflet montre aussi les autres salles (mirror using portal traversal)."),
+        (0x200, "Miroir au sol", "Miroir posé à plat, comme un sol brillant (mirror floor)."),
+        (0x400, "Miroir : voit l'extérieur", "Le reflet montre aussi le dehors (mirror can see exterior view)."),
+        (0x800, "Surface d'eau", "Le portail est une surface d'eau, comme une piscine (water surface)."),
+        (0x1000, "Eau jusqu'à l'horizon", "La surface d'eau s'étend jusqu'à l'horizon (water surface extend to horizon)."),
+        (0x2000, "Lumière qui passe", "La lumière d'une salle passe par le portail dans l'autre (use light bleed)."),
+    ];
+
+    private InteriorPortal? _portalEditStart;
+
+    private static string RoomLabel(Archetype archetype, int room) =>
+        room == 0 ? "0 · extérieur (limbo)"
+        : room < archetype.InteriorRooms.Count ? $"{room} · {(archetype.InteriorRooms[room].Name.Length > 0 ? archetype.InteriorRooms[room].Name : "(sans nom)")}"
+        : $"{room} · (salle absente)";
+
+    // The portals of a room, each one can be selected in turn.
+    private void DrawPortalList(MapEntity interior, Archetype archetype, int room)
+    {
+        bool any = false;
+        for (int p = 0; p < archetype.InteriorPortals.Count; p++)
+        {
+            var portal = archetype.InteriorPortals[p];
+            if (portal.RoomFrom != room && portal.RoomTo != room)
+                continue;
+            any = true;
+            int other = portal.RoomFrom == room ? portal.RoomTo : portal.RoomFrom;
+            if (Widgets.Link($"Portail {p} · vers {RoomLabel(archetype, other)}##portal{p}", "Sélectionner ce portail"))
+            {
+                state.SelectPortal(new RoomSelection(interior, p));
+                state.SetLayerVisible(RoomLayer.LayerName(other == 0 ? RoomLayerPart.OutsidePortals : RoomLayerPart.InnerPortals), true);
+            }
+        }
+        if (!any)
+            Widgets.Hint("Aucun portail : la salle n'est visible depuis nulle part.");
+    }
+
+    private void DrawPortal(RoomSelection selected, Archetype archetype, MapLibrary library)
+    {
+        var names = state.World.Names ?? new HashNames();
+        var interior = selected.Interior;
+        int index = selected.Index;
+        var portal = archetype.InteriorPortals[index];
+
+        void Change(InteriorPortal after, string description)
+        {
+            if (!after.SameAs(archetype.InteriorPortals[index]))
+                state.History.Add(PortalEdit.Apply(library, interior, index, after, description));
+        }
+
+        // Live change while a field is dragged; one undo step when it is released.
+        void Track(InteriorPortal before, string description)
+        {
+            if (ImGui.IsItemActivated())
+                _portalEditStart = before;
+            if (ImGui.IsItemDeactivatedAfterEdit() && _portalEditStart is { } start)
+            {
+                var end = archetype.InteriorPortals[index];
+                if (!end.SameAs(start))
+                    state.History.Add(new PortalEdit(library, interior, index, start, end, description));
+                _portalEditStart = null;
+            }
+        }
+
+        var center = portal.Corners.Count > 0 ? portal.Corners.Aggregate(Vector3.Zero, (sum, c) => sum + c) / portal.Corners.Count : Vector3.Zero;
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted($"{Icons.House}  Portail {index}");
+        ImGui.PopFont();
+        Widgets.Hint($"{Icons.File}  {names.Describe(interior.ArchetypeHash)} · {Path.GetFileName(library.GetArchetypeFile(interior.ArchetypeHash) ?? "")}");
+        if (Widgets.Button($"{Icons.Crosshair}  Aller au portail"))
+        {
+            float radius = portal.Corners.Count > 0 ? portal.Corners.Max(c => Vector3.Distance(c, center)) : 2f;
+            state.FocusOn(Vector3.Transform(center, interior.Transform), MathF.Max(radius, 3f));
+        }
+        ImGui.SameLine();
+        if (Widgets.Button($"{Icons.House}  Sélectionner l'intérieur"))
+        {
+            state.Select(interior);
+            return;
+        }
+
+        if (Widgets.Section("Portail", "portal") && Widgets.BeginProperties("##portal"))
+        {
+            // The two rooms it joins (room 0 = the outside).
+            void RoomCombo(string label, string tooltip, string id, int current, Func<int, InteriorPortal> with, string description)
+            {
+                Widgets.Property(label, tooltip);
+                ImGui.SetNextItemWidth(-1);
+                if (!ImGui.BeginCombo(id, RoomLabel(archetype, current)))
+                    return;
+                for (int r = 0; r < archetype.InteriorRooms.Count; r++)
+                {
+                    if (ImGui.Selectable(RoomLabel(archetype, r), r == current) && r != current)
+                        Change(with(r), description);
+                }
+                ImGui.EndCombo();
+            }
+            RoomCombo("De la salle", "Première salle reliée par le portail (0 = l'extérieur).", "##portal_from", portal.RoomFrom,
+                r => archetype.InteriorPortals[index] with { RoomFrom = r }, $"Salle de départ du portail {index}");
+            RoomCombo("Vers la salle", "Deuxième salle reliée par le portail (0 = l'extérieur).", "##portal_to", portal.RoomTo,
+                r => archetype.InteriorPortals[index] with { RoomTo = r }, $"Salle d'arrivée du portail {index}");
+            Widgets.Property("");
+            if (Widgets.Button($"{Icons.RefreshCw}  Inverser les salles", "Échange « De la salle » et « Vers la salle »."))
+                Change(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }, $"Inverser les salles du portail {index}");
+            portal = archetype.InteriorPortals[index];
+            if (portal.RoomFrom == portal.RoomTo)
+                Widgets.Hint("Le portail relie une salle à elle-même : le jeu ne s'en sert pas.", wrap: true);
+
+            Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
+            float width = Widgets.SplitWidth(3);
+            Widgets.Property("Centre", "Déplace tout le portail (ses coins ensemble), en mètres, dans le repère de l'intérieur.");
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                var current = archetype.InteriorPortals[index];
+                var middle = current.Corners.Count > 0 ? current.Corners.Aggregate(Vector3.Zero, (sum, c) => sum + c) / current.Corners.Count : Vector3.Zero;
+                float value = middle[i];
+                if (Widgets.AxisField($"##portal_center{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+                {
+                    var delta = Vector3.Zero;
+                    delta[i] = value - middle[i];
+                    library.SetPortal(interior.ArchetypeHash, index, current with { Corners = [.. current.Corners.Select(c => c + delta)] });
+                }
+                Track(current, $"Déplacer le portail {index}");
+            }
+            for (int c = 0; c < portal.Corners.Count; c++)
+            {
+                Widgets.Property($"Coin {c + 1}", "Coin du portail, en mètres, dans le repère de l'intérieur (numéroté sur la vue 3D). "
+                    + "Les coins font le tour de l'ouverture, dans l'ordre.");
+                for (int i = 0; i < 3; i++)
+                {
+                    if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                    var current = archetype.InteriorPortals[index];
+                    var corner = current.Corners[c];
+                    float value = corner[i];
+                    if (Widgets.AxisField($"##portal_corner{c}_{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+                    {
+                        corner[i] = value;
+                        int which = c;
+                        library.SetPortal(interior.ArchetypeHash, index, current with { Corners = [.. current.Corners.Select((p, k) => k == which ? corner : p)] });
+                    }
+                    Track(current, $"Déplacer un coin du portail {index}");
+                }
+            }
+            portal = archetype.InteriorPortals[index];
+            if (portal.Corners.Count == 4)
+                Widgets.PropertyText("Taille", $"{Vector3.Distance(portal.Corners[0], portal.Corners[1]):0.00} x {Vector3.Distance(portal.Corners[1], portal.Corners[2]):0.00} m");
+
+            Widgets.Property("Opacité", "Opacité du portail (0 le plus souvent ; utilisé par les miroirs). Entrée pour valider.");
+            {
+                int opacity = portal.Opacity;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt("##portal_opacity", ref opacity, 1, 10, ImGuiInputTextFlags.EnterReturnsTrue))
+                    Change(portal with { Opacity = Math.Max(0, opacity) }, $"Opacité du portail {index}");
+            }
+            Widgets.Property("Priorité du miroir", "Ordre de dessin quand plusieurs miroirs sont visibles (0 le plus souvent). Entrée pour valider.");
+            {
+                int priority = portal.MirrorPriority;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt("##portal_mirror", ref priority, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                    Change(portal with { MirrorPriority = Math.Max(0, priority) }, $"Priorité du miroir du portail {index}");
+            }
+            Widgets.Property("Occlusion audio", "Réglage du son à travers le portail (audio occlusion), par son nom ou son hash (0x...). "
+                + "Vide = aucun. Entrée pour valider.");
+            if (CommitText($"##portal_audio{interior.ArchetypeHash}_{index}", TimecycleText(portal.AudioOcclusionHash, names), "aucun", out var audio)
+                && ParseTimecycle(audio, names) is { } audioHash && audioHash != portal.AudioOcclusionHash)
+                Change(portal with { AudioOcclusionHash = audioHash }, $"Occlusion audio du portail {index}");
+
+            int objects = archetype.InteriorEntities.Count(e => e.InteriorPortal == index && !e.IsDeleted);
+            Widgets.PropertyText("Objets attachés", objects == 0 ? "aucun" : $"{objects} (portes...)");
+            Widgets.EndProperties();
+        }
+
+        if (Widgets.Section("Réglages du portail", "portal_flags"))
+        {
+            foreach (var (flag, text, tooltip) in PortalFlags)
+            {
+                bool on = (portal.Flags & flag) != 0;
+                if (ImGui.Checkbox($"{text}##portal_flag{flag:X}", ref on))
+                    Change(portal with { Flags = on ? portal.Flags | flag : portal.Flags & ~flag }, $"{(on ? "Activer" : "Désactiver")} « {text} » (portail {index})");
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                    ImGui.SetTooltip(tooltip);
+            }
+            uint other = portal.Flags & ~PortalFlags.Aggregate(0u, (all, f) => all | f.Flag);
+            if (other != 0)
+                Widgets.Hint($"Autres drapeaux : 0x{other:X}");
+        }
+        Widgets.Hint("Change le portail dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
+            + "Échap pour désélectionner ; masquez les calques des portails pour sélectionner les objets.", wrap: true);
     }
 
     private void DrawPathNode(PathNode node, PathNetwork network)
