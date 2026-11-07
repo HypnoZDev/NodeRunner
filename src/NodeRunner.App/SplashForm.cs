@@ -55,9 +55,11 @@ internal sealed partial class SplashForm : Form
     private readonly PrivateFontCollection _fonts = new();
     private readonly FontFamily _brand;
     private readonly FontStyle _brandStyle;
+    private readonly GraphicsPath _wordmark;
+    private readonly RectangleF _wordmarkBounds;
+    private static readonly Color WordmarkInk = Color.FromArgb(0xF2, 0xEF, 0xE8);
     private readonly Font _taglineFont = new("Segoe UI", 12f, GraphicsUnit.Pixel);
     private readonly Font _statusFont = new("Segoe UI", 12f, GraphicsUnit.Pixel);
-    private readonly Font _creditFont = new("Segoe UI Semibold", 12f, GraphicsUnit.Pixel);
     private readonly Font _smallFont = new("Segoe UI", 10f, GraphicsUnit.Pixel);
     private readonly float _scale;
     private readonly Bitmap _background;
@@ -98,10 +100,17 @@ internal sealed partial class SplashForm : Form
         BackColor = Background;
         Opacity = 0;
 
-        string brand = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "unbounded-bold.ttf");
-        if (File.Exists(brand))
-            _fonts.AddFontFile(brand);
-        (_brand, _brandStyle) = _fonts.Families.Length > 0 ? (_fonts.Families[0], FontStyle.Regular) : (new FontFamily("Segoe UI"), FontStyle.Bold);
+        foreach (string file in new[] { "unbounded-bold.ttf", "unbounded-light.ttf" })
+        {
+            string font = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", file);
+            if (File.Exists(font))
+                _fonts.AddFontFile(font);
+        }
+        var bold = _fonts.Families.FirstOrDefault(f => f.Name == "Unbounded");
+        var light = _fonts.Families.FirstOrDefault(f => f.Name == "Unbounded Light");
+        (_brand, _brandStyle) = bold is not null ? (bold, FontStyle.Regular) : (new FontFamily("Segoe UI"), FontStyle.Bold);
+        _wordmark = Wordmark(light ?? new FontFamily("Segoe UI"), Gutter, Design.Height - 52f);
+        _wordmarkBounds = _wordmark.GetBounds();
 
         // Monogram, centred on (0, 0): traced, then filled ("NR" white, "S" in the accent colour).
         _monoNr = TextPath("NR", 104f);
@@ -565,10 +574,27 @@ internal sealed partial class SplashForm : Form
         using (var head = new SolidBrush(Color.FromArgb(Alpha(70), AccentLight)))
             g.FillEllipse(head, Gutter + filled - 7f, barTop - 5f, 14f, 14f);
 
-        // Credits, with the notice that always goes with them.
+        // Author's wordmark (a shine passes over it after the name's), with the notice that always goes with it.
         float creditsTop = Design.Height - 50f;
-        using (var credit = new SolidBrush(Color.FromArgb(Alpha(0xFF), Color.White)))
-            g.DrawString("Créé par Inside Rockstar / HypnoZ", _creditFont, credit, Gutter, creditsTop);
+        using (var ink = new SolidBrush(Color.FromArgb(Alpha(0xFF), WordmarkInk)))
+            g.FillPath(ink, _wordmark);
+        float sweep = (Now - TitleFrom - 1.6f) % 6f / 0.7f;
+        if (Now > TitleFrom + 1.6f && sweep < 1f)
+        {
+            var w = _wordmarkBounds;
+            float x = w.X - 30f + (w.Width + 60f) * EaseInOut(sweep);
+            g.SetClip(_wordmark);
+            using var band = new LinearGradientBrush(new RectangleF(x - 20f, 0, 40f, 1f), Color.Transparent, Color.Transparent, 0f)
+            {
+                InterpolationColors = new ColorBlend
+                {
+                    Colors = [Color.FromArgb(0, AccentLight), Color.FromArgb(Alpha(255), AccentLight), Color.FromArgb(0, AccentLight)],
+                    Positions = [0f, 0.5f, 1f],
+                },
+            };
+            g.FillRectangle(band, x - 20f, w.Y - 2f, 40f, w.Height + 4f);
+            g.ResetClip();
+        }
         using (var notice = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x6A, 0x74, 0x8A)))
             g.DrawString("Non affilié à Rockstar Games ni à Take-Two Interactive", _smallFont, notice, Gutter, creditsTop + 18f);
 
@@ -599,6 +625,27 @@ internal sealed partial class SplashForm : Form
         // Winding: the brand font's letters are made of overlapping shapes, which the default fill would cut out.
         var path = new GraphicsPath(FillMode.Winding);
         path.AddString(text, _brand, (int)_brandStyle, size, PointF.Empty, StringFormat.GenericTypographic);
+        return path;
+    }
+
+    // "inside" light then "rockstar" bold on the same baseline, a third of the size apart, ink placed at (left, top).
+    private GraphicsPath Wordmark(FontFamily light, float left, float top)
+    {
+        const float Size = 17f;
+        var path = new GraphicsPath(FillMode.Winding);
+        path.AddString("inside", light, (int)FontStyle.Regular, Size, PointF.Empty, StringFormat.GenericTypographic);
+        float right = path.GetBounds().Right;
+        using (var second = TextPath("rockstar", Size))
+        {
+            using var move = new Matrix();
+            move.Translate(right + Size / 3f - second.GetBounds().X, 0f);
+            second.Transform(move);
+            path.AddPath(second, false);
+        }
+        var bounds = path.GetBounds();
+        using var place = new Matrix();
+        place.Translate(left - bounds.X, top - bounds.Y);
+        path.Transform(place);
         return path;
     }
 
@@ -756,7 +803,7 @@ internal sealed partial class SplashForm : Form
             _titleStudio.Dispose();
             _taglineFont.Dispose();
             _statusFont.Dispose();
-            _creditFont.Dispose();
+            _wordmark.Dispose();
             _smallFont.Dispose();
             _fonts.Dispose();
             // The road map may still be drawing: freed when it is done.
