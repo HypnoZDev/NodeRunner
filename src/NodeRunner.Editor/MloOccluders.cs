@@ -18,6 +18,8 @@ public static class MloOccluders
     private const float MaxWallThickness = 1.5f;
     private const float SamePlane = 0.5f;
     private const float Gap = 0.05f;
+    // Enough to hide; a thicker box only risks sticking out of the wall.
+    private const float MaxBoxThickness = 0.5f;
     private const float PortalMargin = 0.3f;
     private const float PortalDistance = 2f;
     private const float VerticalNormal = 0.3f;
@@ -160,7 +162,7 @@ public static class MloOccluders
         if (to - from >= thin + 2 * Gap)
         {
             from += Gap;
-            to -= Gap;
+            to = MathF.Min(to - Gap, from + MaxBoxThickness);
         }
         else
         {

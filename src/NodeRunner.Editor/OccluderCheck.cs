@@ -70,6 +70,8 @@ public static class OccluderCheck
     private const int Samples = 6;
     private const float BuildingMargin = 1f;
     private const float InteriorInset = 0.5f;
+    // Thinner boxes are walls: the rooms' boxes reach into the walls (and past them for L-shaped rooms).
+    private const float WallThickness = 0.6f;
     private const float MaxOutside = 0.2f;
     private const float DuplicateShare = 0.8f;
     private const float MinFaceArea = 4f;
@@ -87,7 +89,7 @@ public static class OccluderCheck
 
             bool Near(PlacedVolume v) => Vector2.Distance(v.Center, center) <= v.Reach + reach;
 
-            foreach (var interior in interiors)
+            foreach (var interior in MathF.Min(box.Size.X, box.Size.Y) <= WallThickness ? [] : interiors)
             {
                 if (Near(interior) && points.Any(p => interior.Contains(p, -InteriorInset)))
                 {
