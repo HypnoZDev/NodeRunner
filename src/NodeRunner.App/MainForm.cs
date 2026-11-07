@@ -302,19 +302,84 @@ internal sealed unsafe partial class MainForm : Form
         if (_graphics is null || _imguiRenderer is null || _lineRenderer is null)
             return;
 
-        // Do not burn GPU when minimized.
-        if (WindowState == FormWindowState.Minimized)
+        // Do not burn GPU when minimized, hidden or after the GPU was lost.
+        if (_deviceLost || WindowState == FormWindowState.Minimized || _graphics.IsOccluded && _clock.Elapsed.TotalSeconds - _lastFrameTime < 0.25)
         {
             Thread.Sleep(50);
             return;
         }
+        // In the background (another window has the focus): about 30 images per second are enough.
+        if (ActiveForm is null && _clock.Elapsed.TotalSeconds - _lastFrameTime is var elapsed && elapsed < BackgroundFrameTime)
+        {
+            Thread.Sleep((int)Math.Ceiling((BackgroundFrameTime - elapsed) * 1000));
+            return;
+        }
 
+        try
+        {
+            DrawFrame();
+        }
+        catch (SharpGen.Runtime.SharpGenException) when (_graphics.IsLost)
+        {
+        }
+        if (_graphics.IsLost)
+            OnDeviceLost();
+    }
+
+    private const double BackgroundFrameTime = 1.0 / 30;
+
+    private bool _deviceLost;
+
+    // The GPU was taken away: every GPU resource would have to be rebuilt, so the changes are saved and NodeRunner
+    // starts again.
+    private void OnDeviceLost()
+    {
+        if (_deviceLost)
+            return;
+        _deviceLost = true;
+        string reason = _graphics!.LostReason;
+        Diagnostics.ErrorLog.Add("Carte graphique", $"Carte graphique perdue : {reason}.");
+        BeginInvoke(() => RestartAfterDeviceLost(reason));
+    }
+
+    private void RestartAfterDeviceLost(string reason)
+    {
+        string text = $"La carte graphique ne répond plus ({reason}).\n"
+            + "Cela arrive quand son pilote plante, redémarre ou se met à jour. NodeRunner doit redémarrer pour réafficher la carte.";
+        if (_state.History.HasUnsavedChanges && _state.PendingSaveCount > 0)
+        {
+            string count = _state.PendingSaveText;
+            if (_state.Project is null)
+            {
+                // No window can be drawn anymore to name a project: the changes go into a new one.
+                string name = $"Récupération {DateTime.Now:yyyy-MM-dd HH-mm}";
+                string folder = Path.Combine(_state.ProjectsFolder, name);
+                if (_state.CreateProject(folder, name) is { } error)
+                    text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées : {error}";
+                else if (SaveMaps())
+                    text += $"\n\nLes modifications ({count}) ont été enregistrées dans le nouveau projet « {name} » :\n{folder}";
+                else
+                    text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.";
+            }
+            else if (SaveMaps())
+                text += $"\n\nLes modifications du projet « {_state.Project.Name} » ({count}) ont été enregistrées.";
+            else
+                text += $"\n\nLes modifications ({count}) n'ont pas pu être enregistrées.";
+        }
+        MessageBox.Show(this, text, Program.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        Application.Restart();
+    }
+
+    private void DrawFrame()
+    {
+        var graphics = _graphics!;
+        var imguiRenderer = _imguiRenderer!;
         double now = _clock.Elapsed.TotalSeconds;
         float deltaTime = (float)Math.Max(now - _lastFrameTime, 1e-5);
         var io = ImGui.GetIO();
         io.DeltaTime = deltaTime;
         UpdateDisplayScale(io);
-        io.DisplaySize = new Vector2(_graphics.Width, _graphics.Height) / UiTheme.Scale;
+        io.DisplaySize = new Vector2(graphics.Width, graphics.Height) / UiTheme.Scale;
         io.DisplayFramebufferScale = new Vector2(UiTheme.Scale);
         _lastFrameTime = now;
 
@@ -328,16 +393,16 @@ internal sealed unsafe partial class MainForm : Form
         _input.UpdateCursor();
 
         // The viewer's image first (it binds its own target), for the interface drawn below.
-        _state.Viewer.Render(_modelRenderer!, _imguiRenderer, _graphics);
+        _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics);
         var scene = SceneViewport();
         PickClickedObject(scene);
         PickCollision(scene);
         PlaceRequestedObject(scene);
-        _graphics.BeginFrame(BackgroundColor);
-        _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
-        DrawWorld(_lineRenderer, scene);
-        _imguiRenderer.Render(ImGui.GetDrawData());
-        _graphics.Present(_state.Settings.VSync);
+        graphics.BeginFrame(BackgroundColor);
+        graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
+        DrawWorld(_lineRenderer!, scene);
+        imguiRenderer.Render(ImGui.GetDrawData());
+        graphics.Present(_state.Settings.VSync);
 
         HandleUiRequests();
         UpdateTitle();
@@ -1058,7 +1123,7 @@ internal sealed unsafe partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        if (e.Cancel || !_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
+        if (e.Cancel || _deviceLost || !_state.History.HasUnsavedChanges || _state.PendingSaveCount == 0)
             return;
         var answer = MessageBox.Show(this,
             $"Des modifications ne sont pas enregistrées ({_state.PendingSaveText}).\nLes enregistrer avant de quitter ?",

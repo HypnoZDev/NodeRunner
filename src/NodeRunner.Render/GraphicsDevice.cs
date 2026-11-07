@@ -166,7 +166,10 @@ public sealed class GraphicsDevice : IDisposable
         _backBufferView = null;
         DisposeDepthBuffer();
 
-        _swapChain.ResizeBuffers(BackBufferCount, (uint)Width, (uint)Height, BackBufferFormat, SwapChainFlags.None).CheckError();
+        var result = _swapChain.ResizeBuffers(BackBufferCount, (uint)Width, (uint)Height, BackBufferFormat, SwapChainFlags.None);
+        if (result.Failure && IsLost)
+            return; // Nothing is drawn anymore (see IsLost).
+        result.CheckError();
         CreateBackBufferView();
         CreateDepthBuffer();
     }
@@ -198,7 +201,34 @@ public sealed class GraphicsDevice : IDisposable
 
     public void Present(bool vsync = true)
     {
-        _swapChain.Present(vsync ? 1u : 0u, PresentFlags.None);
+        var result = _swapChain.Present(vsync ? 1u : 0u, PresentFlags.None);
+        IsOccluded = result.Code == StatusOccluded;
+    }
+
+    private const int StatusOccluded = 0x087A0001;
+
+    // The window cannot be seen (covered, locked screen): drawing can slow down.
+    public bool IsOccluded { get; private set; }
+
+    // True once Windows has taken the GPU away (driver crash, update or restart, card removed): nothing can be drawn
+    // with this device anymore, and every resource would have to be created again.
+    public bool IsLost => Device.DeviceRemovedReason.Failure;
+
+    public string LostReason
+    {
+        get
+        {
+            var reason = Device.DeviceRemovedReason;
+            string text = (uint)reason.Code switch
+            {
+                0x887A0006 => "la carte graphique ne répondait plus (DXGI_ERROR_DEVICE_HUNG)",
+                0x887A0005 => "la carte graphique a été retirée ou son pilote mis à jour (DXGI_ERROR_DEVICE_REMOVED)",
+                0x887A0007 => "la carte graphique a été réinitialisée (DXGI_ERROR_DEVICE_RESET)",
+                0x887A0020 => "erreur interne du pilote graphique (DXGI_ERROR_DRIVER_INTERNAL_ERROR)",
+                _ => "erreur de la carte graphique",
+            };
+            return $"{text}, code 0x{(uint)reason.Code:X8}";
+        }
     }
 
     private void CreateBackBufferView()
