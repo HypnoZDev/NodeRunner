@@ -210,6 +210,35 @@ internal sealed class SettingsWindow(AppState state)
         }
 
         ImGui.Dummy(new Vector2(0, 4));
+        if (Widgets.Section("Calques", "settings_layers"))
+        {
+            if (Widgets.BeginProperties("##layers_grid", 0.42f))
+            {
+                Widgets.Property("Rayon des collisions", "Distance autour de la caméra où le calque Collisions est chargé. Plus grand = plus de surfaces, plus lent. Aussi dans le panneau Calques.");
+                ImGui.SetNextItemWidth(-1f);
+                float collision = settings.CollisionRadius;
+                if (ImGui.SliderFloat("##collision_radius", ref collision, CollisionLayer.MinRadius, CollisionLayer.MaxRadius, "%.0f m"))
+                    settings.CollisionRadius = collision;
+                SaveWhenReleased();
+
+                Widgets.Property("Rayon du navmesh", "Distance autour de la caméra où le calque Navmesh est chargé. Aussi dans le panneau Calques.");
+                ImGui.SetNextItemWidth(-1f);
+                float navMesh = settings.NavMeshRadius;
+                if (ImGui.SliderFloat("##navmesh_radius", ref navMesh, NavMeshLayer.MinRadius, NavMeshLayer.MaxRadius, "%.0f m"))
+                    settings.NavMeshRadius = navMesh;
+                SaveWhenReleased();
+
+                Widgets.Property("Rayon des boîtes d'objets", "Distance autour de la caméra où les boîtes des objets sont dessinées. Aussi dans le panneau Calques.");
+                ImGui.SetNextItemWidth(-1f);
+                float entities = settings.EntityRadius;
+                if (ImGui.SliderFloat("##entity_radius", ref entities, EntityBoxLayer.MinRadius, EntityBoxLayer.MaxRadius, "%.0f m"))
+                    settings.EntityRadius = entities;
+                SaveWhenReleased();
+                Widgets.EndProperties();
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0, 4));
         if (Widgets.Section("Interface", "settings_interface"))
         {
             if (Widgets.BeginProperties("##interface_grid", 0.42f))
