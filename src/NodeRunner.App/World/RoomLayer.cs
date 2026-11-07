@@ -84,8 +84,15 @@ internal sealed class RoomLayer : IDisposable
         if (_building is { IsCompleted: true } finished)
         {
             _building = null;
-            if (finished.Result.Library == _library)
+            if (!finished.IsCompletedSuccessfully)
+            {
+                Diagnostics.ErrorLog.Add("Salles et portails", finished.Exception!.GetBaseException());
+                _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
+            }
+            else if (finished.Result.Library == _library)
+            {
                 Apply(finished.Result, renderer);
+            }
         }
 
         if (_library is null || !enabled || _building is not null)
@@ -150,18 +157,17 @@ internal sealed class RoomLayer : IDisposable
                     continue;
                 var part = portal.RoomFrom == 0 || portal.RoomTo == 0 ? RoomLayerPart.OutsidePortals : RoomLayerPart.InnerPortals;
                 var color = Color(part);
-                var fill = color with { W = 0.25f };
+                var fill = color with { W = 0.44f };
                 var corners = portal.Corners.Select(c => Vector3.Transform(c, transform)).ToArray();
                 int index = p;
                 portals.Add(new PortalBox(interior, p, portal, corners, RoomName(archetype, portal.RoomFrom), RoomName(archetype, portal.RoomTo),
                     archetype.InteriorEntities.Count(e => e.InteriorPortal == index)));
                 for (int c = 0; c < corners.Length; c++)
                     lines[(int)part].AddLine(corners[c], corners[(c + 1) % corners.Length], color);
-                // Fan of triangles, both faces (seen from either room).
+                // Fan of triangles (ColorRenderer draws both faces).
                 for (int c = 1; c + 1 < corners.Length; c++)
                 {
                     surfaces[(int)part].AddTriangle(corners[0], corners[c], corners[c + 1], fill);
-                    surfaces[(int)part].AddTriangle(corners[0], corners[c + 1], corners[c], fill);
                 }
             }
         }

@@ -26,7 +26,7 @@ internal sealed class PathNodeLayer : IDisposable
     // Width of one lane of a road surface, and of a footpath.
     private const float LaneWidth = 4.5f;
     private const float FootpathWidth = 2f;
-    private const float SurfaceAlpha = 0.28f;
+    private const float SurfaceAlpha = 0.48f;
     private const float PointSize = 0.45f;
 
     private readonly ColorMesh?[] _meshes = new ColorMesh?[Categories.Count];
@@ -128,7 +128,7 @@ internal sealed class PathNodeLayer : IDisposable
 
     private static readonly Vector3 SurfaceOffset = new(0f, 0f, 0.15f);
 
-    // Flat band of the given width along a link, both faces (seen from above and below).
+    // Flat band of the given width along a link (ColorRenderer draws both faces).
     private static void AddStrip(TriangleBatch batch, Vector3 a, Vector3 b, float width, Vector4 color)
     {
         var along = new Vector2(b.X - a.X, b.Y - a.Y);
@@ -138,19 +138,15 @@ internal sealed class PathNodeLayer : IDisposable
         var side = new Vector3(-along.Y, along.X, 0f) * (width * 0.5f);
         batch.AddTriangle(a - side, a + side, b + side, color);
         batch.AddTriangle(a - side, b + side, b - side, color);
-        batch.AddTriangle(b + side, a + side, a - side, color);
-        batch.AddTriangle(b - side, b + side, a - side, color);
     }
 
-    // Small flat diamond on the node, both faces.
+    // Small flat diamond on the node.
     private static void AddPoint(TriangleBatch batch, Vector3 p, Vector4 color)
     {
         var x = new Vector3(PointSize, 0, 0);
         var y = new Vector3(0, PointSize, 0);
         batch.AddTriangle(p - x, p - y, p + x, color);
         batch.AddTriangle(p - x, p + x, p + y, color);
-        batch.AddTriangle(p + x, p - y, p - x, color);
-        batch.AddTriangle(p + y, p + x, p - x, color);
     }
 
     private static Vector4 Brighter(Vector4 c) => new(c.X + (1 - c.X) * 0.5f, c.Y + (1 - c.Y) * 0.5f, c.Z + (1 - c.Z) * 0.5f, 1f);

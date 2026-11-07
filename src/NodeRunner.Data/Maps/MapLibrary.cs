@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using NodeRunner.Data.FileSystem;
 
@@ -10,8 +11,10 @@ public sealed class MapLibrary
     public const float CellSize = 100f;
 
     private readonly Dictionary<uint, Archetype> _archetypes = new();
-    private readonly List<MapData> _maps = new();
-    private readonly Dictionary<(int X, int Y), List<MapEntity>> _cells = new();
+    // Once loaded, the maps and cells are read by background threads while the editor adds to them: the lists are
+    // then replaced by new ones, never changed in place.
+    private List<MapData> _maps = new();
+    private readonly ConcurrentDictionary<(int X, int Y), List<MapEntity>> _cells = new();
 
     public IReadOnlyList<MapData> Maps => _maps;
     public int ArchetypeCount => _archetypes.Count;
@@ -98,7 +101,7 @@ public sealed class MapLibrary
             FilePath = fileName,
             IsCustom = true,
         };
-        Add(map);
+        _maps = [.. _maps, map];
         StructureVersion++;
         return map;
     }
@@ -110,7 +113,7 @@ public sealed class MapLibrary
     {
         map.AddEntity(entity);
         entity.Map = map;
-        AddToCell(entity);
+        AddToCell(entity, copy: true);
         EntityCount++;
         StructureVersion++;
     }
@@ -391,17 +394,21 @@ public sealed class MapLibrary
         foreach (var entity in map.Entities)
         {
             entity.Map = map;
-            AddToCell(entity);
+            AddToCell(entity, copy: false);
         }
         EntityCount += map.Entities.Count;
     }
 
-    private void AddToCell(MapEntity entity)
+    // copy: after loading (see _cells).
+    private void AddToCell(MapEntity entity, bool copy)
     {
         var cell = CellOf(new Vector2(entity.Position.X, entity.Position.Y));
         if (!_cells.TryGetValue(cell, out var list))
-            _cells[cell] = list = new List<MapEntity>();
-        list.Add(entity);
+            _cells[cell] = [entity];
+        else if (copy)
+            _cells[cell] = [.. list, entity];
+        else
+            list.Add(entity);
     }
 
     private static (int X, int Y) CellOf(Vector2 position) =>

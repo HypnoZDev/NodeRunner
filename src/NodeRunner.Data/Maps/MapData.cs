@@ -25,7 +25,8 @@ public sealed class MapData
     public required IReadOnlyList<MapEntity> Entities { get => _entities; init => _entities = value.ToList(); }
     private List<MapEntity> _entities = [];
 
-    internal void AddEntity(MapEntity entity) => _entities.Add(entity);
+    // A new list, not changed in place: background threads may be going through the old one.
+    internal void AddEntity(MapEntity entity) => _entities = [.. _entities, entity];
 
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }

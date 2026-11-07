@@ -71,8 +71,15 @@ internal sealed class EntityBoxLayer : IDisposable
         if (_building is { IsCompleted: true } finished)
         {
             _building = null;
-            if (finished.Result.Library == _library)
+            if (!finished.IsCompletedSuccessfully)
+            {
+                Diagnostics.ErrorLog.Add("Cadres des objets", finished.Exception!.GetBaseException());
+                _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
+            }
+            else if (finished.Result.Library == _library)
+            {
                 Apply(finished.Result, renderer);
+            }
         }
 
         if (_library is null || !enabled || _building is not null)

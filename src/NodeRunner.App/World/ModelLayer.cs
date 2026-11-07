@@ -68,6 +68,7 @@ internal sealed class ModelLayer : IDisposable
     private static readonly Vector3 SelectedTint = new(1.7f, 1.35f, 0.6f);
 
     private readonly List<DrawnEntity> _drawn = new();
+    private readonly HashSet<MapEntity> _selectedSet = new();
 
     // A model read by the background thread (null if the file has none), with the texture of each mesh.
     private sealed record LoadedModel(
@@ -89,6 +90,7 @@ internal sealed class ModelLayer : IDisposable
     public long GpuBytes => _models.Values.Sum(m => m?.ByteSize ?? 0) + _textures.Values.Sum(t => t.Texture?.ByteSize ?? 0);
 
     public List<string> Errors { get; } = new();
+    private readonly HashSet<string> _errorSet = new();
 
     public void Update(WorldLoader loader, ModelRenderer renderer, Vector3 cameraPosition, float distanceMultiplier, int hour, bool enabled)
     {
@@ -108,7 +110,15 @@ internal sealed class ModelLayer : IDisposable
         if (_building is { IsCompleted: true } finished)
         {
             _building = null;
-            _visible = finished.Result;
+            if (finished.IsCompletedSuccessfully)
+            {
+                _visible = finished.Result;
+            }
+            else
+            {
+                Diagnostics.ErrorLog.Add("Objets à afficher", finished.Exception!.GetBaseException());
+                _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
+            }
         }
 
         var center = new Vector2(cameraPosition.X, cameraPosition.Y);
@@ -162,6 +172,8 @@ internal sealed class ModelLayer : IDisposable
         long triangles = 0;
         var fallbacksDrawn = new HashSet<MapEntity>();
         _drawn.Clear();
+        _selectedSet.Clear();
+        _selectedSet.UnionWith(selected);
 
         renderer.Begin(ModelPass.Solid);
         for (int i = 0; i < _visible.Count; i++)
@@ -185,7 +197,7 @@ internal sealed class ModelLayer : IDisposable
                 || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > maxDistance)
                 continue;
 
-            var tint = selected.Count > 0 && selected.Contains(entity.Entity) ? SelectedTint : Vector3.One;
+            var tint = _selectedSet.Contains(entity.Entity) ? SelectedTint : Vector3.One;
             renderer.Draw(model, entity.Transform, viewProjection, tint);
             _drawn.Add(new DrawnEntity(entity.Entity, model, entity.Transform, tint));
             triangles += model.TriangleCount;
@@ -193,10 +205,11 @@ internal sealed class ModelLayer : IDisposable
 
         beforeTranslucent?.Invoke();
 
-        // Decals and glass over the solid meshes of every object.
+        // Decals and glass over the solid meshes of every object, farthest first (they don't write depth: a far pane
+        // drawn last would cover a near one).
         renderer.Begin(ModelPass.Translucent);
-        foreach (var drawn in _drawn)
-            renderer.Draw(drawn.Model, drawn.Transform, viewProjection, drawn.Tint);
+        for (int i = _drawn.Count - 1; i >= 0; i--)
+            renderer.Draw(_drawn[i].Model, _drawn[i].Transform, viewProjection, _drawn[i].Tint);
 
         DrawnObjectCount = _drawn.Count;
         DrawnTriangleCount = triangles;
@@ -336,7 +349,12 @@ internal sealed class ModelLayer : IDisposable
             if (result.Generation != _generation)
                 continue;
             _pending.Remove(result.Location);
-            Errors.AddRange(result.Errors);
+            foreach (var error in result.Errors)
+            {
+                // The same model may be read again after being released: its errors are listed once.
+                if (_errorSet.Add(error))
+                    Errors.Add(error);
+            }
 
             // A null entry means "no model": remembered so it is not requested again.
             GpuModel? model = null;
@@ -469,6 +487,7 @@ internal sealed class ModelLayer : IDisposable
         _visible = new List<VisibleEntity>();
         _builtCenter = new Vector2(float.NaN);
         Errors.Clear();
+        _errorSet.Clear();
     }
 
     public void Dispose()
