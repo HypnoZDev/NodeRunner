@@ -60,6 +60,11 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - Positions copiées en un clic au format Lua (`vector3` / `vector4` avec le cap), JSON ou C#.
 - Un projet par ressource : vos modifications sont enregistrées dans leur dossier et reprises à la prochaine ouverture.
 
+**À votre façon**
+- Interface en **français ou en anglais** (automatique selon la langue de Windows), changée en direct.
+- Réglages pour tous les PC : qualité, images par seconde, carte graphique, mémoire vidéo, caméra (sensibilité, champ de
+  vision, ZQSD / WASD), crans des poignées, couleur d'accent, copie de secours automatique des modifications.
+
 ---
 
 ## Télécharger

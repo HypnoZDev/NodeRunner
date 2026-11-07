@@ -61,6 +61,11 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - Positions copied in one click as Lua (`vector3` / `vector4` with heading), JSON or C#.
 - One project per resource: your changes are saved in their folder and picked up next time you open it.
 
+**Your way**
+- Interface in **English or French** (automatic, from the Windows language), switched live.
+- Settings for every PC: quality, frame rate, graphics card, video memory, camera (sensitivity, field of view,
+  ZQSD / WASD), gizmo snap steps, accent colour, automatic rescue copy of your changes.
+
 ---
 
 ## Download
@@ -112,7 +117,7 @@ single-player pack, light and occlusion layers, and a cinematic mode to shoot vi
 included). The details are in the [specification](docs/cahier-des-charges.md) (in French).
 
 A bug, an idea? Open an [issue](https://github.com/HypnoZDev/NodeRunner/issues), with a screenshot and the position
-(the "Copier la position" button in the Properties panel) if it's a map problem.
+(the "Copy the position" button in the Properties panel) if it's a map problem.
 
 ---
 
