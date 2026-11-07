@@ -49,7 +49,7 @@ internal sealed class MainUi
         _roomHover = new RoomHover(state, roomLayer);
         _roomGizmo = new RoomGizmo(state);
         _deleteWindow = new DeleteWindow(state);
-        _settingsWindow = new SettingsWindow(state);
+        _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
     }
 
     private void OpenInViewer(uint archetypeHash)

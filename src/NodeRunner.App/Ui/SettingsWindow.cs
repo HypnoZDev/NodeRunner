@@ -7,7 +7,7 @@ namespace NodeRunner.App.Ui;
 
 // "Display settings" window: quality presets for smaller PCs (view distance, fog, texture filtering, shadows), sky
 // and time of day, VSync, interface size.
-internal sealed class SettingsWindow(AppState state)
+internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Action chooseProjectsFolder)
 {
     public const string Title = $"{Icons.Settings}  Paramètres d'affichage###Settings";
 
@@ -446,7 +446,51 @@ internal sealed class SettingsWindow(AppState state)
                 Widgets.EndProperties();
             }
         }
+
+        ImGui.Dummy(new Vector2(0, 4));
+        if (Widgets.Section(L("Dossiers"), "settings_folders"))
+        {
+            if (Widgets.BeginProperties("##folders_grid", 0.42f))
+            {
+                Widgets.Property(L("Dossier de GTA V"), L("Installation du jeu lue par NodeRunner (rien n'y est jamais écrit). Détection automatique = Steam, Epic ou Rockstar Games Launcher."));
+                if (state.Game is { } game)
+                {
+                    ImGui.TextUnformatted(Widgets.Fit(game.FolderPath, FolderTextWidth));
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(L($"{game.FolderPath}\nTrouvé via : {game.Source}"));
+                }
+                else
+                {
+                    ImGui.TextColored(UiTheme.Warning, L("Introuvable"));
+                }
+                if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir...##game_folder")))
+                    browseGameFolder();
+                ImGui.SameLine();
+                if (Widgets.Button(L("Détection automatique##game_folder"), L("Oublie le dossier choisi à la main et cherche le jeu dans Steam, Epic et Rockstar Games Launcher.")))
+                    state.RedetectGame(clearManualChoice: true);
+
+                Widgets.Property(L("Dossier des projets"), L("Dossier où sont créés les nouveaux projets (chacun dans son sous-dossier). Les projets déjà créés ne bougent pas."));
+                string projects = state.ProjectsFolder;
+                ImGui.TextUnformatted(Widgets.Fit(projects, FolderTextWidth));
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(projects);
+                if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir...##projects_folder")))
+                    chooseProjectsFolder();
+                ImGui.SameLine();
+                if (Widgets.Button(L("Ouvrir##projects_folder"), L("Ouvre ce dossier dans l'Explorateur Windows."), enabled: Directory.Exists(projects)))
+                    System.Diagnostics.Process.Start("explorer.exe", $"\"{projects}\"");
+                ImGui.SameLine();
+                if (Widgets.Button(L("Par défaut##projects_folder"), L("Documents\\NodeRunner"), enabled: settings.ProjectsFolder is not null))
+                {
+                    settings.ProjectsFolder = null;
+                    state.SaveSettings();
+                }
+                Widgets.EndProperties();
+            }
+        }
     }
+
+    private const float FolderTextWidth = 320f;
 
     private IReadOnlyList<string>? _graphicsCards;
 
