@@ -27,6 +27,8 @@ internal static class ErrorReport
             lists.Add(new("Problèmes de DLC", content.Errors, null));
         if (world.Maps is { SavedMapErrors.Count: > 0 } savedMaps)
             lists.Add(new("Fichiers enregistrés non repris", savedMaps.SavedMapErrors, "La version du jeu est affichée à leur place."));
+        if (OccluderMaps.Errors is { Count: > 0 } occluderErrors)
+            lists.Add(new("Occlusion enregistrée non reprise", occluderErrors, "Les occluders du jeu sont affichés à leur place."));
         if (world.Maps is { Errors.Count: > 0 } maps)
             lists.Add(new("Fichiers de carte ignorés", maps.Errors, "Fichiers dans un autre format (XML, PSO), pas encore lus."));
         if (world.Textures is { Errors.Count: > 0 } textures)

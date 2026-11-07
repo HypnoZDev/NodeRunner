@@ -702,7 +702,63 @@ internal sealed class AppState
         ? network.ChangedAreas.Concat(network.SavedAreas).Distinct().Order().ToList()
         : [];
 
-    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0);
+    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0)
+        + (OccludersPending ? Math.Max(1, OccluderEdits.StreamFileNames.Count()) : 0);
+
+    // Occluder changes not written to the project yet.
+    public bool OccludersPending => OccluderMaps.HasUnsavedChanges(World);
+
+    // The occluder changes as they would be saved now.
+    public OccluderEdits OccluderEdits => OccluderMaps.Capture(World, OccluderFileName);
+
+    // The project's occluder changes (occlusion.json next to projet.json), put back at the next map loading.
+    private void LoadOccluderEdits()
+    {
+        var edits = OccluderEdits.Empty;
+        try
+        {
+            edits = OccluderEdits.Load(Project?.Folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            Diagnostics.ErrorLog.Add("Projet", $"{OccluderEdits.FileName} illisible : {ex.Message}", ex);
+        }
+        OccluderMaps.UseSaved(edits);
+        World.OccluderFileNames = edits.StreamFileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Writes occlusion.json and the changed occluder map files into the stream folder (files no longer changed are removed).
+    private void SaveOccluderEdits(string stream, MapFileSaver.Report report)
+    {
+        if (Project is not { } project)
+            return;
+        var edits = OccluderEdits;
+        int errors = report.Errors.Count;
+        var written = OccluderFileSaver.Save(World, [], OccluderFileName, stream, report);
+        if (report.Errors.Count > errors)
+            return;
+        string file = Path.Combine(project.Folder, OccluderEdits.FileName);
+        try
+        {
+            foreach (var old in OccluderMaps.Saved.StreamFileNames.Except(written, StringComparer.OrdinalIgnoreCase))
+            {
+                string path = Path.Combine(stream, old);
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            if (edits.IsEmpty)
+                File.Delete(file);
+            else
+                File.WriteAllText(file, edits.ToJson());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            report.Errors.Add($"{OccluderEdits.FileName} : {ex.Message}");
+            return;
+        }
+        OccluderMaps.MarkSaved(edits);
+        World.OccluderFileNames = written.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     // Collision changes not written to the project yet.
     public bool CollisionsPending => CollisionEdits.Revision != _savedCollisionRevision;
@@ -712,8 +768,9 @@ internal sealed class AppState
     private const string CollisionEditsFileName = "collisions.json";
 
     // The project's collision changes (collisions.json next to projet.json); none without a project.
-    private void LoadCollisionEdits()
+    private void LoadProjectEdits()
     {
+        LoadOccluderEdits();
         CollisionEdits = new Data.Collisions.CollisionEdits();
         if (Project is { } project && Path.Combine(project.Folder, CollisionEditsFileName) is var file && File.Exists(file))
         {
@@ -763,7 +820,8 @@ internal sealed class AppState
 
     // "2 YMAP", "2 YMAP, 1 YND".
     public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count)
-        + (CollisionsPending ? $", {CollisionEdits.Files.Count} YBN" : "");
+        + (CollisionsPending ? $", {CollisionEdits.Files.Count} YBN" : "")
+        + (OccludersPending ? $", {OccluderEdits.StreamFileNames.Count()} YMAP d'occlusion" : "");
 
     public static string FilesText(int maps, int paths) =>
         paths == 0 ? $"{maps} YMAP" : maps == 0 ? $"{paths} YND" : $"{maps} YMAP, {paths} YND";
@@ -775,7 +833,8 @@ internal sealed class AppState
         var maps = MapsToSave;
         var paths = PathAreasToSave;
         bool collisions = CollisionsPending;
-        if (maps.Count == 0 && paths.Count == 0 && !collisions)
+        bool occluders = OccludersPending;
+        if (maps.Count == 0 && paths.Count == 0 && !collisions && !occluders)
             return;
         var report = maps.Count > 0 ? MapFileSaver.Save(World, maps, folder) : new MapFileSaver.Report([], []);
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
@@ -783,6 +842,8 @@ internal sealed class AppState
         PathFileSaver.Save(World, paths, folder, report);
         if (collisions)
             SaveCollisionEdits(folder, report);
+        if (occluders)
+            SaveOccluderEdits(folder, report);
         if (report.Errors.Count == 0)
         {
             _savedCollisionRevision = CollisionEdits.Revision;
@@ -817,7 +878,7 @@ internal sealed class AppState
         {
             Project = MapProject.Load(folder);
             ApplyProjectMap(Project);
-            LoadCollisionEdits();
+            LoadProjectEdits();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
@@ -903,7 +964,7 @@ internal sealed class AppState
         Settings.ProjectFolder = null;
         SaveSettings();
         LastSave = null;
-        LoadCollisionEdits();
+        LoadProjectEdits();
         World.RequestMapReload();
     }
 
@@ -919,7 +980,7 @@ internal sealed class AppState
         // Without reload, the changes in progress go into the new project (they are kept).
         if (reload)
         {
-            LoadCollisionEdits();
+            LoadProjectEdits();
             World.RequestMapReload();
         }
     }

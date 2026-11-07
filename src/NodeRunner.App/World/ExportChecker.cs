@@ -72,7 +72,10 @@ internal static class ExportChecker
     {
         var items = new List<ExportCheckItem>();
         var names = world.Names ?? new HashNames();
-        var fileNames = input.Maps.Select(m => m.FileName).ToList();
+        // Occluder map files of the game changed by hand ship like the other map files.
+        var fileNames = input.Maps.Select(m => m.FileName)
+            .Concat(OccluderMaps.Get(world).Where(f => f.HasChanges).Select(f => f.FileName))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         // Same map file elsewhere: in the server's resources, then in the user's other projects.
         int scanned = 0;
@@ -198,7 +201,7 @@ internal static class ExportChecker
         // Their occluders, in the game's occluder map files (one mesh stands for a whole block): removed triangle by triangle.
         var occlusionCuts = new List<OccluderFileCut>();
         if (sceneryEntities.Count > 0)
-            occlusionCuts = OcclusionRemoval.Plan(OccluderMaps.Get(world).Select(f => (f.GamePath, f.Occluders)), sceneryEntities);
+            occlusionCuts = OcclusionRemoval.Plan(OccluderMaps.Get(world).Select(f => (f.GamePath, f.Current)), sceneryEntities);
         if (occlusionCuts.Count > 0 && scanRoot is not null)
         {
             var occlusionConflicts = ConflictScanner.ScanResources(scanRoot, ownFolders, occlusionCuts.Select(c => c.FileName).ToList());

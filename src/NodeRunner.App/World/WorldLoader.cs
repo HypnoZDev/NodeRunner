@@ -209,14 +209,19 @@ internal sealed class WorldLoader : IDisposable
 
     public void RequestMapReload() => _reloadRequested = true;
 
+    // Occluder map files of the save folder: rebuilt from the project's occlusion changes, not map files to load.
+    public IReadOnlySet<string> OccluderFileNames { get; set; } = new HashSet<string>();
+
     // The .ymap files of the save folder, uncompressed, by file name; unreadable ones are reported in errors.
-    private static Dictionary<string, byte[]> ReadSavedMaps(string? folder, List<string> errors)
+    private static Dictionary<string, byte[]> ReadSavedMaps(string? folder, IReadOnlySet<string> skipped, List<string> errors)
     {
         var maps = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         if (folder is null || !Directory.Exists(folder))
             return maps;
         foreach (var file in Directory.EnumerateFiles(folder, "*.ymap"))
         {
+            if (skipped.Contains(Path.GetFileName(file)))
+                continue;
             try
             {
                 maps[Path.GetFileName(file)] = ResourceFile.Read(File.ReadAllBytes(file)).Content;
@@ -243,7 +248,7 @@ internal sealed class WorldLoader : IDisposable
 
             progress.Report("Lecture des objets de la carte...");
             var savedErrors = new List<string>();
-            var saved = ReadSavedMaps(_saveFolder, savedErrors);
+            var saved = ReadSavedMaps(_saveFolder, OccluderFileNames, savedErrors);
             var maps = MapLibrary.Load(content, new YtypReader(), new YmapReader(), progress, hiddenScriptedMaps, saved);
             maps.SavedMapErrors.AddRange(savedErrors);
 

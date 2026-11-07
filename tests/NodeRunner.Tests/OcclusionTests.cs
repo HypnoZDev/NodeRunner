@@ -11,6 +11,7 @@ namespace NodeRunner.Tests;
 public class OcclusionTests
 {
     private const uint MapDataStructure = 3545841574; // CMapData.
+    private const uint BoxStructure = 0x3A282E1D; // CBoxOccluder.
 
     // A 10 x 10 x 8 m building standing at (100, 200, 30), not turned.
     private static readonly CutVolume Building = new(Matrix4x4.CreateTranslation(-100, -200, -30), new Vector3(-5, -5, 0), new Vector3(5, 5, 8));
@@ -106,10 +107,63 @@ public class OcclusionTests
             [model.Vertices[model.Indices[0]], model.Vertices[model.Indices[1]], model.Vertices[model.Indices[2]]]);
     }
 
+    [Fact]
+    public void Writes_moved_added_and_deleted_boxes_and_grows_the_extents()
+    {
+        var file = new OccluderFile();
+        var source = SampleMap();
+        var before = file.ReadOccluders(source);
+        var moved = (before.Boxes[2] with { Center = new Vector3(500, 600, 70), Angle = 0.5f }).Quantized();
+        var added = new OccluderBox(-1, new Vector3(-300, 20, 5), new Vector3(10, 12, 14), -1f).Quantized();
+
+        var written = file.WriteOccluders(source, [before.Boxes[1], moved, added],
+            new Dictionary<int, IReadOnlySet<int>> { [1] = new HashSet<int> { 0 } });
+        var after = file.ReadOccluders(written.Content);
+
+        Assert.Equal(3, after.Boxes.Count);
+        Assert.Equal(before.Boxes[1] with { Index = 0 }, after.Boxes[0]);
+        Assert.Equal(moved.Center, after.Boxes[1].Center);
+        Assert.Equal(moved.Angle, after.Boxes[1].Angle, 4);
+        Assert.Equal(added.Size, after.Boxes[2].Size);
+        Assert.Equal(added.Angle, after.Boxes[2].Angle, 4);
+        Assert.Single(after.Models);
+
+        var mapData = MapDataOf(written.Content);
+        Assert.True(BitConverter.ToSingle(mapData, 32) <= -305f); // Streaming min X holds the added box.
+        Assert.True(BitConverter.ToSingle(mapData, 48 + 4) >= 600f); // Streaming max Y holds the moved one.
+    }
+
+    [Fact]
+    public void Builds_a_new_occluder_map_file()
+    {
+        var file = new OccluderFile();
+        OccluderBox[] boxes = [new OccluderBox(0, new Vector3(100, 200, 30), new Vector3(10, 20, 8), 0.25f).Quantized()];
+
+        var built = file.BuildOccluders(SampleMap(), "my_resource_occl", boxes);
+        var read = file.ReadOccluders(built.Content);
+
+        var box = Assert.Single(read.Boxes);
+        Assert.Equal(boxes[0].Center, box.Center);
+        Assert.Equal(boxes[0].Size, box.Size);
+        Assert.Empty(read.Models);
+        var mapData = MapDataOf(built.Content);
+        Assert.Equal(NodeRunner.Data.Hashing.Joaat.Hash("my_resource_occl"), BitConverter.ToUInt32(mapData, 8));
+        Assert.Equal(32u, BitConverter.ToUInt32(mapData, 20));
+    }
+
+    private static byte[] MapDataOf(byte[] content)
+    {
+        var document = MetaDocument.Read(content);
+        return document.Blocks[document.RootBlock].Data;
+    }
+
     private static byte[] SampleMap()
     {
         var document = new MetaDocument { Name = "sample_occl", RootBlock = 0 };
         document.Structures.Add(new MetaDocument.StructureInfo(new byte[0x20], new byte[0x30]));
+        var boxInfo = new byte[0x20];
+        BinaryPrimitives.WriteUInt32LittleEndian(boxInfo, BoxStructure);
+        document.Structures.Add(new MetaDocument.StructureInfo(boxInfo, new byte[0x30]));
         var mapData = new byte[512];
         var boxes = new byte[3 * 16];
         short[][] values = [[0, 0, 0, 32767, 8, 8, 8, 0], [40, -80, 122, 32767, 16, 8, 24, 0], [400, 400, 40, 0, 4, 4, 4, 32767]];
@@ -132,7 +186,7 @@ public class OcclusionTests
         WriteModel(models.AsSpan(64, 64), single, singleIndices, 3, singleOffset);
 
         document.Blocks.Add(new MetaDocument.Block(MapDataStructure, mapData));
-        document.Blocks.Add(new MetaDocument.Block(1001, boxes));
+        document.Blocks.Add(new MetaDocument.Block(BoxStructure, boxes));
         document.Blocks.Add(new MetaDocument.Block(1002, models));
         document.Blocks.Add(new MetaDocument.Block(0x11, data.ToArray()));
         WriteArray(mapData, 128, 1, 3);

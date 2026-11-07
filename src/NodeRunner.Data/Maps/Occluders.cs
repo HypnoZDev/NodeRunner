@@ -67,4 +67,12 @@ public interface IOccluderWriter
     // The decompressed content of the .ymap map without the given boxes (by Index) and triangles (by Index, then
     // triangle number); a mesh left without triangles goes.
     MapFileContent RemoveOccluders(ReadOnlySpan<byte> map, IReadOnlySet<int> boxes, IReadOnlyDictionary<int, IReadOnlySet<int>> triangles);
+
+    // The decompressed content of the .ymap map with these boxes in place of its own and without the given mesh
+    // triangles; its extents grow to hold every occluder left (never shrink).
+    MapFileContent WriteOccluders(ReadOnlySpan<byte> map, IReadOnlyList<OccluderBox> boxes, IReadOnlyDictionary<int, IReadOnlySet<int>> triangles);
+
+    // A new occluder map file holding only these boxes; template is a game occluder map file with boxes (descriptions
+    // of the structures).
+    MapFileContent BuildOccluders(ReadOnlySpan<byte> template, string name, IReadOnlyList<OccluderBox> boxes);
 }
