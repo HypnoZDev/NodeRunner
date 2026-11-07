@@ -432,7 +432,7 @@ internal sealed class TransformGizmo(AppState state)
                         size = new Vector3(GizmoMath.Snap(size.X, BoxSizeStep), GizmoMath.Snap(size.Y, BoxSizeStep), GizmoMath.Snap(size.Z, BoxSizeStep));
                     size = Vector3.Max(size, new Vector3(MinBoxSide));
                     OccluderMaps.SetBox(resized.File, sizeStart with { Size = size });
-                    drag.Feedback = $"Taille  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m";
+                    drag.Feedback = L($"Taille  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m");
                     break;
                 }
                 bool changeHorizontal = drag.Handle.Kind == Kind.ScaleUniform || a < 2;
@@ -443,8 +443,8 @@ internal sealed class TransformGizmo(AppState state)
                     factor = ScaleValue(factor, snap);
                     for (int i = 0; i < drag.Entities.Length; i++)
                         GroupTransform.Scale(drag.Starts[i], pivot, changeHorizontal ? factor : 1f, changeVertical ? factor : 1f).ApplyTo(drag.Entities[i]);
-                    string which = drag.Handle.Kind == Kind.ScaleUniform ? "" : changeVertical ? " verticale" : " horizontale";
-                    drag.Feedback = $"Échelle{which} du groupe  x{factor:0.00}";
+                    string which = drag.Handle.Kind == Kind.ScaleUniform ? "" : changeVertical ? L(" verticale") : L(" horizontale");
+                    drag.Feedback = L($"Échelle{which} du groupe  x{factor:0.00}");
                     break;
                 }
                 var start = drag.Starts[0];
@@ -453,8 +453,8 @@ internal sealed class TransformGizmo(AppState state)
                 if (changeHorizontal) horizontal = ScaleValue(start.Scale.X * factor, snap);
                 if (changeVertical) vertical = ScaleValue(start.Scale.Z * factor, snap);
                 entity.SetPlacement(start.Position, start.Orientation, new Vector3(horizontal, horizontal, vertical));
-                drag.Feedback = drag.Handle.Kind == Kind.ScaleUniform ? $"Échelle  {horizontal:0.000} / {vertical:0.000}"
-                    : changeVertical ? $"Échelle verticale  {vertical:0.000}" : $"Échelle horizontale  {horizontal:0.000}";
+                drag.Feedback = drag.Handle.Kind == Kind.ScaleUniform ? L($"Échelle  {horizontal:0.000} / {vertical:0.000}")
+                    : changeVertical ? L($"Échelle verticale  {vertical:0.000}") : L($"Échelle horizontale  {horizontal:0.000}");
                 break;
             }
         }
@@ -502,7 +502,7 @@ internal sealed class TransformGizmo(AppState state)
         if (!FollowsGround(drag))
             return "";
         float rise = drag.Node is { } node ? node.Position.Z - drag.NodeStart.Z : drag.Main.Position.Z - drag.Starts[^1].Position.Z;
-        return $"    Z  {rise:+0.00;-0.00;0.00} m (sol)";
+        return L($"    Z  {rise:+0.00;-0.00;0.00} m (sol)");
     }
 
     private void RestoreStart(Drag drag)
@@ -536,27 +536,27 @@ internal sealed class TransformGizmo(AppState state)
             OccluderMaps.SetBox(occluder.File, end);
             if (end != boxStart)
             {
-                string boxVerb = drag.Tool switch { TransformTool.Rotate => "Tourner", TransformTool.Scale => "Redimensionner", _ => "Déplacer" };
-                state.History.Add(new OccluderBoxEdit(occluder.File, boxStart, end, $"{boxVerb} la boîte d'occlusion {occluder.Index}"));
+                string boxVerb = drag.Tool switch { TransformTool.Rotate => L("Tourner"), TransformTool.Scale => L("Redimensionner"), _ => L("Déplacer") };
+                state.History.Add(new OccluderBoxEdit(occluder.File, boxStart, end, L($"{boxVerb} la boîte d'occlusion {occluder.Index}")));
             }
             return;
         }
         if (drag.Node is { } node)
         {
             if (commit && node.Position != drag.NodeStart && state.World.PathNetwork is { } network)
-                state.History.Add(new PathNodeMoveEdit(network, node, drag.NodeStart, node.Position, $"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}"));
+                state.History.Add(new PathNodeMoveEdit(network, node, drag.NodeStart, node.Position, L($"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}")));
             return;
         }
         var ends = drag.Entities.Select(Placement.Of).ToArray();
         if (!commit || ends.SequenceEqual(drag.Starts))
             return;
-        string name = drag.IsGroup ? $"{drag.Entities.Length} objets"
+        string name = drag.IsGroup ? L($"{drag.Entities.Length} objets")
             : state.World.Names?.Describe(drag.Main.ArchetypeHash) ?? $"0x{drag.Main.ArchetypeHash:X8}";
         string verb = drag.Tool switch
         {
-            TransformTool.Rotate => "Tourner",
-            TransformTool.Scale => "Redimensionner",
-            _ => "Déplacer",
+            TransformTool.Rotate => L("Tourner"),
+            TransformTool.Scale => L("Redimensionner"),
+            _ => L("Déplacer"),
         };
         state.History.Add(drag.IsGroup
             ? new GroupPlacementEdit(drag.Entities, drag.Starts, ends, $"{verb} {name}")

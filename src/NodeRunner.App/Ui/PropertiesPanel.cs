@@ -33,16 +33,16 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     private MapEntity? _setNameInterior;
 
     // Entity flags whose meaning is known (see MapEntity.IsDrawnInMainView).
-    private static readonly (uint Flag, string Text)[] KnownFlags =
+    private static (uint Flag, string Text)[] KnownFlags =>
     [
-        (0x8, "LOD dans la carte parente"),
-        (0x80000, "projette des ombres fixes"),
-        (0x100000, "projette des ombres mobiles"),
-        (0x800000, "ombres seulement"),
-        (0x1000000, "absent des reflets"),
-        (0x2000000, "reflets seulement"),
-        (0x8000000, "reflets de l'eau seulement"),
-        (0x20000000, "miroirs seulement"),
+        (0x8, L("LOD dans la carte parente")),
+        (0x80000, L("projette des ombres fixes")),
+        (0x100000, L("projette des ombres mobiles")),
+        (0x800000, L("ombres seulement")),
+        (0x1000000, L("absent des reflets")),
+        (0x2000000, L("reflets seulement")),
+        (0x8000000, L("reflets de l'eau seulement")),
+        (0x20000000, L("miroirs seulement")),
     ];
 
     public void Draw(ref bool visible)
@@ -64,25 +64,25 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             var names = state.World.Names ?? new HashNames();
             if (state.SelectedEntities.Count is var count and > 1)
             {
-                Widgets.Hint($"{count} objets sélectionnés : propriétés du dernier cliqué. Les poignées 3D et Suppr agissent sur tout le groupe. "
-                    + "Ctrl+clic pour en ajouter ou en retirer.", wrap: true);
+                Widgets.Hint(L($"{count} objets sélectionnés : propriétés du dernier cliqué. Les poignées 3D et Suppr agissent sur tout le groupe. ")
+                    + L("Ctrl+clic pour en ajouter ou en retirer."), wrap: true);
                 ImGui.Dummy(new Vector2(0, 2));
             }
             DrawHeader(entity, names);
-            if (Widgets.Section("Transformation", "transform"))
+            if (Widgets.Section(L("Transformation"), "transform"))
                 DrawPlacement(entity, library, names);
-            if (Widgets.Section("Fichiers", "files"))
+            if (Widgets.Section(L("Fichiers"), "files"))
                 DrawFiles(entity, library, names);
-            if (Widgets.Section("Niveau de détail", "lod"))
+            if (Widgets.Section(L("Niveau de détail"), "lod"))
                 DrawLevelOfDetail(entity, names);
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
-                && Widgets.Section($"Entity sets ({interior.EntitySets.Count})", "entity_sets"))
+                && Widgets.Section(L($"Entity sets ({interior.EntitySets.Count})"), "entity_sets"))
                 DrawEntitySets(interior, library, names);
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } roomsOf
                 && library.GetArchetype(roomsOf.ArchetypeHash) is { } interiorType
-                && Widgets.Section($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})", "rooms", defaultOpen: false))
+                && Widgets.Section(L($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})"), "rooms", defaultOpen: false))
                 DrawRoomList(roomsOf, interiorType);
-            if (Widgets.Section("Réglages", "flags", defaultOpen: false))
+            if (Widgets.Section(L("Réglages"), "flags", defaultOpen: false))
                 DrawFlags(entity, library);
         }
         else if (state.SelectedPathNode is { } node && state.World.PathNetwork is { } network)
@@ -98,8 +98,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         else
         {
             ImGui.Dummy(new Vector2(0, 6));
-            ImGui.TextColored(UiTheme.TextMuted, "Aucun objet sélectionné");
-            Widgets.Hint("Clic gauche sur un objet de la vue 3D, ou dans la liste Scène, pour voir et modifier ses propriétés.", wrap: true);
+            ImGui.TextColored(UiTheme.TextMuted, L("Aucun objet sélectionné"));
+            Widgets.Hint(L("Clic gauche sur un objet de la vue 3D, ou dans la liste Scène, pour voir et modifier ses propriétés."), wrap: true);
         }
         ImGui.End();
     }
@@ -124,33 +124,33 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         // Actions: go to the object, copy its position for scripts (Lua, JSON or C#), more copies in the "..." menu.
         float more = ImGui.GetFrameHeight();
         float buttonWidth = (ImGui.GetContentRegionAvail().X - more - ImGui.GetStyle().ItemSpacing.X * 2f) / 2f;
-        if (Widgets.Button($"{Icons.Crosshair}  Aller à l'objet", "Placer la caméra devant l'objet (double-clic dans la liste Scène)", buttonWidth))
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à l'objet"), L("Placer la caméra devant l'objet (double-clic dans la liste Scène)"), buttonWidth))
             state.FocusOn(entity);
         ImGui.SameLine();
         string position = state.FormatPosition(entity.Position);
         string withHeading = state.FormatPosition(entity.Position, FiveMFormat.Heading(entity));
-        if (Widgets.Button($"{Icons.Copy}  Copier la position", $"Copier {position}\nClic droit : avec le cap ({withHeading})\n"
-            + $"Format : {PositionText.FormatName(state.CopyFormat)} (à changer dans le menu ...)", buttonWidth))
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), L($"Copier {position}\nClic droit : avec le cap ({withHeading})\n")
+            + L($"Format : {PositionText.FormatName(state.CopyFormat)} (à changer dans le menu ...)"), buttonWidth))
             ImGui.SetClipboardText(position);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
             ImGui.SetClipboardText(withHeading);
         ImGui.SameLine();
-        if (Widgets.IconButton(Icons.Ellipsis, "more_copies", "Autres copies, désélectionner"))
+        if (Widgets.IconButton(Icons.Ellipsis, "more_copies", L("Autres copies, désélectionner")))
             ImGui.OpenPopup("more_copies_menu");
         if (entity.CanEdit)
         {
-            if (Widgets.Button($"{Icons.ArrowDownToLine}  Poser au sol", "Monter ou descendre l'objet jusqu'à la collision en dessous (touche Fin)",
+            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Monter ou descendre l'objet jusqu'à la collision en dessous (touche Fin)"),
                 ImGui.GetContentRegionAvail().X))
                 state.PutSelectionOnGround();
         }
         if (ImGui.BeginPopup("more_copies_menu"))
         {
-            if (ImGui.MenuItem($"{Icons.Copy}  Copier position et cap : {withHeading}"))
+            if (ImGui.MenuItem(L($"{Icons.Copy}  Copier position et cap : {withHeading}")))
                 ImGui.SetClipboardText(withHeading);
             if (state.SelectedEntities.Count is var selected and > 1
-                && ImGui.MenuItem($"{Icons.Copy}  Copier les {selected} objets sélectionnés (liste : nom, position, cap)"))
+                && ImGui.MenuItem(L($"{Icons.Copy}  Copier les {selected} objets sélectionnés (liste : nom, position, cap)")))
                 ImGui.SetClipboardText(state.FormatSelection());
-            if (ImGui.BeginMenu($"{Icons.Copy}  Format de copie : {PositionText.FormatName(state.CopyFormat)}"))
+            if (ImGui.BeginMenu(L($"{Icons.Copy}  Format de copie : {PositionText.FormatName(state.CopyFormat)}")))
             {
                 foreach (var format in Enum.GetValues<CopyFormat>())
                 {
@@ -160,18 +160,18 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 }
                 ImGui.EndMenu();
             }
-            if (ImGui.MenuItem($"{Icons.Copy}  Copier le nom : {name}"))
+            if (ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom : {name}")))
                 ImGui.SetClipboardText(name);
-            if (entity.Map?.FilePath is { } path && ImGui.MenuItem($"{Icons.Copy}  Copier le nom du YMAP : {Path.GetFileNameWithoutExtension(path)}"))
+            if (entity.Map?.FilePath is { } path && ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom du YMAP : {Path.GetFileNameWithoutExtension(path)}")))
                 ImGui.SetClipboardText(Path.GetFileNameWithoutExtension(path));
             ImGui.Separator();
-            if (ImGui.MenuItem($"{Icons.Box}  Voir le modèle dans la visionneuse"))
+            if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
                 showModel(entity.ArchetypeHash);
-            if (ImGui.MenuItem($"{Icons.X}  Désélectionner", "Échap"))
+            if (ImGui.MenuItem(L($"{Icons.X}  Désélectionner"), L("Échap")))
                 state.Select(null);
             ImGui.Separator();
             int group = state.DeletableSelection.Count;
-            if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer...", "Suppr", false, group > 0))
+            if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer..."), L("Suppr"), false, group > 0))
                 state.RequestDelete();
             ImGui.EndPopup();
         }
@@ -191,15 +191,15 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         {
             var p = entity.Position;
             var r = EulerAngles.FromQuaternion(entity.Orientation);
-            Widgets.PropertyText("Position", $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}");
-            Widgets.PropertyText("Rotation", $"X {r.X:0.0}°   Y {r.Y:0.0}°   Z {r.Z:0.0}°");
-            Widgets.PropertyText("Échelle", $"{entity.Scale.X:0.###} (horiz.)   {entity.Scale.Z:0.###} (vert.)");
+            Widgets.PropertyText(L("Position"), $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}");
+            Widgets.PropertyText(L("Rotation"), $"X {r.X:0.0}°   Y {r.Y:0.0}°   Z {r.Z:0.0}°");
+            Widgets.PropertyText(L("Échelle"), L($"{entity.Scale.X:0.###} (horiz.)   {entity.Scale.Z:0.###} (vert.)"));
         }
-        Widgets.PropertyText("Distance d'affichage", $"{library.DrawDistance(entity):0} m");
+        Widgets.PropertyText(L("Distance d'affichage"), $"{library.DrawDistance(entity):0} m");
         Widgets.EndProperties();
 
         if (entity.Interior is not null)
-            Widgets.Hint("Objet défini par l'intérieur (.ytyp) : le déplacer le déplace dans toutes les copies de cet intérieur ; Ctrl+S écrit le .ytyp modifié.", wrap: true);
+            Widgets.Hint(L("Objet défini par l'intérieur (.ytyp) : le déplacer le déplace dans toutes les copies de cet intérieur ; Ctrl+S écrit le .ytyp modifié."), wrap: true);
     }
 
     // Fields to move, turn and scale the object: drag with the mouse, or double-click to type a value.
@@ -215,7 +215,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         var before = Placement.Of(entity);
         Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
 
-        Widgets.Property("Position", "Mètres. X = est, Y = nord, Z = haut.");
+        Widgets.Property(L("Position"), L("Mètres. X = est, Y = nord, Z = haut."));
         var position = entity.Position;
         float width = Widgets.SplitWidth(3);
         for (int i = 0; i < 3; i++)
@@ -227,10 +227,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 position[i] = value;
                 entity.SetPlacement(position, entity.Orientation, entity.Scale);
             }
-            TrackEdit(entity, before, $"Déplacer {name}");
+            TrackEdit(entity, before, L($"Déplacer {name}"));
         }
 
-        Widgets.Property("Rotation (°)", "Degrés autour des axes X, Y et Z.");
+        Widgets.Property(L("Rotation (°)"), L("Degrés autour des axes X, Y et Z."));
         var angles = _angles;
         for (int i = 0; i < 3; i++)
         {
@@ -242,13 +242,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 _angles = angles;
                 entity.SetPlacement(entity.Position, EulerAngles.ToQuaternion(angles), entity.Scale);
             }
-            TrackEdit(entity, before, $"Tourner {name}");
+            TrackEdit(entity, before, L($"Tourner {name}"));
         }
 
         // Interiors cannot be scaled in the game. It stores one horizontal scale (X and Y) and one vertical scale (Z).
         if (!entity.IsInterior)
         {
-            Widgets.Property("Échelle", "Horizontale (X et Y), puis verticale (Z).");
+            Widgets.Property(L("Échelle"), L("Horizontale (X et Y), puis verticale (Z)."));
             var scale = new Vector2(entity.Scale.X, entity.Scale.Z);
             float scaleWidth = Widgets.SplitWidth(2);
             for (int i = 0; i < 2; i++)
@@ -260,7 +260,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     scale[i] = Math.Max(value, MinScale);
                     entity.SetPlacement(entity.Position, entity.Orientation, new Vector3(scale.X, scale.X, scale.Y));
                 }
-                TrackEdit(entity, before, $"Redimensionner {name}");
+                TrackEdit(entity, before, L($"Redimensionner {name}"));
             }
         }
 
@@ -282,51 +282,51 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             return;
 
         var archetype = library.GetArchetype(entity.ArchetypeHash);
-        Widgets.PropertyText("Type (archétype)", names.Describe(entity.ArchetypeHash));
+        Widgets.PropertyText(L("Type (archétype)"), names.Describe(entity.ArchetypeHash));
         if (archetype is not null)
         {
-            FileRow("Défini dans", library.GetArchetypeFile(entity.ArchetypeHash));
+            FileRow(L("Défini dans"), library.GetArchetypeFile(entity.ArchetypeHash));
             if (archetype.Kind == ArchetypeKind.Interior)
-                Widgets.PropertyText("Intérieur (MLO)", $"{entity.InteriorEntities.Count} objets, {archetype.InteriorRooms.Count} salles");
+                Widgets.PropertyText(L("Intérieur (MLO)"), L($"{entity.InteriorEntities.Count} objets, {archetype.InteriorRooms.Count} salles"));
             else
-                FileRow("Modèle 3D", state.World.Models?.Locate(archetype)?.Path);
+                FileRow(L("Modèle 3D"), state.World.Models?.Locate(archetype)?.Path);
             if (archetype.TextureDictionaryHash != 0)
-                Widgets.PropertyText("Textures", $"{names.Describe(archetype.TextureDictionaryHash)}.ytd");
+                Widgets.PropertyText(L("Textures"), $"{names.Describe(archetype.TextureDictionaryHash)}.ytd");
             var size = archetype.BoundsMax - archetype.BoundsMin;
-            Widgets.PropertyText("Taille", $"{size.X:0.0} x {size.Y:0.0} x {size.Z:0.0} m");
+            Widgets.PropertyText(L("Taille"), $"{size.X:0.0} x {size.Y:0.0} x {size.Z:0.0} m");
         }
-        FileRow("Placé par", entity.Map?.FilePath);
+        FileRow(L("Placé par"), entity.Map?.FilePath);
 
         if (entity.Interior is { } interior)
         {
-            Widgets.Property("Dans l'intérieur");
-            if (Widgets.Link($"{names.Describe(interior.ArchetypeHash)}##interior", "Sélectionner l'intérieur"))
+            Widgets.Property(L("Dans l'intérieur"));
+            if (Widgets.Link($"{names.Describe(interior.ArchetypeHash)}##interior", L("Sélectionner l'intérieur")))
                 state.Select(interior);
             if (entity.Definition is not null && library.GetArchetype(interior.ArchetypeHash) is { Kind: ArchetypeKind.Interior } mlo)
                 RoomChoice(entity, interior, mlo);
             else if (entity.InteriorRoom >= 0)
-                Widgets.PropertyText("Salle", entity.InteriorRoom == 0 ? "0 (limbo, vue de l'extérieur)" : $"{entity.InteriorRoom}");
+                Widgets.PropertyText(L("Salle"), entity.InteriorRoom == 0 ? L("0 (limbo, vue de l'extérieur)") : $"{entity.InteriorRoom}");
             if (entity.InteriorPortal >= 0)
-                Widgets.PropertyText("Attaché au portail", $"{entity.InteriorPortal}");
+                Widgets.PropertyText(L("Attaché au portail"), $"{entity.InteriorPortal}");
             if (interior.EntitySets.Count > 0)
                 EntitySetChoice(entity, interior, names);
         }
         Widgets.EndProperties();
 
         if (archetype is null)
-            ImGui.TextColored(UiTheme.Warning, "Type introuvable dans les fichiers .ytyp.");
+            ImGui.TextColored(UiTheme.Warning, L("Type introuvable dans les fichiers .ytyp."));
     }
 
     // The room of an object of an interior, to change (the game draws an object only when its room is visible); warns
     // when the object stands in another room's box.
     private void RoomChoice(MapEntity entity, MapEntity interior, Archetype mlo)
     {
-        Widgets.Property("Salle", "Le jeu n'affiche un objet que quand sa salle est visible : un objet rangé dans la mauvaise salle "
-            + "disparaît selon l'endroit où se trouve le joueur. S'applique aux objets sélectionnés du même intérieur, dans toutes "
-            + "les copies de l'intérieur ; enregistré dans son .ytyp.");
-        if (ImGui.BeginCombo("##entity_room", entity.InteriorRoom < 0 ? "Aucune" : RoomLabel(mlo, entity.InteriorRoom), ImGuiComboFlags.HeightLarge))
+        Widgets.Property(L("Salle"), L("Le jeu n'affiche un objet que quand sa salle est visible : un objet rangé dans la mauvaise salle ")
+            + L("disparaît selon l'endroit où se trouve le joueur. S'applique aux objets sélectionnés du même intérieur, dans toutes ")
+            + L("les copies de l'intérieur ; enregistré dans son .ytyp."));
+        if (ImGui.BeginCombo("##entity_room", entity.InteriorRoom < 0 ? L("Aucune") : RoomLabel(mlo, entity.InteriorRoom), ImGuiComboFlags.HeightLarge))
         {
-            if (ImGui.Selectable("Automatique (salle autour de l'objet)"))
+            if (ImGui.Selectable(L("Automatique (salle autour de l'objet)")))
                 state.SetSelectionRoom(AppState.AutomaticRoom);
             ImGui.Separator();
             for (int r = 0; r < mlo.InteriorRooms.Count; r++)
@@ -341,22 +341,22 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (around > 0 && around != entity.InteriorRoom)
         {
             Widgets.Property("");
-            ImGui.TextColored(UiTheme.Warning, $"{Icons.TriangleAlert} Posé dans {RoomLabel(mlo, around)}");
+            ImGui.TextColored(UiTheme.Warning, L($"{Icons.TriangleAlert} Posé dans {RoomLabel(mlo, around)}"));
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("L'objet est dans la boîte d'une autre salle : en jeu, il peut disparaître. Choisir « Automatique » "
-                    + "dans la liste pour le ranger dans la salle où il se trouve.");
+                ImGui.SetTooltip(L("L'objet est dans la boîte d'une autre salle : en jeu, il peut disparaître. Choisir « Automatique » ")
+                    + L("dans la liste pour le ranger dans la salle où il se trouve."));
         }
     }
 
     // The entity set holding an object of an interior, to change: the object goes into another set or out of its set.
     private void EntitySetChoice(MapEntity entity, MapEntity interior, HashNames names)
     {
-        const string None = "Aucun (toujours affiché)";
+        string None = L("Aucun (toujours affiché)");
         var sets = interior.EntitySets;
         int current = entity.EntitySet is { } set ? sets.ToList().IndexOf(set) : -1;
-        Widgets.Property("Entity set", "Groupe d'objets activé par script. Changer le set range l'objet dans un autre set (ou l'en sort), "
-            + "dans toutes les copies de l'intérieur ; enregistré dans son .ytyp.");
-        string label = current >= 0 ? names.Describe(sets[current].NameHash) + (sets[current].IsActive ? "" : " (masqué)") : None;
+        Widgets.Property(L("Entity set"), L("Groupe d'objets activé par script. Changer le set range l'objet dans un autre set (ou l'en sort), ")
+            + L("dans toutes les copies de l'intérieur ; enregistré dans son .ytyp."));
+        string label = current >= 0 ? names.Describe(sets[current].NameHash) + (sets[current].IsActive ? "" : L(" (masqué)")) : None;
         if (!ImGui.BeginCombo("##entity_set", label, ImGuiComboFlags.HeightLarge))
             return;
         for (int i = -1; i < sets.Count; i++)
@@ -372,23 +372,23 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     private void DrawEntitySets(MapEntity interior, MapLibrary library, HashNames names)
     {
         var sets = interior.EntitySets;
-        Widgets.Hint("Variantes de mobilier activées par les scripts du jeu (styles d'appartement, améliorations...). "
-            + "Masquées par défaut, comme en jeu. Non enregistré dans les YMAP.", wrap: true);
+        Widgets.Hint(L("Variantes de mobilier activées par les scripts du jeu (styles d'appartement, améliorations...). ")
+            + L("Masquées par défaut, comme en jeu. Non enregistré dans les YMAP."), wrap: true);
         ImGui.Dummy(new Vector2(0, 2));
 
         float width = (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X * 2f) / 3f;
-        if (Widgets.Button($"{Icons.Eye}  Tout afficher", "Afficher tous les entity sets de cet intérieur", width))
+        if (Widgets.Button(L($"{Icons.Eye}  Tout afficher"), L("Afficher tous les entity sets de cet intérieur"), width))
             SetAll(library, sets, true);
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.EyeOff}  Tout masquer", "Masquer tous les entity sets de cet intérieur", width))
+        if (Widgets.Button(L($"{Icons.EyeOff}  Tout masquer"), L("Masquer tous les entity sets de cet intérieur"), width))
             SetAll(library, sets, false);
         ImGui.SameLine();
         var shown = sets.Where(s => s.IsActive).ToList();
         string format = state.CopyFormat == CopyFormat.CSharp ? "C#" : "Lua";
-        if (Widgets.Button($"{Icons.Copy}  Copier le script", shown.Count == 0
-                ? "Cochez d'abord les entity sets à activer."
-                : $"Copier les lignes {format} qui activent les {shown.Count} entity sets affichés (GetInteriorAtCoords, "
-                    + "ActivateInteriorEntitySet, RefreshInterior).\nFormat : celui de « Copier la position » (menu ...).",
+        if (Widgets.Button(L($"{Icons.Copy}  Copier le script"), shown.Count == 0
+                ? L("Cochez d'abord les entity sets à activer.")
+                : L($"Copier les lignes {format} qui activent les {shown.Count} entity sets affichés (GetInteriorAtCoords, ")
+                    + L("ActivateInteriorEntitySet, RefreshInterior).\nFormat : celui de « Copier la position » (menu ...)."),
                 width, enabled: shown.Count > 0))
         {
             var items = shown.Select(s => new EntitySetItem(s.NameHash, names.TryGet(s.NameHash))).ToList();
@@ -396,18 +396,18 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 items, state.CopyFormat));
             int unknown = items.Count(i => i.Name is null);
             state.Notify(unknown == 0
-                ? $"Script copié ({items.Count} entity sets)."
-                : $"Script copié : {unknown} entity sets sur {items.Count} sans nom connu (lignes en commentaire).", warning: unknown > 0);
+                ? L($"Script copié ({items.Count} entity sets).")
+                : L($"Script copié : {unknown} entity sets sur {items.Count} sans nom connu (lignes en commentaire)."), warning: unknown > 0);
         }
 
         // Naming: the files only keep hashes; a typed name whose hash is one of these sets becomes its name.
         ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextWithHint("##set_name", "Nommer un entity set (taper son nom, Entrée)", ref _setName, 96,
+        if (ImGui.InputTextWithHint("##set_name", L("Nommer un entity set (taper son nom, Entrée)"), ref _setName, 96,
                 ImGuiInputTextFlags.EnterReturnsTrue))
             NameEntitySet(interior, sets, library, names);
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
-            ImGui.SetTooltip("Le jeu ne stocke que le hash des noms. Tapez le nom d'un entity set (ex. tiré d'un script) : "
-                + "s'il correspond, il est retenu jusqu'au rechargement de la carte.\nPour les garder : un nom par ligne dans data/strings.txt.");
+            ImGui.SetTooltip(L("Le jeu ne stocke que le hash des noms. Tapez le nom d'un entity set (ex. tiré d'un script) : ")
+                + L("s'il correspond, il est retenu jusqu'au rechargement de la carte.\nPour les garder : un nom par ligne dans data/strings.txt."));
         // The answer stays under the field (a message in the status bar alone went unnoticed).
         if (_setNameResult is { } result && _setNameInterior == interior)
             ImGui.TextColored(result.Ok ? UiTheme.Success : UiTheme.Warning, result.Text);
@@ -421,7 +421,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 library.SetEntitySetActive(set, active);
             if (ImGui.BeginPopupContextItem($"set_menu{i}"))
             {
-                if (ImGui.MenuItem("Renommer..."))
+                if (ImGui.MenuItem(L("Renommer...")))
                 {
                     _renamedSet = i;
                     _renamedInterior = interior;
@@ -431,10 +431,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 ImGui.EndPopup();
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
-                ImGui.SetTooltip("Clic droit : renommer");
+                ImGui.SetTooltip(L("Clic droit : renommer"));
             ImGui.SameLine();
             int count = set.Entities.Count(e => !e.IsDeleted);
-            ImGui.TextColored(UiTheme.TextMuted, count == 1 ? "1 objet" : $"{count} objets");
+            ImGui.TextColored(UiTheme.TextMuted, count == 1 ? L("1 objet") : L($"{count} objets"));
 
             if (_renamedSet == i && _renamedInterior == interior)
             {
@@ -444,7 +444,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     ImGui.SetKeyboardFocusHere();
                     _focusRename = false;
                 }
-                if (ImGui.InputTextWithHint($"##rename{i}", "Nouveau nom (Entrée ; Échap pour annuler)", ref _setNewName, 96, ImGuiInputTextFlags.EnterReturnsTrue))
+                if (ImGui.InputTextWithHint($"##rename{i}", L("Nouveau nom (Entrée ; Échap pour annuler)"), ref _setNewName, 96, ImGuiInputTextFlags.EnterReturnsTrue))
                 {
                     RenameEntitySet(interior, i, names);
                     _renamedSet = -1;
@@ -456,12 +456,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         // A new set, empty: objects are put in it with the "Entity set" list of their properties.
         ImGui.Dummy(new Vector2(0, 2));
-        float buttonWidth = ImGui.CalcTextSize("Créer").X + ImGui.GetStyle().FramePadding.X * 2 + 24f;
+        float buttonWidth = ImGui.CalcTextSize(L("Créer")).X + ImGui.GetStyle().FramePadding.X * 2 + 24f;
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonWidth - ImGui.GetStyle().ItemSpacing.X);
-        bool create = ImGui.InputTextWithHint("##new_set", "Nom du nouvel entity set", ref _newSetName, 96, ImGuiInputTextFlags.EnterReturnsTrue);
+        bool create = ImGui.InputTextWithHint("##new_set", L("Nom du nouvel entity set"), ref _newSetName, 96, ImGuiInputTextFlags.EnterReturnsTrue);
         ImGui.SameLine();
-        create |= Widgets.Button($"{Icons.Boxes}  Créer", "Ajouter un entity set vide à cet intérieur (dans toutes ses copies, enregistré dans son .ytyp).\n"
-            + "Ensuite, sélectionner des objets de l'intérieur et choisir ce set dans leur ligne « Entity set ».", buttonWidth,
+        create |= Widgets.Button(L($"{Icons.Boxes}  Créer"), L("Ajouter un entity set vide à cet intérieur (dans toutes ses copies, enregistré dans son .ytyp).\n")
+            + L("Ensuite, sélectionner des objets de l'intérieur et choisir ce set dans leur ligne « Entity set »."), buttonWidth,
             enabled: CleanSetName(_newSetName).Length > 0);
         if (create)
             CreateEntitySet(interior, names);
@@ -483,14 +483,14 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         uint hash = Joaat.Hash(name);
         if (interior.EntitySets.Any(s => s.NameHash == hash))
         {
-            state.Notify($"Cet intérieur a déjà un entity set « {name} ».", warning: true);
+            state.Notify(L($"Cet intérieur a déjà un entity set « {name} »."), warning: true);
             return;
         }
         names.Add(name);
-        state.History.Add(EntitySetEdit.Create(library, interior, hash, $"Créer l'entity set {name}"));
+        state.History.Add(EntitySetEdit.Create(library, interior, hash, L($"Créer l'entity set {name}")));
         library.SetEntitySetActive(interior.EntitySets[^1], true);
         _newSetName = "";
-        state.Notify($"Entity set « {name.ToLowerInvariant()} » créé, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S).");
+        state.Notify(L($"Entity set « {name.ToLowerInvariant()} » créé, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S)."));
     }
 
     private void RenameEntitySet(MapEntity interior, int index, HashNames names)
@@ -506,14 +506,14 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         if (interior.EntitySets.Any(s => s.NameHash == hash))
         {
-            state.Notify($"Cet intérieur a déjà un entity set « {name} ».", warning: true);
+            state.Notify(L($"Cet intérieur a déjà un entity set « {name} »."), warning: true);
             return;
         }
         string old = names.Describe(interior.EntitySets[index].NameHash);
         names.Add(name);
-        state.History.Add(EntitySetEdit.Rename(library, interior, index, hash, $"Renommer l'entity set {old}"));
-        state.Notify($"Entity set renommé en « {name.ToLowerInvariant()} » (enregistré dans son .ytyp au Ctrl+S). "
-            + "Les scripts qui l'activent doivent utiliser ce nouveau nom.");
+        state.History.Add(EntitySetEdit.Rename(library, interior, index, hash, L($"Renommer l'entity set {old}")));
+        state.Notify(L($"Entity set renommé en « {name.ToLowerInvariant()} » (enregistré dans son .ytyp au Ctrl+S). ")
+            + L("Les scripts qui l'activent doivent utiliser ce nouveau nom."));
     }
 
     private static void SetAll(MapLibrary library, IEnumerable<PlacedEntitySet> sets, bool active)
@@ -533,7 +533,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (sets.Any(s => s.NameHash == hash))
         {
             names.Add(name);
-            _setNameResult = (true, $"Nommé : {name.ToLowerInvariant()} (0x{hash:X8}).");
+            _setNameResult = (true, L($"Nommé : {name.ToLowerInvariant()} (0x{hash:X8})."));
             _setName = "";
         }
         else if (library.FindEntitySetInteriors(hash) is { Count: > 0 } others)
@@ -541,11 +541,11 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             // Not a set of this interior, but of another one: the name is kept all the same.
             names.Add(name);
             string where = string.Join(", ", others.Take(3).Select(names.Describe)) + (others.Count > 3 ? "..." : "");
-            _setNameResult = (true, $"Nom retenu, mais c'est un entity set d'un autre intérieur : {where}.");
+            _setNameResult = (true, L($"Nom retenu, mais c'est un entity set d'un autre intérieur : {where}."));
             _setName = "";
         }
         else
-            _setNameResult = (false, $"Aucun entity set ne s'appelle « {name} » (hash 0x{hash:X8}). Vérifiez l'orthographe.");
+            _setNameResult = (false, L($"Aucun entity set ne s'appelle « {name} » (hash 0x{hash:X8}). Vérifiez l'orthographe."));
         state.Notify(_setNameResult.Value.Text, warning: !_setNameResult.Value.Ok);
     }
 
@@ -565,14 +565,14 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (!Widgets.BeginProperties("##lod"))
             return;
 
-        Widgets.PropertyText("Niveau", LevelName(entity.LodLevel));
+        Widgets.PropertyText(L("Niveau"), LevelName(entity.LodLevel));
         if (entity.ChildLodDistance > 0f)
-            Widgets.PropertyText("Remplacé par ses enfants", $"à moins de {entity.ChildLodDistance:0} m");
+            Widgets.PropertyText(L("Remplacé par ses enfants"), L($"à moins de {entity.ChildLodDistance:0} m"));
 
-        Widgets.Property("Parent");
+        Widgets.Property(L("Parent"));
         if (entity.Parent is { } parent)
         {
-            if (Widgets.Link($"{names.Describe(parent.ArchetypeHash)}##parent", $"Sélectionner le parent : {LevelName(parent.LodLevel)}"))
+            if (Widgets.Link($"{names.Describe(parent.ArchetypeHash)}##parent", L($"Sélectionner le parent : {LevelName(parent.LodLevel)}")))
                 state.Select(parent);
         }
         else
@@ -582,7 +582,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
 
         var children = entity.Children.Where(c => !c.IsDeleted).ToList();
-        Widgets.Property("Enfants");
+        Widgets.Property(L("Enfants"));
         if (children.Count == 0)
         {
             ImGui.AlignTextToFramePadding();
@@ -592,11 +592,11 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         {
             for (int i = 0; i < children.Count && i < MaxChildrenListed; i++)
             {
-                if (Widgets.Link($"{names.Describe(children[i].ArchetypeHash)}##child{i}", "Sélectionner cet enfant"))
+                if (Widgets.Link($"{names.Describe(children[i].ArchetypeHash)}##child{i}", L("Sélectionner cet enfant")))
                     state.Select(children[i]);
             }
             if (children.Count > MaxChildrenListed)
-                Widgets.Hint($"... et {children.Count - MaxChildrenListed} autres");
+                Widgets.Hint(L($"... et {children.Count - MaxChildrenListed} autres"));
             ImGui.TreePop();
         }
         Widgets.EndProperties();
@@ -607,7 +607,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (!Widgets.BeginProperties("##flags"))
             return;
 
-        Widgets.Property("De l'objet");
+        Widgets.Property(L("De l'objet"));
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted($"0x{entity.Flags:X8}");
         var known = KnownFlags.Where(f => (entity.Flags & f.Flag) != 0).Select(f => f.Text).ToList();
@@ -616,11 +616,11 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (library.GetArchetype(entity.ArchetypeHash) is { } archetype)
         {
-            Widgets.Property("Du type");
+            Widgets.Property(L("Du type"));
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted($"0x{archetype.Flags:X8}");
             if (archetype.IsShadowOrReflectionProxy)
-                ImGui.TextWrapped("doublure pour les ombres et reflets (jamais affichée)");
+                ImGui.TextWrapped(L("doublure pour les ombres et reflets (jamais affichée)"));
         }
         Widgets.EndProperties();
     }
@@ -630,17 +630,17 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
     private static string LevelName(LodLevel level) => level switch
     {
-        LodLevel.Hd => "détail (HD)",
-        LodLevel.OrphanHd => "détail sans LOD",
-        LodLevel.Lod => "LOD (vue moyenne)",
-        _ => $"{level.ToString().ToUpperInvariant()} (vue lointaine)",
+        LodLevel.Hd => L("détail (HD)"),
+        LodLevel.OrphanHd => L("détail sans LOD"),
+        LodLevel.Lod => L("LOD (vue moyenne)"),
+        _ => L($"{level.ToString().ToUpperInvariant()} (vue lointaine)"),
     };
 
     private Vector3 _nodeEditStart;
 
     private void DrawPathNodePosition(PathNode node, PathNetwork network)
     {
-        Widgets.Property("Position", "Mètres. X = est, Y = nord, Z = haut. Aussi avec les poignées (outil Déplacer, touche 2).");
+        Widgets.Property(L("Position"), L("Mètres. X = est, Y = nord, Z = haut. Aussi avec les poignées (outil Déplacer, touche 2)."));
         Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
         var before = node.Position;
         var position = before;
@@ -657,7 +657,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (ImGui.IsItemActivated())
                 _nodeEditStart = before;
             if (ImGui.IsItemDeactivatedAfterEdit() && node.Position != _nodeEditStart)
-                state.History.Add(new PathNodeMoveEdit(network, node, _nodeEditStart, node.Position, $"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}"));
+                state.History.Add(new PathNodeMoveEdit(network, node, _nodeEditStart, node.Position, L($"Déplacer le nœud {node.Id.AreaId}:{node.Id.NodeId}")));
         }
     }
 
@@ -680,12 +680,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 var end = file.Boxes[occluder.Index].Quantized();
                 OccluderMaps.SetBox(file, end);
                 if (end != start)
-                    state.History.Add(new OccluderBoxEdit(file, start, end, $"Modifier la boîte d'occlusion {occluder.Index}"));
+                    state.History.Add(new OccluderBoxEdit(file, start, end, L($"Modifier la boîte d'occlusion {occluder.Index}")));
                 _boxEditStart = null;
             }
         }
 
-        Widgets.Property("Centre", "Mètres. X = est, Y = nord, Z = haut. Arrondi à 25 cm (précision du format du jeu). Aussi avec les poignées (touche 2).");
+        Widgets.Property(L("Centre"), L("Mètres. X = est, Y = nord, Z = haut. Arrondi à 25 cm (précision du format du jeu). Aussi avec les poignées (touche 2)."));
         for (int i = 0; i < 3; i++)
         {
             if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -700,7 +700,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Track(box);
         }
 
-        Widgets.Property("Taille", "Longueur (X), largeur (Y) et hauteur (Z) de la boîte, en mètres, dans son propre sens. Aussi avec les poignées (touche 4).");
+        Widgets.Property(L("Taille"), L("Longueur (X), largeur (Y) et hauteur (Z) de la boîte, en mètres, dans son propre sens. Aussi avec les poignées (touche 4)."));
         for (int i = 0; i < 3; i++)
         {
             if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -715,7 +715,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Track(box);
         }
 
-        Widgets.Property("Rotation Z", "Degrés. Une boîte d'occlusion ne tourne qu'autour de l'axe vertical. Aussi avec les poignées (touche 3).");
+        Widgets.Property(L("Rotation Z"), L("Degrés. Une boîte d'occlusion ne tourne qu'autour de l'axe vertical. Aussi avec les poignées (touche 3)."));
         {
             var box = file.Boxes[occluder.Index];
             float degrees = (box.Angle * 180f / MathF.PI + 360f) % 360f;
@@ -725,7 +725,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
 
         if (file.IsBoxChanged(occluder.Index))
-            Widgets.PropertyText("État", "modifiée (pas encore enregistrée)", "L'enregistrement des boîtes d'occlusion arrive à l'étape suivante.", UiTheme.Warning);
+            Widgets.PropertyText(L("État"), L("modifiée (pas encore enregistrée)"), L("L'enregistrement des boîtes d'occlusion arrive à l'étape suivante."), UiTheme.Warning);
     }
 
     private void DrawOccluder(OccluderSelection occluder)
@@ -740,51 +740,51 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         Widgets.Hint($"{Icons.File}  {occluder.File.FileName}");
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(occluder.File.GamePath);
-        if (Widgets.Button($"{Icons.Crosshair}  Aller à l'occluder"))
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à l'occluder")))
             state.FocusOn(center, MathF.Max(size.Length() / 2, 5f));
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.Copy}  Copier la position", state.FormatPosition(center)))
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), state.FormatPosition(center)))
             ImGui.SetClipboardText(state.FormatPosition(center));
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.Trash}  Supprimer", "Suppr. Annulable avec Ctrl+Z."))
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Annulable avec Ctrl+Z.")))
         {
             state.DeleteSelectedOccluder();
             return;
         }
 
-        if (Widgets.Section(isBox ? "Boîte" : "Maillage", "occluder") && Widgets.BeginProperties("##occluder"))
+        if (Widgets.Section(isBox ? L("Boîte") : L("Maillage"), "occluder") && Widgets.BeginProperties("##occluder"))
         {
             if (occluder.Box is not null)
                 DrawOccluderBoxFields(occluder);
             else if (occluder.Model is { } model)
             {
-                Widgets.PropertyText("Triangles", Widgets.Count(model.TriangleCount));
-                Widgets.PropertyText("Sommets", Widgets.Count(model.Vertices.Count), "255 au plus par maillage.");
-                Widgets.PropertyText("Emprise", $"{size.X:0} x {size.Y:0} x {size.Z:0} m");
-                Widgets.PropertyText("Centre", $"{center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
+                Widgets.PropertyText(L("Triangles"), Widgets.Count(model.TriangleCount));
+                Widgets.PropertyText(L("Sommets"), Widgets.Count(model.Vertices.Count), L("255 au plus par maillage."));
+                Widgets.PropertyText(L("Emprise"), $"{size.X:0} x {size.Y:0} x {size.Z:0} m");
+                Widgets.PropertyText(L("Centre"), $"{center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
             }
-            Widgets.PropertyText("Fichier", occluder.File.FileName, occluder.File.GamePath);
+            Widgets.PropertyText(L("Fichier"), occluder.File.FileName, occluder.File.GamePath);
             var occluders = occluder.File.Occluders;
-            Widgets.PropertyText("Dans ce fichier", $"{occluders.Boxes.Count} boîte(s), {occluders.Models.Count} maillage(s)");
+            Widgets.PropertyText(L("Dans ce fichier"), L($"{occluders.Boxes.Count} boîte(s), {occluders.Models.Count} maillage(s)"));
             Widgets.EndProperties();
         }
-        Widgets.Hint("Le jeu ne dessine pas ce qui est caché derrière un occluder. Échap pour désélectionner ; "
-            + "masquez le calque Occlusion pour sélectionner les bâtiments.", wrap: true);
+        Widgets.Hint(L("Le jeu ne dessine pas ce qui est caché derrière un occluder. Échap pour désélectionner ; ")
+            + L("masquez le calque Occlusion pour sélectionner les bâtiments."), wrap: true);
     }
 
     // Room flags (CMloRoomDef), as named by the community tools.
-    private static readonly (uint Flag, string Text, string Tooltip)[] RoomFlags =
+    private static (uint Flag, string Text, string Tooltip)[] RoomFlags =>
     [
-        (0x1, "Figer les véhicules", "Les véhicules de la salle ne bougent plus (freeze vehicles)."),
-        (0x2, "Figer les piétons", "Les piétons de la salle ne bougent plus (freeze peds)."),
-        (0x4, "Sans lumière du soleil", "Le soleil n'éclaire pas la salle (no directional light)."),
-        (0x8, "Sans lumières extérieures", "Les lumières du dehors n'éclairent pas la salle (no exterior lights)."),
-        (0x10, "Forcer le figeage", "Force freeze."),
-        (0x20, "Moins de véhicules", "Moins de véhicules générés autour (reduce cars)."),
-        (0x40, "Moins de piétons", "Moins de piétons générés autour (reduce peds)."),
-        (0x80, "Forcer la lumière du soleil", "Le soleil éclaire la salle même à l'intérieur (force directional light on)."),
-        (0x100, "Ne pas dessiner l'extérieur", "Le dehors n'est pas dessiné depuis cette salle, même par les fenêtres (don't render exterior)."),
-        (0x200, "Miroir visible", "Un miroir peut être visible depuis cette salle (mirror potentially visible)."),
+        (0x1, L("Figer les véhicules"), L("Les véhicules de la salle ne bougent plus (freeze vehicles).")),
+        (0x2, L("Figer les piétons"), L("Les piétons de la salle ne bougent plus (freeze peds).")),
+        (0x4, L("Sans lumière du soleil"), L("Le soleil n'éclaire pas la salle (no directional light).")),
+        (0x8, L("Sans lumières extérieures"), L("Les lumières du dehors n'éclairent pas la salle (no exterior lights).")),
+        (0x10, L("Forcer le figeage"), L("Force freeze.")),
+        (0x20, L("Moins de véhicules"), L("Moins de véhicules générés autour (reduce cars).")),
+        (0x40, L("Moins de piétons"), L("Moins de piétons générés autour (reduce peds).")),
+        (0x80, L("Forcer la lumière du soleil"), L("Le soleil éclaire la salle même à l'intérieur (force directional light on).")),
+        (0x100, L("Ne pas dessiner l'extérieur"), L("Le dehors n'est pas dessiné depuis cette salle, même par les fenêtres (don't render exterior).")),
+        (0x200, L("Miroir visible"), L("Un miroir peut être visible depuis cette salle (mirror potentially visible).")),
     ];
 
     private InteriorRoom? _roomEditStart;
@@ -793,22 +793,22 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     // The rooms of an interior, each one can be selected (and edited) in turn.
     private void DrawRoomList(MapEntity interior, Archetype archetype)
     {
-        Widgets.Hint("Boîtes qui découpent l'intérieur : le jeu ne dessine une salle que si elle est visible par un portail. "
-            + "Cliquez une salle pour la modifier.", wrap: true);
+        Widgets.Hint(L("Boîtes qui découpent l'intérieur : le jeu ne dessine une salle que si elle est visible par un portail. ")
+            + L("Cliquez une salle pour la modifier."), wrap: true);
         for (int r = 1; r < archetype.InteriorRooms.Count; r++)
         {
             var room = archetype.InteriorRooms[r];
             int index = r;
-            if (Widgets.Link($"{r} · {(room.Name.Length > 0 ? room.Name : "(sans nom)")}##room{r}", "Sélectionner cette salle"))
+            if (Widgets.Link(L($"{r} · {(room.Name.Length > 0 ? room.Name : L("(sans nom)"))}##room{r}"), L("Sélectionner cette salle")))
             {
                 state.SelectRoom(new RoomSelection(interior, index));
                 state.SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
             }
             ImGui.SameLine();
             int objects = archetype.InteriorEntities.Count(e => e.InteriorRoom == index && !e.IsDeleted);
-            ImGui.TextColored(UiTheme.TextMuted, objects == 1 ? "1 objet" : $"{objects} objets");
+            ImGui.TextColored(UiTheme.TextMuted, objects == 1 ? L("1 objet") : L($"{objects} objets"));
         }
-        if (Widgets.Button($"{Icons.Box}  Ajouter une salle", "Boîte de 4 x 4 x 3 m devant la caméra, dans toutes les copies de l'intérieur."))
+        if (Widgets.Button(L($"{Icons.Box}  Ajouter une salle"), L("Boîte de 4 x 4 x 3 m devant la caméra, dans toutes les copies de l'intérieur.")))
             state.AddRoom(interior);
     }
 
@@ -856,13 +856,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
 
         ImGui.PushFont(UiTheme.SemiboldFont);
-        ImGui.TextUnformatted($"{Icons.House}  Salle {index} : {(room.Name.Length > 0 ? room.Name : "(sans nom)")}");
+        ImGui.TextUnformatted(L($"{Icons.House}  Salle {index} : {(room.Name.Length > 0 ? room.Name : L("(sans nom)"))}"));
         ImGui.PopFont();
         Widgets.Hint($"{Icons.File}  {names.Describe(interior.ArchetypeHash)} · {Path.GetFileName(library.GetArchetypeFile(interior.ArchetypeHash) ?? "")}");
-        if (Widgets.Button($"{Icons.Crosshair}  Aller à la salle"))
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à la salle")))
             state.FocusOn(center, MathF.Max((room.BoundsMax - room.BoundsMin).Length() / 2, 4f));
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.House}  Sélectionner l'intérieur"))
+        if (Widgets.Button(L($"{Icons.House}  Sélectionner l'intérieur")))
         {
             state.Select(interior);
             return;
@@ -870,25 +870,25 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (index == 0)
         {
-            Widgets.Hint("Salle 0 (limbo) : elle représente l'extérieur de l'intérieur, elle n'a pas de boîte à modifier.", wrap: true);
+            Widgets.Hint(L("Salle 0 (limbo) : elle représente l'extérieur de l'intérieur, elle n'a pas de boîte à modifier."), wrap: true);
             return;
         }
 
-        if (Widgets.Section("Salle", "room") && Widgets.BeginProperties("##room"))
+        if (Widgets.Section(L("Salle"), "room") && Widgets.BeginProperties("##room"))
         {
-            Widgets.Property("Nom", "Nom de la salle dans le .ytyp (lettres, chiffres, _ et -). Entrée pour valider.");
-            if (CommitText($"##room_name{interior.ArchetypeHash}_{index}", room.Name, "nom de la salle", out var name) && name != room.Name)
+            Widgets.Property(L("Nom"), L("Nom de la salle dans le .ytyp (lettres, chiffres, _ et -). Entrée pour valider."));
+            if (CommitText($"##room_name{interior.ArchetypeHash}_{index}", room.Name, L("nom de la salle"), out var name) && name != room.Name)
             {
                 string clean = new(name.Replace(' ', '_').Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
                 if (clean.Length == 0)
-                    state.Notify("Nom de salle vide ou sans lettre valide : non changé.", warning: true);
+                    state.Notify(L("Nom de salle vide ou sans lettre valide : non changé."), warning: true);
                 else
-                    Change(room with { Name = clean }, $"Renommer la salle {index}");
+                    Change(room with { Name = clean }, L($"Renommer la salle {index}"));
             }
 
             Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
             float width = Widgets.SplitWidth(3);
-            Widgets.Property("Coin min", "Coin bas de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z).");
+            Widgets.Property(L("Coin min"), L("Coin bas de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z)."));
             for (int i = 0; i < 3; i++)
             {
                 if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -900,9 +900,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     min[i] = MathF.Min(value, current.BoundsMax[i] - 0.1f);
                     library.SetRoom(interior.ArchetypeHash, index, current with { BoundsMin = min });
                 }
-                Track(current, $"Redimensionner la salle {index}");
+                Track(current, L($"Redimensionner la salle {index}"));
             }
-            Widgets.Property("Coin max", "Coin haut de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z).");
+            Widgets.Property(L("Coin max"), L("Coin haut de la boîte de la salle, en mètres, dans le repère de l'intérieur (X, Y, Z)."));
             for (int i = 0; i < 3; i++)
             {
                 if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -914,70 +914,70 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     max[i] = MathF.Max(value, current.BoundsMin[i] + 0.1f);
                     library.SetRoom(interior.ArchetypeHash, index, current with { BoundsMax = max });
                 }
-                Track(current, $"Redimensionner la salle {index}");
+                Track(current, L($"Redimensionner la salle {index}"));
             }
             room = archetype.InteriorRooms[index];
             var size = room.BoundsMax - room.BoundsMin;
-            Widgets.PropertyText("Taille", $"{size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m");
+            Widgets.PropertyText(L("Taille"), $"{size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m");
 
-            Widgets.Property("Timecycle", "Réglage de lumière et de couleurs de la salle (timecycle modifier), par son nom (ex. int_gasstation). "
-                + "Vide = aucun. Entrée pour valider.");
+            Widgets.Property(L("Timecycle"), L("Réglage de lumière et de couleurs de la salle (timecycle modifier), par son nom (ex. int_gasstation). ")
+                + L("Vide = aucun. Entrée pour valider."));
             if (CommitText($"##room_tc{interior.ArchetypeHash}_{index}", TimecycleText(room.TimecycleHash, names), "aucun", out var timecycle)
                 && ParseTimecycle(timecycle, names) is { } tcHash && tcHash != room.TimecycleHash)
-                Change(room with { TimecycleHash = tcHash }, $"Timecycle de la salle {index}");
-            Widgets.Property("Timecycle secondaire", "Deuxième réglage de lumière, mélangé au premier. Vide = aucun.");
+                Change(room with { TimecycleHash = tcHash }, L($"Timecycle de la salle {index}"));
+            Widgets.Property(L("Timecycle secondaire"), L("Deuxième réglage de lumière, mélangé au premier. Vide = aucun."));
             if (CommitText($"##room_tc2{interior.ArchetypeHash}_{index}", TimecycleText(room.SecondaryTimecycleHash, names), "aucun", out var secondary)
                 && ParseTimecycle(secondary, names) is { } tc2Hash && tc2Hash != room.SecondaryTimecycleHash)
-                Change(room with { SecondaryTimecycleHash = tc2Hash }, $"Timecycle secondaire de la salle {index}");
+                Change(room with { SecondaryTimecycleHash = tc2Hash }, L($"Timecycle secondaire de la salle {index}"));
 
-            Widgets.Property("Étage", "Numéro d'étage de la salle (floor id), 0 le plus souvent. Entrée pour valider.");
+            Widgets.Property(L("Étage"), L("Numéro d'étage de la salle (floor id), 0 le plus souvent. Entrée pour valider."));
             {
                 int floor = room.FloorId;
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.InputInt("##room_floor", ref floor, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
-                    Change(room with { FloorId = floor }, $"Étage de la salle {index}");
+                    Change(room with { FloorId = floor }, L($"Étage de la salle {index}"));
             }
-            Widgets.Property("Profondeur de l'extérieur", "Nombre de portails à traverser au plus pour voir l'extérieur depuis cette salle "
-                + "(exterior visibility depth) ; -1 = réglage du jeu. Entrée pour valider.");
+            Widgets.Property(L("Profondeur de l'extérieur"), L("Nombre de portails à traverser au plus pour voir l'extérieur depuis cette salle ")
+                + L("(exterior visibility depth) ; -1 = réglage du jeu. Entrée pour valider."));
             {
                 int depth = room.ExteriorVisibilityDepth;
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.InputInt("##room_depth", ref depth, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
-                    Change(room with { ExteriorVisibilityDepth = Math.Max(-1, depth) }, $"Profondeur de l'extérieur de la salle {index}");
+                    Change(room with { ExteriorVisibilityDepth = Math.Max(-1, depth) }, L($"Profondeur de l'extérieur de la salle {index}"));
             }
 
             room = archetype.InteriorRooms[index];
             int portals = archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index);
             int objects = archetype.InteriorEntities.Count(e => e.InteriorRoom == index && !e.IsDeleted);
-            Widgets.PropertyText("Contenu", $"{portals} portail(s), {objects} objet(s)");
+            Widgets.PropertyText(L("Contenu"), L($"{portals} portail(s), {objects} objet(s)"));
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section("Réglages de la salle", "room_flags"))
+        if (Widgets.Section(L("Réglages de la salle"), "room_flags"))
         {
             foreach (var (flag, text, tooltip) in RoomFlags)
             {
                 bool on = (room.Flags & flag) != 0;
                 if (ImGui.Checkbox($"{text}##room_flag{flag:X}", ref on))
-                    Change(room with { Flags = on ? room.Flags | flag : room.Flags & ~flag }, $"{(on ? "Activer" : "Désactiver")} « {text} » (salle {index})");
+                    Change(room with { Flags = on ? room.Flags | flag : room.Flags & ~flag }, L($"{(on ? L("Activer") : L("Désactiver"))} « {text} » (salle {index})"));
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
                     ImGui.SetTooltip(tooltip);
             }
             uint other = room.Flags & ~RoomFlags.Aggregate(0u, (all, f) => all | f.Flag);
             if (other != 0)
-                Widgets.Hint($"Autres drapeaux : 0x{other:X}");
+                Widgets.Hint(L($"Autres drapeaux : 0x{other:X}"));
         }
-        if (Widgets.Section("Portails de la salle", "room_portals"))
+        if (Widgets.Section(L("Portails de la salle"), "room_portals"))
             DrawPortalList(interior, archetype, index);
         int roomPortals = archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index);
-        if (Widgets.Button($"{Icons.Trash}  Supprimer la salle", "Supprime la salle" + (roomPortals > 0 ? $" et ses {roomPortals} portail(s)" : "")
-                + " ; ses objets vont dans la salle qui les entoure (sinon dans limbo). Suppr fait de même."))
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer la salle"), L("Supprime la salle") + (roomPortals > 0 ? L($" et ses {roomPortals} portail(s)") : "")
+                + L(" ; ses objets vont dans la salle qui les entoure (sinon dans limbo). Suppr fait de même.")))
         {
             state.DeleteSelectedRoom();
             return;
         }
-        Widgets.Hint("Change la salle dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
-            + "Échap pour désélectionner ; masquez le calque Salles pour sélectionner les objets.", wrap: true);
+        Widgets.Hint(L("Change la salle dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. ")
+            + L("Échap pour désélectionner ; masquez le calque Salles pour sélectionner les objets."), wrap: true);
     }
 
     private static string TimecycleText(uint hash, HashNames names) =>
@@ -994,7 +994,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             return hex;
         if (text.Any(char.IsWhiteSpace))
         {
-            state.Notify("Nom de timecycle invalide (espaces).", warning: true);
+            state.Notify(L("Nom de timecycle invalide (espaces)."), warning: true);
             return null;
         }
         names.Add(text);
@@ -1002,30 +1002,30 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     }
 
     // Portal flags (CMloPortalDef), as named by the community tools.
-    private static readonly (uint Flag, string Text, string Tooltip)[] PortalFlags =
+    private static (uint Flag, string Text, string Tooltip)[] PortalFlags =>
     [
-        (0x1, "Sens unique", "On ne voit à travers le portail que dans un sens (one way)."),
-        (0x2, "Relie un autre intérieur", "Le portail mène à un autre intérieur collé à celui-ci (link interior)."),
-        (0x4, "Miroir", "Le portail est un miroir : il montre la salle en reflet (mirror)."),
-        (0x8, "Ignorer le timecycle", "Le réglage de lumière de la salle n'est pas appliqué à travers le portail (ignore modifier)."),
-        (0x10, "Miroir haute qualité", "Miroir dessiné avec les effets coûteux (mirror using expensive shaders)."),
-        (0x20, "Basse qualité seulement", "Seulement pour les modèles de basse qualité (low LOD only)."),
-        (0x40, "Se ferme avec la porte", "Quand la porte attachée est fermée, ce qui est derrière n'est plus dessiné (allow closing)."),
-        (0x80, "Miroir : voit le soleil", "Le reflet est éclairé par le soleil (mirror can see directional)."),
-        (0x100, "Miroir : traverse les portails", "Le reflet montre aussi les autres salles (mirror using portal traversal)."),
-        (0x200, "Miroir au sol", "Miroir posé à plat, comme un sol brillant (mirror floor)."),
-        (0x400, "Miroir : voit l'extérieur", "Le reflet montre aussi le dehors (mirror can see exterior view)."),
-        (0x800, "Surface d'eau", "Le portail est une surface d'eau, comme une piscine (water surface)."),
-        (0x1000, "Eau jusqu'à l'horizon", "La surface d'eau s'étend jusqu'à l'horizon (water surface extend to horizon)."),
-        (0x2000, "Lumière qui passe", "La lumière d'une salle passe par le portail dans l'autre (use light bleed)."),
+        (0x1, L("Sens unique"), L("On ne voit à travers le portail que dans un sens (one way).")),
+        (0x2, L("Relie un autre intérieur"), L("Le portail mène à un autre intérieur collé à celui-ci (link interior).")),
+        (0x4, L("Miroir"), L("Le portail est un miroir : il montre la salle en reflet (mirror).")),
+        (0x8, L("Ignorer le timecycle"), L("Le réglage de lumière de la salle n'est pas appliqué à travers le portail (ignore modifier).")),
+        (0x10, L("Miroir haute qualité"), L("Miroir dessiné avec les effets coûteux (mirror using expensive shaders).")),
+        (0x20, L("Basse qualité seulement"), L("Seulement pour les modèles de basse qualité (low LOD only).")),
+        (0x40, L("Se ferme avec la porte"), L("Quand la porte attachée est fermée, ce qui est derrière n'est plus dessiné (allow closing).")),
+        (0x80, L("Miroir : voit le soleil"), L("Le reflet est éclairé par le soleil (mirror can see directional).")),
+        (0x100, L("Miroir : traverse les portails"), L("Le reflet montre aussi les autres salles (mirror using portal traversal).")),
+        (0x200, L("Miroir au sol"), L("Miroir posé à plat, comme un sol brillant (mirror floor).")),
+        (0x400, L("Miroir : voit l'extérieur"), L("Le reflet montre aussi le dehors (mirror can see exterior view).")),
+        (0x800, L("Surface d'eau"), L("Le portail est une surface d'eau, comme une piscine (water surface).")),
+        (0x1000, L("Eau jusqu'à l'horizon"), L("La surface d'eau s'étend jusqu'à l'horizon (water surface extend to horizon).")),
+        (0x2000, L("Lumière qui passe"), L("La lumière d'une salle passe par le portail dans l'autre (use light bleed).")),
     ];
 
     private InteriorPortal? _portalEditStart;
 
     private static string RoomLabel(Archetype archetype, int room) =>
-        room == 0 ? "0 · extérieur (limbo)"
+        room == 0 ? L("0 · extérieur (limbo)")
         : room < archetype.InteriorRooms.Count ? $"{room} · {(archetype.InteriorRooms[room].Name.Length > 0 ? archetype.InteriorRooms[room].Name : "(sans nom)")}"
-        : $"{room} · (salle absente)";
+        : L($"{room} · (salle absente)");
 
     // The portals of a room, each one can be selected in turn.
     private void DrawPortalList(MapEntity interior, Archetype archetype, int room)
@@ -1038,16 +1038,16 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 continue;
             any = true;
             int other = portal.RoomFrom == room ? portal.RoomTo : portal.RoomFrom;
-            if (Widgets.Link($"Portail {p} · vers {RoomLabel(archetype, other)}##portal{p}", "Sélectionner ce portail"))
+            if (Widgets.Link(L($"Portail {p} · vers {RoomLabel(archetype, other)}##portal{p}"), L("Sélectionner ce portail")))
             {
                 state.SelectPortal(new RoomSelection(interior, p));
                 state.SetLayerVisible(RoomLayer.LayerName(other == 0 ? RoomLayerPart.OutsidePortals : RoomLayerPart.InnerPortals), true);
             }
         }
         if (!any)
-            Widgets.Hint("Aucun portail : la salle n'est visible depuis nulle part.");
-        if (Widgets.Button($"{Icons.Box}  Ajouter un portail", "Ouverture de 1,2 x 2,2 m en bas du côté de la salle tourné vers la caméra, "
-                + "vers l'extérieur. À placer ensuite sur la porte ou la fenêtre."))
+            Widgets.Hint(L("Aucun portail : la salle n'est visible depuis nulle part."));
+        if (Widgets.Button(L($"{Icons.Box}  Ajouter un portail"), L("Ouverture de 1,2 x 2,2 m en bas du côté de la salle tourné vers la caméra, ")
+                + L("vers l'extérieur. À placer ensuite sur la porte ou la fenêtre.")))
             state.AddPortal(interior, room);
     }
 
@@ -1080,22 +1080,22 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         var center = portal.Corners.Count > 0 ? portal.Corners.Aggregate(Vector3.Zero, (sum, c) => sum + c) / portal.Corners.Count : Vector3.Zero;
         ImGui.PushFont(UiTheme.SemiboldFont);
-        ImGui.TextUnformatted($"{Icons.House}  Portail {index}");
+        ImGui.TextUnformatted(L($"{Icons.House}  Portail {index}"));
         ImGui.PopFont();
         Widgets.Hint($"{Icons.File}  {names.Describe(interior.ArchetypeHash)} · {Path.GetFileName(library.GetArchetypeFile(interior.ArchetypeHash) ?? "")}");
-        if (Widgets.Button($"{Icons.Crosshair}  Aller au portail"))
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller au portail")))
         {
             float radius = portal.Corners.Count > 0 ? portal.Corners.Max(c => Vector3.Distance(c, center)) : 2f;
             state.FocusOn(Vector3.Transform(center, interior.Transform), MathF.Max(radius, 3f));
         }
         ImGui.SameLine();
-        if (Widgets.Button($"{Icons.House}  Sélectionner l'intérieur"))
+        if (Widgets.Button(L($"{Icons.House}  Sélectionner l'intérieur")))
         {
             state.Select(interior);
             return;
         }
 
-        if (Widgets.Section("Portail", "portal") && Widgets.BeginProperties("##portal"))
+        if (Widgets.Section(L("Portail"), "portal") && Widgets.BeginProperties("##portal"))
         {
             // The two rooms it joins (room 0 = the outside).
             void RoomCombo(string label, string tooltip, string id, int current, Func<int, InteriorPortal> with, string description)
@@ -1111,20 +1111,20 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 }
                 ImGui.EndCombo();
             }
-            RoomCombo("De la salle", "Première salle reliée par le portail (0 = l'extérieur).", "##portal_from", portal.RoomFrom,
-                r => archetype.InteriorPortals[index] with { RoomFrom = r }, $"Salle de départ du portail {index}");
-            RoomCombo("Vers la salle", "Deuxième salle reliée par le portail (0 = l'extérieur).", "##portal_to", portal.RoomTo,
-                r => archetype.InteriorPortals[index] with { RoomTo = r }, $"Salle d'arrivée du portail {index}");
+            RoomCombo(L("De la salle"), L("Première salle reliée par le portail (0 = l'extérieur)."), "##portal_from", portal.RoomFrom,
+                r => archetype.InteriorPortals[index] with { RoomFrom = r }, L($"Salle de départ du portail {index}"));
+            RoomCombo(L("Vers la salle"), L("Deuxième salle reliée par le portail (0 = l'extérieur)."), "##portal_to", portal.RoomTo,
+                r => archetype.InteriorPortals[index] with { RoomTo = r }, L($"Salle d'arrivée du portail {index}"));
             Widgets.Property("");
-            if (Widgets.Button($"{Icons.RefreshCw}  Inverser les salles", "Échange « De la salle » et « Vers la salle »."))
-                Change(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }, $"Inverser les salles du portail {index}");
+            if (Widgets.Button(L($"{Icons.RefreshCw}  Inverser les salles"), L("Échange « De la salle » et « Vers la salle ».")))
+                Change(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }, L($"Inverser les salles du portail {index}"));
             portal = archetype.InteriorPortals[index];
             if (portal.RoomFrom == portal.RoomTo)
-                Widgets.Hint("Le portail relie une salle à elle-même : le jeu ne s'en sert pas.", wrap: true);
+                Widgets.Hint(L("Le portail relie une salle à elle-même : le jeu ne s'en sert pas."), wrap: true);
 
             Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
             float width = Widgets.SplitWidth(3);
-            Widgets.Property("Centre", "Déplace tout le portail (ses coins ensemble), en mètres, dans le repère de l'intérieur.");
+            Widgets.Property(L("Centre"), L("Déplace tout le portail (ses coins ensemble), en mètres, dans le repère de l'intérieur."));
             for (int i = 0; i < 3; i++)
             {
                 if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -1137,12 +1137,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     delta[i] = value - middle[i];
                     library.SetPortal(interior.ArchetypeHash, index, current with { Corners = [.. current.Corners.Select(c => c + delta)] });
                 }
-                Track(current, $"Déplacer le portail {index}");
+                Track(current, L($"Déplacer le portail {index}"));
             }
             for (int c = 0; c < portal.Corners.Count; c++)
             {
-                Widgets.Property($"Coin {c + 1}", "Coin du portail, en mètres, dans le repère de l'intérieur (numéroté sur la vue 3D). "
-                    + "Les coins font le tour de l'ouverture, dans l'ordre.");
+                Widgets.Property(L($"Coin {c + 1}"), L("Coin du portail, en mètres, dans le repère de l'intérieur (numéroté sur la vue 3D). ")
+                    + L("Les coins font le tour de l'ouverture, dans l'ordre."));
                 for (int i = 0; i < 3; i++)
                 {
                     if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
@@ -1155,113 +1155,113 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                         int which = c;
                         library.SetPortal(interior.ArchetypeHash, index, current with { Corners = [.. current.Corners.Select((p, k) => k == which ? corner : p)] });
                     }
-                    Track(current, $"Déplacer un coin du portail {index}");
+                    Track(current, L($"Déplacer un coin du portail {index}"));
                 }
             }
             portal = archetype.InteriorPortals[index];
             if (portal.Corners.Count == 4)
-                Widgets.PropertyText("Taille", $"{Vector3.Distance(portal.Corners[0], portal.Corners[1]):0.00} x {Vector3.Distance(portal.Corners[1], portal.Corners[2]):0.00} m");
+                Widgets.PropertyText(L("Taille"), $"{Vector3.Distance(portal.Corners[0], portal.Corners[1]):0.00} x {Vector3.Distance(portal.Corners[1], portal.Corners[2]):0.00} m");
 
-            Widgets.Property("Opacité", "Opacité du portail (0 le plus souvent ; utilisé par les miroirs). Entrée pour valider.");
+            Widgets.Property(L("Opacité"), L("Opacité du portail (0 le plus souvent ; utilisé par les miroirs). Entrée pour valider."));
             {
                 int opacity = portal.Opacity;
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.InputInt("##portal_opacity", ref opacity, 1, 10, ImGuiInputTextFlags.EnterReturnsTrue))
-                    Change(portal with { Opacity = Math.Max(0, opacity) }, $"Opacité du portail {index}");
+                    Change(portal with { Opacity = Math.Max(0, opacity) }, L($"Opacité du portail {index}"));
             }
-            Widgets.Property("Priorité du miroir", "Ordre de dessin quand plusieurs miroirs sont visibles (0 le plus souvent). Entrée pour valider.");
+            Widgets.Property(L("Priorité du miroir"), L("Ordre de dessin quand plusieurs miroirs sont visibles (0 le plus souvent). Entrée pour valider."));
             {
                 int priority = portal.MirrorPriority;
                 ImGui.SetNextItemWidth(-1);
                 if (ImGui.InputInt("##portal_mirror", ref priority, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
-                    Change(portal with { MirrorPriority = Math.Max(0, priority) }, $"Priorité du miroir du portail {index}");
+                    Change(portal with { MirrorPriority = Math.Max(0, priority) }, L($"Priorité du miroir du portail {index}"));
             }
-            Widgets.Property("Occlusion audio", "Réglage du son à travers le portail (audio occlusion), par son nom ou son hash (0x...). "
-                + "Vide = aucun. Entrée pour valider.");
+            Widgets.Property(L("Occlusion audio"), L("Réglage du son à travers le portail (audio occlusion), par son nom ou son hash (0x...). ")
+                + L("Vide = aucun. Entrée pour valider."));
             if (CommitText($"##portal_audio{interior.ArchetypeHash}_{index}", TimecycleText(portal.AudioOcclusionHash, names), "aucun", out var audio)
                 && ParseTimecycle(audio, names) is { } audioHash && audioHash != portal.AudioOcclusionHash)
-                Change(portal with { AudioOcclusionHash = audioHash }, $"Occlusion audio du portail {index}");
+                Change(portal with { AudioOcclusionHash = audioHash }, L($"Occlusion audio du portail {index}"));
 
             int objects = archetype.InteriorEntities.Count(e => e.InteriorPortal == index && !e.IsDeleted);
-            Widgets.PropertyText("Objets attachés", objects == 0 ? "aucun" : $"{objects} (portes...)");
+            Widgets.PropertyText(L("Objets attachés"), objects == 0 ? L("aucun") : L($"{objects} (portes...)"));
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section("Réglages du portail", "portal_flags"))
+        if (Widgets.Section(L("Réglages du portail"), "portal_flags"))
         {
             foreach (var (flag, text, tooltip) in PortalFlags)
             {
                 bool on = (portal.Flags & flag) != 0;
                 if (ImGui.Checkbox($"{text}##portal_flag{flag:X}", ref on))
-                    Change(portal with { Flags = on ? portal.Flags | flag : portal.Flags & ~flag }, $"{(on ? "Activer" : "Désactiver")} « {text} » (portail {index})");
+                    Change(portal with { Flags = on ? portal.Flags | flag : portal.Flags & ~flag }, L($"{(on ? L("Activer") : L("Désactiver"))} « {text} » (portail {index})"));
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
                     ImGui.SetTooltip(tooltip);
             }
             uint other = portal.Flags & ~PortalFlags.Aggregate(0u, (all, f) => all | f.Flag);
             if (other != 0)
-                Widgets.Hint($"Autres drapeaux : 0x{other:X}");
+                Widgets.Hint(L($"Autres drapeaux : 0x{other:X}"));
         }
-        if (Widgets.Button($"{Icons.Trash}  Supprimer le portail", "Les objets attachés (portes...) restent, sans portail. Suppr fait de même."))
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer le portail"), L("Les objets attachés (portes...) restent, sans portail. Suppr fait de même.")))
         {
             state.DeleteSelectedPortal();
             return;
         }
-        Widgets.Hint("Change le portail dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. "
-            + "Échap pour désélectionner ; masquez les calques des portails pour sélectionner les objets.", wrap: true);
+        Widgets.Hint(L("Change le portail dans toutes les copies de l'intérieur ; enregistré dans son .ytyp au Ctrl+S. ")
+            + L("Échap pour désélectionner ; masquez les calques des portails pour sélectionner les objets."), wrap: true);
     }
 
     private void DrawPathNode(PathNode node, PathNetwork network)
     {
         var names = state.World.Names ?? new HashNames();
         ImGui.PushFont(UiTheme.SemiboldFont);
-        ImGui.TextUnformatted($"{Icons.Route}  Nœud {node.Id.AreaId}:{node.Id.NodeId}");
+        ImGui.TextUnformatted(L($"{Icons.Route}  Nœud {node.Id.AreaId}:{node.Id.NodeId}"));
         ImGui.PopFont();
         Widgets.Hint($"{Icons.File}  nodes{node.Id.AreaId}.ynd");
         var p = node.Position;
-        if (Widgets.Button($"{Icons.Copy}  Copier la position", state.FormatPosition(p)))
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), state.FormatPosition(p)))
             ImGui.SetClipboardText(state.FormatPosition(p));
 
-        if (Widgets.Section("Nœud", "path_node") && Widgets.BeginProperties("##path_node"))
+        if (Widgets.Section(L("Nœud"), "path_node") && Widgets.BeginProperties("##path_node"))
         {
             DrawPathNodePosition(node, network);
-            Widgets.PropertyText("Catégorie", PathNodeLayer.CategoryOf(node));
+            Widgets.PropertyText(L("Catégorie"), PathNodeLayer.CategoryOf(node));
             if (node.StreetNameHash != 0)
-                Widgets.PropertyText("Rue", names.Describe(node.StreetNameHash));
-            Widgets.PropertyText("Vitesse", node.SpeedCategory switch { 0 => "lente", 1 => "normale", 2 => "rapide", _ => "très rapide" });
-            Widgets.PropertyText("Densité de trafic", $"{node.Density} / 15");
+                Widgets.PropertyText(L("Rue"), names.Describe(node.StreetNameHash));
+            Widgets.PropertyText(L("Vitesse"), node.SpeedCategory switch { 0 => L("lente"), 1 => L("normale"), 2 => L("rapide"), _ => L("très rapide") });
+            Widgets.PropertyText(L("Densité de trafic"), $"{node.Density} / 15");
             if (node.Special != PathNodeSpecialType.None)
-                Widgets.PropertyText("Type spécial", SpecialLabel(node.Special));
+                Widgets.PropertyText(L("Type spécial"), SpecialLabel(node.Special));
             var flags = new List<string>();
             if (node.IsJunction) flags.Add("carrefour");
             if (node.IsHighway) flags.Add("autoroute");
             if (node.IsTunnel) flags.Add("tunnel");
             if (node.IsOffRoad) flags.Add("hors-piste");
             if (node.IsSlipRoad) flags.Add("bretelle");
-            if (node.NoBigVehicles) flags.Add("pas de gros véhicules");
-            if (node.NoGps) flags.Add("ignoré par le GPS");
-            if (node.IsSwitchedOff) flags.Add("sans trafic par défaut");
-            Widgets.PropertyText("Particularités", flags.Count == 0 ? "aucune" : string.Join(", ", flags));
-            Widgets.PropertyText("Octets bruts", $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
-                "Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd");
+            if (node.NoBigVehicles) flags.Add(L("pas de gros véhicules"));
+            if (node.NoGps) flags.Add(L("ignoré par le GPS"));
+            if (node.IsSwitchedOff) flags.Add(L("sans trafic par défaut"));
+            Widgets.PropertyText(L("Particularités"), flags.Count == 0 ? L("aucune") : string.Join(", ", flags));
+            Widgets.PropertyText(L("Octets bruts"), $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
+                L("Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd"));
             Widgets.EndProperties();
         }
 
         var area = network.GetArea(node.Id.AreaId);
         var links = area?.LinksOf(node).ToList() ?? [];
-        if (Widgets.Section($"Liens ({links.Count})", "path_links") && links.Count > 0 && Widgets.BeginProperties("##path_links"))
+        if (Widgets.Section(L($"Liens ({links.Count})"), "path_links") && links.Count > 0 && Widgets.BeginProperties("##path_links"))
         {
             foreach (var (link, i) in links.Select((l, i) => (l, i)))
             {
                 var target = network.GetNode(link.Target);
-                Widgets.Property($"Vers {link.Target.AreaId}:{link.Target.NodeId}");
-                string lanes = $"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {network.LinkLength(node, link)} m";
-                if (link.IsShortcut) lanes += ", raccourci";
-                if (link.IsNarrowRoad) lanes += ", étroite";
-                if (link.DontUseForNavigation) lanes += ", hors navigation";
-                if (target is not null && Widgets.Link($"{lanes}##link{i}", "Sélectionner ce nœud"))
+                Widgets.Property(L($"Vers {link.Target.AreaId}:{link.Target.NodeId}"));
+                string lanes = L($"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {network.LinkLength(node, link)} m");
+                if (link.IsShortcut) lanes += L(", raccourci");
+                if (link.IsNarrowRoad) lanes += L(", étroite");
+                if (link.DontUseForNavigation) lanes += L(", hors navigation");
+                if (target is not null && Widgets.Link($"{lanes}##link{i}", L("Sélectionner ce nœud")))
                     state.SelectedPathNode = target;
                 else if (target is null)
-                    ImGui.TextColored(UiTheme.TextFaint, $"{lanes} (zone non chargée)");
+                    ImGui.TextColored(UiTheme.TextFaint, L($"{lanes} (zone non chargée)"));
             }
             Widgets.EndProperties();
         }
@@ -1269,15 +1269,15 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
     private static string SpecialLabel(PathNodeSpecialType type) => type switch
     {
-        PathNodeSpecialType.ParkingSpace => "place de parking",
-        PathNodeSpecialType.PedCrossing => "passage piéton",
-        PathNodeSpecialType.PedAssistedMovement => "déplacement piéton guidé",
-        PathNodeSpecialType.TrafficLightStop => "arrêt au feu",
+        PathNodeSpecialType.ParkingSpace => L("place de parking"),
+        PathNodeSpecialType.PedCrossing => L("passage piéton"),
+        PathNodeSpecialType.PedAssistedMovement => L("déplacement piéton guidé"),
+        PathNodeSpecialType.TrafficLightStop => L("arrêt au feu"),
         PathNodeSpecialType.StopSign => "stop",
         PathNodeSpecialType.Caution => "prudence",
-        PathNodeSpecialType.PedCrossingNoWait => "passage piéton sans attente",
-        PathNodeSpecialType.EmergencyVehiclesOnly => "véhicules d'urgence seulement",
-        PathNodeSpecialType.OffRoadJunction => "carrefour hors-piste",
+        PathNodeSpecialType.PedCrossingNoWait => L("passage piéton sans attente"),
+        PathNodeSpecialType.EmergencyVehiclesOnly => L("véhicules d'urgence seulement"),
+        PathNodeSpecialType.OffRoadJunction => L("carrefour hors-piste"),
         _ => $"{(int)type}",
     };
 }

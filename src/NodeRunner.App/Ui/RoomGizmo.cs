@@ -280,7 +280,7 @@ internal sealed class RoomGizmo(AppState state)
             var size = max - min;
             drag.Feedback = drag.Handle.Part == Part.Face
                 ? $"{size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m"
-                : $"Déplacement {delta.Length():0.00} m";
+                : L($"Déplacement {delta.Length():0.00} m");
         }
         else if (drag.PortalStart is { } portal)
         {
@@ -302,7 +302,7 @@ internal sealed class RoomGizmo(AppState state)
             library.SetPortal(hash, drag.Target.Index, portal with { Corners = corners });
             drag.Feedback = corners.Length == 4 && drag.Handle.Part is Part.Corner or Part.Edge
                 ? $"{Vector3.Distance(corners[0], corners[1]):0.00} x {Vector3.Distance(corners[1], corners[2]):0.00} m"
-                : $"Déplacement {delta.Length():0.00} m";
+                : L($"Déplacement {delta.Length():0.00} m");
         }
     }
 
@@ -320,11 +320,11 @@ internal sealed class RoomGizmo(AppState state)
         _drag = null;
         var interior = drag.Target.Interior;
         int index = drag.Target.Index;
-        string verb = drag.Handle.Part is Part.Center or Part.Arrow ? "Déplacer" : "Redimensionner";
+        string verb = drag.Handle.Part is Part.Center or Part.Arrow ? L("Déplacer") : L("Redimensionner");
         if (drag.RoomStart is { } room && archetype.InteriorRooms[index] is var roomEnd && roomEnd != room)
-            state.History.Add(new RoomEdit(library, interior, index, room, roomEnd, $"{verb} la salle {index}"));
+            state.History.Add(new RoomEdit(library, interior, index, room, roomEnd, L($"{verb} la salle {index}")));
         else if (drag.PortalStart is { } portal && archetype.InteriorPortals[index] is var portalEnd && !portalEnd.SameAs(portal))
-            state.History.Add(new PortalEdit(library, interior, index, portal, portalEnd, $"{verb} le portail {index}"));
+            state.History.Add(new PortalEdit(library, interior, index, portal, portalEnd, L($"{verb} le portail {index}")));
     }
 
     // --- Drawing ---
