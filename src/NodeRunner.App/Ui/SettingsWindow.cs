@@ -129,6 +129,22 @@ internal sealed class SettingsWindow(AppState state)
                     ImGui.EndCombo();
                 }
 
+                Widgets.Property("En arrière-plan", "Images par seconde quand une autre fenêtre est active (navigateur, jeu, Discord...) : moins de travail pour la carte graphique. « Pas de ralentissement » = comme quand NodeRunner est actif.");
+                ImGui.SetNextItemWidth(-1f);
+                string BackgroundText(int fps) => fps > 0 ? $"{fps} images par seconde" : "Pas de ralentissement";
+                if (ImGui.BeginCombo("##background_fps", BackgroundText(settings.BackgroundFps)))
+                {
+                    foreach (int fps in BackgroundFpsChoices)
+                    {
+                        if (ImGui.Selectable(BackgroundText(fps), settings.BackgroundFps == fps))
+                        {
+                            settings.BackgroundFps = fps;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+
                 Widgets.Property("Synchronisation verticale", "Limite les images par seconde à la fréquence de l'écran (moins de chauffe, pas de déchirure).");
                 bool vsync = settings.VSync;
                 if (ImGui.Checkbox("##vsync", ref vsync))
@@ -349,6 +365,8 @@ internal sealed class SettingsWindow(AppState state)
             }
         }
     }
+
+    private static readonly int[] BackgroundFpsChoices = [5, 10, 15, 30, 60, 0];
 
     private static readonly int[] FpsLimits = [0, 30, 60, 90, 120, 144, 165, 240];
 

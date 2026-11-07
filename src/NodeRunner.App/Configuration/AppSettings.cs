@@ -21,6 +21,9 @@ public sealed class AppSettings
     // Images per second at most; 0 = no limit (other than VSync).
     public int MaxFps { get; set; }
 
+    // Images per second while another window has the focus; 0 = as when active.
+    public int BackgroundFps { get; set; } = 30;
+
     // Mouse look speed of the camera (1 = default).
     public float MouseSensitivity { get; set; } = 1f;
 

@@ -342,10 +342,11 @@ internal sealed unsafe partial class MainForm : Form
             Thread.Sleep(50);
             return;
         }
-        // In the background (another window has the focus): about 30 images per second are enough.
-        if (ActiveForm is null && _clock.Elapsed.TotalSeconds - _lastFrameTime is var elapsed && elapsed < BackgroundFrameTime)
+        // In the background (another window has the focus): fewer images per second (setting, 0 = no slowing down).
+        if (ActiveForm is null && _state.Settings.BackgroundFps > 0
+            && 1.0 / _state.Settings.BackgroundFps - (_clock.Elapsed.TotalSeconds - _lastFrameTime) is var backgroundWait && backgroundWait > 0)
         {
-            Thread.Sleep((int)Math.Ceiling((BackgroundFrameTime - elapsed) * 1000));
+            Thread.Sleep(Math.Min((int)Math.Ceiling(backgroundWait * 1000), 50)); // Short steps: the window reacts at once when it is activated.
             return;
         }
         // Images per second limit chosen by the user: sleep most of the wait, the last 2 ms by coming back here.
@@ -370,7 +371,6 @@ internal sealed unsafe partial class MainForm : Form
             OnDeviceLost();
     }
 
-    private const double BackgroundFrameTime = 1.0 / 30;
 
     private bool _deviceLost;
 
