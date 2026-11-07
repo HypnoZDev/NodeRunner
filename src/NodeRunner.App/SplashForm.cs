@@ -484,7 +484,7 @@ internal sealed partial class SplashForm : Form
         {
             var all = RectangleF.Union(_titleNodeBounds, _titleStudioBounds);
             float x = all.X - 80f + (all.Width + 160f) * EaseInOut(shine);
-            using var clip = new GraphicsPath();
+            using var clip = new GraphicsPath(FillMode.Winding);
             clip.AddPath(_titleNode, false);
             clip.AddPath(_titleStudio, false);
             g.SetClip(clip);
@@ -596,7 +596,8 @@ internal sealed partial class SplashForm : Form
 
     private GraphicsPath TextPath(string text, float size)
     {
-        var path = new GraphicsPath();
+        // Winding: the brand font's letters are made of overlapping shapes, which the default fill would cut out.
+        var path = new GraphicsPath(FillMode.Winding);
         path.AddString(text, _brand, (int)_brandStyle, size, PointF.Empty, StringFormat.GenericTypographic);
         return path;
     }
