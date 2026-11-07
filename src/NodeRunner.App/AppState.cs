@@ -471,10 +471,6 @@ internal sealed class AppState
 
     // --- Occluders ---
 
-    // Taken off each side of an object's box for its occluder: an occluder must stay inside the walls, or it hides
-    // what is behind them through windows and gaps.
-    public const float OccluderInset = 0.3f;
-
     public string OccluderFileName => $"{Project?.ResourceName ?? FiveMResource.DefaultName}_occl.ymap";
 
     // A new 10 m box occluder 25 m in front of the camera, standing on the ground there.
@@ -491,59 +487,64 @@ internal sealed class AppState
         AddOccluderBoxes(file, [box], "Nouvelle boîte d'occlusion");
     }
 
-    // One box occluder per selected object, fitted to its model's box turned like the object (around Z only), a little
-    // smaller. Objects without a model box or almost flat are left out.
+    // Box occluders inside each selected object (OccluderFit): inside the walls of its collision, one per closed
+    // building, or its model's box a little smaller where there is no collision.
     public void CreateOccluderBoxesFromSelection()
     {
         if (World.Maps is not { } library || OccluderMaps.ProjectFile(World, OccluderFileName) is not { } file)
             return;
         var boxes = new List<OccluderBox>();
-        int skipped = 0;
+        int fromModel = 0, open = 0, skipped = 0;
         foreach (var entity in SelectedEntities)
         {
-            if (FitOccluderBox(entity, library.GetArchetype(entity.ArchetypeHash)) is { } box)
-                boxes.Add(box);
-            else
-                skipped++;
+            switch (FitOccluderBoxes(entity, library.GetArchetype(entity.ArchetypeHash)))
+            {
+                case { Source: OccluderFitSource.NoClosedSpace }:
+                    open++;
+                    break;
+                case { Boxes.Count: > 0 } fit:
+                    boxes.AddRange(fit.Boxes);
+                    if (fit.Source == OccluderFitSource.Model)
+                        fromModel++;
+                    break;
+                default:
+                    skipped++;
+                    break;
+            }
         }
+        var notes = new List<string>();
+        if (open > 0)
+            notes.Add($"{open} objet(s) sans bâtiment fermé dans la collision");
+        if (skipped > 0)
+            notes.Add($"{skipped} objet(s) sans volume ou trop plat(s)");
+        if (fromModel > 0)
+            notes.Add($"{fromModel} objet(s) sans collision : boîte du modèle");
         if (boxes.Count == 0)
         {
-            Notify("aucune boîte créée : objets sans volume (ou trop plats)", warning: true);
+            Notify($"aucune boîte créée : {string.Join(", ", notes)}", warning: true);
             return;
         }
         AddOccluderBoxes(file, boxes, boxes.Count == 1 ? "Boîte d'occlusion sur l'objet" : $"{boxes.Count} boîtes d'occlusion sur les objets");
-        if (skipped > 0)
-            Notify($"{boxes.Count} boîte(s) créée(s), {skipped} objet(s) ignoré(s) (sans volume ou trop plats)", warning: true);
+        if (notes.Count > 0)
+            Notify($"{boxes.Count} boîte(s) créée(s) ; {string.Join(", ", notes)}", warning: true);
     }
 
-    public static OccluderBox? FitOccluderBox(MapEntity entity, Archetype? archetype)
+    private OccluderFitResult? FitOccluderBoxes(MapEntity entity, Archetype? archetype)
     {
-        if (archetype is null || archetype.BoundsMin == archetype.BoundsMax)
-            return null;
-        var transform = entity.Transform;
-        var xAxis = System.Numerics.Vector3.TransformNormal(System.Numerics.Vector3.UnitX, transform);
-        float angle = MathF.Atan2(xAxis.Y, xAxis.X);
-        float cos = MathF.Cos(angle), sin = MathF.Sin(angle);
-        var min = new System.Numerics.Vector3(float.MaxValue);
-        var max = new System.Numerics.Vector3(float.MinValue);
-        for (int k = 0; k < 8; k++)
+        if (GroundSnap.WorldBox(entity, archetype) is not var (min, max) || World.Maps is not { } library)
+            return OccluderFit.Fit(entity, archetype);
+        var collisions = World.Collisions is null ? null : CollisionQuery.CollisionIn(World, min, max, CollisionEdits);
+        // Interiors (MLO) placed there stay free of occluders.
+        var interiors = new List<(System.Numerics.Vector3 Min, System.Numerics.Vector3 Max)>();
+        var center = new System.Numerics.Vector2((min.X + max.X) / 2, (min.Y + max.Y) / 2);
+        float radius = System.Numerics.Vector2.Distance(center, new System.Numerics.Vector2(max.X, max.Y)) + 200f;
+        foreach (var interior in library.EntitiesAround(center, radius))
         {
-            var local = new System.Numerics.Vector3(
-                (k & 1) != 0 ? archetype.BoundsMax.X : archetype.BoundsMin.X,
-                (k & 2) != 0 ? archetype.BoundsMax.Y : archetype.BoundsMin.Y,
-                (k & 4) != 0 ? archetype.BoundsMax.Z : archetype.BoundsMin.Z);
-            var world = System.Numerics.Vector3.Transform(local, transform);
-            // In the frame of the box (turned by angle around Z).
-            var p = new System.Numerics.Vector3(world.X * cos + world.Y * sin, -world.X * sin + world.Y * cos, world.Z);
-            min = System.Numerics.Vector3.Min(min, p);
-            max = System.Numerics.Vector3.Max(max, p);
+            if (interior.IsInterior && GroundSnap.WorldBox(interior, library.GetArchetype(interior.ArchetypeHash)) is { } box
+                && box.Min.X <= max.X && box.Max.X >= min.X && box.Min.Y <= max.Y && box.Max.Y >= min.Y && box.Min.Z <= max.Z && box.Max.Z >= min.Z)
+                interiors.Add(box);
         }
-        var size = max - min - new System.Numerics.Vector3(2 * OccluderInset);
-        if (size.Z < 1f || size.X < 0.5f || size.Y < 0.5f)
-            return null;
-        var c = (min + max) / 2;
-        var center = new System.Numerics.Vector3(c.X * cos - c.Y * sin, c.X * sin + c.Y * cos, c.Z);
-        return new OccluderBox(0, center, size, angle).Quantized();
+        return OccluderFit.Fit(entity, archetype, collisions, interiors);
     }
 
     private void AddOccluderBoxes(OccluderMapFile file, IReadOnlyList<OccluderBox> boxes, string description)

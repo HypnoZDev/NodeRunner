@@ -82,7 +82,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             ImGui.SameLine();
             int selected = state.SelectedEntities.Count;
             if (Widgets.Button($"{Icons.Boxes}  Sur la sélection{(selected > 1 ? $" ({selected})" : "")}",
-                    $"Une boîte par objet sélectionné, ajustée à son modèle et réduite de {AppState.OccluderInset:0.0} m par côté. "
+                    "Pour chaque objet sélectionné : une boîte à l'intérieur de chaque bâtiment fermé de sa collision, sinon dans la boîte de son modèle. "
                     + "Sélectionnez d'abord les bâtiments (calque Occlusion masqué, Ctrl+clic pour plusieurs).", enabled: selected > 0))
                 state.CreateOccluderBoxesFromSelection();
         }
