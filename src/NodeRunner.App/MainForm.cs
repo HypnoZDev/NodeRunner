@@ -348,6 +348,15 @@ internal sealed unsafe partial class MainForm : Form
             Thread.Sleep((int)Math.Ceiling((BackgroundFrameTime - elapsed) * 1000));
             return;
         }
+        // Images per second limit chosen by the user: sleep most of the wait, the last 2 ms by coming back here.
+        if (_state.Settings.MaxFps > 0 && 1.0 / _state.Settings.MaxFps - (_clock.Elapsed.TotalSeconds - _lastFrameTime) is var wait && wait > 0)
+        {
+            if (wait > 0.002)
+                Thread.Sleep((int)((wait - 0.002) * 1000));
+            else
+                Thread.Yield();
+            return;
+        }
 
         try
         {

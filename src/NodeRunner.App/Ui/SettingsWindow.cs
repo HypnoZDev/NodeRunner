@@ -114,6 +114,21 @@ internal sealed class SettingsWindow(AppState state)
                     SaveWhenReleased();
                 }
 
+                Widgets.Property("Images par seconde max.", "Limite le nombre d'images par seconde : moins de chauffe et de bruit sur les portables, batterie qui dure plus. Avec la synchronisation verticale, la plus basse des deux limites s'applique.");
+                ImGui.SetNextItemWidth(-1f);
+                if (ImGui.BeginCombo("##max_fps", settings.MaxFps > 0 ? $"{settings.MaxFps}" : "Illimité"))
+                {
+                    foreach (int fps in FpsLimits)
+                    {
+                        if (ImGui.Selectable(fps > 0 ? $"{fps}" : "Illimité", settings.MaxFps == fps))
+                        {
+                            settings.MaxFps = fps;
+                            state.SaveSettings();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+
                 Widgets.Property("Synchronisation verticale", "Limite les images par seconde à la fréquence de l'écran (moins de chauffe, pas de déchirure).");
                 bool vsync = settings.VSync;
                 if (ImGui.Checkbox("##vsync", ref vsync))
@@ -334,6 +349,8 @@ internal sealed class SettingsWindow(AppState state)
             }
         }
     }
+
+    private static readonly int[] FpsLimits = [0, 30, 60, 90, 120, 144, 165, 240];
 
     private static readonly float[] GridSpacings = [0f, 1f, 5f, 10f, 25f, 50f, 100f];
 
