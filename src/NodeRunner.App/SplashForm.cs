@@ -53,6 +53,7 @@ internal sealed partial class SplashForm : Form
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 15 };
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly PrivateFontCollection _fonts = new();
+    private readonly PrivateFontCollection _lightFonts = new();
     private readonly FontFamily _brand;
     private readonly FontStyle _brandStyle;
     private readonly GraphicsPath _wordmark;
@@ -100,14 +101,16 @@ internal sealed partial class SplashForm : Form
         BackColor = Background;
         Opacity = 0;
 
-        foreach (string file in new[] { "unbounded-bold.ttf", "unbounded-light.ttf" })
+        // One collection per file: the family names Windows gives them vary ("Unbounded Light Light").
+        FontFamily? Load(PrivateFontCollection fonts, string file)
         {
             string font = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", file);
             if (File.Exists(font))
-                _fonts.AddFontFile(font);
+                fonts.AddFontFile(font);
+            return fonts.Families.FirstOrDefault();
         }
-        var bold = _fonts.Families.FirstOrDefault(f => f.Name == "Unbounded");
-        var light = _fonts.Families.FirstOrDefault(f => f.Name == "Unbounded Light");
+        var bold = Load(_fonts, "unbounded-bold.ttf");
+        var light = Load(_lightFonts, "unbounded-light.ttf");
         (_brand, _brandStyle) = bold is not null ? (bold, FontStyle.Regular) : (new FontFamily("Segoe UI"), FontStyle.Bold);
         _wordmark = Wordmark(light ?? new FontFamily("Segoe UI"), Gutter, Design.Height - 52f);
         _wordmarkBounds = _wordmark.GetBounds();
@@ -601,7 +604,9 @@ internal sealed partial class SplashForm : Form
         // Size of the road network, counted up while it lights.
         if (_map is { } map && reveal > 0f)
         {
-            var french = CultureInfo.GetCultureInfo("fr-FR");
+            // Plain no-break space between thousands: the narrow one of fr-FR is missing from Segoe UI at this size.
+            var french = (CultureInfo)CultureInfo.GetCultureInfo("fr-FR").Clone();
+            french.NumberFormat.NumberGroupSeparator = " ";
             float count = EaseOut(reveal);
             string figures = string.Format(french, "{0:N0} nœuds  ·  {1:N0} km de routes", (int)(map.NodeCount * count), map.Kilometres * count);
             using var brush = new SolidBrush(Color.FromArgb(Alpha((int)(255 * Math.Min(1f, reveal * 3f))), 0x8A, 0x94, 0xAA));
@@ -806,6 +811,7 @@ internal sealed partial class SplashForm : Form
             _wordmark.Dispose();
             _smallFont.Dispose();
             _fonts.Dispose();
+            _lightFonts.Dispose();
             // The road map may still be drawing: freed when it is done.
             _mapTask?.ContinueWith(task => task.Result?.Dispose(), TaskScheduler.Default);
         }
