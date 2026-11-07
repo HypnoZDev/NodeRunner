@@ -96,6 +96,7 @@ public sealed class DeleteEdit(MapLibrary library, DeletionPlan plan, string des
     public MapEntity? Subject => plan.Target;
     public IEnumerable<MapEntity> Entities => plan.Entities;
     public IReadOnlyList<MapEntity> Selection => plan.Targets;
+    public DeletionPlan Plan => plan;
 
     public static DeleteEdit Apply(MapLibrary library, DeletionPlan plan, string description)
     {

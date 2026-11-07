@@ -15,6 +15,8 @@ public sealed class RoomEdit(MapLibrary library, MapEntity interior, int index, 
 {
     public MapEntity Interior { get; } = interior;
 
+    public InteriorRoom After => after;
+
     public int Index { get; } = index;
 
     public string Description { get; } = description;
@@ -40,6 +42,8 @@ public sealed class PortalEdit(MapLibrary library, MapEntity interior, int index
     : IEdit, IInteriorEdit
 {
     public MapEntity Interior { get; } = interior;
+
+    public InteriorPortal After => after;
 
     public int Index { get; } = index;
 
@@ -75,6 +79,8 @@ public sealed class InteriorLayoutEdit(MapLibrary library, MapEntity interior, I
     public bool IsPortal { get; } = isPortal;
     public int Index { get; } = index;
     public bool Added { get; } = added;
+
+    public InteriorLayout After => after;
 
     // Runs the change (which returns the index of the room or portal) and returns the step to record.
     public static InteriorLayoutEdit Apply(MapLibrary library, MapEntity interior, Func<int> change, string description, bool isPortal, bool added)

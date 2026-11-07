@@ -723,8 +723,9 @@ internal sealed class AppState
 
     private void AddOccluderBoxes(OccluderMapFile file, IReadOnlyList<OccluderBox> boxes, string description)
     {
-        var added = boxes.Select(b => new OccluderSelection(file, OcclusionLayerPart.Boxes, OccluderMaps.AddBox(file, b).Index)).ToList();
-        History.Add(new OccluderPresenceEdit(added, deleted: false, description));
+        var edit = OccluderAddEdit.Apply(file, boxes, description);
+        var added = edit.Added;
+        History.Add(edit);
         SetLayerVisible(OcclusionLayer.LayerName(OcclusionLayerPart.Boxes), true);
         Select(null);
         SelectedOccluder = added[^1];

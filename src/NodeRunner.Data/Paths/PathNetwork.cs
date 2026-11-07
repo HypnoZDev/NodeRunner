@@ -114,6 +114,8 @@ public sealed partial class PathNetwork
         return network;
     }
 
+    internal void SetArea(PathNodeArea area) => _areas[area.AreaId] = area;
+
     public PathNodeArea? GetArea(int areaId) =>
         areaId is >= 0 and < PathNodeArea.AreaCount ? _areas[areaId] : null;
 

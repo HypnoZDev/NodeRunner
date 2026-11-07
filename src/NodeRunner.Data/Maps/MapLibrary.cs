@@ -474,6 +474,21 @@ public sealed class MapLibrary
         return library;
     }
 
+    internal static MapLibrary Create(IEnumerable<Archetype> archetypes, params (MapData Map, string Path)[] maps)
+    {
+        var library = new MapLibrary();
+        foreach (var archetype in archetypes)
+            library.AddArchetype(archetype);
+        foreach (var (map, path) in maps)
+        {
+            map.FilePath = path;
+            library.Add(map);
+        }
+        library.LinkLodTree();
+        library.PlaceInteriorContents();
+        return library;
+    }
+
     // Problems with the maps of the user's save folder (files left unused, the game's file is shown instead).
     public List<string> SavedMapErrors { get; } = new();
 

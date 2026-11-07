@@ -26,6 +26,17 @@ public sealed class CollisionEdit : IEdit
     public MapEntity? Subject => null;
     public IReadOnlyList<CollisionPolygon> Polygons { get; }
 
+    public IReadOnlyList<(CollisionPolygon Polygon, bool Removed, byte? Material)> After => _after;
+
+    // The same change made elsewhere (another computer): polygons brought to these states.
+    public static CollisionEdit ToStates(CollisionEdits edits, string description, IReadOnlyList<(CollisionPolygon Polygon, bool Removed, byte? Material)> after)
+    {
+        var edit = new CollisionEdit(edits, description, [.. after.Select(a => a.Polygon)]);
+        edit._after.AddRange(after);
+        edit.Redo();
+        return edit;
+    }
+
     public static CollisionEdit Remove(CollisionEdits edits, IReadOnlyList<CollisionPolygon> polygons)
     {
         var edit = new CollisionEdit(edits, polygons.Count == 1 ? "supprimer une surface de collision" : $"supprimer {polygons.Count} surfaces de collision", polygons);

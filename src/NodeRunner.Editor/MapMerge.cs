@@ -165,6 +165,10 @@ public sealed class MergeEdit : IEdit
     public IEnumerable<MapEntity> Entities => _moves.Select(m => m.Entity).Concat(_deleted).Concat(_added);
     public IReadOnlyList<MapEntity> Selection => [];
 
+    public IReadOnlyList<(MapEntity Entity, Placement Before, Placement After)> Moves => _moves;
+    public IReadOnlyList<MapEntity> Deleted => _deleted;
+    public IReadOnlyList<MapEntity> Added => _added;
+
     // added: new objects already made for plan.Additions, put in addTo (the project's own map).
     public static MergeEdit Apply(MapLibrary library, MergePlan plan, MapData? addTo, IReadOnlyList<MapEntity> added, string description)
     {

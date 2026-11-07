@@ -259,8 +259,7 @@ internal sealed class OccluderBoxEdit(OccluderMapFile file, OccluderBox before, 
     public void Redo() => OccluderMaps.SetBox(file, after);
 }
 
-// Occluders added (deleted = false) or deleted (deleted = true): undoing flips them back. An added box stays in its
-// file's list, only marked as deleted while undone.
+// Occluders deleted (deleted = true), or brought back (deleted = false): undoing flips them back.
 internal sealed class OccluderPresenceEdit(IReadOnlyList<OccluderSelection> occluders, bool deleted, string description) : IEdit
 {
     public string Description { get; } = description;
@@ -275,5 +274,33 @@ internal sealed class OccluderPresenceEdit(IReadOnlyList<OccluderSelection> occl
     {
         foreach (var o in occluders)
             OccluderMaps.SetDeleted(o.File, o.Kind, o.Index, delete);
+    }
+}
+
+// Boxes created in a file (the project's): undoing marks them deleted, they stay in the file's list.
+internal sealed class OccluderAddEdit : IEdit
+{
+    private OccluderAddEdit(OccluderMapFile file, IReadOnlyList<OccluderSelection> added, string description)
+    {
+        File = file;
+        Added = added;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public OccluderMapFile File { get; }
+    public IReadOnlyList<OccluderSelection> Added { get; }
+
+    public static OccluderAddEdit Apply(OccluderMapFile file, IReadOnlyList<OccluderBox> boxes, string description) =>
+        new(file, [.. boxes.Select(b => new OccluderSelection(file, OcclusionLayerPart.Boxes, OccluderMaps.AddBox(file, b).Index))], description);
+
+    public void Undo() => SetDeleted(true);
+    public void Redo() => SetDeleted(false);
+
+    private void SetDeleted(bool deleted)
+    {
+        foreach (var o in Added)
+            OccluderMaps.SetDeleted(File, o.Kind, o.Index, deleted);
     }
 }

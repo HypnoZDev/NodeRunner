@@ -151,9 +151,10 @@ public sealed class EntitySetMoveEdit : IEdit
     private readonly MapEntity[] _oldPlaced;
     private readonly MapEntity[] _newPlaced;
 
-    private EntitySetMoveEdit(MapLibrary library, MapEntity[] oldPlaced, MapEntity[] newPlaced, string description)
+    private EntitySetMoveEdit(MapLibrary library, MapEntity[] oldPlaced, MapEntity[] newPlaced, int setIndex, string description)
     {
         _library = library;
+        SetIndex = setIndex;
         _oldPlaced = oldPlaced;
         _newPlaced = newPlaced;
         _old = [.. oldPlaced.SelectMany(p => p.Definition!.Copies)];
@@ -166,12 +167,16 @@ public sealed class EntitySetMoveEdit : IEdit
     public IEnumerable<MapEntity> Entities => _old.Concat(_new);
     public IReadOnlyList<MapEntity> Selection => _newPlaced[0].IsDeleted ? _oldPlaced : _newPlaced;
 
+    // The objects as they were before the move, and the set they went to (-1 = out of any set).
+    public IReadOnlyList<MapEntity> OldPlaced => _oldPlaced;
+    public int SetIndex { get; }
+
     // setIndex: as in the instance's EntitySets, -1 = out of any set.
     public static EntitySetMoveEdit Apply(MapLibrary library, IReadOnlyList<MapEntity> placed, int setIndex, string description)
     {
         if (placed.Count == 0)
             throw new ArgumentException("Nothing to move.", nameof(placed));
-        return new EntitySetMoveEdit(library, [.. placed], [.. placed.Select(p => library.MoveToEntitySet(p, setIndex))], description);
+        return new EntitySetMoveEdit(library, [.. placed], [.. placed.Select(p => library.MoveToEntitySet(p, setIndex))], setIndex, description);
     }
 
     public void Undo()
@@ -213,6 +218,10 @@ public sealed class EntitySetEdit : IEdit, IInteriorEdit
     public string Description { get; }
     public MapEntity? Subject => Interior;
     public IEnumerable<MapEntity> Entities => [];
+
+    public bool IsCreation => _created is not null;
+    public int Index => _index;
+    public uint NewName => _newName;
 
     public static EntitySetEdit Create(MapLibrary library, MapEntity interior, uint nameHash, string description)
     {

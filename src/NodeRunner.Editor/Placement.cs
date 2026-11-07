@@ -16,6 +16,7 @@ public sealed class PlacementEdit(MapEntity entity, Placement before, Placement 
 {
     public string Description { get; } = description;
     public MapEntity? Subject => entity;
+    public MapEntity Entity => entity;
     public Placement Before { get; } = before;
     public Placement After { get; } = after;
 
@@ -30,6 +31,7 @@ public sealed class GroupPlacementEdit(IReadOnlyList<MapEntity> entities, IReadO
     public MapEntity? Subject => entities[^1];
     public IEnumerable<MapEntity> Entities => entities;
     public IReadOnlyList<MapEntity> Selection => entities;
+    public IReadOnlyList<Placement> After => after;
 
     public void Undo() => Apply(before);
     public void Redo() => Apply(after);
