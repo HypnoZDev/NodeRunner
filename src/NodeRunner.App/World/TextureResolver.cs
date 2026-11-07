@@ -7,20 +7,19 @@ namespace NodeRunner.App.World;
 // Identifies a texture: the file it comes from (.ytd, or the model file for embedded ones) and its name.
 internal readonly record struct TextureKey(string Source, uint NameHash);
 
-internal sealed record ResolvedTexture(TextureKey Key, TextureData Data);
+// Data is null when the texture was already on the GPU (its dictionary was not read again).
+internal sealed record ResolvedTexture(TextureKey Key, TextureData? Data);
 
 // Finds the colour texture of each mesh of a model, as the game does: first in the model file itself, then in the
-// archetype's texture dictionary (.ytd), then in its parent dictionaries.
+// archetype's texture dictionary (.ytd), then in its parent dictionaries. Can be used by several threads at once.
 internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader reader)
 {
-    private const int RecentFileCacheSize = 32;
-
-    private readonly Dictionary<string, IReadOnlyDictionary<uint, TextureData>> _recentFiles = new();
-    private readonly Queue<string> _recentOrder = new();
+    private readonly RecentFileCache<IReadOnlyDictionary<uint, TextureData>> _recentFiles = new(32);
 
     // The textures of each mesh of model (same order; for each mesh, same order as TextureNames), null when it has
     // none or it was not found.
-    public ResolvedTexture?[][] Resolve(ModelLocation location, ModelData model, List<string> errors, IReadOnlyList<string>? fallbackDictionaries = null)
+    public ResolvedTexture?[][] Resolve(ModelLocation location, ModelData model, List<string> errors, IReadOnlyList<string>? fallbackDictionaries = null,
+        Func<TextureKey, bool>? isOnGpu = null)
     {
         var result = new ResolvedTexture?[model.Meshes.Count][];
         List<string>? chain = null;
@@ -42,9 +41,15 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
                 chain ??= [.. catalog.GetSearchChain(location.TextureDictionaryHash), .. fallbackDictionaries ?? []];
                 foreach (var path in chain)
                 {
+                    var key = new TextureKey(path, name);
+                    if (isOnGpu?.Invoke(key) == true)
+                    {
+                        result[i][t] = new ResolvedTexture(key, null);
+                        break;
+                    }
                     if (Read(path, errors).TryGetValue(name, out var texture))
                     {
-                        result[i][t] = new ResolvedTexture(new TextureKey(path, name), texture);
+                        result[i][t] = new ResolvedTexture(key, texture);
                         break;
                     }
                 }
@@ -55,25 +60,24 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
 
     private IReadOnlyDictionary<uint, TextureData> Read(string path, List<string> errors)
     {
-        if (_recentFiles.TryGetValue(path, out var textures))
-            return textures;
-        try
+        string? error = null;
+        var textures = _recentFiles.Get(path, p =>
         {
-            textures = reader.ReadTextures(path);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Any error: the models using this dictionary are still shown, without its textures.
-            errors.Add($"{Path.GetFileName(path)} : {ex.Message}");
-            if (ex is not (InvalidDataException or IOException))
-                Diagnostics.ErrorLog.Add($"Textures {Path.GetFileName(path)}", ex);
-            textures = new Dictionary<uint, TextureData>(); // Remembered so it is not read again.
-        }
-
-        _recentFiles[path] = textures;
-        _recentOrder.Enqueue(path);
-        if (_recentOrder.Count > RecentFileCacheSize)
-            _recentFiles.Remove(_recentOrder.Dequeue());
+            try
+            {
+                return reader.ReadTextures(p);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Any error: the models using this dictionary are still shown, without its textures.
+                error = $"{Path.GetFileName(p)} : {ex.Message}";
+                if (ex is not (InvalidDataException or IOException))
+                    Diagnostics.ErrorLog.Add($"Textures {Path.GetFileName(p)}", ex);
+                return new Dictionary<uint, TextureData>(); // Remembered so it is not read again.
+            }
+        });
+        if (error is not null)
+            errors.Add(error);
         return textures;
     }
 }

@@ -160,7 +160,7 @@ internal sealed class ModelViewer : IDisposable
                     continue;
                 if (!uploaded.TryGetValue(resolved.Key, out var texture))
                 {
-                    uploaded[resolved.Key] = texture = renderer.UploadTexture(resolved.Data);
+                    uploaded[resolved.Key] = texture = renderer.UploadTexture(resolved.Data!);
                     if (texture is not null)
                         _textures.Add(texture);
                 }

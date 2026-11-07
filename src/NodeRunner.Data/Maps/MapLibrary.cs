@@ -151,16 +151,13 @@ public sealed class MapLibrary
         // Object types are definitions looked up by name: take them from every archive (the active version
         // first). Placed objects (ymaps) only come from active archives.
         var typeFiles = content.EnumerateFiles(".ytyp", withInactiveFallback: true);
-        int done = 0;
-        foreach (var path in typeFiles)
+        var allTypes = ReadAll(content, typeFiles, typesReader.Read, library.Errors, progress, "Lecture des types d'objets", 100);
+        for (int i = 0; i < typeFiles.Count; i++)
         {
-            if (++done % 100 == 0)
-                progress?.Report($"Lecture des types d'objets : {done} / {typeFiles.Count} fichiers");
-            var types = ReadOrNull(content, path, typesReader.Read, library.Errors);
-            foreach (var archetype in types?.Archetypes ?? [])
+            foreach (var archetype in allTypes[i]?.Archetypes ?? [])
             {
                 library._archetypes[archetype.NameHash] = archetype;
-                library._archetypeFiles[archetype.NameHash] = path;
+                library._archetypeFiles[archetype.NameHash] = typeFiles[i];
             }
         }
 
@@ -170,12 +167,10 @@ public sealed class MapLibrary
         var mapFiles = content.EnumerateFiles(".ymap");
         var byName = new Dictionary<uint, (MapData Map, string Path)>();
         var scripted = new List<(MapData Map, string Path)>();
-        done = 0;
-        foreach (var path in mapFiles)
+        var allMaps = ReadAll(content, mapFiles, mapReader.Read, library.Errors, progress, "Lecture des objets de la carte", 250);
+        for (int i = 0; i < mapFiles.Count; i++)
         {
-            if (++done % 250 == 0)
-                progress?.Report($"Lecture des objets de la carte : {done} / {mapFiles.Count} fichiers");
-            var map = ReadOrNull(content, path, mapReader.Read, library.Errors);
+            var (path, map) = (mapFiles[i], allMaps[i]);
             if (map is null)
                 continue;
             if (savedMaps is not null && savedMaps.TryGetValue(Path.GetFileName(path), out var saved))
@@ -416,18 +411,31 @@ public sealed class MapLibrary
 
     private delegate T Reader<T>(ReadOnlySpan<byte> data);
 
-    private static T? ReadOrNull<T>(GameContent content, string path, Reader<T> read, List<string> errors) where T : class
+    // Reads the files on several cores; results and errors keep the order of paths (later files override earlier ones).
+    private static T?[] ReadAll<T>(GameContent content, IReadOnlyList<string> paths, Reader<T> read, List<string> errors,
+        IProgress<string>? progress, string label, int reportEvery) where T : class
     {
-        try
+        var results = new T?[paths.Count];
+        var fileErrors = new string?[paths.Count];
+        int done = 0;
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) };
+        Parallel.For(0, paths.Count, options, i =>
         {
-            var data = content.ReadFile(path);
-            return data is null || data.Length == 0 ? null : read(data);
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException)
-        {
-            errors.Add($"{path} : {ex.Message}");
-            return null;
-        }
+            try
+            {
+                var data = content.ReadFile(paths[i]);
+                results[i] = data is null || data.Length == 0 ? null : read(data);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
+            {
+                fileErrors[i] = $"{paths[i]} : {ex.Message}";
+            }
+            int count = Interlocked.Increment(ref done);
+            if (count % reportEvery == 0)
+                progress?.Report($"{label} : {count} / {paths.Count} fichiers");
+        });
+        errors.AddRange(fileErrors.OfType<string>());
+        return results;
     }
 
     private static bool IsOriginal(MapData map, string path) =>

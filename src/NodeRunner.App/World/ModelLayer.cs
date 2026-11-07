@@ -17,15 +17,17 @@ internal sealed class ModelLayer : IDisposable
     public const float MaxDistanceMultiplier = 4f;
 
     private const float RebuildDistance = 15f;
-    private const int MaxPendingReads = 24;
+    private const int MaxPendingReads = 32;
     private const int UploadTriangleBudgetPerFrame = 300_000;
     private const long UploadTextureBytesBudgetPerFrame = 48L << 20;
     private const double UnusedModelLifetime = 15.0;
-    private const int RecentFileCacheSize = 16;
+    private const int RecentFileCacheSize = 24;
 
     private readonly Dictionary<ModelLocation, GpuModel?> _models = new();
     private readonly Dictionary<ModelLocation, double> _lastUsed = new();
     private readonly Dictionary<TextureKey, SharedTexture> _textures = new();
+    // Keys of _textures, read by the reading threads (a texture already on the GPU is not read again).
+    private readonly ConcurrentDictionary<TextureKey, byte> _texturesOnGpu = new();
     private readonly Dictionary<ModelLocation, TextureKey[]> _modelTextures = new();
     private readonly HashSet<ModelLocation> _pending = new();
     private readonly Channel<(ModelLocation Location, int Generation)> _requests = Channel.CreateUnbounded<(ModelLocation, int)>();
@@ -46,10 +48,15 @@ internal sealed class ModelLayer : IDisposable
     private float _builtAltitude;
     private int _builtHour = -1;
     private double _lastEviction;
+    private Frustum? _lastFrustum;
+    private volatile RecentFileCache<IReadOnlyDictionary<uint, ModelData>> _recentFiles = new(RecentFileCacheSize);
 
     public ModelLayer()
     {
-        Task.Run(ReadModelsInBackground);
+        // A few reading threads, leaving cores for drawing and the other layers.
+        int threads = Math.Clamp(Environment.ProcessorCount / 3, 2, 4);
+        for (int i = 0; i < threads; i++)
+            Task.Run(ReadModelsInBackground);
     }
 
     // An object to draw: where (computed for Revision of the entity), which model, its bounding sphere in the world
@@ -168,6 +175,7 @@ internal sealed class ModelLayer : IDisposable
         Action? beforeTranslucent = null)
     {
         var frustum = new Frustum(viewProjection);
+        _lastFrustum = frustum;
         double now = _clock.Elapsed.TotalSeconds;
         long triangles = 0;
         var fallbacksDrawn = new HashSet<MapEntity>();
@@ -328,16 +336,31 @@ internal sealed class ModelLayer : IDisposable
         return new VisibleEntity(entity, revision, transform, location, sphereCenter, sphereRadius);
     }
 
+    // Nearest first, those in view before those behind the camera.
     private void RequestModels()
     {
+        if (_lastFrustum is { } frustum)
+        {
+            foreach (var entity in _visible)
+            {
+                if (_pending.Count >= MaxPendingReads)
+                    return;
+                if (frustum.Intersects(entity.SphereCenter, entity.SphereRadius))
+                    Request(entity.Location);
+            }
+        }
         foreach (var entity in _visible)
         {
             if (_pending.Count >= MaxPendingReads)
-                break;
-            if (_models.ContainsKey(entity.Location) || !_pending.Add(entity.Location))
-                continue;
-            _requests.Writer.TryWrite((entity.Location, _generation));
+                return;
+            Request(entity.Location);
         }
+    }
+
+    private void Request(ModelLocation location)
+    {
+        if (!_models.ContainsKey(location) && _pending.Add(location))
+            _requests.Writer.TryWrite((location, _generation));
     }
 
     private void UploadArrivedModels(ModelRenderer renderer)
@@ -349,6 +372,8 @@ internal sealed class ModelLayer : IDisposable
             if (result.Generation != _generation)
                 continue;
             _pending.Remove(result.Location);
+            if (result.Textures.Any(mesh => mesh.Any(r => r is { Data: null } && !_textures.ContainsKey(r.Key))))
+                continue; // A texture found on the GPU was released meanwhile: the model is asked for again.
             foreach (var error in result.Errors)
             {
                 // The same model may be read again after being released: its errors are listed once.
@@ -371,8 +396,9 @@ internal sealed class ModelLayer : IDisposable
                             continue;
                         if (!_textures.TryGetValue(resolved.Key, out var shared))
                         {
-                            _textures[resolved.Key] = shared = new SharedTexture(renderer.UploadTexture(resolved.Data));
-                            textureBudget -= resolved.Data.Data.Length;
+                            _textures[resolved.Key] = shared = new SharedTexture(renderer.UploadTexture(resolved.Data!));
+                            _texturesOnGpu[resolved.Key] = 0;
+                            textureBudget -= resolved.Data!.Data.Length;
                         }
                         textures[i][t] = shared.Texture;
                         if (!keys.Contains(resolved.Key))
@@ -419,6 +445,7 @@ internal sealed class ModelLayer : IDisposable
         {
             if (_textures.TryGetValue(key, out var shared) && --shared.Users <= 0)
             {
+                _texturesOnGpu.TryRemove(key, out _);
                 shared.Texture?.Dispose();
                 _textures.Remove(key);
             }
@@ -427,9 +454,6 @@ internal sealed class ModelLayer : IDisposable
 
     private async Task ReadModelsInBackground()
     {
-        // .ydd files hold many models: keep the last few files read to avoid reading them again.
-        var recentFiles = new Dictionary<string, IReadOnlyDictionary<uint, ModelData>>();
-        var recentOrder = new Queue<string>();
         try
         {
             await foreach (var (location, generation) in _requests.Reader.ReadAllAsync(_stop.Token))
@@ -440,17 +464,11 @@ internal sealed class ModelLayer : IDisposable
                 var errors = new List<string>();
                 try
                 {
-                    if (!recentFiles.TryGetValue(location.Path, out var models))
-                    {
-                        models = reader.ReadModels(location.Path);
-                        recentFiles[location.Path] = models;
-                        recentOrder.Enqueue(location.Path);
-                        if (recentOrder.Count > RecentFileCacheSize)
-                            recentFiles.Remove(recentOrder.Dequeue());
-                    }
+                    // .ydd files hold many models: the last few files read are kept.
+                    var models = _recentFiles.Get(location.Path, reader.ReadModels);
                     var model = models.GetValueOrDefault(location.ModelHash);
                     var textures = model is not null && resolver is not null
-                        ? resolver.Resolve(location, model, errors)
+                        ? resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey)
                         : [];
                     _results.Enqueue(new LoadedModel(location, generation, model, textures, errors));
                 }
@@ -474,6 +492,7 @@ internal sealed class ModelLayer : IDisposable
     private void Clear()
     {
         _generation++;
+        _recentFiles = new(RecentFileCacheSize);
         _drawn.Clear();
         foreach (var model in _models.Values)
             model?.Dispose();
@@ -481,6 +500,7 @@ internal sealed class ModelLayer : IDisposable
             shared.Texture?.Dispose();
         _models.Clear();
         _textures.Clear();
+        _texturesOnGpu.Clear();
         _modelTextures.Clear();
         _lastUsed.Clear();
         _pending.Clear();
