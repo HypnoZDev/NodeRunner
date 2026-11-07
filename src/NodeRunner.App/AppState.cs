@@ -514,11 +514,11 @@ internal sealed class AppState
         }
         var notes = new List<string>();
         if (open > 0)
-            notes.Add($"{open} objet(s) sans bâtiment fermé dans la collision");
+            notes.Add($"{open} objet(s) qui ne sont pas des bâtiments fermés");
         if (skipped > 0)
             notes.Add($"{skipped} objet(s) sans volume ou trop plat(s)");
         if (fromModel > 0)
-            notes.Add($"{fromModel} objet(s) sans collision : boîte du modèle");
+            notes.Add($"{fromModel} objet(s) sans collision ni modèle lisible : boîte du modèle");
         if (boxes.Count == 0)
         {
             Notify($"aucune boîte créée : {string.Join(", ", notes)}", warning: true);
@@ -544,7 +544,31 @@ internal sealed class AppState
                 && box.Min.X <= max.X && box.Max.X >= min.X && box.Min.Y <= max.Y && box.Max.Y >= min.Y && box.Min.Z <= max.Z && box.Max.Z >= min.Z)
                 interiors.Add(box);
         }
-        return OccluderFit.Fit(entity, archetype, collisions, interiors);
+        return OccluderFit.Fit(entity, archetype, collisions, ModelTriangles(entity, archetype), interiors);
+    }
+
+    // The triangles of an object's model in world positions (three points each), or null when it cannot be read.
+    private List<System.Numerics.Vector3>? ModelTriangles(MapEntity entity, Archetype? archetype)
+    {
+        if (archetype is null || World.Models?.Locate(archetype) is not { } location || World.ModelReader is not { } reader)
+            return null;
+        try
+        {
+            if (reader.ReadModels(location.Path).GetValueOrDefault(location.ModelHash) is not { } model)
+                return null;
+            var transform = entity.Transform;
+            var triangles = new List<System.Numerics.Vector3>(model.TriangleCount * 3);
+            foreach (var mesh in model.Meshes)
+            {
+                foreach (ushort index in mesh.Indices)
+                    triangles.Add(System.Numerics.Vector3.Transform(mesh.Positions[index], transform));
+            }
+            return triangles;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            return null;
+        }
     }
 
     private void AddOccluderBoxes(OccluderMapFile file, IReadOnlyList<OccluderBox> boxes, string description)

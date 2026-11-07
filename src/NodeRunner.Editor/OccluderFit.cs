@@ -6,14 +6,14 @@ namespace NodeRunner.Editor;
 
 public enum OccluderFitSource
 {
-    // No usable collision there: the model's box, a little smaller.
+    // Neither collision nor model to look at: the model's box, a little smaller.
     Model,
 
-    // Inside the walls of the collision: boxes per closed building (a model often holds a car park, or several
-    // buildings), stacked when a tower stands on a lower part.
+    // Inside walls: boxes per closed building (a model often holds a car park, or several buildings), stacked when a
+    // tower stands on a lower part.
     Walls,
 
-    // Walls found, but none closing a space big enough (open structure, fences only): no box.
+    // Walls found, but none closing a space big enough (open structure, rock, tree, small prop): no box.
     NoClosedSpace,
 }
 
@@ -22,7 +22,8 @@ public sealed record OccluderFitResult(OccluderFitSource Source, IReadOnlyList<O
 // Box occluders fitted to an object. From above, its collision is drawn on a grid lined up with most of its walls; a
 // cell is inside a building when it sees a wall in almost every direction (windows and doors are gaps in the
 // collision). Each building gets the largest rectangle that fits inside it, up to its lowest roof there; a higher part
-// (a tower) gets its own box on top.
+// (a tower) gets its own box on top. Map collision is shared by every object of the area, so only the part under the
+// object's own model counts; without collision, the model's own walls and roofs are used.
 public static class OccluderFit
 {
     // Taken off each side of a model's box, and off the top and bottom of a box fitted to walls: an occluder must stay
@@ -32,8 +33,8 @@ public static class OccluderFit
     // Walls must reach this high above the bottom of the model's box (kerbs, low walls and fences do not count).
     public const float MinWallTop = 2.5f;
 
-    public const float MinSide = 2f;
-    public const float MinFloorArea = 12f;
+    public const float MinSide = 3f;
+    public const float MinFloorArea = 25f;
     public const int MaxBoxesPerObject = 8;
 
     // Out of the 8 directions (axes and diagonals), a cell inside a building sees a wall in at least this many.
@@ -54,24 +55,46 @@ public static class OccluderFit
     // The top of a box: the roof height that only this share of its cells is under (antennas and gaps ignored).
     private const float RoofShare = 0.05f;
 
-    // keepOut: world boxes no occluder may cover (interiors placed there: the game must keep drawing what is in them).
+    // model: the object's own triangles, in world positions (three points each). keepOut: world boxes no occluder may
+    // cover (interiors placed there: the game must keep drawing what is in them).
     public static OccluderFitResult? Fit(MapEntity entity, Archetype? archetype, IReadOnlyList<PlacedCollision>? collisions = null,
-        IReadOnlyList<(Vector3 Min, Vector3 Max)>? keepOut = null)
+        IReadOnlyList<Vector3>? model = null, IReadOnlyList<(Vector3 Min, Vector3 Max)>? keepOut = null)
     {
         if (archetype is null || archetype.BoundsMin == archetype.BoundsMax)
             return null;
         var frame = new Frame(entity, archetype, null);
-        var (walls, flats) = collisions is { Count: > 0 } ? Surfaces(collisions, frame) : ([], []);
-        if (walls.Count == 0)
+        var own = model is { Count: >= 3 } ? InBox(model, Matrix4x4.Identity, frame) : null;
+        var placed = new List<Vector3>();
+        foreach (var (mesh, meshToWorld) in collisions ?? [])
+            placed.AddRange(InBox(mesh, meshToWorld, frame));
+        var (walls, flats) = Classify(placed, frame);
+        var (ownWalls, ownFlats) = own is null ? ([], []) : Classify(own, frame);
+        if (walls.Count == 0 && own is null)
             return ModelBox(frame) is { } box ? new OccluderFitResult(OccluderFitSource.Model, [box]) : null;
-        // Lined up with the walls: a building is not always turned like its object.
-        var wallFrame = new Frame(entity, archetype, WallAngle(walls, frame.Angle));
-        for (int i = 0; i < walls.Count; i++)
-            walls[i] = wallFrame.ToFrame(walls[i]);
-        for (int i = 0; i < flats.Count; i++)
-            flats[i] = wallFrame.ToFrame(flats[i]);
-        var boxes = new Grid(wallFrame, walls, flats).Boxes(keepOut ?? []);
+        bool fromCollision = walls.Count > 0;
+        if (!fromCollision)
+            (walls, flats) = (ownWalls, ownFlats);
+        if (walls.Count == 0)
+            return new OccluderFitResult(OccluderFitSource.NoClosedSpace, []);
+
+        // Lined up with the walls (the object's own first): a building is not always turned like its object.
+        var wallFrame = new Frame(entity, archetype, WallAngle(ownWalls.Count > 0 ? ownWalls : walls, frame.Angle));
+        ToFrame(walls, wallFrame);
+        ToFrame(flats, wallFrame);
+        List<Vector3>? owner = null;
+        if (fromCollision && own is not null)
+        {
+            owner = own;
+            ToFrame(owner, wallFrame);
+        }
+        var boxes = new Grid(wallFrame, walls, flats, owner).Boxes(keepOut ?? []);
         return new OccluderFitResult(boxes.Count > 0 ? OccluderFitSource.Walls : OccluderFitSource.NoClosedSpace, boxes);
+    }
+
+    private static void ToFrame(List<Vector3> points, Frame frame)
+    {
+        for (int i = 0; i < points.Count; i++)
+            points[i] = frame.ToFrame(points[i]);
     }
 
     // The model's box in a frame turned around Z, by default like the object.
@@ -117,46 +140,65 @@ public static class OccluderFit
     private static OccluderBox? ModelBox(Frame frame) =>
         frame.Box(frame.Min + new Vector3(Inset), frame.Max - new Vector3(Inset));
 
-    // Triangles inside the model's box, in world positions (three points each): near-vertical ones reaching
-    // MinWallTop (walls), and flat ones (floors, roofs).
-    private static (List<Vector3> Walls, List<Vector3> Flats) Surfaces(IReadOnlyList<PlacedCollision> collisions, Frame frame)
+    // The triangles of a mesh placed by meshToWorld lying inside the model's box, in world positions (three points each).
+    private static List<Vector3> InBox(CollisionMesh mesh, Matrix4x4 meshToWorld, Frame frame)
+    {
+        var points = new List<Vector3>();
+        for (int t = 0; t < mesh.TriangleCount; t++)
+            AddIfInside(points, frame, Vector3.Transform(mesh.Vertices[mesh.Indices[t * 3]], meshToWorld),
+                Vector3.Transform(mesh.Vertices[mesh.Indices[t * 3 + 1]], meshToWorld),
+                Vector3.Transform(mesh.Vertices[mesh.Indices[t * 3 + 2]], meshToWorld));
+        return points;
+    }
+
+    private static List<Vector3> InBox(IReadOnlyList<Vector3> triangles, Matrix4x4 toWorld, Frame frame)
+    {
+        var points = new List<Vector3>();
+        for (int i = 0; i + 2 < triangles.Count; i += 3)
+            AddIfInside(points, frame, Vector3.Transform(triangles[i], toWorld), Vector3.Transform(triangles[i + 1], toWorld),
+                Vector3.Transform(triangles[i + 2], toWorld));
+        return points;
+    }
+
+    private static void AddIfInside(List<Vector3> points, Frame frame, Vector3 a, Vector3 b, Vector3 c)
     {
         var limitMin = frame.Min - new Vector3(CollisionCut.Margin);
         var limitMax = frame.Max + new Vector3(CollisionCut.Margin);
+        foreach (var w in (ReadOnlySpan<Vector3>)[a, b, c])
+        {
+            var v = frame.ToFrame(w);
+            if (v.X < limitMin.X || v.Y < limitMin.Y || v.Z < limitMin.Z || v.X > limitMax.X || v.Y > limitMax.Y || v.Z > limitMax.Z)
+                return;
+        }
+        points.Add(a);
+        points.Add(b);
+        points.Add(c);
+    }
+
+    // Near-vertical triangles reaching MinWallTop above the bottom of the model's box (walls), and flat ones (floors,
+    // roofs).
+    private static (List<Vector3> Walls, List<Vector3> Flats) Classify(List<Vector3> triangles, Frame frame)
+    {
         var walls = new List<Vector3>();
         var flats = new List<Vector3>();
-        var v = new Vector3[3];
-        var w = new Vector3[3];
-        foreach (var (mesh, meshToWorld) in collisions)
+        for (int i = 0; i + 2 < triangles.Count; i += 3)
         {
-            for (int t = 0; t < mesh.TriangleCount; t++)
-            {
-                bool inside = true;
-                for (int k = 0; k < 3 && inside; k++)
-                {
-                    w[k] = Vector3.Transform(mesh.Vertices[mesh.Indices[t * 3 + k]], meshToWorld);
-                    v[k] = frame.ToFrame(w[k]);
-                    inside = v[k].X >= limitMin.X && v[k].Y >= limitMin.Y && v[k].Z >= limitMin.Z
-                             && v[k].X <= limitMax.X && v[k].Y <= limitMax.Y && v[k].Z <= limitMax.Z;
-                }
-                if (!inside)
-                    continue;
-                var cross = Vector3.Cross(v[1] - v[0], v[2] - v[0]);
-                float length = cross.Length();
-                if (length < 1e-4f)
-                    continue;
-                float up = MathF.Abs(cross.Z / length);
-                List<Vector3> list;
-                if (up >= FlatNormal)
-                    list = flats;
-                else if (up < VerticalNormal && MathF.Max(v[0].Z, MathF.Max(v[1].Z, v[2].Z)) >= frame.Min.Z + MinWallTop)
-                    list = walls;
-                else
-                    continue;
-                list.Add(w[0]);
-                list.Add(w[1]);
-                list.Add(w[2]);
-            }
+            var (a, b, c) = (triangles[i], triangles[i + 1], triangles[i + 2]);
+            var cross = Vector3.Cross(b - a, c - a);
+            float length = cross.Length();
+            if (length < 1e-4f)
+                continue;
+            float up = MathF.Abs(cross.Z / length);
+            List<Vector3> list;
+            if (up >= FlatNormal)
+                list = flats;
+            else if (up < VerticalNormal && MathF.Max(a.Z, MathF.Max(b.Z, c.Z)) >= frame.Min.Z + MinWallTop)
+                list = walls;
+            else
+                continue;
+            list.Add(a);
+            list.Add(b);
+            list.Add(c);
         }
         return (walls, flats);
     }
@@ -207,11 +249,13 @@ public static class OccluderFit
         private readonly Vector2 _origin;
         private readonly int _width, _height;
 
-        // Per cell: walls there and the lowest point of their triangles; highest flat surface (NaN without any).
+        // Per cell: walls there and the lowest point of their triangles; highest flat surface (NaN without any); under
+        // the object's own model or inside it (null: everything counts).
         private readonly bool[] _wall;
         private readonly float[] _wallBottom, _roof;
+        private readonly bool[]? _owned;
 
-        public Grid(Frame frame, List<Vector3> walls, List<Vector3> flats)
+        public Grid(Frame frame, List<Vector3> walls, List<Vector3> flats, List<Vector3>? owner)
         {
             _frame = frame;
             float extent = MathF.Max(frame.Max.X - frame.Min.X, frame.Max.Y - frame.Min.Y) + 2 * CollisionCut.Margin;
@@ -238,16 +282,31 @@ public static class OccluderFit
                 Rasterize(flats[i], flats[i + 1], flats[i + 2], index =>
                     _roof[index] = float.IsNaN(_roof[index]) ? z : MathF.Max(_roof[index], z));
             }
+            if (owner is not null)
+            {
+                var covered = new bool[_wall.Length];
+                for (int i = 0; i + 2 < owner.Count; i += 3)
+                    Rasterize(owner[i], owner[i + 1], owner[i + 2], index => covered[index] = true);
+                var seen = WallDirections(covered);
+                for (int i = 0; i < covered.Length; i++)
+                    covered[i] |= seen[i] >= MinWallDirections;
+                _owned = Dilate(covered, 1);
+            }
         }
 
         public List<OccluderBox> Boxes(IReadOnlyList<(Vector3 Min, Vector3 Max)> keepOut)
         {
             // Inside: walls seen in enough directions (inner walls are inside too), single missing cells filled.
-            var seen = WallDirections();
+            var seen = WallDirections(_wall);
             var inside = new bool[_wall.Length];
             for (int i = 0; i < inside.Length; i++)
                 inside[i] = seen[i] >= MinWallDirections;
             inside = Invert(Dilate(Invert(Dilate(inside, 1)), 1));
+            if (_owned is not null)
+            {
+                for (int i = 0; i < inside.Length; i++)
+                    inside[i] &= _owned[i];
+            }
             foreach (var (min, max) in keepOut)
             {
                 if (max.Z < _frame.Min.Z || min.Z > _frame.Max.Z)
@@ -285,8 +344,12 @@ public static class OccluderFit
                     if (x1 < x0 || (x1 - x0 + 1) * _cell < MinSide || (y1 - y0 + 1) * _cell < MinSide
                         || (x1 - x0 + 1) * (y1 - y0 + 1) * _cell * _cell < MinFloorArea)
                         break;
-                    bottom ??= WallFoot(x0, y0, x1, y1);
-                    if (bottom is not { } low || Roof(x0, y0, x1, y1, low) is not { } roof || roof - low < 1f + 2 * Inset)
+                    // Never beyond the object's own height (a canopy at the foot of a tower).
+                    bottom ??= WallFoot(x0, y0, x1, y1) is { } foot ? MathF.Max(foot, _frame.Min.Z) : null;
+                    if (bottom is not { } low || Roof(x0, y0, x1, y1, low) is not { } found)
+                        break;
+                    float roof = MathF.Min(found, _frame.Max.Z);
+                    if (roof - low < 1f + 2 * Inset)
                         break;
                     var min = _origin + new Vector2(x0, y0) * _cell;
                     var max = _origin + new Vector2(x1 + 1, y1 + 1) * _cell;
@@ -375,11 +438,11 @@ public static class OccluderFit
             }
         }
 
-        // For each cell, in how many of the 8 directions a wall lies further on (in the grid).
-        private byte[] WallDirections()
+        // For each cell, in how many of the 8 directions a marked cell lies further on.
+        private byte[] WallDirections(bool[] wall)
         {
-            var count = new byte[_wall.Length];
-            var ahead = new bool[_wall.Length];
+            var count = new byte[wall.Length];
+            var ahead = new bool[wall.Length];
             for (int dy = -1; dy <= 1; dy++)
             {
                 for (int dx = -1; dx <= 1; dx++)
@@ -398,7 +461,7 @@ public static class OccluderFit
                             if (nx >= 0 && ny >= 0 && nx < _width && ny < _height)
                             {
                                 int next = ny * _width + nx;
-                                hit = _wall[next] || ahead[next];
+                                hit = wall[next] || ahead[next];
                             }
                             ahead[y * _width + x] = hit;
                             if (hit)

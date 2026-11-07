@@ -138,11 +138,64 @@ public class OccluderFitTests
         var b = new CollisionMeshBuilder();
         Building(b, Vector2.Zero, 40, 20, 10);
         // An interior filling the west half.
-        var fit = OccluderFit.Fit(AtOrigin, Lot, [Ground(b)], [(new Vector3(-20, -10, 0), new Vector3(0, 10, 10))]);
+        var fit = OccluderFit.Fit(AtOrigin, Lot, [Ground(b)], keepOut: [(new Vector3(-20, -10, 0), new Vector3(0, 10, 10))]);
         var box = Assert.Single(fit!.Boxes);
         foreach (var corner in box.Corners())
             Assert.True(corner.X >= 0, $"corner at x = {corner.X}");
         Assert.InRange(box.Size.X, 17f, 20f);
+    }
+
+    // The triangles of a collision mesh as a model (world positions, three points each).
+    private static List<Vector3> AsModel(CollisionMeshBuilder b)
+    {
+        var mesh = b.Build()!;
+        return mesh.Indices.Select(i => mesh.Vertices[i]).ToList();
+    }
+
+    [Fact]
+    public void Small_object_next_to_a_building_does_not_take_its_walls()
+    {
+        // A building's collision (shared by the whole area), and a 4 x 4 m kiosk model standing outside it, whose box
+        // reaches into the building.
+        var area = new CollisionMeshBuilder();
+        Building(area, new(10, 0), 20, 20, 12);
+        var kioskModel = new CollisionMeshBuilder();
+        Wall(kioskModel, new(-2, -2), new(2, -2), 0, 3);
+        Wall(kioskModel, new(2, -2), new(2, 2), 0, 3);
+        Wall(kioskModel, new(2, 2), new(-2, 2), 0, 3);
+        Wall(kioskModel, new(-2, 2), new(-2, -2), 0, 3);
+        Roof(kioskModel, new(-2, -2), new(2, 2), 3);
+        var kiosk = new Archetype { NameHash = 1, BoundsMin = new(-8, -8, 0), BoundsMax = new(8, 8, 4) };
+        var fit = OccluderFit.Fit(AtOrigin, kiosk, [Ground(area)], AsModel(kioskModel));
+        foreach (var box in fit!.Boxes)
+        {
+            foreach (var corner in box.Corners())
+                Assert.InRange(corner.X, -3f, 3f);
+        }
+    }
+
+    [Fact]
+    public void Without_collision_the_model_own_walls_are_used()
+    {
+        var model = new CollisionMeshBuilder();
+        Building(model, new(4, -2), 20, 10, 12);
+        var fit = OccluderFit.Fit(AtOrigin, Lot, [], AsModel(model));
+        Assert.Equal(OccluderFitSource.Walls, fit!.Source);
+        var box = Assert.Single(fit.Boxes);
+        Assert.InRange(box.Size.X, 18.5f, 20f);
+        Assert.Equal(12 - 2 * OccluderFit.Inset, box.Size.Z, 0.13f);
+    }
+
+    [Fact]
+    public void Plant_model_gets_no_box()
+    {
+        // Two crossed vertical cards, as a weed or a bush.
+        var model = new CollisionMeshBuilder();
+        Wall(model, new(-3, 0), new(3, 0), 0, 4);
+        Wall(model, new(0, -3), new(0, 3), 0, 4);
+        var plant = new Archetype { NameHash = 1, BoundsMin = new(-3, -3, 0), BoundsMax = new(3, 3, 4) };
+        var fit = OccluderFit.Fit(AtOrigin, plant, [], AsModel(model));
+        Assert.Equal(OccluderFitSource.NoClosedSpace, fit!.Source);
     }
 
     [Fact]
