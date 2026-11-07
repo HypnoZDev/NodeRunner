@@ -228,8 +228,16 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
                 continue;
             if (item.Advice is { } advice)
                 Widgets.Hint(advice, wrap: true);
-            foreach (string detail in item.Details)
+            foreach (var (detail, d) in item.Details.Select((detail, d) => (detail, d)))
             {
+                if (item.Occluders is { } occluders && d < occluders.Count)
+                {
+                    if (ImGui.Selectable($"{Icons.Crosshair}  {Widgets.Fit(detail, ImGui.GetContentRegionAvail().X - 30 * UiTheme.Scale)}##occl{index}_{d}"))
+                        state.ShowOccluder(occluders[d]);
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                        ImGui.SetTooltip("Sélectionner la boîte et y aller");
+                    continue;
+                }
                 ImGui.TextUnformatted(Widgets.Fit(detail, ImGui.GetContentRegionAvail().X));
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                     ImGui.SetTooltip(detail);

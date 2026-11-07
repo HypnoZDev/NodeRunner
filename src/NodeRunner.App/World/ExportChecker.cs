@@ -7,9 +7,10 @@ using NodeRunner.Editor;
 namespace NodeRunner.App.World;
 
 // One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.
-// Merge: the other versions of the same map file whose changes can be taken into ours.
+// Merge: the other versions of the same map file whose changes can be taken into ours. Occluders: the box of each
+// detail line, shown on click.
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
-    IReadOnlyList<MapConflict>? Merge = null);
+    IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
@@ -246,8 +247,91 @@ internal static class ExportChecker
                 "Leur version simplifiée (LOD) représente aussi d'autres objets : elle est gardée."));
         }
 
+        CheckOccluders(world, names, items);
+
         summary = $"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}";
         return new Result(items, summary, cuts, occlusionCuts);
+    }
+
+    // The boxes made or changed by hand, against the buildings, interiors, roads and the other boxes around them.
+    private static void CheckOccluders(WorldLoader world, HashNames names, List<ExportCheckItem> items)
+    {
+        var checkedBoxes = new List<OccluderSelection>();
+        var others = new List<OccluderSelection>();
+        foreach (var file in OccluderMaps.Get(world))
+        {
+            for (int i = 0; i < file.Boxes.Count; i++)
+            {
+                if (!file.DeletedBoxes.Contains(i))
+                    (file.IsProject || file.IsBoxChanged(i) ? checkedBoxes : others).Add(new OccluderSelection(file, OcclusionLayerPart.Boxes, i));
+            }
+        }
+        if (checkedBoxes.Count == 0)
+            return;
+        var boxes = checkedBoxes.Select(s => s.Box!).ToList();
+
+        var buildings = new List<PlacedVolume>();
+        var interiors = new List<PlacedVolume>();
+        if (world.Maps is { } library)
+        {
+            var seen = new HashSet<MapEntity>();
+            foreach (var box in boxes)
+            {
+                float reach = new System.Numerics.Vector2(box.Size.X, box.Size.Y).Length() / 2 + 200f;
+                foreach (var entity in library.EntitiesAround(new System.Numerics.Vector2(box.Center.X, box.Center.Y), reach))
+                {
+                    if (entity.Interior is not null || !seen.Add(entity)
+                        || GroundSnap.LocalBox(library.GetArchetype(entity.ArchetypeHash)) is not var (min, max))
+                        continue;
+                    if (entity.IsInterior)
+                        interiors.AddRange(OccluderCheck.Rooms(entity, library.GetArchetype(entity.ArchetypeHash)!, min, max));
+                    else if (entity.LodLevel is LodLevel.Hd or LodLevel.OrphanHd && System.Numerics.Vector3.Distance(min, max) >= 3f)
+                        buildings.Add(new PlacedVolume(entity.Transform, min, max));
+                }
+            }
+        }
+
+        var paths = new List<System.Numerics.Vector3>();
+        if (world.PathNetwork is { } network)
+        {
+            var low = boxes.Select(b => b.Center - b.Size).Aggregate(System.Numerics.Vector3.Min);
+            var high = boxes.Select(b => b.Center + b.Size).Aggregate(System.Numerics.Vector3.Max);
+            foreach (var node in network.Areas.SelectMany(a => a.Nodes))
+            {
+                var p = node.Position;
+                if (p.X >= low.X && p.X <= high.X && p.Y >= low.Y && p.Y <= high.Y && p.Z >= low.Z - 3f && p.Z <= high.Z)
+                    paths.Add(p);
+            }
+        }
+
+        var issues = OccluderCheck.Run(boxes, others.Select(s => s.Box!).ToList(), buildings, interiors, paths);
+        string Name(OccluderSelection s) => $"{s.File.FileName} : boîte {s.Index}";
+        void Add(OccluderIssueKind kind, bool problem, string one, string several, string advice, Func<OccluderIssue, string> detail)
+        {
+            var found = issues.Where(i => i.Kind == kind).ToList();
+            if (found.Count == 0)
+                return;
+            items.Add(new ExportCheckItem(problem, found.Count == 1 ? one : $"{found.Count} {several}",
+                Limit(found.Select(detail).ToList()), advice, Occluders: found.Take(MaxDetails).Select(i => checkedBoxes[i.Box]).ToList()));
+        }
+
+        Add(OccluderIssueKind.InsideInterior, false, "1 boîte d'occlusion empiète sur un intérieur (MLO)", "boîtes d'occlusion empiètent sur un intérieur (MLO)",
+            "Le jeu ne dessine pas ce qui est derrière une boîte : vus de dehors (porte ouverte, fenêtres), les objets de "
+            + "l'intérieur peuvent disparaître. Si l'intérieur se voit de dehors, réduisez la boîte pour qu'elle reste hors de ses pièces.",
+            i => $"{Name(checkedBoxes[i.Box])} (intérieur {names.Describe((uint)i.Other)})");
+        Add(OccluderIssueKind.OutsideBuildings, true, "1 boîte d'occlusion dépasse des bâtiments", "boîtes d'occlusion dépassent des bâtiments",
+            "Une partie de la boîte est dans le vide (rue, cour, ciel) : ce qui se trouve derrière disparaîtra en jeu alors qu'on "
+            + "devrait le voir. Gardez la boîte à l'intérieur des murs, et vérifiez avec Calques > Occlusion > « Aperçu comme le jeu ».",
+            i => Name(checkedBoxes[i.Box]));
+        Add(OccluderIssueKind.AcrossPath, true, "1 boîte d'occlusion sur une route ou un trottoir", "boîtes d'occlusion sur une route ou un trottoir",
+            "Des véhicules ou des piétons du jeu passent dans la boîte : elle est sûrement à côté du bâtiment au lieu d'être dedans.",
+            i => Name(checkedBoxes[i.Box]));
+        Add(OccluderIssueKind.TooSmall, false, "1 boîte d'occlusion trop petite", "boîtes d'occlusion trop petites",
+            "Moins de 4 m² sur sa plus grande face : elle ne cache presque rien. Agrandissez-la ou supprimez-la.",
+            i => Name(checkedBoxes[i.Box]));
+        Add(OccluderIssueKind.Duplicate, false, "1 boîte d'occlusion en double", "boîtes d'occlusion en double",
+            "Elle est presque entièrement dans une autre boîte : elle ne cache rien de plus. Supprimez-la.",
+            i => $"{Name(checkedBoxes[i.Box])} (dans {Name(i.Other >= 0 ? checkedBoxes[(int)i.Other] : others[(int)(-1 - i.Other)])})");
     }
 
     private static string Owners(IEnumerable<MapConflict> conflicts, string one, string several)

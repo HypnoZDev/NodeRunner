@@ -16,19 +16,23 @@ public static class GroundSnap
     private const float CornerInset = 0.9f;
 
     // World box of an object (8 corners of its type's box, placed), or null without a type box.
-    public static (Vector3 Min, Vector3 Max)? WorldBox(MapEntity entity, Archetype? archetype)
+    // The archetype's own bounds; for an interior without any, those of its rooms.
+    public static (Vector3 Min, Vector3 Max)? LocalBox(Archetype? archetype)
     {
         if (archetype is null)
             return null;
-        var (localMin, localMax) = (archetype.BoundsMin, archetype.BoundsMax);
-        if (localMin == localMax)
-        {
-            var rooms = archetype.InteriorRooms.Where(r => r.BoundsMin != r.BoundsMax).ToList();
-            if (rooms.Count == 0)
-                return null;
-            localMin = rooms.Select(r => r.BoundsMin).Aggregate(Vector3.Min);
-            localMax = rooms.Select(r => r.BoundsMax).Aggregate(Vector3.Max);
-        }
+        if (archetype.BoundsMin != archetype.BoundsMax)
+            return (archetype.BoundsMin, archetype.BoundsMax);
+        var rooms = archetype.InteriorRooms.Where(r => r.BoundsMin != r.BoundsMax).ToList();
+        if (rooms.Count == 0)
+            return null;
+        return (rooms.Select(r => r.BoundsMin).Aggregate(Vector3.Min), rooms.Select(r => r.BoundsMax).Aggregate(Vector3.Max));
+    }
+
+    public static (Vector3 Min, Vector3 Max)? WorldBox(MapEntity entity, Archetype? archetype)
+    {
+        if (LocalBox(archetype) is not var (localMin, localMax))
+            return null;
         var transform = entity.Transform;
         var min = new Vector3(float.MaxValue);
         var max = new Vector3(float.MinValue);

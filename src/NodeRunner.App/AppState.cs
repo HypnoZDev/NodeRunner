@@ -581,6 +581,18 @@ internal sealed class AppState
         Notify(added.Count == 1 ? $"boîte d'occlusion ajoutée à {file.FileName}" : $"{added.Count} boîtes d'occlusion ajoutées à {file.FileName}");
     }
 
+    // Selects an occluder, shows its layer and moves the camera in front of it.
+    public void ShowOccluder(OccluderSelection occluder)
+    {
+        if (occluder.File.IsDeleted(occluder.Kind, occluder.Index))
+            return;
+        Select(null);
+        SelectedOccluder = occluder;
+        SetLayerVisible(OcclusionLayer.LayerName(occluder.Kind), true);
+        var (min, max) = occluder.Bounds();
+        FocusOn((min + max) / 2, System.Numerics.Vector3.Distance(min, max) / 2);
+    }
+
     public void DeleteSelectedOccluder()
     {
         if (SelectedOccluder is not { } occluder)
