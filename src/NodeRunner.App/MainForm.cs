@@ -422,6 +422,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Camera.FieldOfView = Math.Clamp(_state.Settings.FieldOfView, MinFieldOfView, MaxFieldOfView) * MathF.PI / 180f;
         _cameraController.Sensitivity = Math.Clamp(_state.Settings.MouseSensitivity, MinMouseSensitivity, MaxMouseSensitivity);
         _cameraController.InvertY = _state.Settings.InvertMouseY;
+        _cameraController.MovementKeys = _state.Settings.MovementKeys;
         _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
 
         ImGui.NewFrame();

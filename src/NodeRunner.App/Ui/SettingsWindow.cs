@@ -151,6 +151,16 @@ internal sealed class SettingsWindow(AppState state)
                     settings.InvertMouseY = invertY;
                     state.SaveSettings();
                 }
+
+                Widgets.Property("Touches de déplacement", "Lettres qui déplacent la caméra (avancer, gauche, reculer, droite). Les deux = ZQSD et WASD en même temps. Les flèches marchent toujours.");
+                ImGui.SetNextItemWidth(-1f);
+                string[] keyNames = ["ZQSD et WASD", "ZQSD (clavier AZERTY)", "WASD (clavier QWERTY)"];
+                int keys = Math.Clamp((int)settings.MovementKeys, 0, keyNames.Length - 1);
+                if (ImGui.Combo("##movement_keys", ref keys, keyNames, keyNames.Length))
+                {
+                    settings.MovementKeys = (NodeRunner.App.Input.MovementKeys)keys;
+                    state.SaveSettings();
+                }
                 Widgets.EndProperties();
             }
         }

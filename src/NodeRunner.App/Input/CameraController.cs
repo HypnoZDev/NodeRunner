@@ -25,6 +25,8 @@ internal sealed class CameraController
     // Moving the mouse up looks down, as in a flight simulator.
     public bool InvertY { get; set; }
 
+    public MovementKeys MovementKeys { get; set; }
+
     public bool IsLooking => _looking;
 
     public void Attach(Control control)
@@ -77,10 +79,18 @@ internal sealed class CameraController
             return;
 
         var move = Vector3.Zero;
-        if (AnyDown(Keys.W, Keys.Z, Keys.Up)) move += camera.Forward;
+        // Key codes follow the keyboard layout: the forward key is Z on AZERTY, W on QWERTY.
+        var (forward, left) = MovementKeys switch
+        {
+            MovementKeys.Zqsd => (Keys.Z, Keys.Q),
+            MovementKeys.Wasd => (Keys.W, Keys.A),
+            _ => (Keys.None, Keys.None),
+        };
+        bool both = forward == Keys.None;
+        if (AnyDown(Keys.Up, forward) || both && AnyDown(Keys.W, Keys.Z)) move += camera.Forward;
         if (AnyDown(Keys.S, Keys.Down)) move -= camera.Forward;
         if (AnyDown(Keys.D, Keys.Right)) move += camera.Right;
-        if (AnyDown(Keys.A, Keys.Q, Keys.Left)) move -= camera.Right;
+        if (AnyDown(Keys.Left, left) || both && AnyDown(Keys.A, Keys.Q)) move -= camera.Right;
         if (AnyDown(Keys.Space, Keys.E, Keys.PageUp)) move += Vector3.UnitZ;
         if (AnyDown(Keys.C, Keys.PageDown)) move -= Vector3.UnitZ;
 
@@ -103,4 +113,12 @@ internal sealed class CameraController
 
     private static bool ImGuiWantsMouse() =>
         ImGui.GetCurrentContext() != IntPtr.Zero && ImGui.GetIO().WantCaptureMouse;
+}
+
+// Letters that move the camera: both sets at once, or only the one of the keyboard.
+public enum MovementKeys
+{
+    Both,
+    Zqsd,
+    Wasd,
 }

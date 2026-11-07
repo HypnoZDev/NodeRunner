@@ -26,6 +26,8 @@ public sealed class AppSettings
 
     public bool InvertMouseY { get; set; }
 
+    public NodeRunner.App.Input.MovementKeys MovementKeys { get; set; }
+
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 
