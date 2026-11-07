@@ -44,12 +44,13 @@ public sealed class DrawableReader : IModelReader
         switch (extension.ToLowerInvariant())
         {
             case ".ydr":
-                if (Convert(res, fileHash, 0) is { } drawable)
+                if (Convert(res, fileHash, 0, SkeletonPose(res, 0)) is { } drawable)
                     models[fileHash] = drawable;
                 break;
 
             case ".yft":
-                if (Convert(res, fileHash, Block(res, res.UInt64(FragDrawablePointer), DrawableLength)) is { } body)
+                int main = Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
+                if (Convert(res, fileHash, main, FragmentPose(res) ?? SkeletonPose(res, main)) is { } body)
                     models[fileHash] = AddWheels(res, body);
                 break;
 
@@ -64,7 +65,7 @@ public sealed class DrawableReader : IModelReader
                     byHash[res.UInt32(hashes + i * 4)] = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
                 foreach (var (hash, offset) in byHash)
                 {
-                    if (Convert(res, hash, offset) is { } model)
+                    if (Convert(res, hash, offset, SkeletonPose(res, offset)) is { } model)
                         models[hash] = model;
                 }
                 break;
@@ -91,12 +92,15 @@ public sealed class DrawableReader : IModelReader
     private const int ShadersPointer = 0x10;
     private const int ShadersCount = 0x18;
 
-    // Model: geometries and the shader of each.
+    // Model: geometries and the shader of each, bone binding (byte 1: skinned, byte 3: bone index).
     private const int GeometriesPointer = 0x08;
     private const int GeometriesCount = 0x10;
     private const int ShaderMappingPointer = 0x20;
+    private const int SkeletonBinding = 0x28;
 
-    private static ModelData? Convert(ResourceData res, uint hash, int d)
+    // pose: where each bone is in the model (null: no skeleton). A model that is not skinned is stored relative to its
+    // bone (pieces of breakable objects: planks of a bench, arm of a traffic light).
+    private static ModelData? Convert(ResourceData res, uint hash, int d, Matrix4x4[]? pose = null)
     {
         if (d < 0 || Models(res, d) is not { } models)
             return null;
@@ -107,6 +111,10 @@ public sealed class DrawableReader : IModelReader
         {
             if (model < 0)
                 continue;
+            uint binding = res.UInt32(model + SkeletonBinding);
+            bool skinned = ((binding >> 8) & 0xFF) != 0;
+            int bone = (int)(binding >> 24);
+            var boneTransform = !skinned && pose is not null && bone < pose.Length ? pose[bone] : Matrix4x4.Identity;
             int count = res.UInt16(model + GeometriesCount);
             int geometries = res.ResolveArray(res.UInt64(model + GeometriesPointer), count, 8, "géométries");
             ulong mappingPointer = res.UInt64(model + ShaderMappingPointer);
@@ -118,7 +126,7 @@ public sealed class DrawableReader : IModelReader
                     continue;
                 int shaderId = mapping >= 0 ? res.UInt16(mapping + i * 2) : 0;
                 if (ConvertGeometry(res, geometry, shaderId < shaders.Count ? shaders[shaderId] : null, shaders) is { } mesh)
-                    meshes.Add(mesh);
+                    meshes.Add(boneTransform.IsIdentity ? mesh : Transform(mesh, boneTransform));
             }
         }
 
@@ -471,10 +479,79 @@ public sealed class DrawableReader : IModelReader
         private static float B(ReadOnlySpan<byte> b, int at) => at < b.Length ? b[at] / 255f : 0f;
     }
 
+    // ---- Skeleton ----
+
+    // Where each bone is in the model, from the drawable's skeleton (0x18): 0x30 bone matrices relative to the parent
+    // bone, 0x38 parent indices, 0x5E bone count. Null without a skeleton.
+    private static Matrix4x4[]? SkeletonPose(ResourceData res, int d)
+    {
+        if (d < 0)
+            return null;
+        int skeleton = Block(res, res.UInt64(d + 0x18), 0x70);
+        if (skeleton < 0)
+            return null;
+        int count = res.UInt16(skeleton + 0x5E);
+        ulong matricesPointer = res.UInt64(skeleton + 0x30);
+        ulong parentsPointer = res.UInt64(skeleton + 0x38);
+        if (count == 0 || matricesPointer == 0)
+            return null;
+        int matrices = res.ResolveArray(matricesPointer, count, 64, "os du squelette");
+        int parents = parentsPointer == 0 ? -1 : res.ResolveArray(parentsPointer, count, 2, "parents des os");
+
+        var local = new Matrix4x4[count];
+        for (int i = 0; i < count; i++)
+        {
+            local[i] = Matrix(res, matrices + i * 64);
+            // The 4th column holds something else than a projection.
+            local[i].M14 = local[i].M24 = local[i].M34 = 0f;
+            local[i].M44 = 1f;
+        }
+
+        // Bones are not always stored parents first: each one goes up its own chain (depth capped against loops).
+        var pose = new Matrix4x4[count];
+        for (int i = 0; i < count; i++)
+        {
+            var transform = local[i];
+            int parent = parents < 0 ? -1 : (short)res.UInt16(parents + i * 2);
+            for (int depth = 0; parent >= 0 && parent < count && depth < count; depth++)
+            {
+                transform *= local[parent];
+                parent = (short)res.UInt16(parents + parent * 2);
+            }
+            pose[i] = transform;
+        }
+        return pose;
+    }
+
+    // Default pose of a fragment's bones, in the model (0xA8: 0x10 count, 0x20 matrices of 3 rows x 4 floats, the
+    // 4th float of each row being the translation). Null when absent.
+    private static Matrix4x4[]? FragmentPose(ResourceData res)
+    {
+        int block = Block(res, res.UInt64(FragBoneTransformsPointer), 0x20);
+        if (block < 0)
+            return null;
+        int count = res.Byte(block + 0x10);
+        if (count == 0)
+            return null;
+        int items = res.ResolveArray(res.UInt64(FragBoneTransformsPointer) + 0x20, count, 48, "pose du fragment");
+        var pose = new Matrix4x4[count];
+        for (int i = 0; i < count; i++)
+        {
+            int o = items + i * 48;
+            pose[i] = new Matrix4x4(
+                F32(res, o), F32(res, o + 16), F32(res, o + 32), 0f,
+                F32(res, o + 4), F32(res, o + 20), F32(res, o + 36), 0f,
+                F32(res, o + 8), F32(res, o + 24), F32(res, o + 40), 0f,
+                F32(res, o + 12), F32(res, o + 28), F32(res, o + 44), 1f);
+        }
+        return pose;
+    }
+
     // ---- Fragments (vehicles) ----
 
-    // Fragment: 0x30 main drawable, 0xF0 physics levels (0x10: the first level).
+    // Fragment: 0x30 main drawable, 0xA8 default pose of the bones, 0xF0 physics levels (0x10: the first level).
     private const int FragDrawablePointer = 0x30;
+    private const int FragBoneTransformsPointer = 0xA8;
     private const int FragPhysicsPointer = 0xF0;
 
     // Bone tags of the wheels: left / right, front, middle (6-wheelers and more) and rear.
