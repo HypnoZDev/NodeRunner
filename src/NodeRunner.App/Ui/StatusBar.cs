@@ -32,7 +32,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         if (state.Project is { } project)
             Item(Icons.FolderOpen, project.Name);
         else
-            Item(Icons.FolderOpen, "Aucun projet", UiTheme.TextFaint);
+            Item(Icons.FolderOpen, L("Aucun projet"), UiTheme.TextFaint);
         Separator();
         Item(Icons.Globe, Toolbar.VersionName(settings.MapVersion));
 
@@ -41,7 +41,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             var last = settings.LastDlcPack is null ? null
                 : content.AllPacks.FirstOrDefault(p => p.Name.Equals(settings.LastDlcPack, StringComparison.OrdinalIgnoreCase));
             Separator();
-            Item(Icons.Package, last is null ? $"Tous les DLC ({content.AllPacks.Count})" : $"DLC jusqu'à : {last.DisplayName}");
+            Item(Icons.Package, last is null ? L($"Tous les DLC ({content.AllPacks.Count})") : L($"DLC jusqu'à : {last.DisplayName}"));
         }
 
         var world = state.World;
@@ -49,7 +49,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         {
             Separator();
             Item(Icons.TriangleAlert, world.Status, UiTheme.Error);
-            Clickable("Clic : voir l'erreur et copier le rapport");
+            Clickable(L("Clic : voir l'erreur et copier le rapport"));
         }
         else if (world.IsBusy)
         {
@@ -59,7 +59,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         else if (modelLayer.PendingModelCount > 0)
         {
             Separator();
-            Item(Icons.LoaderCircle, $"{modelLayer.PendingModelCount} modèles en cours de chargement", ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+            Item(Icons.LoaderCircle, L($"{modelLayer.PendingModelCount} modèles en cours de chargement"), ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
         }
 
         if (state.Notice is { } notice && (DateTime.Now - notice.Time).TotalSeconds < 8)
@@ -74,16 +74,16 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         if (state.Online.Session is { IsOver: false } session)
         {
             Separator();
-            string host = session.Participants.Count > 0 ? session.Participants[0] : "l'hôte";
+            string host = session.Participants.Count > 0 ? session.Participants[0] : L("l'hôte");
             Item(Icons.Users, session.Role == Editor.Online.SessionRole.Host
-                ? $"Session Online : {session.Participants.Count} participant(s)"
-                : $"Session Online de {host} : c'est {host} qui enregistre", UiTheme.Accent);
+                ? L($"Session Online : {session.Participants.Count} participant(s)")
+                : L($"Session Online de {host} : c'est {host} qui enregistre"), UiTheme.Accent);
         }
 
         if (state.History.HasUnsavedChanges && !state.Online.IsGuest)
         {
             Separator();
-            Item(Icons.Save, $"Modifications non enregistrées ({state.PendingSaveText}) : Ctrl+S", UiTheme.Warning);
+            Item(Icons.Save, L($"Modifications non enregistrées ({state.PendingSaveText}) : Ctrl+S"), UiTheme.Warning);
         }
         else if (state.LastSave is { } save && (DateTime.Now - save.Time).TotalSeconds < 8)
         {
@@ -96,7 +96,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
     {
         var p = state.Camera.Position;
         string position = $"{Icons.MapPinned}  X {p.X:0}   Y {p.Y:0}   Z {p.Z:0}";
-        string edition = state.Game is { } game ? $"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}" : $"{Icons.HardDrive}  GTA V introuvable";
+        string edition = state.Game is { } game ? L($"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}") : L($"{Icons.HardDrive}  GTA V introuvable");
         string fps = $"{Icons.Gauge}  {ImGui.GetIO().Framerate:0} FPS";
         int errorCount = Diagnostics.ErrorLog.Count;
         string errors = errorCount > 0 ? $"{Icons.TriangleAlert}  {errorCount}" : Icons.TriangleAlert;
@@ -113,7 +113,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             ImGui.TextColored(Diagnostics.ErrorLog.Unseen > 0 ? UiTheme.Error : UiTheme.Warning, errors);
         else
             ImGui.TextDisabled(errors);
-        Clickable(errorCount > 0 ? $"{errorCount} erreur(s) : clic pour les voir et copier le rapport" : "Aucune erreur. Clic : rapport à envoyer en cas de problème");
+        Clickable(errorCount > 0 ? L($"{errorCount} erreur(s) : clic pour les voir et copier le rapport") : L("Aucune erreur. Clic : rapport à envoyer en cas de problème"));
         ImGui.SameLine(0, gap);
         ImGui.TextDisabled(position);
         ImGui.SameLine(0, gap);

@@ -58,7 +58,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSizeConstraints(new Vector2(520f, 0f), new Vector2(520f, float.MaxValue));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        bool visible = ImGui.Begin(Title, ref _open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
+        bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
         ImGui.PopStyleVar();
         if (visible)
             DrawContent();

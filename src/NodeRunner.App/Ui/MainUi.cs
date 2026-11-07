@@ -241,110 +241,110 @@ internal sealed class MainUi
         ImGui.PopFont();
         ImGui.SameLine(0, 18f);
 
-        if (Menu("Fichier"))
+        if (Menu(L("Fichier")))
         {
             DrawProjectMenuItems();
             ImGui.Separator();
             int toSave = _state.PendingSaveCount;
-            if (ImGui.MenuItem($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}", "Ctrl+S", false, toSave > 0))
+            if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), "Ctrl+S", false, toSave > 0))
                 SaveRequested = true;
-            if (ImGui.MenuItem($"{Icons.Package}  Exporter en ressource FiveM..."))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM...")))
                 _exportWindow.Open();
-            if (ImGui.MenuItem($"{Icons.Users}  Online...", null, _onlineWindow.IsOpen))
+            if (ImGui.MenuItem(L($"{Icons.Users}  Online..."), null, _onlineWindow.IsOpen))
                 _onlineWindow.Toggle();
             ImGui.Separator();
-            if (ImGui.MenuItem("Choisir le dossier de GTA V..."))
+            if (ImGui.MenuItem(L("Choisir le dossier de GTA V...")))
                 BrowseGameFolderRequested = true;
-            if (ImGui.MenuItem("Relancer la détection automatique"))
+            if (ImGui.MenuItem(L("Relancer la détection automatique")))
                 _state.RedetectGame(clearManualChoice: true);
             ImGui.Separator();
-            if (ImGui.MenuItem("Quitter"))
+            if (ImGui.MenuItem(L("Quitter")))
                 ExitRequested = true;
             ImGui.EndMenu();
         }
 
-        if (Menu("Édition"))
+        if (Menu(L("Édition")))
         {
             var history = _state.History;
-            if (ImGui.MenuItem(history.NextUndo is { } undo ? $"Annuler : {undo.Description}" : "Annuler", "Ctrl+Z", false, history.CanUndo))
+            if (ImGui.MenuItem(history.NextUndo is { } undo ? L($"Annuler : {undo.Description}") : L("Annuler"), "Ctrl+Z", false, history.CanUndo))
                 _state.Undo();
-            if (ImGui.MenuItem(history.NextRedo is { } redo ? $"Rétablir : {redo.Description}" : "Rétablir", "Ctrl+Y", false, history.CanRedo))
+            if (ImGui.MenuItem(history.NextRedo is { } redo ? L($"Rétablir : {redo.Description}") : L("Rétablir"), "Ctrl+Y", false, history.CanRedo))
                 _state.Redo();
             ImGui.Separator();
             int selected = _state.SelectedEntities.Count;
-            if (ImGui.MenuItem(selected > 1 ? $"{Icons.Copy}  Copier les {selected} objets sélectionnés" : $"{Icons.Copy}  Copier l'objet sélectionné",
+            if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"),
                 "Ctrl+C", false, selected > 0))
                 _state.CopySelection();
             int copied = _state.Copied.Count;
-            if (ImGui.MenuItem(copied > 1 ? $"{Icons.Copy}  Coller les {copied} objets" : $"{Icons.Copy}  Coller", "Ctrl+V", false, copied > 0))
+            if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), "Ctrl+V", false, copied > 0))
                 _state.PasteRequest = true;
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Ajoute une copie au sol, au centre de la vue 3D, dans le YMAP du projet (le groupe garde sa disposition).");
+                ImGui.SetTooltip(L("Ajoute une copie au sol, au centre de la vue 3D, dans le YMAP du projet (le groupe garde sa disposition)."));
             ImGui.Separator();
             int group = _state.DeletableSelection.Count;
-            if (ImGui.MenuItem(group > 1 ? $"{Icons.Trash}  Supprimer les {group} objets sélectionnés..." : $"{Icons.Trash}  Supprimer l'objet sélectionné...",
-                "Suppr", false, group > 0))
+            if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer l'objet sélectionné..."),
+                L("Suppr"), false, group > 0))
                 _state.RequestDelete();
-            if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Poser au sol", "Fin", false, _state.EditableSelection.Count > 0))
+            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Fin"), false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-                ImGui.SetTooltip("Monte ou descend chaque objet sélectionné jusqu'à ce que le bas de sa boîte touche la collision en dessous.");
+                ImGui.SetTooltip(L("Monte ou descend chaque objet sélectionné jusqu'à ce que le bas de sa boîte touche la collision en dessous."));
             bool followGround = _state.Settings.FollowGround;
-            if (ImGui.MenuItem($"{Icons.Footprints}  Suivre le sol en déplaçant", null, ref followGround))
+            if (ImGui.MenuItem(L($"{Icons.Footprints}  Suivre le sol en déplaçant"), null, ref followGround))
             {
                 _state.Settings.FollowGround = followGround;
                 _state.SaveSettings();
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-                ImGui.SetTooltip("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision.");
+                ImGui.SetTooltip(L("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision."));
             ImGui.Separator();
-            if (ImGui.BeginMenu($"{Icons.ScanEye}  Occlusion"))
+            if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();
                 ImGui.EndMenu();
             }
             ImGui.Separator();
-            if (ImGui.MenuItem($"{Icons.Search}  Rechercher...", "Ctrl+K"))
+            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
                 _searchPalette.Open();
             ImGui.Separator();
-            ImGui.TextDisabled(history.Count == 0 ? "Aucune modification" : $"{history.Count} modification(s), pas encore enregistrée(s)");
+            ImGui.TextDisabled(history.Count == 0 ? L("Aucune modification") : L($"{history.Count} modification(s), pas encore enregistrée(s)"));
             ImGui.EndMenu();
         }
 
-        if (Menu("Affichage"))
+        if (Menu(L("Affichage")))
         {
-            ImGui.MenuItem(ScenePanel.Title, null, ref _showScene);
-            ImGui.MenuItem(LayersTitle, null, ref _showLayers);
-            ImGui.MenuItem(PropertiesPanel.Title, null, ref _showProperties);
-            ImGui.MenuItem(StatusPanel.Title, null, ref _showStatus);
-            ImGui.MenuItem(ViewerPanel.Title, null, ref _showViewer);
-            ImGui.MenuItem(ArchivePanel.Title, null, ref _showArchives);
-            ImGui.MenuItem(ProjectPanel.Title, null, ref _showProject);
-            if (ImGui.MenuItem("Réinitialiser la disposition des panneaux"))
+            ImGui.MenuItem(L(ScenePanel.Title), null, ref _showScene);
+            ImGui.MenuItem(L(LayersTitle), null, ref _showLayers);
+            ImGui.MenuItem(L(PropertiesPanel.Title), null, ref _showProperties);
+            ImGui.MenuItem(L(StatusPanel.Title), null, ref _showStatus);
+            ImGui.MenuItem(L(ViewerPanel.Title), null, ref _showViewer);
+            ImGui.MenuItem(L(ArchivePanel.Title), null, ref _showArchives);
+            ImGui.MenuItem(L(ProjectPanel.Title), null, ref _showProject);
+            if (ImGui.MenuItem(L("Réinitialiser la disposition des panneaux")))
             {
                 _showLayers = _showScene = _showProperties = _showStatus = true;
                 _resetLayout = true;
             }
             ImGui.Separator();
             bool showGrid = _state.Settings.ShowGrid;
-            if (ImGui.MenuItem("Grille au sol", "G", ref showGrid))
+            if (ImGui.MenuItem(L("Grille au sol"), "G", ref showGrid))
             {
                 _state.Settings.ShowGrid = showGrid;
                 _state.SaveSettings();
             }
-            if (ImGui.MenuItem($"{Icons.Settings}  Paramètres d'affichage..."))
+            if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres d'affichage...")))
                 _settingsWindow.Open();
             ImGui.Separator();
-            ImGui.MenuItem("Démo ImGui (développeurs)", null, ref _showImGuiDemo);
+            ImGui.MenuItem(L("Démo ImGui (développeurs)"), null, ref _showImGuiDemo);
             ImGui.EndMenu();
         }
 
-        if (Menu("Aide"))
+        if (Menu(L("Aide")))
         {
-            if (ImGui.MenuItem($"{Icons.TriangleAlert}  Erreurs et rapport..."))
+            if (ImGui.MenuItem(L($"{Icons.TriangleAlert}  Erreurs et rapport...")))
                 _errorWindow.Open();
             ImGui.Separator();
-            if (ImGui.MenuItem($"À propos de {Program.Name}"))
+            if (ImGui.MenuItem(L($"À propos de {Program.Name}")))
                 _showAbout = true;
             ImGui.EndMenu();
         }
@@ -364,34 +364,34 @@ internal sealed class MainUi
 
     private void DrawOcclusionMenuItems()
     {
-        if (ImGui.MenuItem($"{Icons.Box}  Nouvelle boîte d'occlusion"))
+        if (ImGui.MenuItem(L($"{Icons.Box}  Nouvelle boîte d'occlusion")))
             _state.CreateOccluderBox();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-            ImGui.SetTooltip("Boîte de 10 m posée au sol devant la caméra, dans le fichier d'occlusion du projet. À ajuster avec les poignées.");
+            ImGui.SetTooltip(L("Boîte de 10 m posée au sol devant la caméra, dans le fichier d'occlusion du projet. À ajuster avec les poignées."));
         int selected = _state.SelectedEntities.Count;
-        if (ImGui.MenuItem(selected > 1 ? $"{Icons.Boxes}  Boîtes d'occlusion sur les {selected} objets sélectionnés" : $"{Icons.Boxes}  Boîte d'occlusion sur l'objet sélectionné",
+        if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Boxes}  Boîtes d'occlusion sur les {selected} objets sélectionnés") : L($"{Icons.Boxes}  Boîte d'occlusion sur l'objet sélectionné"),
                 null, false, selected > 0))
             _state.CreateOccluderBoxesFromSelection();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Une boîte par bâtiment fermé, à l'intérieur des murs de la collision (sinon dans la boîte du modèle). "
-                + "Pour un intérieur (MLO) : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres.");
+            ImGui.SetTooltip(L("Une boîte par bâtiment fermé, à l'intérieur des murs de la collision (sinon dans la boîte du modèle). ")
+                + L("Pour un intérieur (MLO) : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres."));
         var occluder = _state.SelectedOccluder;
-        if (ImGui.MenuItem($"{Icons.Trash}  Supprimer l'occluder sélectionné", "Suppr", false, occluder is not null))
+        if (ImGui.MenuItem(L($"{Icons.Trash}  Supprimer l'occluder sélectionné"), L("Suppr"), false, occluder is not null))
             _state.DeleteSelectedOccluder();
     }
 
     private void DrawProjectMenuItems()
     {
-        if (ImGui.MenuItem($"{Icons.FolderOpen}  Nouveau projet..."))
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Nouveau projet...")))
             ProjectWindow.Open();
-        if (ImGui.MenuItem($"{Icons.FolderOpen}  Ouvrir un projet..."))
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet...")))
             OpenProjectRequested = true;
-        if (ImGui.MenuItem($"{Icons.ArrowDownToLine}  Importer un mapping..."))
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mapping...")))
             ImportMappingRequested = true;
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié.");
+            ImGui.SetTooltip(L("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié."));
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (ImGui.BeginMenu("Projets récents", recent.Count > 0))
+        if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))
         {
             foreach (var folder in recent)
             {
@@ -399,10 +399,10 @@ internal sealed class MainUi
                 if (ImGui.MenuItem($"{Path.GetFileName(folder)}##{folder}", null, false, exists))
                     RecentProjectRequested = folder;
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                    ImGui.SetTooltip(exists ? folder : $"{folder}\nIntrouvable (déplacé ou supprimé)");
+                    ImGui.SetTooltip(exists ? folder : L($"{folder}\nIntrouvable (déplacé ou supprimé)"));
             }
             ImGui.Separator();
-            if (ImGui.MenuItem("Effacer la liste"))
+            if (ImGui.MenuItem(L("Effacer la liste")))
             {
                 _state.Settings.RecentProjects.RemoveAll(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase));
                 _state.SaveSettings();
@@ -411,18 +411,18 @@ internal sealed class MainUi
         }
         if (_state.Project is { } project)
         {
-            if (ImGui.MenuItem($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)"))
+            if (ImGui.MenuItem(L($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)")))
                 ShowProjectPanel();
-            if (ImGui.MenuItem($"{Icons.FolderOpen}  Ouvrir le dossier du projet") && Directory.Exists(project.Folder))
+            if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir le dossier du projet")) && Directory.Exists(project.Folder))
                 System.Diagnostics.Process.Start("explorer.exe", project.Folder);
-            if (ImGui.MenuItem($"{Icons.X}  Fermer le projet"))
+            if (ImGui.MenuItem(L($"{Icons.X}  Fermer le projet")))
                 CloseProjectRequested = true;
         }
     }
 
     private void DrawLayersWindow()
     {
-        if (ImGui.Begin(LayersTitle, ref _showLayers))
+        if (ImGui.Begin(L(LayersTitle), ref _showLayers))
             _layersPanel.DrawContent();
         ImGui.End();
     }
@@ -433,7 +433,7 @@ internal sealed class MainUi
         ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSizeConstraints(new Vector2(440f, 0f), new Vector2(440f, float.MaxValue));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        bool visible = ImGui.Begin($"À propos de {Program.Name}###About", ref _showAbout, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
+        bool visible = ImGui.Begin(L($"À propos de {Program.Name}###About"), ref _showAbout, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
         ImGui.PopStyleVar();
         if (!visible)
         {
@@ -444,45 +444,45 @@ internal sealed class MainUi
         ImGui.PushFont(UiTheme.TitleFont);
         ImGui.TextUnformatted(Program.Name);
         ImGui.PopFont();
-        Widgets.Hint($"Version {Program.Version} · par {Program.Author}");
+        Widgets.Hint(L($"Version {Program.Version} · par {Program.Author}"));
         ImGui.Dummy(new Vector2(0, 2));
-        ImGui.TextWrapped("Outil gratuit pour explorer et modifier la carte de GTA V en 3D (solo et FiveM).");
+        ImGui.TextWrapped(L("Outil gratuit pour explorer et modifier la carte de GTA V en 3D (solo et FiveM)."));
 
-        if (Widgets.Section("Crédits", "about_credits") && Widgets.BeginProperties("##credits", 0.32f))
+        if (Widgets.Section(L("Crédits"), "about_credits") && Widgets.BeginProperties("##credits", 0.32f))
         {
-            Widgets.Property("Remerciements");
-            ImGui.TextWrapped("CodeWalker par dexyfex, référence de la communauté pour les fichiers du jeu");
-            if (Widgets.Link(CodeWalkerUrl, "Clic : copier l'adresse"))
+            Widgets.Property(L("Remerciements"));
+            ImGui.TextWrapped(L("CodeWalker par dexyfex, référence de la communauté pour les fichiers du jeu"));
+            if (Widgets.Link(CodeWalkerUrl, L("Clic : copier l'adresse")))
                 ImGui.SetClipboardText(CodeWalkerUrl);
-            Widgets.Property("Interface");
+            Widgets.Property(L("Interface"));
             ImGui.TextWrapped("Dear ImGui (Omar Cornut) via ImGui.NET");
             Widgets.Property("DirectX 11");
             ImGui.TextWrapped("Vortice.Windows (Amer Koleci)");
-            Widgets.Property("Icônes");
-            ImGui.TextWrapped("Lucide (lucide.dev, licence ISC ; icônes issues de Feather : MIT)");
+            Widgets.Property(L("Icônes"));
+            ImGui.TextWrapped(L("Lucide (lucide.dev, licence ISC ; icônes issues de Feather : MIT)"));
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section("Licence", "about_license") && Widgets.BeginProperties("##license", 0.32f))
+        if (Widgets.Section(L("Licence"), "about_license") && Widgets.BeginProperties("##license", 0.32f))
         {
-            Widgets.Property("Licence");
-            ImGui.TextWrapped("PolyForm Strict 1.0.0 (fichier LICENSE.md à côté du logiciel)");
-            Widgets.Property("Autorisé");
-            ImGui.TextWrapped("Utilisation gratuite pour tout usage non commercial");
-            Widgets.Property("Interdit");
-            ImGui.TextWrapped("Revente, redistribution et versions modifiées sans l'accord de l'auteur");
-            Widgets.Property("Nom et logo");
-            ImGui.TextWrapped($"« {Program.Name} » et le logo NRS appartiennent à {Program.Author}");
+            Widgets.Property(L("Licence"));
+            ImGui.TextWrapped(L("PolyForm Strict 1.0.0 (fichier LICENSE.md à côté du logiciel)"));
+            Widgets.Property(L("Autorisé"));
+            ImGui.TextWrapped(L("Utilisation gratuite pour tout usage non commercial"));
+            Widgets.Property(L("Interdit"));
+            ImGui.TextWrapped(L("Revente, redistribution et versions modifiées sans l'accord de l'auteur"));
+            Widgets.Property(L("Nom et logo"));
+            ImGui.TextWrapped(L($"« {Program.Name} » et le logo NRS appartiennent à {Program.Author}"));
             Widgets.Property("Copyright");
             ImGui.TextWrapped($"© 2026 {Program.Author}");
             Widgets.EndProperties();
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        Widgets.Hint($"NodeRunner et {Program.Author} ne sont pas affiliés à Rockstar Games ni à Take-Two Interactive. "
-            + "Aucun fichier du jeu n'est fourni : le logiciel lit ta propre installation.", wrap: true);
+        Widgets.Hint(L($"NodeRunner et {Program.Author} ne sont pas affiliés à Rockstar Games ni à Take-Two Interactive. ")
+            + L("Aucun fichier du jeu n'est fourni : le logiciel lit ta propre installation."), wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Button("Fermer", width: 90f))
+        if (Widgets.Button(L("Fermer"), width: 90f))
             _showAbout = false;
         ImGui.End();
     }

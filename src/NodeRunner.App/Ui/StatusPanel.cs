@@ -15,7 +15,7 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
 
     public void Draw(ref bool visible)
     {
-        if (ImGui.Begin(Title, ref visible))
+        if (ImGui.Begin(L(Title), ref visible))
         {
             if (Widgets.Section("Projet", "status_project"))
                 DrawProject();

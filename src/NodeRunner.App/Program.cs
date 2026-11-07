@@ -29,6 +29,7 @@ internal static class Program
 
         var paths = AppPaths.Resolve();
         var settings = AppSettings.Load(paths.SettingsFile);
+        NodeRunner.Editor.Localization.Loc.Current = settings.InterfaceLanguage;
         var state = new AppState(paths, settings);
         _state = state;
         state.RedetectGame();

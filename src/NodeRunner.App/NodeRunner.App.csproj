@@ -26,6 +26,11 @@
     <None Include="..\..\LICENSE.md" Link="LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- L("texte") : interface text in the chosen language. -->
+  <ItemGroup>
+    <Using Include="NodeRunner.Editor.Localization.Loc" Static="true" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\NodeRunner.Data\NodeRunner.Data.csproj" />
     <ProjectReference Include="..\NodeRunner.Data.Native\NodeRunner.Data.Native.csproj" />

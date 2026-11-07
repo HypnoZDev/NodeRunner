@@ -44,7 +44,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         var center = ImGui.GetMainViewport().GetCenter();
         ImGui.SetNextWindowPos(center, ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSize(new Vector2(760f, 560f), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin(Title, ref open))
+        if (ImGui.Begin(L(Title), ref open))
         {
             UpdateTree();
             DrawContent();
@@ -299,7 +299,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
     private void DrawTextWindow()
     {
         ImGui.SetNextWindowSize(new Vector2(720f, 520f), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin(TextTitle, ref _showText, ImGuiWindowFlags.NoDocking))
+        if (ImGui.Begin(L(TextTitle), ref _showText, ImGuiWindowFlags.NoDocking))
         {
             Widgets.Hint(_textName ?? "");
             ImGui.SameLine();

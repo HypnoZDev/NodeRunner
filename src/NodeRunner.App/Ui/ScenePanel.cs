@@ -48,7 +48,7 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     public void Draw(ref bool visible)
     {
-        if (ImGui.Begin(Title, ref visible))
+        if (ImGui.Begin(L(Title), ref visible))
             DrawContent();
         ImGui.End();
     }

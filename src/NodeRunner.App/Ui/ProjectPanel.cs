@@ -28,7 +28,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
         var center = ImGui.GetMainViewport().GetCenter();
         ImGui.SetNextWindowPos(center, ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSize(new Vector2(620f, 560f), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin(Title, ref open))
+        if (ImGui.Begin(L(Title), ref open))
             DrawContent();
         ImGui.End();
     }

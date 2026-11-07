@@ -30,6 +30,15 @@ public sealed class AppSettings
     // Video memory for the models, in MB; 0 = automatic (70 % of what Windows grants NodeRunner).
     public int ModelMemoryMb { get; set; }
 
+    // Interface language; null = the Windows language (French for a French Windows, otherwise English).
+    public NodeRunner.Editor.Localization.Language? Language { get; set; }
+
+    [JsonIgnore]
+    public NodeRunner.Editor.Localization.Language InterfaceLanguage => Language
+        ?? (System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr"
+            ? NodeRunner.Editor.Localization.Language.French
+            : NodeRunner.Editor.Localization.Language.English);
+
     // Accent colour of the interface (0xRRGGBB).
     public uint AccentColor { get; set; } = 0x4C8DFF;
 

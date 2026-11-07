@@ -55,7 +55,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.SetNextWindowPos(center, ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSize(new Vector2(960f, 580f), ImGuiCond.FirstUseEver);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
-        bool visible = ImGui.Begin(Title, ref open);
+        bool visible = ImGui.Begin(L(Title), ref open);
         ImGui.PopStyleVar();
         Viewer.RequestedSize = Vector2.Zero; // Set again below while the view is visible.
         if (visible)

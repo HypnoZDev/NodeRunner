@@ -25,7 +25,7 @@ internal sealed class ErrorWindow(AppState state, ModelLayer modelLayer, Collisi
         ImGui.SetNextWindowSize(new Vector2(620f, 0f), ImGuiCond.Appearing);
         ImGui.SetNextWindowSizeConstraints(new Vector2(420f, 0f), new Vector2(1400f, 900f));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        bool visible = ImGui.Begin(Title, ref _open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.AlwaysAutoResize);
+        bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.AlwaysAutoResize);
         ImGui.PopStyleVar();
         if (visible)
             DrawContent();
