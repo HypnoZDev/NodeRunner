@@ -29,7 +29,21 @@ public sealed class MapData
     internal void AddEntity(MapEntity entity) => _entities = [.. _entities, entity];
 
     // Parking spots where the game may park a car.
-    public IReadOnlyList<CarGenerator> CarGenerators { get; init; } = [];
+    public IReadOnlyList<CarGenerator> CarGenerators { get => _carGenerators; init => _carGenerators = value.ToList(); }
+    private List<CarGenerator> _carGenerators = [];
+
+    // Raised by any change of a parking spot, in any map (the 3D layer is built again).
+    public static int CarGeneratorRevision => _carGeneratorRevision;
+    private static int _carGeneratorRevision;
+
+    // A new list, not changed in place (see AddEntity).
+    public void SetCarGenerator(int index, CarGenerator spot)
+    {
+        var list = _carGenerators.ToList();
+        list[index] = spot;
+        _carGenerators = list;
+        Interlocked.Increment(ref _carGeneratorRevision);
+    }
 
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }

@@ -401,3 +401,52 @@ internal sealed class InteriorDuplicateCodec : EditCodec<InteriorDuplicateEdit>
         return InteriorDuplicateEdit.Apply(r.Context.Library, map, source, name, position, r.ReadQuaternion(), description);
     }
 }
+
+internal sealed class CarGeneratorCodec : EditCodec<CarGeneratorEdit>
+{
+    public override string Tag => "car-generator";
+
+    protected override void Write(CarGeneratorEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+        var s = edit.After;
+        w.Write(s.Position);
+        w.Write(s.Orientation.X);
+        w.Write(s.Orientation.Y);
+        w.Write(s.Width);
+        w.Write(s.CarModel);
+        w.Write(s.Flags);
+        w.Write(s.Color1);
+        w.Write(s.Color2);
+        w.Write(s.Color3);
+        w.Write(s.Color4);
+        w.Write(s.PopGroup);
+        w.Write(s.Livery);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        int index = r.ReadInt();
+        if (index < 0 || index >= map.CarGenerators.Count)
+            throw new InvalidDataException("Parking spot not found here.");
+        var before = map.CarGenerators[index];
+        var after = before with
+        {
+            Position = r.ReadVector3(),
+            Orientation = new System.Numerics.Vector2(r.ReadFloat(), r.ReadFloat()),
+            Width = r.ReadFloat(),
+            CarModel = r.ReadUInt(),
+            Flags = r.ReadUInt(),
+            Color1 = r.ReadInt(),
+            Color2 = r.ReadInt(),
+            Color3 = r.ReadInt(),
+            Color4 = r.ReadInt(),
+            PopGroup = r.ReadUInt(),
+            Livery = r.ReadInt(),
+        };
+        map.SetCarGenerator(index, after);
+        return new CarGeneratorEdit(map, index, before, after, description);
+    }
+}

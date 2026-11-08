@@ -45,15 +45,15 @@ public sealed class YmapReader : IMapDataReader
 
     // CCarGen fields (the first 16 bytes are unused).
     internal const int CarGeneratorSize = 80;
-    private const int CarPosition = 16;
-    private const int CarOrientX = 32;
-    private const int CarOrientY = 36;
-    private const int CarPerpendicularLength = 40;
-    private const int CarModel = 44;
-    private const int CarFlags = 48;
-    private const int CarColor1 = 52;
-    private const int CarPopGroup = 68;
-    private const int CarLivery = 72;
+    internal const int CarPosition = 16;
+    internal const int CarOrientX = 32;
+    internal const int CarOrientY = 36;
+    internal const int CarPerpendicularLength = 40;
+    internal const int CarModel = 44;
+    internal const int CarFlags = 48;
+    internal const int CarColor1 = 52;
+    internal const int CarPopGroup = 68;
+    internal const int CarLivery = 72;
 
     public MapData Read(ReadOnlySpan<byte> data)
     {

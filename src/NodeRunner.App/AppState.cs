@@ -622,6 +622,11 @@ internal sealed class AppState
             Select(null);
             SelectedOccluder = new OccluderSelection(boxEdit.File, OcclusionLayerPart.Boxes, boxEdit.Index);
         }
+        else if (edit is CarGeneratorEdit spotEdit)
+        {
+            Select(null);
+            SelectedCarGenerator = new CarGeneratorSelection(spotEdit.Map, spotEdit.Index);
+        }
         else if (edit is OccluderPresenceEdit presenceEdit)
         {
             Select(null);
@@ -1043,6 +1048,7 @@ internal sealed class AppState
                 .Where(entity => entity.Interior is null).Select(entity => entity.Map)
                 // The project's maps placing an interior whose portals changed: the instance stores its number of exits.
                 .Concat(history.All.OfType<IInteriorEdit>().Select(e => e.Interior.Map).Where(m => m is { IsCustom: true }))
+                .Concat(history.All.OfType<CarGeneratorEdit>().Select(e => e.Map))
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()

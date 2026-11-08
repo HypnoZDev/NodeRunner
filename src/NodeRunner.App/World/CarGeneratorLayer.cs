@@ -32,6 +32,7 @@ internal sealed class CarGeneratorLayer : IDisposable
     private MapLibrary? _library;
     private Task<BuildResult>? _building;
     private Vector2 _builtCenter = new(float.NaN);
+    private int _builtRevision;
     private List<CarGeneratorSelection> _spots = [];
 
     public int Count => _spots.Count;
@@ -63,10 +64,11 @@ internal sealed class CarGeneratorLayer : IDisposable
             return;
 
         var center = new Vector2(cameraPosition.X, cameraPosition.Y);
-        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance)
+        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance || _builtRevision != MapData.CarGeneratorRevision)
         {
             var library = _library;
             _builtCenter = center;
+            _builtRevision = MapData.CarGeneratorRevision;
             _building = Task.Run(() => Build(library, center));
         }
     }

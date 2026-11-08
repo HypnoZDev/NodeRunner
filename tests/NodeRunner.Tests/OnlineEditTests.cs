@@ -53,6 +53,7 @@ public class OnlineEditTests
                 new MapEntity { ArchetypeHash = InteriorHash, Position = new(100, 0, 0), StoredRotation = Quarter, IsInterior = true },
                 new MapEntity { ArchetypeHash = InteriorHash, Position = new(0, 500, 10), IsInterior = true },
             ],
+            CarGenerators = [new CarGenerator { Position = new(40, 0, 0), Orientation = new(0, 5), Width = 2.5f, SourceIndex = 0 }],
         };
         var library = MapLibrary.Create([interior], (map, "test.ymap"));
         var paths = new PathNetwork();
@@ -90,6 +91,8 @@ public class OnlineEditTests
                 }
             }
         }
+        foreach (var spot in w.Map.CarGenerators)
+            text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery}\n");
         var archetype = w.Library.GetArchetype(InteriorHash)!;
         foreach (var room in archetype.InteriorRooms)
             text.Append(CultureInfo.InvariantCulture, $"room {room.Name} {V(room.BoundsMin)} {V(room.BoundsMax)} {room.Flags}\n");
@@ -193,6 +196,12 @@ public class OnlineEditTests
         var nodeBefore = node.Position;
         a.Paths.MoveNode(node, new Vector3(8, 8, 8));
         Share(new PathNodeMoveEdit(a.Paths, node, nodeBefore, node.Position, "Déplacer un nœud"));
+
+        // A parking spot moved, turned and given a model.
+        var spotBefore = a.Map.CarGenerators[0];
+        var spotAfter = spotBefore with { Position = new(41, 2, 0.5f), Orientation = new(-4, 0), Width = 3f, CarModel = 0xB779A091, Flags = 0x1, Color1 = 5, Color4 = 7, PopGroup = 0x99, Livery = 2 };
+        a.Map.SetCarGenerator(0, spotAfter);
+        Share(new CarGeneratorEdit(a.Map, 0, spotBefore, spotAfter, "Modifier la place"));
 
         // Undone and redone the same way on both computers.
         while (a.History.CanUndo)

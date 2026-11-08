@@ -66,6 +66,32 @@ public class CarGeneratorTests
     }
 
     [Fact]
+    public void A_changed_parking_spot_is_written_back_to_its_map_file()
+    {
+        var file = BuildYmap((new Vector3(10, 20, 30), new Vector2(0, 5), 2.5f, 0xABCD), (new Vector3(-4, 1, 2), new Vector2(3, 0), 3f, 0));
+        var map = new YmapReader().Read(file);
+        var changed = map.CarGenerators[1] with
+        {
+            Position = new Vector3(-6, 3, 2.5f), Orientation = new Vector2(0, -4.5f), Width = 2.8f, CarModel = 0x1234, Flags = 0x60,
+            Color1 = 3, Color2 = 4, Color3 = 5, Color4 = 6, PopGroup = 0x77, Livery = 4,
+        };
+        var edit = new Editor.CarGeneratorEdit(map, 1, map.CarGenerators[1], changed, "test");
+        edit.Redo();
+
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content);
+
+        Assert.Equal(map.CarGenerators[0], written.CarGenerators[0]);
+        Assert.Equal(changed, written.CarGenerators[1]);
+        Assert.True(written.StreamingExtentsMin.X <= -6f && written.StreamingExtentsMax.Y >= 20f);
+
+        // Unchanged spots give the same values back; undoing puts the file's spot back.
+        edit.Undo();
+        var undone = new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content);
+        Assert.Equal(new YmapReader().Read(file).CarGenerators, undone.CarGenerators);
+    }
+
+    [Fact]
     public void A_map_file_without_parking_spots_reads_an_empty_list() =>
         Assert.Empty(new YmapReader().Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd))).CarGenerators);
 }

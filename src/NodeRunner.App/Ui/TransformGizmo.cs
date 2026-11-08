@@ -23,6 +23,7 @@ internal sealed class TransformGizmo(AppState state)
     private const float MinScale = 0.01f;
     private const float MinBoxSide = 0.25f;     // Metres: the precision of a box occluder in the game's files.
     private float BoxSizeStep => MoveStep;
+    private const float MinSpotSide = 0.5f;
 
     private enum Kind { None, Axis, Plane, Ring, ScaleAxis, ScaleUniform }
 
@@ -36,6 +37,8 @@ internal sealed class TransformGizmo(AppState state)
         public Vector3 NodeStart;
         public OccluderSelection? Occluder;
         public OccluderBox? BoxStart;
+        public CarGeneratorSelection? Spot;
+        public CarGenerator? SpotStart;
         public required TransformTool Tool;
         public required Handle Handle;
         public required Placement[] Starts;
@@ -64,7 +67,8 @@ internal sealed class TransformGizmo(AppState state)
     private Vector3 _cameraPosition, _viewDirection, _rayOrigin, _rayDirection, _pivot;
     private float _length;                  // World length of an arrow at the object's distance.
     private readonly Vector3[] _axes = new Vector3[3];
-    private bool _boxMode;                  // A box occluder: Z ring only, sides resized one by one.
+    private bool _boxMode;                  // A box occluder or a parking spot: Z ring only, sides resized one by one.
+    private bool _spotMode;                 // A parking spot: no height.
 
     private static readonly Vector4[] AxisColors = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
     private static readonly string[] AxisNames = ["X", "Y", "Z"];
@@ -80,11 +84,13 @@ internal sealed class TransformGizmo(AppState state)
         var entities = state.EditableSelection;
         var node = entities.Count == 0 && state.World.PathNetwork is not null ? state.SelectedPathNode : null;
         var occluder = entities.Count == 0 && node is null && state.SelectedOccluder is { Box: not null } selected ? selected : null;
+        var spot = entities.Count == 0 && node is null && occluder is null && state.SelectedCarGenerator is { } selectedSpot ? selectedSpot : null;
         var tool = state.Tool;
-        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Tool != tool))
-            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder);
+        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Spot != spot || current.Tool != tool))
+            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder && current.Spot == spot);
 
-        _boxMode = occluder is not null;
+        _spotMode = spot is not null;
+        _boxMode = occluder is not null || _spotMode;
         if (tool == TransformTool.Collision)
             return;
         if (node is not null)
@@ -95,6 +101,11 @@ internal sealed class TransformGizmo(AppState state)
         else if (occluder?.Box is { } box)
         {
             if (tool == TransformTool.Select || !SetUpFrame(box.Center, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, box.Angle), tool))
+                return;
+        }
+        else if (spot?.Spot is { } parked)
+        {
+            if (tool == TransformTool.Select || !SetUpFrame(parked.Position, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, parked.Angle), tool))
                 return;
         }
         else if (entities.Count == 0 || tool == TransformTool.Select || (tool == TransformTool.Scale && entities.Any(e => e.IsInterior)))
@@ -121,7 +132,7 @@ internal sealed class TransformGizmo(AppState state)
         {
             _hovered = FindHovered(tool, mouse);
             if (_hovered.Kind != Kind.None && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-                BeginDrag(entities, node, occluder, tool, _hovered, mouse);
+                BeginDrag(entities, node, occluder, spot, tool, _hovered, mouse);
         }
 
         if (_drag is not null || _hovered.Kind != Kind.None)
@@ -274,7 +285,7 @@ internal sealed class TransformGizmo(AppState state)
             return new Handle(Kind.ScaleUniform);
         var best = default(Handle);
         float bestDistance = HoverDistance + 2f;
-        for (int a = 0; a < 3; a++)
+        for (int a = 0; a < (_spotMode ? 2 : 3); a++)
         {
             if (!AxisUsable(a) || !TryProject(_pivot + _axes[a] * _length, out var tip))
                 continue;
@@ -296,15 +307,17 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Dragging ---
 
-    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, TransformTool tool, Handle handle, Vector2 mouse)
+    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, CarGeneratorSelection? spot, TransformTool tool, Handle handle, Vector2 mouse)
     {
         var drag = new Drag
         {
-            Entities = node is null && occluder is null ? [.. entities] : [],
+            Entities = node is null && occluder is null && spot is null ? [.. entities] : [],
             Node = node,
             NodeStart = node?.Position ?? default,
             Occluder = occluder,
             BoxStart = occluder?.Box,
+            Spot = spot,
+            SpotStart = spot?.Spot,
             Tool = tool,
             Handle = handle,
             Starts = [.. entities.Select(Placement.Of)],
@@ -408,6 +421,12 @@ internal sealed class TransformGizmo(AppState state)
                 if (snap) degrees = GizmoMath.Snap(degrees, RotateStep);
                 if (drag.Occluder is { } turned && drag.BoxStart is { } turnedStart)
                     OccluderMaps.SetBox(turned.File, turnedStart with { Angle = turnedStart.Angle + degrees * MathF.PI / 180f });
+                if (drag.Spot is { } turnedSpot && drag.SpotStart is { } spotStart)
+                {
+                    var o = spotStart.Orientation;
+                    float c = MathF.Cos(degrees * MathF.PI / 180f), sn = MathF.Sin(degrees * MathF.PI / 180f);
+                    turnedSpot.Map.SetCarGenerator(turnedSpot.Index, spotStart with { Orientation = new Vector2(o.X * c - o.Y * sn, o.X * sn + o.Y * c) });
+                }
                 var turn = Quaternion.CreateFromAxisAngle(axis, degrees * MathF.PI / 180f);
                 for (int i = 0; i < drag.Entities.Length; i++)
                     GroupTransform.Rotate(drag.Starts[i], pivot, turn).ApplyTo(drag.Entities[i]);
@@ -421,6 +440,21 @@ internal sealed class TransformGizmo(AppState state)
                 float factor = drag.Handle.Kind == Kind.ScaleUniform
                     ? 1f + (moved.X - moved.Y) / (2f * LengthPixels) // Right or up: bigger.
                     : 1f + Vector2.Dot(moved, drag.ScreenDirection) / drag.ScreenLength;
+                if (drag.Spot is { } resizedSpot && drag.SpotStart is { } spotSize)
+                {
+                    float length = spotSize.Length, spotWidth = spotSize.Width;
+                    float f = MathF.Max(0.01f, factor);
+                    if (drag.Handle.Kind == Kind.ScaleUniform || a == 0) length *= f;
+                    if (drag.Handle.Kind == Kind.ScaleUniform || a == 1) spotWidth *= f;
+                    if (snap)
+                        (length, spotWidth) = (GizmoMath.Snap(length, BoxSizeStep), GizmoMath.Snap(spotWidth, BoxSizeStep));
+                    length = MathF.Max(length, MinSpotSide);
+                    spotWidth = MathF.Max(spotWidth, MinSpotSide);
+                    var forward = spotSize.Length > 1e-4f ? spotSize.Orientation / spotSize.Length : Vector2.UnitX;
+                    resizedSpot.Map.SetCarGenerator(resizedSpot.Index, spotSize with { Orientation = forward * length, Width = spotWidth });
+                    drag.Feedback = L($"Place  {length:0.00} x {spotWidth:0.00} m");
+                    break;
+                }
                 if (drag.Occluder is { } resized && drag.BoxStart is { } sizeStart)
                 {
                     var size = sizeStart.Size;
@@ -461,7 +495,7 @@ internal sealed class TransformGizmo(AppState state)
     }
 
     private bool FollowsGround(Drag drag) =>
-        drag.Occluder is null && state.Settings.FollowGround
+        drag.Occluder is null && drag.Spot is null && state.Settings.FollowGround
         && (drag.Handle.Kind == Kind.Axis && drag.Handle.Axis < 2 || drag.Handle.Kind == Kind.Plane && drag.Handle.Axis == 2);
 
     // Moves the dragged objects by delta; following the ground, the height of each is then taken from the collision
@@ -474,6 +508,8 @@ internal sealed class TransformGizmo(AppState state)
         drag.LastDelta = delta;
         if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
             OccluderMaps.SetBox(occluder.File, boxStart with { Center = boxStart.Center + delta });
+        if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
+            spot.Map.SetCarGenerator(spot.Index, spotStart with { Position = spotStart.Position + delta });
         if (drag.Node is { } node && state.World.PathNetwork is { } network)
         {
             var target = drag.NodeStart + delta;
@@ -509,6 +545,8 @@ internal sealed class TransformGizmo(AppState state)
     {
         if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
             OccluderMaps.SetBox(occluder.File, boxStart);
+        if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
+            spot.Map.SetCarGenerator(spot.Index, spotStart);
         if (drag.Node is { } node)
             state.World.PathNetwork?.MoveNode(node, drag.NodeStart);
         for (int i = 0; i < drag.Entities.Length; i++)
@@ -522,6 +560,20 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is not { } drag)
             return;
         _drag = null;
+        if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
+        {
+            if (!commit)
+            {
+                spot.Map.SetCarGenerator(spot.Index, spotStart);
+                return;
+            }
+            if (spot.Spot is { } spotEnd && spotEnd != spotStart)
+            {
+                string spotVerb = drag.Tool switch { TransformTool.Rotate => L("Tourner"), TransformTool.Scale => L("Redimensionner"), _ => L("Déplacer") };
+                state.History.Add(new CarGeneratorEdit(spot.Map, spot.Index, spotStart, spotEnd, L($"{spotVerb} la place de véhicule {spot.Index}")));
+            }
+            return;
+        }
         if (drag.Occluder is { } occluder && drag.BoxStart is { } boxStart)
         {
             if (!commit)
@@ -690,7 +742,7 @@ internal sealed class TransformGizmo(AppState state)
 
     private void DrawScale(ImDrawListPtr drawList, Vector2 center)
     {
-        for (int a = 0; a < 3; a++)
+        for (int a = 0; a < (_spotMode ? 2 : 3); a++)
         {
             var handle = new Handle(Kind.ScaleAxis, a);
             // X and Y change the same horizontal scale: both light up together.

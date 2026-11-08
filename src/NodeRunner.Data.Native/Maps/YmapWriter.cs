@@ -31,6 +31,7 @@ public sealed class YmapWriter : IMapDataWriter
         foreach (var entity in kept)
             WriteEntity(document, sources[entity.SourceIndex], entity);
         WriteEntityPointers(document, mapData, kept.Select(e => sources[e.SourceIndex]).ToList());
+        WriteCarGenerators(document, mapData, map.CarGenerators);
 
         WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
         WriteVector3(mapData, YmapReader.MapStreamingMax, extents.StreamingMax);
@@ -82,6 +83,8 @@ public sealed class YmapWriter : IMapDataWriter
         uint pointerStructure = document.Blocks[MetaDocument.DecodePointer(
             BinaryPrimitives.ReadUInt64LittleEndian(templateMapData.AsSpan(YmapReader.MapEntities))).Block].Structure;
 
+        if (map.CarGenerators.Count > 0)
+            throw new InvalidDataException("Les places de véhicules d'une carte créée ne sont pas encore prises en charge.");
         MetaDocument? saved = map.SavedContent is { } content ? MetaDocument.Read(content) : null;
         var savedItems = saved is null ? [] : EntityItems(saved, saved.Blocks[saved.RootBlock].Data);
 
@@ -301,6 +304,40 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt64LittleEndian(field, items.Count == 0 ? 0 : MetaDocument.Pointer(arrayBlock, arrayOffset));
         BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)items.Count);  // Count.
         BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count); // Capacity.
+    }
+
+    // The parking spots, written in place (same number, same order as in the file).
+    private static void WriteCarGenerators(MetaDocument document, byte[] mapData, IReadOnlyList<CarGenerator> spots)
+    {
+        var field = mapData.AsSpan(YmapReader.MapCarGenerators);
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(field[8..]);
+        if (spots.Count != count || spots.Where((s, i) => s.SourceIndex != i).Any())
+            throw new InvalidDataException("L'ajout ou la suppression de places de véhicules n'est pas encore pris en charge.");
+        if (count == 0)
+            return;
+        var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(field));
+        if (block < 0 || document.Blocks[block].Structure != YmapReader.CarGeneratorStructure)
+            throw new InvalidDataException("Places de véhicules (CCarGen) introuvables dans le fichier.");
+        var data = document.Blocks[block].Data;
+        if (offset + count * YmapReader.CarGeneratorSize > data.Length)
+            throw new InvalidDataException("Places de véhicules (CCarGen) tronquées dans le fichier.");
+        for (int i = 0; i < count; i++)
+        {
+            var spot = spots[i];
+            int o = offset + i * YmapReader.CarGeneratorSize;
+            WriteVector3(data, o + YmapReader.CarPosition, spot.Position);
+            WriteFloat(data, o + YmapReader.CarOrientX, spot.Orientation.X);
+            WriteFloat(data, o + YmapReader.CarOrientY, spot.Orientation.Y);
+            WriteFloat(data, o + YmapReader.CarPerpendicularLength, spot.Width);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarModel), spot.CarModel);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarFlags), spot.Flags);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1), spot.Color1);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 4), spot.Color2);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 8), spot.Color3);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 12), spot.Color4);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarPopGroup), spot.PopGroup);
+            data[o + YmapReader.CarLivery] = (byte)(sbyte)spot.Livery;
+        }
     }
 
     private static uint ReadUInt32(MetaDocument document, (int Block, int Offset) item, int field) =>
