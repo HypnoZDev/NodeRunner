@@ -124,11 +124,26 @@ internal sealed class AppState
         SelectedPortal = portal;
     }
 
+    // A parking spot selected in the 3D view (an object selection clears it). Forgotten when the map is loaded again.
+    public CarGeneratorSelection? SelectedCarGenerator
+    {
+        get => _selectedCarGeneratorLibrary == World.Maps && _selectedCarGenerator is { Spot: not null } s ? s : null;
+        set
+        {
+            _selectedCarGenerator = value;
+            _selectedCarGeneratorLibrary = World.Maps;
+        }
+    }
+
+    private CarGeneratorSelection? _selectedCarGenerator;
+    private MapLibrary? _selectedCarGeneratorLibrary;
+
     public void Select(MapEntity? entity)
     {
         _selection.Clear();
         SelectedPathNode = null;
         SelectedOccluder = null;
+        SelectedCarGenerator = null;
         SelectedRoom = null;
         SelectedPortal = null;
         if (entity is not null)
@@ -1492,7 +1507,7 @@ internal sealed class AppState
 
     private static bool IsHiddenByDefault(string layer) =>
         layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
-        || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal);
+        || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName;
 
     public void SetLayerVisible(string layer, bool visible)
     {

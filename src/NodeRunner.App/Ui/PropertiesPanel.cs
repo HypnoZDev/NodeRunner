@@ -89,6 +89,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             DrawPathNode(node, network);
         else if (state.SelectedOccluder is { } occluder)
             DrawOccluder(occluder);
+        else if (state.SelectedCarGenerator is { Spot: { } spot } carGenerator)
+            DrawCarGenerator(carGenerator, spot, state.World.Names ?? new HashNames());
         else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
                  && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
             DrawRoom(room, roomInterior, roomLibrary);
@@ -774,6 +776,60 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         Widgets.Hint(L("Le jeu ne dessine pas ce qui est caché derrière un occluder. Échap pour désélectionner ; ")
             + L("masquez le calque Occlusion pour sélectionner les bâtiments."), wrap: true);
+    }
+
+    // Heading as in FiveM: degrees from north, counterclockwise (the front of a car is its Y axis).
+    private static float CarHeading(CarGenerator spot) => ((spot.Angle * 180f / MathF.PI - 90f) % 360f + 360f) % 360f;
+
+    private void DrawCarGenerator(CarGeneratorSelection selection, CarGenerator spot, HashNames names)
+    {
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L($"{Icons.Car}  Place de véhicule {selection.Index}"));
+        ImGui.PopFont();
+        string file = Path.GetFileName(selection.Map.FilePath ?? "");
+        Widgets.Hint($"{Icons.File}  {file}");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort) && selection.Map.FilePath is { } path)
+            ImGui.SetTooltip(path);
+        float heading = CarHeading(spot);
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à la place")))
+            state.FocusOn(spot.Position, MathF.Max(spot.Length, 4f));
+        ImGui.SameLine();
+        string copied = state.FormatPosition(spot.Position, heading);
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
+            ImGui.SetClipboardText(copied);
+
+        if (Widgets.Section(L("Place"), "cargen_place") && Widgets.BeginProperties("##cargen_place"))
+        {
+            Widgets.PropertyText(L("Position"), $"{spot.Position.X:0.00}, {spot.Position.Y:0.00}, {spot.Position.Z:0.00}",
+                L("Centre de la place, en mètres. X = est, Y = nord, Z = haut."));
+            Widgets.PropertyText(L("Cap"), $"{heading:0.0}°", L("Sens de l'avant du véhicule, en degrés depuis le nord (comme le cap d'un vector4 FiveM)."));
+            Widgets.PropertyText(L("Longueur"), $"{spot.Length:0.00} m");
+            Widgets.PropertyText(L("Largeur"), $"{spot.Width:0.00} m");
+            Widgets.EndProperties();
+        }
+
+        if (Widgets.Section(L("Véhicule"), "cargen_vehicle") && Widgets.BeginProperties("##cargen_vehicle"))
+        {
+            Widgets.PropertyText(L("Modèle"), spot.CarModel == 0 ? L("au hasard") : names.Describe(spot.CarModel),
+                L("Modèle garé à cette place. Au hasard : un modèle du groupe de population, sinon un véhicule de la zone."));
+            Widgets.PropertyText(L("Groupe"), spot.PopGroup == 0 ? L("aucun") : names.Describe(spot.PopGroup),
+                L("Groupe de population (popgroups) dans lequel le jeu choisit le modèle."));
+            static string Color(int c) => c < 0 ? L("au hasard") : c.ToString();
+            Widgets.PropertyText(L("Couleurs"), $"{Color(spot.Color1)} / {Color(spot.Color2)} / {Color(spot.Color3)} / {Color(spot.Color4)}",
+                L("Numéros des couleurs de carrosserie (body color remap) 1 à 4."));
+            Widgets.PropertyText(L("Livrée"), spot.Livery < 0 ? L("au hasard") : spot.Livery.ToString());
+            Widgets.PropertyText(L("Drapeaux"), $"0x{spot.Flags:X}", L("Réglages de la place (heures d'apparition, priorité...)."));
+            Widgets.EndProperties();
+        }
+
+        if (Widgets.Section(L("Fichier"), "cargen_file") && Widgets.BeginProperties("##cargen_file"))
+        {
+            Widgets.PropertyText(L("YMAP"), file, selection.Map.FilePath);
+            Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.CarGenerators.Count} place(s)"));
+            Widgets.EndProperties();
+        }
+        Widgets.Hint(L("Le jeu peut garer un véhicule à cette place quand le joueur passe à proximité. Échap pour désélectionner ; ")
+            + L("masquez le calque Véhicules garés pour sélectionner les objets."), wrap: true);
     }
 
     // Room flags (CMloRoomDef), as named by the community tools.

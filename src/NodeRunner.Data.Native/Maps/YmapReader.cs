@@ -11,6 +11,7 @@ public sealed class YmapReader : IMapDataReader
     internal const uint MapDataStructure = 3545841574;
     internal const uint EntityStructure = 3461354627;
     internal const uint InteriorInstanceStructure = 164374718;
+    internal const uint CarGeneratorStructure = 0x6EE83BDF;
 
     private const int MapDataSize = 512;
     internal const int EntitySize = 128;
@@ -26,6 +27,7 @@ public sealed class YmapReader : IMapDataReader
     internal const int MapEntitiesMin = 64;
     internal const int MapEntitiesMax = 80;
     internal const int MapEntities = 96;
+    internal const int MapCarGenerators = 240;
 
     // CEntityDef fields.
     internal const int EntityArchetype = 8;
@@ -40,6 +42,18 @@ public sealed class YmapReader : IMapDataReader
     private const int EntityChildLodDistance = 80;
     private const int EntityLodLevel = 84;
     internal const int EntityChildCount = 88;
+
+    // CCarGen fields (the first 16 bytes are unused).
+    internal const int CarGeneratorSize = 80;
+    private const int CarPosition = 16;
+    private const int CarOrientX = 32;
+    private const int CarOrientY = 36;
+    private const int CarPerpendicularLength = 40;
+    private const int CarModel = 44;
+    private const int CarFlags = 48;
+    private const int CarColor1 = 52;
+    private const int CarPopGroup = 68;
+    private const int CarLivery = 72;
 
     public MapData Read(ReadOnlySpan<byte> data)
     {
@@ -71,7 +85,38 @@ public sealed class YmapReader : IMapDataReader
             EntitiesExtentsMin = meta.Vector3(map + MapEntitiesMin),
             EntitiesExtentsMax = meta.Vector3(map + MapEntitiesMax),
             Entities = entities,
+            CarGenerators = ReadCarGenerators(meta, map),
         };
+    }
+
+    private static List<CarGenerator> ReadCarGenerators(MetaResource meta, int map)
+    {
+        var (offset, count) = meta.ReadArray(map + MapCarGenerators, CarGeneratorSize);
+        var result = new List<CarGenerator>(count);
+        if (count == 0)
+            return result;
+        meta.RequireStructure(CarGeneratorStructure, CarGeneratorSize, "CCarGen");
+        var d = meta.Data;
+        for (int i = 0; i < count; i++)
+        {
+            int o = offset + i * CarGeneratorSize;
+            result.Add(new CarGenerator
+            {
+                Position = meta.Vector3(o + CarPosition),
+                Orientation = new Vector2(meta.Float(o + CarOrientX), meta.Float(o + CarOrientY)),
+                Width = meta.Float(o + CarPerpendicularLength),
+                CarModel = d.UInt32(o + CarModel),
+                Flags = d.UInt32(o + CarFlags),
+                Color1 = (int)d.UInt32(o + CarColor1),
+                Color2 = (int)d.UInt32(o + CarColor1 + 4),
+                Color3 = (int)d.UInt32(o + CarColor1 + 8),
+                Color4 = (int)d.UInt32(o + CarColor1 + 12),
+                PopGroup = d.UInt32(o + CarPopGroup),
+                Livery = (sbyte)d.Byte(o + CarLivery),
+                SourceIndex = i,
+            });
+        }
+        return result;
     }
 
     // Offsets of the entities (ordinary ones and interior instances) of the CMapData at map, in file order.

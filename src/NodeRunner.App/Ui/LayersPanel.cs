@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
 // (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller)
+internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, CarGeneratorLayer carGeneratorLayer)
 {
     private const int MaxScriptedMapsListed = 300;
 
@@ -70,6 +70,12 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
                 LayerRow(RoomLayer.LayerName(part), RoomLayer.Color(part), RoomLayer.Label(part),
                     part == RoomLayerPart.Rooms ? Widgets.Count(roomLayer.Rooms.Count) : null);
             Widgets.Hint(L($"Intérieurs à moins de {RoomLayer.Radius:0} m. Survolez une salle ou un portail pour voir ses détails, cliquez dessus pour le modifier."), wrap: true);
+        }
+
+        if (LayerSection(L("Véhicules garés (car generators)"), "cargens", [CarGeneratorLayer.LayerName], defaultOpen: false))
+        {
+            LayerRow(CarGeneratorLayer.LayerName, CarGeneratorLayer.Color, L("Places de véhicules"), Widgets.Count(carGeneratorLayer.Count));
+            Widgets.Hint(L($"Places à moins de {CarGeneratorLayer.Radius:0} m où le jeu peut garer un véhicule ; la flèche montre l'avant. Cliquez sur une place pour voir ses détails."), wrap: true);
         }
 
         if (LayerSection(L("Occlusion"), "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))

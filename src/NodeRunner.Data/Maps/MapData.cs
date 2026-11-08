@@ -28,6 +28,9 @@ public sealed class MapData
     // A new list, not changed in place: background threads may be going through the old one.
     internal void AddEntity(MapEntity entity) => _entities = [.. _entities, entity];
 
+    // Parking spots where the game may park a car.
+    public IReadOnlyList<CarGenerator> CarGenerators { get; init; } = [];
+
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }
 

@@ -27,6 +27,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         (L("Collisions"), Icons.Mountain, CollisionLayer.Surfaces.Select(CollisionLayer.LayerName).ToArray()),
         (L("Salles et portails"), Icons.House, RoomLayer.Parts.Select(RoomLayer.LayerName).ToArray()),
         (L("Occlusion"), Icons.ScanEye, OcclusionLayer.Parts.Select(OcclusionLayer.LayerName).ToArray()),
+        (L("Véhicules garés"), Icons.Car, [CarGeneratorLayer.LayerName]),
     ];
 
     private static readonly (Vector3 Direction, string Label, Vector4 Color)[] Axes =

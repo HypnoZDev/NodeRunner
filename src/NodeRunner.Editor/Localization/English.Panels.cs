@@ -286,5 +286,9 @@ public static partial class English
         ("Ctrl+Z / Ctrl+Y", "Ctrl+Z / Ctrl+Y"),
         ("Réglages", "Settings"),
         ("Données", "Data"),
+        ("Véhicules garés", "Parked vehicles"),
+        ("Véhicules garés (car generators)", "Parked vehicles (car generators)"),
+        ("Places de véhicules", "Vehicle spots"),
+        ("Places à moins de {0} m où le jeu peut garer un véhicule ; la flèche montre l'avant. Cliquez sur une place pour voir ses détails.", "Spots within {0} m where the game may park a vehicle; the arrow shows the front. Click a spot to see its details."),
     ];
 }

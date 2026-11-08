@@ -45,6 +45,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly EntityBoxLayer _entityBoxLayer = new();
     private readonly RoomLayer _roomLayer = new();
     private readonly OcclusionLayer _occlusionLayer = new();
+    private readonly CarGeneratorLayer _carGeneratorLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
     private WindowAlpha? _windowAlpha;
@@ -56,7 +57,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -306,6 +307,7 @@ internal sealed unsafe partial class MainForm : Form
         _entityBoxLayer.Dispose();
         _roomLayer.Dispose();
         _occlusionLayer.Dispose();
+        _carGeneratorLayer.Dispose();
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
@@ -574,6 +576,10 @@ internal sealed unsafe partial class MainForm : Form
         bool occlusionEnabled = OcclusionLayer.Parts.Any(p => _state.IsLayerVisible(OcclusionLayer.LayerName(p)));
         _occlusionLayer.Update(_state.World, lines, camera.Position, occlusionEnabled);
         _occlusionLayer.Draw(lines, viewProjection, camera.Position, p => _state.IsLayerVisible(OcclusionLayer.LayerName(p)));
+        bool carGeneratorsEnabled = _state.IsLayerVisible(CarGeneratorLayer.LayerName);
+        _carGeneratorLayer.Update(_state.World, lines, camera.Position, carGeneratorsEnabled);
+        if (carGeneratorsEnabled)
+            _carGeneratorLayer.Draw(lines, viewProjection, camera.Position);
 
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));
@@ -590,6 +596,8 @@ internal sealed unsafe partial class MainForm : Form
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
         if (_state.SelectedOccluder is { } selectedOccluder)
             _occlusionLayer.DrawSelected(lines, selectedOccluder, viewProjection, camera.Position);
+        if (_state.SelectedCarGenerator?.Spot is { } selectedSpot)
+            CarGeneratorLayer.DrawSelected(lines, selectedSpot, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
@@ -825,6 +833,14 @@ internal sealed unsafe partial class MainForm : Form
         {
             _state.Select(null);
             _state.SelectedOccluder = occluder;
+            return;
+        }
+        // Parking spots, while their layer is shown.
+        if (!control && _state.IsLayerVisible(CarGeneratorLayer.LayerName)
+            && _carGeneratorLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height)) is { } spot)
+        {
+            _state.Select(null);
+            _state.SelectedCarGenerator = spot;
             return;
         }
         // Then portals and rooms, while their layer is shown.
