@@ -967,8 +967,23 @@ internal sealed unsafe partial class MainForm : Form
                 lines.AddBox(archetype.BoundsMin, archetype.BoundsMax, entity.Transform,
                     i == selected.Count - 1 ? SelectionBoxColor : SecondarySelectionBoxColor);
         }
+        // How the selected doors open.
+        if (_state.World.Names is { } names)
+        {
+            foreach (var door in selected.Take(MaxDoorArcs))
+            {
+                if (library.GetArchetype(door.ArchetypeHash) is not { } type || !Doors.IsDoor(names.TryGet(door.ArchetypeHash)))
+                    continue;
+                var transform = door.Transform;
+                foreach (var (from, to) in DoorShape.Of(type, names.TryGet(door.ArchetypeHash)).Lines())
+                    lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorArcColor);
+            }
+        }
         lines.Flush(viewProjection, _state.Camera.Position, onTop: true);
     }
+
+    private const int MaxDoorArcs = 40;
+    private static readonly Vector4 DoorArcColor = new(0.35f, 1f, 0.55f, 0.9f);
 
     private static readonly Vector4 MarkerColor = new(0.30f, 0.55f, 1f, 1f);
 

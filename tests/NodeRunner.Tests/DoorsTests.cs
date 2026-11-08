@@ -78,4 +78,24 @@ public class DoorsTests
         var pairs = DoorCheck.Duplicates([a, b, far], (_, _) => all, Name);
         Assert.Single(pairs);
     }
+
+    private static Archetype Type(Vector3 min, Vector3 max, uint flags = DoorCheck.DynamicFlag) =>
+        new() { NameHash = 1, BoundsMin = min, BoundsMax = max, Flags = flags };
+
+    [Fact]
+    public void DoorShapeComesFromTheModelBox()
+    {
+        var hinged = DoorShape.Of(Type(new Vector3(-1.1f, -0.05f, 0), new Vector3(0.02f, 0.05f, 2.2f)), "v_ilev_door");
+        Assert.Equal(DoorKind.Hinged, hinged.Kind);
+        Assert.Equal(-1f, hinged.Side);
+        Assert.Equal(1.1f, hinged.Width, 3);
+        Assert.Contains(hinged.Lines(), l => Vector3.Distance(l.To, new Vector3(0, 1.1f, 0.05f)) < 1e-3f);
+
+        Assert.Equal(DoorKind.Garage, DoorShape.Of(Type(new Vector3(-2.5f, 0, 0), new Vector3(2.5f, 0.1f, 3)), "prop_garagedoor_01").Kind);
+        Assert.Equal(DoorKind.Sliding, DoorShape.Of(Type(new Vector3(-1, 0, 0), new Vector3(1, 0.1f, 2.5f)), "prop_door_elev").Kind);
+        Assert.Equal(DoorKind.Fixed, DoorShape.Of(Type(new Vector3(-1, 0, 0), new Vector3(0, 0.1f, 2), flags: 0), "v_ilev_door").Kind);
+
+        string qb = DoorLockScript.Write([new DoorItem(1, "prop_garagedoor_01", Vector3.Zero, 0, DoorKind.Garage)], DoorLockFormat.QbDoorlock, false);
+        Assert.Contains("doorType = 'garage'", qb);
+    }
 }

@@ -67,7 +67,92 @@ public static class Doors
     }
 }
 
-public readonly record struct DoorItem(uint Hash, string? Name, Vector3 Position, float Heading);
+public readonly record struct DoorItem(uint Hash, string? Name, Vector3 Position, float Heading, DoorKind Kind = DoorKind.Hinged);
+
+public enum DoorKind
+{
+    Hinged,
+    Sliding,
+    Garage,
+    Fixed,
+}
+
+// How a door opens, from its model's box: swinging doors have their origin on the hinge (763 of the 937 opening door
+// types of the game), sliding and garage doors in their middle (measured).
+public readonly record struct DoorShape(DoorKind Kind, float Width, float Height, float Bottom, float Side)
+{
+    private const int ArcSegments = 24;
+
+    public static DoorShape Of(Archetype archetype, string? name)
+    {
+        var min = archetype.BoundsMin;
+        var max = archetype.BoundsMax;
+        float width = max.X - min.X;
+        float height = max.Z - min.Z;
+        if ((archetype.Flags & 0x20000) == 0)
+            return new DoorShape(DoorKind.Fixed, width, height, min.Z, 1f);
+        bool centered = width > 0 && MathF.Abs(min.X + max.X) < 0.15f * width && min.X < -0.2f * width;
+        if (centered)
+        {
+            string lower = name?.ToLowerInvariant() ?? "";
+            bool garage = lower.Contains("garage") || lower.Contains("roller") || lower.Contains("shutter");
+            return new DoorShape(garage ? DoorKind.Garage : DoorKind.Sliding, width, height, min.Z, 1f);
+        }
+        // The leaf goes from the hinge (origin) to the farther side.
+        bool positive = MathF.Abs(max.X) >= MathF.Abs(min.X);
+        return new DoorShape(DoorKind.Hinged, positive ? max.X : -min.X, height, min.Z, positive ? 1f : -1f);
+    }
+
+    // Lines showing how the door opens, in the model's space: swinging doors = the closed leaf and the circle swept by
+    // its edge up to 90 degrees each way; sliding = arrows along the door; garage = an arrow going up.
+    public List<(Vector3 From, Vector3 To)> Lines()
+    {
+        var lines = new List<(Vector3, Vector3)>();
+        float z = Bottom + 0.05f;
+        switch (Kind)
+        {
+            case DoorKind.Hinged:
+            {
+                float reach = Side * Width;
+                Vector3 At(float angle) => new(reach * MathF.Cos(angle), reach * MathF.Sin(angle), z);
+                for (int i = 0; i < ArcSegments; i++)
+                {
+                    float a = -MathF.PI / 2 + MathF.PI * i / ArcSegments;
+                    float b = -MathF.PI / 2 + MathF.PI * (i + 1) / ArcSegments;
+                    lines.Add((At(a), At(b)));
+                }
+                var hinge = new Vector3(0, 0, z);
+                lines.Add((hinge, At(-MathF.PI / 2)));
+                lines.Add((hinge, At(MathF.PI / 2)));
+                lines.Add((hinge, At(0)));
+                lines.Add((hinge, hinge + new Vector3(0, 0, Height)));
+                break;
+            }
+            case DoorKind.Sliding:
+            {
+                float half = Width / 2;
+                foreach (float sign in new[] { -1f, 1f })
+                {
+                    var tip = new Vector3(sign * Width, 0, z);
+                    lines.Add((new Vector3(sign * half * 0.2f, 0, z), tip));
+                    lines.Add((tip, tip - new Vector3(sign * 0.25f, 0.2f, 0)));
+                    lines.Add((tip, tip - new Vector3(sign * 0.25f, -0.2f, 0)));
+                }
+                break;
+            }
+            case DoorKind.Garage:
+            {
+                var from = new Vector3(0, 0, z);
+                var tip = new Vector3(0, 0, Bottom + Height * 1.2f);
+                lines.Add((from, tip));
+                lines.Add((tip, tip - new Vector3(0.3f, 0, 0.3f)));
+                lines.Add((tip, tip - new Vector3(-0.3f, 0, 0.3f)));
+                break;
+            }
+        }
+        return lines;
+    }
+}
 
 public enum DoorLockFormat
 {
@@ -153,14 +238,14 @@ public static class DoorLockScript
             text.Append($"Config.DoorList['{id}'] = {{\n");
             if (group.Count > 1)
             {
-                text.Append("    doorType = 'double',\n    doors = {\n");
+                text.Append(group.All(d => d.Kind == DoorKind.Sliding) ? "    doorType = 'doublesliding',\n    doors = {\n" : "    doorType = 'double',\n    doors = {\n");
                 foreach (var door in group)
                     text.Append($"        {{ {Object(door)} }},\n");
                 text.Append("    },\n");
             }
             else
             {
-                text.Append("    doorType = 'door',\n");
+                text.Append($"    doorType = '{QbType(group[0].Kind)}',\n");
                 foreach (string field in Fields(group[0]))
                     text.Append($"    {field},\n");
             }
@@ -168,6 +253,13 @@ public static class DoorLockScript
         }
         return text.ToString().TrimEnd('\n');
     }
+
+    private static string QbType(DoorKind kind) => kind switch
+    {
+        DoorKind.Sliding => "sliding",
+        DoorKind.Garage => "garage",
+        _ => "door",
+    };
 
     private static string Object(DoorItem door) => string.Join(", ", Fields(door));
 

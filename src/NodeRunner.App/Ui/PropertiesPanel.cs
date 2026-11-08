@@ -73,6 +73,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 DrawPlacement(entity, library, names);
             if (Widgets.Section(L("Fichiers"), "files"))
                 DrawFiles(entity, library, names);
+            if (Doors.IsDoor(names.TryGet(entity.ArchetypeHash)) && library.GetArchetype(entity.ArchetypeHash) is { } doorType
+                && Widgets.Section(L("Porte"), "door"))
+                DrawDoor(entity, doorType, names);
             if (Widgets.Section(L("Niveau de détail"), "lod"))
                 DrawLevelOfDetail(entity, names);
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
@@ -187,7 +190,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                     + L("Aucun YMAP modifié, donc aucun conflit avec les autres ressources.\nMarche aussi pour les portes créées par les scripts du jeu."));
             if (doors.Count > 0 && ImGui.BeginMenu(L($"{Icons.DoorOpen}  Copier pour doorlock ({doors.Count})")))
             {
-                var items = doors.Select(d => new DoorItem(d.ArchetypeHash, names.TryGet(d.ArchetypeHash), d.Position, FiveMFormat.Heading(d))).ToList();
+                var items = doors.Select(d => new DoorItem(d.ArchetypeHash, names.TryGet(d.ArchetypeHash), d.Position, FiveMFormat.Heading(d),
+                    state.World.Maps?.GetArchetype(d.ArchetypeHash) is { } type ? DoorShape.Of(type, names.TryGet(d.ArchetypeHash)).Kind : DoorKind.Hinged)).ToList();
                 int pairs = DoorLockScript.Group(items).Count(g => g.Count > 1);
                 void Copy(DoorLockFormat format, bool csharp)
                 {
@@ -224,6 +228,35 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     private (MapEntity Entity, int Structure, int Revision, MapLibrary Library, List<MapEntity> Doors)? _doors;
 
     // Selects the doors of the selected building or interior, ready for Suppr.
+    private void DrawDoor(MapEntity entity, Archetype archetype, HashNames names)
+    {
+        if (!Widgets.BeginProperties("##door"))
+            return;
+        var shape = DoorShape.Of(archetype, names.TryGet(entity.ArchetypeHash));
+        Widgets.PropertyText(L("Ouverture"), shape.Kind switch
+        {
+            DoorKind.Hinged => L("battante (gonds à l'origine du modèle)"),
+            DoorKind.Sliding => L("coulissante"),
+            DoorKind.Garage => L("porte de garage (monte)"),
+            _ => L("fixe (ne s'ouvre pas)"),
+        }, L("Déduit de la boîte du modèle : une porte battante a son origine sur les gonds, une porte coulissante ou de garage en son milieu. ")
+           + L("L'arc d'ouverture est dessiné dans la vue 3D."), shape.Kind == DoorKind.Fixed ? UiTheme.Warning : null);
+        Widgets.PropertyText(L("Taille"), L($"{archetype.BoundsMax.X - archetype.BoundsMin.X:0.00} x {shape.Height:0.00} m"),
+            L("Largeur x hauteur du modèle, en mètres."));
+        bool dynamic = (archetype.Flags & DoorCheck.DynamicFlag) != 0;
+        Widgets.PropertyText(L("Dynamic"), dynamic ? L("oui") : L("non : la porte reste figée"),
+            L($"Drapeau 0x{DoorCheck.DynamicFlag:X} du type (archétype) : sans lui, le jeu ne fait pas bouger la porte."),
+            dynamic ? null : UiTheme.Warning);
+        Widgets.PropertyText(L("Drapeau de porte"), (archetype.Flags & DoorCheck.DoorFlag) != 0 ? L("oui") : L("non"),
+            L($"Drapeau 0x{DoorCheck.DoorFlag:X} du type : présent sur la moitié des portes du jeu, sur presque aucun autre objet."));
+        var p = entity.Position;
+        Widgets.PropertyText(L("Position (doorlock)"), L($"{p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}"),
+            L("Position exacte utilisée par les scripts de serrure (objCoords). Menu ... > Copier pour doorlock."));
+        Widgets.PropertyText(L("Hash du modèle"), $"{unchecked((int)archetype.NameHash)} / 0x{archetype.NameHash:X8}",
+            L("objHash dans qb-doorlock (décimal), model dans ox_doorlock."));
+        Widgets.EndProperties();
+    }
+
     private void DrawDoorButton(MapEntity entity, HashNames names)
     {
         if (state.World.Maps is not { } library)
