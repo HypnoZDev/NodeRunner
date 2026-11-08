@@ -597,7 +597,7 @@ internal sealed unsafe partial class MainForm : Form
         if (_state.SelectedOccluder is { } selectedOccluder)
             _occlusionLayer.DrawSelected(lines, selectedOccluder, viewProjection, camera.Position);
         if (_state.SelectedCarGenerator?.Spot is { } selectedSpot)
-            CarGeneratorLayer.DrawSelected(lines, selectedSpot, viewProjection, camera.Position);
+            _carGeneratorLayer.DrawSelected(lines, _state.World, selectedSpot, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);

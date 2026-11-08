@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Numerics;
+using NodeRunner.Data.Collisions;
 using NodeRunner.Data.Maps;
+using NodeRunner.Editor;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -16,13 +19,42 @@ internal sealed class CarGeneratorLayer : IDisposable
     public const string LayerName = "CarGenerators";
     public const float Radius = 500f;
 
-    // Height of the box drawn over a spot, and how far below the spot's position it starts: the game's positions are
-    // about 1 m above the road (measured against the road nodes: median 0.94 m), the car is put on the ground below.
+    // Height of the box drawn over a spot. The game's positions are above the ground (measured against the road nodes:
+    // median 0.94 m, up to 4 m), the car is put on the ground below: the box stands on the collision under the spot,
+    // or Below the position without collision there.
     public const float Height = 1.5f;
-    public const float Below = 1f;
+    private const float Below = 1f;
+    private const float ProbeAbove = 0.5f;  // Ground looked for from a little above the position...
+    private const float ProbeDepth = 15f;   // ...down to this far below it.
 
-    private static Vector3[] BaseCorners(CarGenerator spot) =>
-        [.. spot.Corners().Select(c => c - new Vector3(0, 0, Below))];
+    // Bottom of the box of each spot (by position), found in the collision.
+    private readonly ConcurrentDictionary<Vector3, float> _grounds = new();
+    private readonly CollisionQuery _buildQuery = new();  // Used by one build at a time.
+    private readonly CollisionQuery _mainQuery = new();   // Used on the main thread (the selected spot).
+    private CollisionCatalog? _collisions;
+
+    private Vector3[] BaseCorners(CarGenerator spot)
+    {
+        float drop = spot.Position.Z - Bottom(spot);
+        return [.. spot.Corners().Select(c => c - new Vector3(0, 0, drop))];
+    }
+
+    private float Bottom(CarGenerator spot) => _grounds.TryGetValue(spot.Position, out float z) ? z : spot.Position.Z - Below;
+
+    // The ground under the spot, looked up and remembered (null: collisions not loaded yet).
+    private float? FindBottom(WorldLoader loader, CollisionQuery query, CarGenerator spot)
+    {
+        if (_grounds.TryGetValue(spot.Position, out float known))
+            return known;
+        if (loader.Collisions is null)
+            return null;
+        var p = spot.Position;
+        float from = p.Z + ProbeAbove;
+        var collisions = query.CollisionIn(loader, p with { Z = p.Z - ProbeDepth }, p with { Z = from });
+        float bottom = GroundSnap.HighestBelow(collisions, new Vector2(p.X, p.Y), from) is { } z && z > p.Z - ProbeDepth ? z : p.Z - Below;
+        _grounds[p] = bottom;
+        return bottom;
+    }
 
     private const float RebuildDistance = 60f;
     private const float SurfaceAlpha = 0.25f;
@@ -50,6 +82,13 @@ internal sealed class CarGeneratorLayer : IDisposable
             _builtCenter = new Vector2(float.NaN);
             DisposeMeshes();
         }
+        if (loader.Collisions != _collisions && _building is null)
+        {
+            // Collisions loaded (after the maps) or changed: the boxes are put on the ground again.
+            _collisions = loader.Collisions;
+            _grounds.Clear();
+            _builtCenter = new Vector2(float.NaN);
+        }
 
         if (_building is { IsCompleted: true } finished)
         {
@@ -74,7 +113,7 @@ internal sealed class CarGeneratorLayer : IDisposable
             var library = _library;
             _builtCenter = center;
             _builtRevision = MapData.CarGeneratorRevision;
-            _building = Task.Run(() => Build(library, center));
+            _building = Task.Run(() => Build(library, loader, center));
         }
     }
 
@@ -112,15 +151,16 @@ internal sealed class CarGeneratorLayer : IDisposable
         return best;
     }
 
-    // The selected spot, outlined over everything.
-    public static void DrawSelected(ColorRenderer lines, CarGenerator spot, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    // The selected spot, outlined over everything (its ground looked up again when it was moved).
+    public void DrawSelected(ColorRenderer lines, WorldLoader loader, CarGenerator spot, Matrix4x4 viewProjection, Vector3 cameraPosition)
     {
+        FindBottom(loader, _mainQuery, spot);
         AddOutline(lines.AddLine, spot, new Vector4(1f, 0.95f, 0.35f, 1f));
         lines.Flush(viewProjection, cameraPosition, onTop: true);
     }
 
     // Box of the spot and arrow on its top, towards the front.
-    private static void AddOutline(Action<Vector3, Vector3, Vector4> addLine, CarGenerator spot, Vector4 color)
+    private void AddOutline(Action<Vector3, Vector3, Vector4> addLine, CarGenerator spot, Vector4 color)
     {
         var c = BaseCorners(spot);
         var up = new Vector3(0, 0, Height);
@@ -136,7 +176,7 @@ internal sealed class CarGeneratorLayer : IDisposable
         var f = new Vector3(forward, 0);
         var side = new Vector3(forward.Y, -forward.X, 0);
         float half = spot.Length / 2;
-        var top = spot.Position + up - new Vector3(0, 0, Below);
+        var top = spot.Position with { Z = Bottom(spot) } + up;
         var tip = top + f * (half * 0.9f);
         float head = MathF.Min(spot.Width, spot.Length) * 0.3f;
         addLine(top - f * (half * 0.6f), tip, color);
@@ -151,11 +191,11 @@ internal sealed class CarGeneratorLayer : IDisposable
     }
 
     // Distance along the ray to the box of the spot, or null (slabs, in the spot's own axes).
-    private static float? RayBox(Vector3 origin, Vector3 direction, CarGenerator spot)
+    private float? RayBox(Vector3 origin, Vector3 direction, CarGenerator spot)
     {
         var forward = spot.Length > 1e-4f ? Vector2.Normalize(spot.Orientation) : Vector2.UnitX;
         var axes = new[] { new Vector3(forward, 0), new Vector3(forward.Y, -forward.X, 0), Vector3.UnitZ };
-        var center = spot.Position + new Vector3(0, 0, Height / 2 - Below);
+        var center = spot.Position with { Z = Bottom(spot) + Height / 2 };
         var half = new Vector3(spot.Length / 2, spot.Width / 2, Height / 2);
         var delta = center - origin;
         float near = 0f, far = float.MaxValue;
@@ -183,7 +223,7 @@ internal sealed class CarGeneratorLayer : IDisposable
 
     private sealed record BuildResult(MapLibrary Library, LineBatch Lines, TriangleBatch Surfaces, List<CarGeneratorSelection> Spots);
 
-    private static BuildResult Build(MapLibrary library, Vector2 center)
+    private BuildResult Build(MapLibrary library, WorldLoader loader, Vector2 center)
     {
         var lines = new LineBatch();
         var surfaces = new TriangleBatch();
@@ -200,6 +240,7 @@ internal sealed class CarGeneratorLayer : IDisposable
                 if (Vector2.DistanceSquared(new Vector2(spot.Position.X, spot.Position.Y), center) > reach * reach)
                     continue;
                 spots.Add(new CarGeneratorSelection(map, i));
+                FindBottom(loader, _buildQuery, spot);
                 AddOutline(lines.AddLine, spot, Color);
                 var c = BaseCorners(spot);
                 surfaces.AddTriangle(c[0], c[1], c[2], fill);
