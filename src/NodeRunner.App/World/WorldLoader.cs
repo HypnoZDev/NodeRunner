@@ -258,6 +258,7 @@ internal sealed class WorldLoader : IDisposable
             progress.Report(L("Index des textures..."));
             var textures = TextureCatalog.Create(content, new GtxdReader());
             var names = HashNames.FromFileNames(content, maps.GetArchetypeHashes());
+            names.AddModelSetNames(files);
             var userNames = ReadUserNames(names);
 
             progress.Report(L("Index des collisions..."));
