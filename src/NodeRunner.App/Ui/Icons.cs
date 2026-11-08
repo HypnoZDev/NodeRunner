@@ -10,6 +10,7 @@ internal static class Icons
     public const string ArrowDownToLine = "\ue455";
     public const string Box = "\ue061";
     public const string Boxes = "\ue2d0";
+    public const string DoorOpen = "\ue3d6";
     public const string Camera = "\ue064";
     public const string Check = "\ue06c";
     public const string ChevronDown = "\ue06d";

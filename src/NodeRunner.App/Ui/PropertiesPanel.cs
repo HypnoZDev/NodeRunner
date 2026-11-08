@@ -152,6 +152,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 ImGui.SetItemTooltip(L("En déplaçant ou en tournant un bâtiment (3 m de haut ou plus), ses surfaces de collision (.ybn) bougent avec lui. Le sol en dessous reste en place."));
             }
         }
+        DrawDoorButton(entity, names);
         if (ImGui.BeginPopup("more_copies_menu"))
         {
             if (ImGui.MenuItem(L($"{Icons.Copy}  Copier position et cap : {withHeading}")))
@@ -174,6 +175,17 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (entity.Map?.FilePath is { } path && ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom du YMAP : {Path.GetFileNameWithoutExtension(path)}")))
                 ImGui.SetClipboardText(Path.GetFileNameWithoutExtension(path));
             ImGui.Separator();
+            var doors = state.SelectedEntities.Where(e => Doors.IsDoor(names.TryGet(e.ArchetypeHash))).ToList();
+            if (doors.Count > 0 && ImGui.MenuItem(L($"{Icons.Copy}  Copier le script qui cache {(doors.Count > 1 ? L($"les {doors.Count} portes") : L("la porte"))} (CreateModelHide)")))
+            {
+                ImGui.SetClipboardText(ModelHideScript.Hide(
+                    doors.Select(d => new HiddenModel(d.ArchetypeHash, names.TryGet(d.ArchetypeHash), d.Position)).ToList(), state.CopyFormat));
+                state.Notify(L("Script copié : à mettre dans le client.lua d'une ressource. Aucun YMAP à exporter."));
+            }
+            if (doors.Count > 0 && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                ImGui.SetTooltip(L("Autre façon de retirer une porte : la cacher par script au lieu de supprimer l'objet.\n")
+                    + L("Aucun YMAP modifié, donc aucun conflit avec les autres ressources.\nMarche aussi pour les portes créées par les scripts du jeu."));
+            ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
                 showModel(entity.ArchetypeHash);
             if (ImGui.MenuItem(L($"{Icons.X}  Désélectionner"), L("Échap")))
@@ -185,6 +197,34 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             ImGui.EndPopup();
         }
         ImGui.Dummy(new Vector2(0, 2));
+    }
+
+    private (MapEntity Entity, int Structure, int Revision, MapLibrary Library, List<MapEntity> Doors)? _doors;
+
+    // Selects the doors of the selected building or interior, ready for Suppr.
+    private void DrawDoorButton(MapEntity entity, HashNames names)
+    {
+        if (state.World.Maps is not { } library)
+            return;
+        if (_doors is not { } cache || cache.Entity != entity || cache.Library != library
+            || cache.Structure != library.StructureVersion || cache.Revision != entity.Revision)
+        {
+            cache = (entity, library.StructureVersion, entity.Revision, library, Doors.Of(entity, library, names.TryGet));
+            _doors = cache;
+        }
+        var doors = cache.Doors;
+        if (doors.Count == 0 || doors.All(state.IsSelected) && state.SelectedEntities.Count == doors.Count)
+            return;
+        bool interior = entity.IsInterior || entity.Interior is not null;
+        if (Widgets.Button(L($"{Icons.DoorOpen}  Sélectionner les portes ({doors.Count})"),
+                (interior ? L("Sélectionner toutes les portes de cet intérieur.") : L("Sélectionner les portes posées sur ce bâtiment (dans sa boîte, à 1 m près).")) + "\n"
+                + L("Ensuite : Suppr pour les supprimer, ou menu ... > Copier le script qui les cache.\n")
+                + L("Une porte dessinée dans le modèle du bâtiment n'est pas un objet à part : elle ne peut pas être retirée ici."),
+                ImGui.GetContentRegionAvail().X))
+        {
+            state.SelectAll(doors);
+            state.Notify(L($"{doors.Count} portes sélectionnées : Suppr pour les supprimer."));
+        }
     }
 
     private void DrawPlacement(MapEntity entity, MapLibrary library, HashNames names)
