@@ -16,6 +16,29 @@ public class DoorsTests
     public void DoorsAreFoundByName(string? name, bool door) => Assert.Equal(door, Doors.IsDoor(name));
 
     [Fact]
+    public void CloseDoorsFormADoubleDoor()
+    {
+        var doors = new[]
+        {
+            new DoorItem(1, "door_l", new Vector3(10, 0, 30), 90),
+            new DoorItem(2, "far", new Vector3(50, 0, 30), 0),
+            new DoorItem(3, "door_r", new Vector3(11.5f, 0, 30.1f), 270),
+        };
+        var groups = DoorLockScript.Group(doors);
+        Assert.Equal(2, groups.Count);
+        Assert.Equal(["door_l", "door_r"], groups[0].Select(d => d.Name));
+
+        string qb = DoorLockScript.Write(doors, DoorLockFormat.QbDoorlock, false);
+        Assert.Contains("doorType = 'double'", qb);
+        Assert.Contains("{ objName = 'door_l', objYaw = 90.0, objCoords = vec3(10.000, 0.000, 30.000) },", qb);
+        Assert.Contains("    objName = 'far',\n    objYaw = 0.0,\n    objCoords = vec3(50.000, 0.000, 30.000),", qb);
+
+        string natives = DoorLockScript.Write(doors, DoorLockFormat.Natives, false);
+        Assert.Contains("AddDoorToSystem(`nrs_door_50_0_30`, `far`, 50.000, 0.000, 30.000, false, false, false)", natives);
+        Assert.Contains("DoorSystemSetDoorState(`nrs_door_50_0_30`, 1, false, false)", natives);
+    }
+
+    [Fact]
     public void HideScriptUsesNameOrHash()
     {
         var models = new[]

@@ -185,6 +185,28 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (doors.Count > 0 && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
                 ImGui.SetTooltip(L("Autre façon de retirer une porte : la cacher par script au lieu de supprimer l'objet.\n")
                     + L("Aucun YMAP modifié, donc aucun conflit avec les autres ressources.\nMarche aussi pour les portes créées par les scripts du jeu."));
+            if (doors.Count > 0 && ImGui.BeginMenu(L($"{Icons.DoorOpen}  Copier pour doorlock ({doors.Count})")))
+            {
+                var items = doors.Select(d => new DoorItem(d.ArchetypeHash, names.TryGet(d.ArchetypeHash), d.Position, FiveMFormat.Heading(d))).ToList();
+                int pairs = DoorLockScript.Group(items).Count(g => g.Count > 1);
+                void Copy(DoorLockFormat format, bool csharp)
+                {
+                    ImGui.SetClipboardText(DoorLockScript.Write(items, format, csharp));
+                    state.Notify(pairs > 0
+                        ? L($"Configuration copiée : {doors.Count} portes, dont {pairs} portes doubles.")
+                        : L($"Configuration copiée : {doors.Count} portes."));
+                }
+                if (ImGui.MenuItem(L("qb-doorlock (Config.DoorList)")))
+                    Copy(DoorLockFormat.QbDoorlock, false);
+                ImGui.SetItemTooltip(L("Une entrée par porte (deux portes proches = porte double), verrouillée, métier police.\nÀ coller dans un fichier du dossier configs de qb-doorlock."));
+                if (ImGui.MenuItem(L("Natives FiveM Lua (AddDoorToSystem)")))
+                    Copy(DoorLockFormat.Natives, false);
+                if (ImGui.MenuItem(L("Natives FiveM C# (AddDoorToSystem)")))
+                    Copy(DoorLockFormat.Natives, true);
+                ImGui.Separator();
+                Widgets.Hint(L("Modèle et position exacte de chaque porte : les scripts de serrure les comparent au centimètre près."));
+                ImGui.EndMenu();
+            }
             ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
                 showModel(entity.ArchetypeHash);

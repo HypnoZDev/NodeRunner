@@ -67,6 +67,120 @@ public static class Doors
     }
 }
 
+public readonly record struct DoorItem(uint Hash, string? Name, Vector3 Position, float Heading);
+
+public enum DoorLockFormat
+{
+    Natives,
+    QbDoorlock,
+}
+
+// Door lock configuration for FiveM: door lock scripts match doors by model and exact position.
+public static class DoorLockScript
+{
+    // Two doors this close (and at the same height) form a double door.
+    private const float PairDistance = 2.8f;
+
+    public static List<IReadOnlyList<DoorItem>> Group(IReadOnlyList<DoorItem> doors)
+    {
+        var left = doors.ToList();
+        var groups = new List<IReadOnlyList<DoorItem>>();
+        while (left.Count > 0)
+        {
+            var door = left[0];
+            left.RemoveAt(0);
+            int best = -1;
+            float bestDistance = PairDistance;
+            for (int i = 0; i < left.Count; i++)
+            {
+                float d = Vector2.Distance(new Vector2(door.Position.X, door.Position.Y), new Vector2(left[i].Position.X, left[i].Position.Y));
+                if (d < bestDistance && MathF.Abs(door.Position.Z - left[i].Position.Z) < 0.5f)
+                    (best, bestDistance) = (i, d);
+            }
+            if (best < 0)
+            {
+                groups.Add([door]);
+                continue;
+            }
+            groups.Add([door, left[best]]);
+            left.RemoveAt(best);
+        }
+        return groups;
+    }
+
+    public static string Write(IReadOnlyList<DoorItem> doors, DoorLockFormat format, bool csharp) => format switch
+    {
+        DoorLockFormat.QbDoorlock => QbDoorlock(Group(doors)),
+        _ => Natives(Group(doors), csharp),
+    };
+
+    private static string Model(DoorItem door, bool csharp) => csharp
+        ? door.Name is { } n ? $"(uint)API.GetHashKey(\"{n}\")" : $"0x{door.Hash:X8}u"
+        : door.Name is { } m ? $"`{m}`" : $"0x{door.Hash:X8}";
+
+    // Door system ids are global to the game: built from the position so they do not clash with other resources.
+    private static string Id(DoorItem door) =>
+        Invariant($"nrs_door_{MathF.Round(door.Position.X):0}_{MathF.Round(door.Position.Y):0}_{MathF.Round(door.Position.Z):0}");
+
+    private static string Natives(List<IReadOnlyList<DoorItem>> groups, bool cs)
+    {
+        var text = new StringBuilder();
+        text.Append(cs ? "// client : 1 = verrouillée, 0 = ouverte\n" : "-- client.lua : 1 = verrouillée, 0 = ouverte\n");
+        foreach (var group in groups)
+        {
+            if (group.Count > 1)
+                text.Append(cs ? "// porte double\n" : "-- porte double\n");
+            foreach (var door in group)
+            {
+                var p = door.Position;
+                string id = cs ? $"(int)API.GetHashKey(\"{Id(door)}\")" : $"`{Id(door)}`";
+                text.Append(cs
+                    ? Invariant($"API.AddDoorToSystem((uint){id}, {Model(door, true)}, {p.X:0.000}f, {p.Y:0.000}f, {p.Z:0.000}f, false, false, false);\n")
+                      + $"API.DoorSystemSetDoorState((uint){id}, 1, false, false);\n"
+                    : Invariant($"AddDoorToSystem({id}, {Model(door, false)}, {p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}, false, false, false)\n")
+                      + $"DoorSystemSetDoorState({id}, 1, false, false)\n");
+            }
+        }
+        return text.ToString().TrimEnd('\n');
+    }
+
+    private static string QbDoorlock(List<IReadOnlyList<DoorItem>> groups)
+    {
+        var text = new StringBuilder();
+        foreach (var group in groups)
+        {
+            string id = Id(group[0]).Replace("nrs_door_", "door_");
+            text.Append($"Config.DoorList['{id}'] = {{\n");
+            if (group.Count > 1)
+            {
+                text.Append("    doorType = 'double',\n    doors = {\n");
+                foreach (var door in group)
+                    text.Append($"        {{ {Object(door)} }},\n");
+                text.Append("    },\n");
+            }
+            else
+            {
+                text.Append("    doorType = 'door',\n");
+                foreach (string field in Fields(group[0]))
+                    text.Append($"    {field},\n");
+            }
+            text.Append("    locked = true,\n    distance = 2.0,\n    authorizedJobs = { ['police'] = 0 },\n}\n");
+        }
+        return text.ToString().TrimEnd('\n');
+    }
+
+    private static string Object(DoorItem door) => string.Join(", ", Fields(door));
+
+    private static string[] Fields(DoorItem door)
+    {
+        var p = door.Position;
+        string model = door.Name is { } n ? $"objName = '{n}'" : Invariant($"objHash = {unchecked((int)door.Hash)}");
+        return [model, Invariant($"objYaw = {door.Heading:0.0}"), Invariant($"objCoords = vec3({p.X:0.000}, {p.Y:0.000}, {p.Z:0.000})")];
+    }
+
+    private static string Invariant(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
+}
+
 public readonly record struct HiddenModel(uint Hash, string? Name, Vector3 Position);
 
 // FiveM client script that hides placed objects without shipping a modified YMAP (no conflict with other resources).
