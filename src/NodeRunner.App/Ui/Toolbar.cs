@@ -78,6 +78,36 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
                 L("NodeRunner Online : modifier la carte à plusieurs (jusqu'à 5 personnes), le projet restant sur le PC de l'hôte."),
                 active: online.IsActive))
             toggleOnline();
+        DrawGlow();
+    }
+
+    // Eye-catcher on the Online button: pulsing accent halo and a light sweep every few seconds.
+    private static void DrawGlow()
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        float rounding = ImGui.GetStyle().FrameRounding;
+        float t = (float)ImGui.GetTime();
+        float pulse = 0.5f + 0.5f * MathF.Sin(t * 2.6f);
+
+        for (int i = 3; i >= 1; i--)
+            drawList.AddRect(min - new Vector2(i, i), max + new Vector2(i, i),
+                Widgets.Col(UiTheme.Accent with { W = (0.10f + 0.22f * pulse) / i }), rounding + i, ImDrawFlags.None, 1.5f);
+        drawList.AddRect(min, max, Widgets.Col(UiTheme.AccentText with { W = 0.45f + 0.45f * pulse }), rounding, ImDrawFlags.None, 1f);
+
+        const float period = 3.2f, sweep = 0.9f, band = 26f;
+        float phase = t % period;
+        if (phase < sweep)
+        {
+            float x = min.X - band + (max.X - min.X + band * 2) * (phase / sweep);
+            uint clear = Widgets.Col(new Vector4(1f, 1f, 1f, 0f));
+            uint light = Widgets.Col(new Vector4(1f, 1f, 1f, 0.22f));
+            drawList.PushClipRect(min, max, true);
+            drawList.AddRectFilledMultiColor(new Vector2(x - band * 0.5f, min.Y), new Vector2(x, max.Y), clear, light, light, clear);
+            drawList.AddRectFilledMultiColor(new Vector2(x, min.Y), new Vector2(x + band * 0.5f, max.Y), light, clear, clear, light);
+            drawList.PopClipRect();
+        }
     }
 
     private void DrawProject()

@@ -11,6 +11,9 @@ internal sealed class OnlineWindow(AppState state)
 {
     public const string Title = $"{Icons.Users}  Online###Online";
 
+    // Sessions stay locked until the relay (codes NRS-XXXX) is ready.
+    public static readonly bool Available = false;
+
     private bool _open;
     private string _name = "";
     private string _address = "";
@@ -75,8 +78,8 @@ internal sealed class OnlineWindow(AppState state)
             Widgets.Hint(state.Project is { } project
                 ? L($"Partage le projet « {project.Name} » : il est enregistré, sa carte rechargée, puis vos collègues le reçoivent. Jusqu'à {OnlineSession.MaxParticipants} personnes ; seul l'hôte enregistre et exporte.")
                 : L("Ouvrez ou créez d'abord un projet : la session partage le projet ouvert."), wrap: true);
-            ImGui.BeginDisabled(state.Project is null);
-            if (Widgets.PrimaryButton(L("Créer une session"), -1))
+            ImGui.BeginDisabled(!Available || state.Project is null);
+            if (Widgets.PrimaryButton(Available ? L("Créer une session") : L("Bientôt disponible"), -1))
                 online.Host();
             ImGui.EndDisabled();
         }
@@ -85,9 +88,11 @@ internal sealed class OnlineWindow(AppState state)
         {
             Widgets.Hint(L("L'adresse affichée chez l'hôte (même réseau, ou réseau virtuel type Tailscale / Radmin VPN). Vos modifications non enregistrées sont enregistrées dans votre projet d'abord."), wrap: true);
             ImGui.SetNextItemWidth(-1);
+            ImGui.BeginDisabled(!Available);
             bool enter = ImGui.InputTextWithHint("##online_address", "192.168.1.20", ref _address, 64, ImGuiInputTextFlags.EnterReturnsTrue);
-            if (Widgets.Button(L("Rejoindre"), width: -1) || enter)
+            if ((Widgets.Button(Available ? L("Rejoindre") : L("Bientôt disponible"), width: -1) || enter) && Available)
                 online.Join(_address);
+            ImGui.EndDisabled();
         }
 
         if (online.PreviousProject is not null || online.Session is { Role: SessionRole.Guest })

@@ -68,16 +68,19 @@ internal static class WindowChrome
         var maxMax = new Vector2(_maximize.Right, _maximize.Bottom);
         if (MaximizeHovered || MaximizePressed)
             drawList.AddRectFilled(maxMin, maxMax, Widgets.Col(new Vector4(1f, 1f, 1f, MaximizePressed ? 0.12f : 0.07f)));
+        // Lines only, on pixel centres: AddRect adds its own half pixel and came out blurred (looked doubled).
         var c = Widgets.Snap((maxMin + maxMax) * 0.5f) + new Vector2(0.5f, 0.5f);
         uint color = Widgets.Col(UiTheme.Text);
         if (IsMaximized)
         {
-            drawList.AddRect(c + new Vector2(-5, -3), c + new Vector2(3, 5), color, 1f);
+            Square(drawList, c + new Vector2(-5, -3), 8, color);
+            drawList.AddLine(c + new Vector2(-3, -3), c + new Vector2(-3, -5), color);
             drawList.AddLine(c + new Vector2(-3, -5), c + new Vector2(5, -5), color);
             drawList.AddLine(c + new Vector2(5, -5), c + new Vector2(5, 3), color);
+            drawList.AddLine(c + new Vector2(5, 3), c + new Vector2(3, 3), color);
         }
         else
-            drawList.AddRect(c + new Vector2(-5, -5), c + new Vector2(5, 5), color, 1f);
+            Square(drawList, c + new Vector2(-5, -5), 10, color);
 
         if (Button(drawList, "##close", x + ButtonWidth * 2, height, true, out center))
             CloseRequested = true;
@@ -86,6 +89,15 @@ internal static class WindowChrome
         drawList.AddLine(center + new Vector2(5, -5), center + new Vector2(-5.5f, 5.5f), closeColor);
 
         ImGui.PopClipRect();
+    }
+
+    private static void Square(ImDrawListPtr drawList, Vector2 min, float size, uint color)
+    {
+        var max = min + new Vector2(size, size);
+        drawList.AddLine(min, new Vector2(max.X, min.Y), color);
+        drawList.AddLine(new Vector2(max.X, min.Y), max, color);
+        drawList.AddLine(max, new Vector2(min.X, max.Y), color);
+        drawList.AddLine(new Vector2(min.X, max.Y), min, color);
     }
 
     private static bool Button(ImDrawListPtr drawList, string id, float x, float height, bool danger, out Vector2 center)

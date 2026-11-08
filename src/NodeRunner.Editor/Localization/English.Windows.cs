@@ -256,6 +256,7 @@ public static partial class English
         ("L'adresse affichée chez l'hôte (même réseau, ou réseau virtuel type Tailscale / Radmin VPN). Vos modifications non enregistrées sont enregistrées dans votre projet d'abord.",
             "The address shown on the host's PC (same network, or a virtual network like Tailscale / Radmin VPN). Your unsaved changes are saved in your project first."),
         ("Rejoindre", "Join"),
+        ("Bientôt disponible", "Coming soon"),
         ("Préparation de la session : enregistrement du projet et chargement de sa carte...", "Preparing the session: saving the project and loading its map..."),
         ("Rôle", "Role"),
         ("Hôte (le projet est sur ce PC)", "Host (the project is on this PC)"),
