@@ -158,6 +158,7 @@ internal sealed class CollisionLayer : IDisposable
             _loaded[file].Dispose();
             _loaded.Remove(file);
             _selectionShown = null;
+            _shownVersion++;
         }
         _pending.RemoveWhere(f => f.IsInterior && !kept.Contains(f));
         _interiors = found;
@@ -203,6 +204,7 @@ internal sealed class CollisionLayer : IDisposable
             if (result.Mesh is not null && (_edits?.For(result.File.Path) is not null || result.Shown != result.Mesh))
                 Rebuild(renderer, result.File);
             _selectionShown = null;
+            _shownVersion++;
             uploaded++;
         }
     }
@@ -214,6 +216,7 @@ internal sealed class CollisionLayer : IDisposable
         {
             _loaded[file].Dispose();
             _loaded.Remove(file);
+            _shownVersion++;
         }
     }
 
@@ -329,6 +332,7 @@ internal sealed class CollisionLayer : IDisposable
         meshes.Surfaces = batches.Select(renderer.CreateMesh).ToArray();
         meshes.TriangleCount = batches.Sum(b => b.TriangleCount);
         _selectionShown = null; // its triangles may have changed
+        _shownVersion++;
     }
 
     // Loaded collision as shown, for selecting polygons.
@@ -338,22 +342,31 @@ internal sealed class CollisionLayer : IDisposable
     public HashSet<CollisionPolygon> Pick(Matrix4x4 viewProjection, Vector2 viewport, Vector2 rectMin, Vector2 rectMax) =>
         CollisionPicker.Pick(ShownMeshes(), viewProjection, viewport, rectMin, rectMax);
 
-    // Materials of these polygons as shown (files not loaded are skipped).
-    public Dictionary<CollisionPolygon, byte> MaterialsOf(IReadOnlySet<CollisionPolygon> polygons)
+    private Dictionary<CollisionPolygon, byte>? _materials;
+    private (int Selection, int Shown) _materialsVersion = (-1, -1);
+    private int _shownVersion;
+
+    // Materials of these polygons as shown (files not loaded are skipped). Called every frame by the properties panel:
+    // computed again only when the selection or the loaded collision changes.
+    public Dictionary<CollisionPolygon, byte> MaterialsOf(IReadOnlySet<CollisionPolygon> polygons, int selectionVersion)
     {
+        if (_materials is not null && _materialsVersion == (selectionVersion, _shownVersion))
+            return _materials;
         var result = new Dictionary<CollisionPolygon, byte>();
+        var byPath = polygons.GroupBy(p => p.Path).ToDictionary(g => g.Key, g => g.Select(p => p.Polygon).ToHashSet());
         foreach (var (file, meshes) in _loaded)
         {
-            if (meshes.Shown is not { } shown)
+            if (meshes.Shown is not { } shown || !byPath.TryGetValue(file.Path, out var wanted))
                 continue;
             for (int t = 0; t < shown.TriangleCount; t++)
             {
-                var key = new CollisionPolygon(file.Path, shown.Polygons[t]);
-                if (polygons.Contains(key))
-                    result.TryAdd(key, shown.Materials[t]);
+                int polygon = shown.Polygons[t];
+                if (wanted.Contains(polygon))
+                    result.TryAdd(new CollisionPolygon(file.Path, polygon), shown.Materials[t]);
             }
         }
-        return result;
+        _materialsVersion = (selectionVersion, _shownVersion);
+        return _materials = result;
     }
 
     private static readonly Vector4 SelectionColor = new(1f, 0.62f, 0.1f, 0.55f);
@@ -378,13 +391,14 @@ internal sealed class CollisionLayer : IDisposable
             {
                 var surface = new TriangleBatch();
                 var edges = new LineBatch();
+                var byPath = selection.GroupBy(p => p.Path).ToDictionary(g => g.Key, g => g.Select(p => p.Polygon).ToHashSet());
                 foreach (var (file, meshes) in _loaded)
                 {
-                    if (meshes.Shown is not { } shown)
+                    if (meshes.Shown is not { } shown || !byPath.TryGetValue(file.Path, out var wanted))
                         continue;
                     for (int t = 0; t < shown.TriangleCount; t++)
                     {
-                        if (!selection.Contains(new CollisionPolygon(file.Path, shown.Polygons[t])))
+                        if (!wanted.Contains(shown.Polygons[t]))
                             continue;
                         var a = shown.Vertices[shown.Indices[t * 3]];
                         var b = shown.Vertices[shown.Indices[t * 3 + 1]];
@@ -418,6 +432,7 @@ internal sealed class CollisionLayer : IDisposable
         _interiorFrames = 0;
         Errors.Clear();
         _selectionShown = null;
+        _shownVersion++;
     }
 
     public void Dispose()

@@ -50,7 +50,7 @@ internal sealed class CollisionProperties(AppState state, CollisionLayer layer)
         }
 
         var catalog = state.World.Collisions;
-        var materials = layer.MaterialsOf(selection);
+        var materials = layer.MaterialsOf(selection, state.CollisionSelectionVersion);
         if (Widgets.Section(L($"Sélection ({selection.Count})"), "collision_selection"))
         {
             if (Widgets.BeginProperties("##collision_selection"))
