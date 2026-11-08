@@ -129,6 +129,8 @@ float4 Shade(PS_INPUT input)
     float4 color = ColorTexture.Sample(ColorSampler, input.uv);
     if (Terrain.z > 0.5f)
         color.rgb *= input.color.rgb;
+    if (Terrain.w > 0.5f)
+        color.rgb *= Layer1.Sample(ColorSampler, input.maskUv).rgb;
     return Shade(input, color);
 }
 
@@ -482,11 +484,12 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 continue;
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
-                terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor)));
+                terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
+                terrain is null && mesh.TintTextureName is not null));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
-                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? Vector2.Zero);
+                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? mesh.TintTexCoords?[i] ?? Vector2.Zero);
             }
             mesh.Indices.CopyTo(indices, x);
             x += mesh.Indices.Length;
@@ -520,7 +523,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var texture = textures.Length > 0 ? textures[0] : null;
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
-                r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh);
+                r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize);
     }
@@ -664,7 +667,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             }
             else
             {
-                SetMesh(emission, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, 0f));
+                SetMesh(emission, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
+                if (part.TintTexture is not null)
+                    _context.PSSetShaderResource(1, part.TintTexture.View);
             }
             _context.PSSetShaderResource(0, baseTexture.View);
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
@@ -803,7 +808,7 @@ public sealed class GpuModel : IDisposable
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
-        int Mesh);
+        int Mesh, GpuTexture? TintTexture);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -840,7 +845,7 @@ public sealed class GpuModel : IDisposable
 public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
-        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot);
+        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

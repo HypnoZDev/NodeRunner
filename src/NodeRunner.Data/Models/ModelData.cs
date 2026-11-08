@@ -57,7 +57,15 @@ public sealed class ModelMesh
 
     private static readonly IReadOnlyDictionary<uint, string> EmptyTextures = new Dictionary<uint, string>();
 
-    public IReadOnlyList<string?> TextureNames => Terrain is null ? [DiffuseTextureName] : [DiffuseTextureName, .. Terrain.TextureNames];
+    // Second colour texture multiplied over the first (grass_fur: DiffuseHfSampler, the patch's large-scale colour),
+    // read with TintTexCoords.
+    public string? TintTextureName { get; init; }
+
+    public Vector2[]? TintTexCoords { get; init; }
+
+    public IReadOnlyList<string?> TextureNames => Terrain is not null ? [DiffuseTextureName, .. Terrain.TextureNames]
+        : TintTextureName is not null ? [DiffuseTextureName, TintTextureName]
+        : [DiffuseTextureName];
 }
 
 // Ground made of four textures (grass, dirt, rock...) blended per pixel.

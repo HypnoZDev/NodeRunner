@@ -281,6 +281,7 @@ public sealed class DrawableReader : IModelReader
 
     // Shaders without texture, coloured by the vertex colours.
     private static readonly uint VertexColorShader = Joaat.Hash("cpv_only");
+    private static readonly uint TintSampler = Joaat.Hash("DiffuseHfSampler");
 
     // Presets of the tree and bush shaders (hash of the file name).
     private static readonly HashSet<uint> TreePresets = new[]
@@ -371,6 +372,23 @@ public sealed class DrawableReader : IModelReader
             colors[v] = hasColors ? declaration.Read(bytes, start, ColorComponent) : Vector4.One;
         }
 
+        // grass_fur: large-scale colour of the patch, multiplied over the tiled grass (without it, far too light).
+        string? tintName = shader?.Textures.GetValueOrDefault(TintSampler);
+        Vector2[]? tintCoords = null;
+        if (tintName is not null)
+        {
+            tintCoords = texCoords;
+            if (declaration.Has(SecondTexCoordComponent))
+            {
+                tintCoords = new Vector2[count];
+                for (int v = 0; v < count; v++)
+                {
+                    var uv = declaration.Read(bytes, v * stride, SecondTexCoordComponent);
+                    tintCoords[v] = new Vector2(uv.X, uv.Y);
+                }
+            }
+        }
+
         // Ignore incomplete triangles and indices pointing outside the vertices.
         int safeCount = indexCount - indexCount % 3;
         var indices = new ushort[safeCount];
@@ -403,6 +421,8 @@ public sealed class DrawableReader : IModelReader
                 : MeshEmission.None,
             Terrain = Terrain(shader, declaration, bytes, count),
             VertexColored = hasColors && shader?.Name == VertexColorShader,
+            TintTextureName = tintName,
+            TintTexCoords = tintCoords,
             ShaderHash = shader?.Name ?? 0,
             ShaderTextures = shader?.Textures ?? (IReadOnlyDictionary<uint, string>)new Dictionary<uint, string>(),
             DiffuseColor = shader is not null && shader.Vectors.TryGetValue(DiffuseColorParameter, out var diffuse) ? diffuse : null,
@@ -671,6 +691,8 @@ public sealed class DrawableReader : IModelReader
         Emission = mesh.Emission,
         Terrain = mesh.Terrain,
         VertexColored = mesh.VertexColored,
+        TintTextureName = mesh.TintTextureName,
+        TintTexCoords = mesh.TintTexCoords,
         ShaderHash = mesh.ShaderHash,
         ShaderTextures = mesh.ShaderTextures,
         DiffuseColor = mesh.DiffuseColor,
