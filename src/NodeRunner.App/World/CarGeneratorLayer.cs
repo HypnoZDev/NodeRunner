@@ -16,8 +16,13 @@ internal sealed class CarGeneratorLayer : IDisposable
     public const string LayerName = "CarGenerators";
     public const float Radius = 500f;
 
-    // Height of the box drawn over a spot.
+    // Height of the box drawn over a spot, and how far below the spot's position it starts: the game's positions are
+    // about 1 m above the road (measured against the road nodes: median 0.94 m), the car is put on the ground below.
     public const float Height = 1.5f;
+    public const float Below = 1f;
+
+    private static Vector3[] BaseCorners(CarGenerator spot) =>
+        [.. spot.Corners().Select(c => c - new Vector3(0, 0, Below))];
 
     private const float RebuildDistance = 60f;
     private const float SurfaceAlpha = 0.25f;
@@ -117,7 +122,7 @@ internal sealed class CarGeneratorLayer : IDisposable
     // Box of the spot and arrow on its top, towards the front.
     private static void AddOutline(Action<Vector3, Vector3, Vector4> addLine, CarGenerator spot, Vector4 color)
     {
-        var c = spot.Corners();
+        var c = BaseCorners(spot);
         var up = new Vector3(0, 0, Height);
         for (int i = 0; i < 4; i++)
         {
@@ -131,7 +136,7 @@ internal sealed class CarGeneratorLayer : IDisposable
         var f = new Vector3(forward, 0);
         var side = new Vector3(forward.Y, -forward.X, 0);
         float half = spot.Length / 2;
-        var top = spot.Position + up;
+        var top = spot.Position + up - new Vector3(0, 0, Below);
         var tip = top + f * (half * 0.9f);
         float head = MathF.Min(spot.Width, spot.Length) * 0.3f;
         addLine(top - f * (half * 0.6f), tip, color);
@@ -150,7 +155,7 @@ internal sealed class CarGeneratorLayer : IDisposable
     {
         var forward = spot.Length > 1e-4f ? Vector2.Normalize(spot.Orientation) : Vector2.UnitX;
         var axes = new[] { new Vector3(forward, 0), new Vector3(forward.Y, -forward.X, 0), Vector3.UnitZ };
-        var center = spot.Position + new Vector3(0, 0, Height / 2);
+        var center = spot.Position + new Vector3(0, 0, Height / 2 - Below);
         var half = new Vector3(spot.Length / 2, spot.Width / 2, Height / 2);
         var delta = center - origin;
         float near = 0f, far = float.MaxValue;
@@ -196,7 +201,7 @@ internal sealed class CarGeneratorLayer : IDisposable
                     continue;
                 spots.Add(new CarGeneratorSelection(map, i));
                 AddOutline(lines.AddLine, spot, Color);
-                var c = spot.Corners();
+                var c = BaseCorners(spot);
                 surfaces.AddTriangle(c[0], c[1], c[2], fill);
                 surfaces.AddTriangle(c[0], c[2], c[3], fill);
                 surfaces.AddTriangle(c[0] + up, c[1] + up, c[2] + up, fill);
