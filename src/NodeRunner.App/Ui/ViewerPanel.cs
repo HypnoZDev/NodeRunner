@@ -958,7 +958,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
             var start = ImGui.GetCursorScreenPos();
             bool clicked = ImGui.InvisibleButton("##texture", new Vector2(ImGui.GetContentRegionAvail().X, thumb + 4f));
             bool hovered = ImGui.IsItemHovered();
-            var after = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
             if (hovered)
                 drawList.AddRectFilled(start, ImGui.GetItemRectMax(), Widgets.Col(new Vector4(1f, 1f, 1f, 0.05f)), UiTheme.FrameRounding);
@@ -975,7 +974,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 ImGui.SetTooltip(texture.Source);
             if (clicked)
                 _openTexture = texture;
-            ImGui.SetCursorScreenPos(after);
             ImGui.PopID();
         }
         if (Viewer.MissingTextureCount > 0)
