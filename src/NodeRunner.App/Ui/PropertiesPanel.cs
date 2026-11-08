@@ -252,9 +252,62 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         var p = entity.Position;
         Widgets.PropertyText(L("Position (doorlock)"), L($"{p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}"),
             L("Position exacte utilisée par les scripts de serrure (objCoords). Menu ... > Copier pour doorlock."));
+        DoorChoice(entity, archetype, names);
         Widgets.PropertyText(L("Hash du modèle"), $"{unchecked((int)archetype.NameHash)} / 0x{archetype.NameHash:X8}",
             L("objHash dans qb-doorlock (décimal), model dans ox_doorlock."));
         Widgets.EndProperties();
+    }
+
+    private string _doorQuery = "";
+    private (MapLibrary Library, (uint Hash, string Name, float Width, float Height, DoorKind Kind)[] Types)? _doorTypes;
+
+    // Another door model for the selected doors, the closest widths first.
+    private void DoorChoice(MapEntity entity, Archetype archetype, HashNames names)
+    {
+        if (state.World.Maps is not { } library)
+            return;
+        Widgets.Property(L("Remplacer par"), L("Change le modèle des portes sélectionnées et recale la nouvelle dans l'encadrement : ")
+            + L("gonds sur le même montant, ou centrée pour une porte coulissante / de garage, bas au même niveau. Ctrl+Z pour annuler. ")
+            + L("Pas encore pour les portes des intérieurs (MLO)."));
+        ImGui.SetNextItemWidth(-1);
+        if (!ImGui.BeginCombo("##door_replace", L("Choisir une autre porte..."), ImGuiComboFlags.HeightLarge))
+            return;
+        if (ImGui.IsWindowAppearing())
+        {
+            _doorQuery = "";
+            ImGui.SetKeyboardFocusHere();
+        }
+        if (_doorTypes is not { } cache || cache.Library != library)
+        {
+            var types = library.GetArchetypeHashes()
+                .Select(h => (Hash: h, Name: names.TryGet(h), Type: library.GetArchetype(h)!))
+                .Where(t => t.Type.Kind == ArchetypeKind.Base && Doors.IsDoor(t.Name))
+                .Select(t => (t.Hash, t.Name!, t.Type.BoundsMax.X - t.Type.BoundsMin.X, t.Type.BoundsMax.Z - t.Type.BoundsMin.Z, DoorShape.Of(t.Type, t.Name).Kind))
+                .ToArray();
+            _doorTypes = cache = (library, types);
+        }
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##door_query", L("Filtrer (ex. v_ilev, garage)"), ref _doorQuery, 64);
+        ImGui.Separator();
+        float width = archetype.BoundsMax.X - archetype.BoundsMin.X;
+        string query = _doorQuery.Trim();
+        var matches = cache.Types.Where(t => t.Hash != entity.ArchetypeHash && (query.Length == 0 || t.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(t => MathF.Abs(t.Width - width)).ThenBy(t => t.Name, StringComparer.Ordinal).Take(MaxTypeChoices).ToList();
+        if (matches.Count == 0)
+            ImGui.TextDisabled(L("Aucune porte trouvée."));
+        foreach (var t in matches)
+        {
+            string kind = t.Kind switch
+            {
+                DoorKind.Hinged => L("battante"),
+                DoorKind.Sliding => L("coulissante"),
+                DoorKind.Garage => L("garage"),
+                _ => L("fixe"),
+            };
+            if (ImGui.Selectable(L($"{t.Name}  ·  {t.Width:0.00} x {t.Height:0.00} m, {kind}##door{t.Hash}")))
+                state.ReplaceSelectedDoors(t.Hash);
+        }
+        ImGui.EndCombo();
     }
 
     private void DrawDoorButton(MapEntity entity, HashNames names)

@@ -155,6 +155,28 @@ internal sealed class ArchetypeCodec : EditCodec<ArchetypeEdit>
     }
 }
 
+internal sealed class DoorReplaceCodec : EditCodec<DoorReplaceEdit>
+{
+    public override string Tag => "door-replace";
+
+    protected override void Write(DoorReplaceEdit edit, EditWriter w)
+    {
+        w.WriteEntities(edit.Selection);
+        w.Write(edit.Archetype);
+        w.WriteList(edit.After, w.Write);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var entities = r.ReadEntities();
+        uint archetype = r.ReadUInt();
+        var after = r.ReadList(r.ReadPlacement);
+        if (after.Count != entities.Count)
+            throw new InvalidDataException("Group sizes differ.");
+        return DoorReplaceEdit.Apply(entities, archetype, after, description);
+    }
+}
+
 internal sealed class EntitySetCodec : EditCodec<EntitySetEdit>
 {
     public override string Tag => "entity-set";

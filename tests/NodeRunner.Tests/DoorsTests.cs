@@ -98,4 +98,23 @@ public class DoorsTests
         string qb = DoorLockScript.Write([new DoorItem(1, "prop_garagedoor_01", Vector3.Zero, 0, DoorKind.Garage)], DoorLockFormat.QbDoorlock, false);
         Assert.Contains("doorType = 'garage'", qb);
     }
+
+    [Fact]
+    public void ReplacedDoorFillsTheSameFrame()
+    {
+        var from = Type(new Vector3(0, -0.05f, 0), new Vector3(1, 0.05f, 2.1f));
+        var door = new MapEntity { ArchetypeHash = 1, Position = new Vector3(10, 20, 30), StoredRotation = Quaternion.Identity };
+        // Hinge on the other side: it goes on the other jamb (x = 1 in the old door's space).
+        var otherSide = DoorReplaceEdit.Fit(door, from, Type(new Vector3(-1, -0.05f, 0.1f), new Vector3(0, 0.05f, 2.2f)), "v_ilev_door_b");
+        Assert.Equal(new Vector3(11, 20, 29.9f), otherSide.Position);
+        // Sliding door: centred on the opening.
+        var sliding = DoorReplaceEdit.Fit(door, from, Type(new Vector3(-0.6f, -0.05f, 0), new Vector3(0.6f, 0.05f, 2.2f)), "prop_door_elev");
+        Assert.Equal(10.5f, sliding.Position.X, 3);
+
+        var edit = DoorReplaceEdit.Apply([door], 7, [otherSide], "test");
+        Assert.Equal(7u, door.ArchetypeHash);
+        edit.Undo();
+        Assert.Equal(1u, door.ArchetypeHash);
+        Assert.Equal(new Vector3(10, 20, 30), door.Position);
+    }
 }

@@ -314,6 +314,35 @@ internal sealed class AppState
         Notify(L($"{what} remplacé(s) par {name}."));
     }
 
+    // Gives the selected doors another door model, fitted in their frame.
+    public void ReplaceSelectedDoors(uint archetypeHash)
+    {
+        if (World.Maps is not { } library || library.GetArchetype(archetypeHash) is not { } to)
+            return;
+        var names = World.Names;
+        var doors = SelectedEntities.Where(e => ArchetypeEdit.CanChange(e) && e.ArchetypeHash != archetypeHash
+            && Doors.IsDoor(names?.TryGet(e.ArchetypeHash)) && library.GetArchetype(e.ArchetypeHash) is not null).ToList();
+        if (doors.Count == 0)
+        {
+            Notify(SelectedEntities.Any(e => !ArchetypeEdit.CanChange(e))
+                ? L("Les portes des intérieurs (MLO) ne peuvent pas encore changer de modèle.") : L("Aucune porte à remplacer."));
+            return;
+        }
+        string name = names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        string toName = names?.TryGet(archetypeHash) ?? name;
+        var widths = doors.Select(d => library.GetArchetype(d.ArchetypeHash)!).Select(a => a.BoundsMax.X - a.BoundsMin.X).ToList();
+        var after = doors.Select(d => DoorReplaceEdit.Fit(d, library.GetArchetype(d.ArchetypeHash)!, to, toName)).ToList();
+        string what = doors.Count == 1 ? names?.Describe(doors[0].ArchetypeHash) ?? L("la porte") : L($"{doors.Count} portes");
+        var edit = DoorReplaceEdit.Apply(doors, archetypeHash, after, L($"Remplacer {what} par {name}"));
+        History.Add(edit);
+        SelectAll(edit.Selection);
+        float wider = (to.BoundsMax.X - to.BoundsMin.X) - widths.Max();
+        float narrower = (to.BoundsMax.X - to.BoundsMin.X) - widths.Min();
+        Notify(wider > 0.05f ? L($"{what} remplacée(s) par {name} : {wider * 100:0} cm plus large, elle peut entrer dans le mur.")
+            : narrower < -0.05f ? L($"{what} remplacée(s) par {name} : {-narrower * 100:0} cm plus étroite, un jour peut rester.")
+            : L($"{what} remplacée(s) par {name}, recalée(s) dans l'encadrement."));
+    }
+
     public const int AutomaticRoom = -2;
 
     // Lift of the point tested against the rooms: an object standing on a floor is just above the room's bottom.
