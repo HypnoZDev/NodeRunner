@@ -80,7 +80,7 @@ internal sealed partial class BoundsFile
             if (!removed.Contains(first + i))
                 kept.Add(i);
         }
-        if (kept.Count == count)
+        if (kept.Count == count && !_rebuild.Contains(o))
             return false;
 
         int polygons = Resolve(U64(o + PolygonsPointer), count, 16);

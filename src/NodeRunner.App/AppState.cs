@@ -647,6 +647,11 @@ internal sealed class AppState
             else
                 SelectRoom(place);
         }
+        else if (edit is CollisionMoveEdit collisionMove)
+        {
+            Tool = TransformTool.Collision;
+            SelectCollision(collisionMove.Polygons, CollisionSelectMode.Replace);
+        }
         else if (edit is CollisionEdit collisionEdit)
         {
             Tool = TransformTool.Collision;
@@ -1015,6 +1020,26 @@ internal sealed class AppState
         int count = _selectedCollision.Count;
         SelectCollision([], CollisionSelectMode.Replace);
         Notify(count == 1 ? L("1 surface de collision supprimée") : L($"{count} surfaces de collision supprimées"));
+    }
+
+    // While the handles are dragged: how the selected polygons are moved (world space), drawn over the collision.
+    public System.Numerics.Matrix4x4? CollisionDragPreview { get; set; }
+
+    // Moves the selected polygons by world (world space). placements: where each file is shown (an interior's file is
+    // in the interior's space), to turn the move into the file's space.
+    public void MoveSelectedCollision(System.Numerics.Matrix4x4 world, IReadOnlyDictionary<string, System.Numerics.Matrix4x4> placements,
+        string description)
+    {
+        var moves = new List<(string Path, Data.Collisions.CollisionMove Move)>();
+        foreach (var group in _selectedCollision.GroupBy(p => p.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            var toWorld = placements.GetValueOrDefault(group.Key, System.Numerics.Matrix4x4.Identity);
+            if (!System.Numerics.Matrix4x4.Invert(toWorld, out var toFile))
+                continue;
+            moves.Add((group.Key, Data.Collisions.CollisionMove.Of(group.Select(p => p.Polygon), toWorld * world * toFile)));
+        }
+        if (moves.Count > 0)
+            Apply(new CollisionMoveEdit(CollisionEdits, description, moves));
     }
 
     public void SetSelectedCollisionMaterial(byte material)

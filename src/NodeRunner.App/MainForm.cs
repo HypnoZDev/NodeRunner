@@ -587,7 +587,8 @@ internal sealed unsafe partial class MainForm : Form
         _collisionLayer.Draw(lines, viewProjection, camera.Position,
             s => _state.IsLayerVisible(CollisionLayer.LayerName(s)) || (collisionTool && !collisionsEnabled));
         if (collisionTool)
-            _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion);
+            _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion,
+                _state.CollisionDragPreview);
         _pathNodeLayer.Update(_state.World, lines, deferChanges: _ui.IsGizmoDragging || ImGui.IsAnyItemActive());
         _pathNodeLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)));
         bool entitiesEnabled = EntityBoxLayer.Categories.Any(c => _state.IsLayerVisible(EntityBoxLayer.LayerName(c)));

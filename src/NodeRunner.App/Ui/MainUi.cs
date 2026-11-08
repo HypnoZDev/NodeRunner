@@ -48,6 +48,7 @@ internal sealed class MainUi
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);
         _roomGizmo = new RoomGizmo(state);
+        _collisionGizmo = new CollisionGizmo(state, collisionLayer);
         _deleteWindow = new DeleteWindow(state);
         _interiorWindow = new InteriorWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
@@ -82,6 +83,7 @@ internal sealed class MainUi
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
     private readonly RoomGizmo _roomGizmo;
+    private readonly CollisionGizmo _collisionGizmo;
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
     private readonly InteriorWindow _interiorWindow;
@@ -132,9 +134,9 @@ internal sealed class MainUi
 
     public bool IsSearchOpen => _searchPalette.IsOpen;
 
-    public bool IsGizmoHovered => _gizmo.IsHovered || _roomGizmo.IsHovered;
+    public bool IsGizmoHovered => _gizmo.IsHovered || _roomGizmo.IsHovered || _collisionGizmo.IsHovered;
 
-    public bool IsGizmoDragging => _gizmo.IsDragging || _roomGizmo.IsDragging;
+    public bool IsGizmoDragging => _gizmo.IsDragging || _roomGizmo.IsDragging || _collisionGizmo.IsDragging;
 
     public void Draw()
     {
@@ -149,6 +151,7 @@ internal sealed class MainUi
         _gizmo.Update(blocked: _searchPalette.IsOpen);
         _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
         _roomGizmo.Update(blocked: _searchPalette.IsOpen);
+        _collisionGizmo.Update(blocked: _searchPalette.IsOpen);
         _viewportOverlay.Draw();
         if (_showLayers) DrawLayersWindow();
         if (_showScene) _scenePanel.Draw(ref _showScene);

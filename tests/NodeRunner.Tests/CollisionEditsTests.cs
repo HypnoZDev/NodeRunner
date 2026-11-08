@@ -49,4 +49,24 @@ public sealed class CollisionEditsTests
         Assert.True(back.IsRemoved("A.YBN", 4));
         Assert.Equal((byte)12, back.MaterialOf("a.ybn", 7));
     }
+
+    [Fact]
+    public void Moves_are_saved_and_move_the_shared_corners()
+    {
+        var edits = new CollisionEdits();
+        var move = CollisionMove.Of([0], Matrix4x4.CreateTranslation(0, 0, 2));
+        edits.AddMove("a.ybn", move);
+
+        var back = CollisionEdits.FromJson(edits.ToJson());
+        var mesh = back.Apply("a.ybn", Mesh());
+
+        Assert.Equal(move.Transform, back.For("a.ybn")!.Moves.Single().Transform);
+        // Polygon 0's corners go up, and with them the same corners of the other triangles.
+        foreach (int i in mesh.Indices.Take(3))
+            Assert.Equal(Mesh().Vertices[i].Z + 2, mesh.Vertices[i].Z);
+        Assert.Equal(mesh.BoundsMax.Z, mesh.Vertices.Max(v => v.Z));
+
+        edits.RemoveMove("a.ybn", move);
+        Assert.Null(edits.For("a.ybn"));
+    }
 }

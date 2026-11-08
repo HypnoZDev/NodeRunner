@@ -1,10 +1,53 @@
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace NodeRunner.Data.Collisions;
 
-// Changes made by hand to one collision file: polygons removed and new materials, numbered as in the game's file
-// (CollisionMesh.Polygons), so they can be applied again to the original at any time.
+// Polygons moved by hand: their corners, and the corners of any other polygon at the same place (so that the surfaces
+// around stay joined), go through Matrix (file space, row-vector convention, 16 floats).
+public sealed record CollisionMove(int[] Polygons, float[] Matrix)
+{
+    public static CollisionMove Of(IEnumerable<int> polygons, Matrix4x4 m) => new([.. polygons.Order()],
+        [m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24, m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44]);
+
+    [JsonIgnore]
+    public Matrix4x4 Transform => Matrix.Length == 16
+        ? new(Matrix[0], Matrix[1], Matrix[2], Matrix[3], Matrix[4], Matrix[5], Matrix[6], Matrix[7],
+            Matrix[8], Matrix[9], Matrix[10], Matrix[11], Matrix[12], Matrix[13], Matrix[14], Matrix[15])
+        : Matrix4x4.Identity;
+
+    // The vertices after these moves, in order. Indices / polygons: those of a CollisionMesh.
+    public static Vector3[] MoveVertices(IReadOnlyList<Vector3> vertices, IReadOnlyList<int> indices, IReadOnlyList<int> polygons,
+        IEnumerable<CollisionMove> moves)
+    {
+        var result = vertices.ToArray();
+        foreach (var move in moves)
+        {
+            var moved = move.Polygons.ToHashSet();
+            var places = new HashSet<Vector3>();
+            for (int t = 0; t < polygons.Count && t * 3 + 2 < indices.Count; t++)
+            {
+                if (!moved.Contains(polygons[t]))
+                    continue;
+                for (int k = 0; k < 3; k++)
+                    places.Add(result[indices[t * 3 + k]]);
+            }
+            if (places.Count == 0)
+                continue;
+            var m = move.Transform;
+            for (int i = 0; i < result.Length; i++)
+            {
+                if (places.Contains(result[i]))
+                    result[i] = Vector3.Transform(result[i], m);
+            }
+        }
+        return result;
+    }
+}
+
+// Changes made by hand to one collision file: polygons moved, removed and given new materials, numbered as in the game's
+// file (CollisionMesh.Polygons), so they can be applied again to the original at any time.
 public sealed class CollisionFileEdit
 {
     public HashSet<int> Removed { get; init; } = [];
@@ -12,14 +55,20 @@ public sealed class CollisionFileEdit
     // Polygon -> material index of materials.dat.
     public Dictionary<int, byte> Materials { get; init; } = [];
 
-    [JsonIgnore]
-    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0;
+    // In the order they were made.
+    public List<CollisionMove> Moves { get; init; } = [];
 
-    // The mesh as the game will see it: removed polygons left out, new materials applied.
-    public CollisionMesh Apply(CollisionMesh mesh)
+    [JsonIgnore]
+    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Moves.Count == 0;
+
+    // The mesh as the game will see it: polygons moved, removed ones left out, new materials applied. withMoves false:
+    // the mesh is already moved (read from the moved file, exact even for the round shapes sharing a moved corner).
+    public CollisionMesh Apply(CollisionMesh mesh, bool withMoves = true)
     {
-        if (IsEmpty || mesh.Polygons.Count != mesh.TriangleCount)
+        bool move = withMoves && Moves.Count > 0;
+        if ((Removed.Count == 0 && Materials.Count == 0 && !move) || mesh.Polygons.Count != mesh.TriangleCount)
             return mesh;
+        var vertices = move ? CollisionMove.MoveVertices(mesh.Vertices, mesh.Indices, mesh.Polygons, Moves) : mesh.Vertices;
         var indices = new List<int>(mesh.Indices.Count);
         var materials = new List<byte>(mesh.TriangleCount);
         var polygons = new List<int>(mesh.TriangleCount);
@@ -34,11 +83,20 @@ public sealed class CollisionFileEdit
             materials.Add(polygon >= 0 && Materials.TryGetValue(polygon, out byte m) ? m : mesh.Materials[t]);
             polygons.Add(polygon);
         }
+        var (min, max) = (mesh.BoundsMin, mesh.BoundsMax);
+        if (move)
+        {
+            foreach (var v in vertices)
+            {
+                min = Vector3.Min(min, v);
+                max = Vector3.Max(max, v);
+            }
+        }
         return new CollisionMesh
         {
-            BoundsMin = mesh.BoundsMin,
-            BoundsMax = mesh.BoundsMax,
-            Vertices = mesh.Vertices,
+            BoundsMin = min,
+            BoundsMax = max,
+            Vertices = vertices,
             Indices = indices,
             Materials = materials,
             Polygons = polygons,
@@ -81,6 +139,20 @@ public sealed class CollisionEdits
             edit.Materials[polygon] = m;
         else
             edit.Materials.Remove(polygon);
+        Changed(path);
+    }
+
+    public void AddMove(string path, CollisionMove move)
+    {
+        Get(path).Moves.Add(move);
+        Changed(path);
+    }
+
+    // The last time this move was made is taken back.
+    public void RemoveMove(string path, CollisionMove move)
+    {
+        if (_files.TryGetValue(path, out var edit) && edit.Moves.LastIndexOf(move) is var i and >= 0)
+            edit.Moves.RemoveAt(i);
         Changed(path);
     }
 

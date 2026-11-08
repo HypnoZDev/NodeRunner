@@ -163,8 +163,12 @@ public sealed class CollisionCatalog
         (_reader as ICollisionWriter ?? throw new NotSupportedException()).RemovePolygons(file.Path, polygons);
 
     // The file with new materials and without removed polygons.
-    public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials) =>
-        (_reader as ICollisionWriter ?? throw new NotSupportedException()).Edit(path, removed, materials);
+    public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
+        IReadOnlyList<CollisionMove> moves) =>
+        (_reader as ICollisionWriter ?? throw new NotSupportedException()).Edit(path, removed, materials, moves);
+
+    public CollisionMesh? ReadMoved(string path, IReadOnlyList<CollisionMove> moves) =>
+        (_reader as ICollisionWriter ?? throw new NotSupportedException()).ReadMoved(path, moves);
 
     public static CollisionKind KindOf(string fileName)
     {

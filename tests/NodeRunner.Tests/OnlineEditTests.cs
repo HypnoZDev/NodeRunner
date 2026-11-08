@@ -191,6 +191,10 @@ public class OnlineEditTests
 
         Share(Apply(CollisionEdit.Remove(a.Collisions, [new("x.ybn", 3), new("x.ybn", 4)])));
         Share(Apply(CollisionEdit.SetMaterial(a.Collisions, [new("y.ybn", 1)], 7, "herbe")));
+        var collisionMove = new CollisionMoveEdit(a.Collisions, "déplacer des surfaces de collision",
+            [("y.ybn", CollisionMove.Of([1, 2], Matrix4x4.CreateRotationZ(0.5f) * Matrix4x4.CreateTranslation(1, 2, 3)))]);
+        collisionMove.Redo();
+        Share(collisionMove);
 
         var node = a.Paths.GetNode(new(5, 1))!;
         var nodeBefore = node.Position;

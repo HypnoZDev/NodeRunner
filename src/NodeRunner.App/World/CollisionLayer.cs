@@ -34,7 +34,7 @@ internal sealed class CollisionLayer : IDisposable
     private readonly HashSet<CollisionFile> _pending = new();
     private readonly Channel<(CollisionFile File, int Generation, CollisionFileEdit? Edit)> _requests =
         Channel.CreateUnbounded<(CollisionFile, int, CollisionFileEdit?)>();
-    private readonly ConcurrentQueue<(CollisionFile File, int Generation, CollisionMesh? Mesh, CollisionMesh? Shown, TriangleBatch[]? Batches, string? Error)> _results = new();
+    private readonly ConcurrentQueue<(CollisionFile File, int Generation, CollisionMesh? Mesh, CollisionMesh? Shown, bool Edited, IReadOnlyList<CollisionMove> Moves, TriangleBatch[]? Batches, string? Error)> _results = new();
     private readonly CancellationTokenSource _stop = new();
 
     private CollisionCatalog? _catalog;
@@ -186,6 +186,8 @@ internal sealed class CollisionLayer : IDisposable
 
             if (!_pending.Remove(result.File))
                 continue; // An interior moved or deleted meanwhile.
+            if (_loaded.Remove(result.File, out var previous))
+                previous.Dispose(); // read again with other moves
             if (result.Error is not null)
             {
                 Errors.Add($"{result.File.Name}.ybn : {result.Error}");
@@ -198,10 +200,13 @@ internal sealed class CollisionLayer : IDisposable
             {
                 Mesh = result.Mesh,
                 Shown = result.Shown,
-                WasEdited = result.Shown != result.Mesh,
+                WasEdited = result.Edited,
+                Moves = result.Moves,
             };
             // Changed while it was being read: shown again with the current changes.
-            if (result.Mesh is not null && (_edits?.For(result.File.Path) is not null || result.Shown != result.Mesh))
+            if (result.Mesh is not null && !SameMoves(result.Moves, MovesOf(result.File.Path)))
+                ReadAgain(result.File);
+            else if (result.Mesh is not null && (_edits?.For(result.File.Path) is not null || result.Edited))
                 Rebuild(renderer, result.File);
             _selectionShown = null;
             _shownVersion++;
@@ -262,17 +267,18 @@ internal sealed class CollisionLayer : IDisposable
                     continue;
                 try
                 {
-                    var mesh = catalog.Read(file);
-                    if (mesh is not null && file.IsInterior)
-                        mesh = Placed(mesh, file.Transform);
-                    var shown = mesh is null ? null : edit?.Apply(mesh) ?? mesh;
-                    _results.Enqueue((file, generation, mesh, shown, shown is null ? null : BuildBatches(shown, catalog.Materials), null));
+                    // Moved polygons: read from the moved file (exactly what will be written). Changes are in the file's
+                    // space: applied before an interior's file is placed.
+                    IReadOnlyList<CollisionMove> moves = edit?.Moves ?? [];
+                    var mesh = moves.Count > 0 ? catalog.ReadMoved(file.Path, moves) : catalog.Read(file);
+                    var shown = mesh is null ? null : Placed(file, edit?.Apply(mesh, withMoves: false) ?? mesh);
+                    _results.Enqueue((file, generation, mesh, shown, edit is not null, moves, shown is null ? null : BuildBatches(shown, catalog.Materials), null));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException) // Any error would stop the loop for good.
                 {
                     if (ex is not (InvalidDataException or IOException))
                         Diagnostics.ErrorLog.Add(L("Collisions"), ex);
-                    _results.Enqueue((file, generation, null, null, null, ex.Message));
+                    _results.Enqueue((file, generation, null, null, false, [], null, ex.Message));
                 }
             }
         }
@@ -281,6 +287,8 @@ internal sealed class CollisionLayer : IDisposable
             // Application closing.
         }
     }
+
+    private static CollisionMesh Placed(CollisionFile file, CollisionMesh mesh) => file.IsInterior ? Placed(mesh, file.Transform) : mesh;
 
     // The triangles in world space (polygon numbers and materials unchanged).
     private static CollisionMesh Placed(CollisionMesh mesh, Matrix4x4 transform)
@@ -307,16 +315,31 @@ internal sealed class CollisionLayer : IDisposable
 
     // A copy, read by the background thread while the interface may change the original.
     private CollisionFileEdit? Snapshot(string path) => _edits?.For(path) is { } edit
-        ? new CollisionFileEdit { Removed = [.. edit.Removed], Materials = new(edit.Materials) }
+        ? new CollisionFileEdit { Removed = [.. edit.Removed], Materials = new(edit.Materials), Moves = [.. edit.Moves] }
         : null;
 
     private void ApplyEdits(ColorRenderer renderer, CollisionEdits edits)
     {
         foreach (var (file, meshes) in _loaded.ToList())
         {
-            if (meshes.Mesh is not null && (meshes.WasEdited || edits.For(file.Path) is not null))
+            if (meshes.Mesh is null)
+                continue;
+            if (!SameMoves(meshes.Moves, MovesOf(file.Path)))
+                ReadAgain(file); // shown as before until it is read again
+            else if (meshes.WasEdited || edits.For(file.Path) is not null)
                 Rebuild(renderer, file);
         }
+    }
+
+    private IReadOnlyList<CollisionMove> MovesOf(string path) => _edits?.For(path)?.Moves ?? (IReadOnlyList<CollisionMove>)[];
+
+    private static bool SameMoves(IReadOnlyList<CollisionMove> a, IReadOnlyList<CollisionMove> b) =>
+        a.Count == b.Count && a.Zip(b).All(p => ReferenceEquals(p.First, p.Second));
+
+    private void ReadAgain(CollisionFile file)
+    {
+        if (_pending.Add(file))
+            _requests.Writer.TryWrite((file, _generation, Snapshot(file.Path)));
     }
 
     private void Rebuild(ColorRenderer renderer, CollisionFile file)
@@ -325,7 +348,7 @@ internal sealed class CollisionLayer : IDisposable
         if (meshes.Mesh is null || _catalog is null)
             return;
         var edit = _edits?.For(file.Path);
-        meshes.Shown = edit?.Apply(meshes.Mesh) ?? meshes.Mesh;
+        meshes.Shown = Placed(file, edit?.Apply(meshes.Mesh, withMoves: false) ?? meshes.Mesh);
         meshes.WasEdited = edit is not null;
         var batches = BuildBatches(meshes.Shown, _catalog.Materials);
         foreach (var mesh in meshes.Surfaces) mesh?.Dispose();
@@ -376,10 +399,55 @@ internal sealed class CollisionLayer : IDisposable
     private ColorMesh? _selectionSurface;
     private ColorMesh? _selectionEdges;
 
-    // The selected polygons, orange with their edges, over the collision.
-    public void DrawSelection(ColorRenderer renderer, Matrix4x4 viewProjection, Vector3 cameraPosition,
-        IReadOnlySet<CollisionPolygon> selection, int selectionVersion)
+    private (Vector3 Center, Dictionary<string, Matrix4x4> Placements)? _frame;
+    private (int Selection, int Shown) _frameVersion = (-1, -1);
+
+    // The middle of the selected polygons as shown, and where each of their files is shown (the copy of an interior
+    // nearest to the camera when there are several); null when none is loaded.
+    public (Vector3 Center, Dictionary<string, Matrix4x4> Placements)? SelectionFrame(IReadOnlySet<CollisionPolygon> selection,
+        int selectionVersion, Vector3 cameraPosition)
     {
+        if (_frameVersion == (selectionVersion, _shownVersion))
+            return _frame;
+        _frameVersion = (selectionVersion, _shownVersion);
+        var byPath = selection.GroupBy(p => p.Path).ToDictionary(g => g.Key, g => g.Select(p => p.Polygon).ToHashSet());
+        var chosen = new Dictionary<string, (Vector3 Min, Vector3 Max, Matrix4x4 Placement, float Distance)>();
+        foreach (var (file, meshes) in _loaded)
+        {
+            if (meshes.Shown is not { } shown || !byPath.TryGetValue(file.Path, out var wanted))
+                continue;
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            for (int t = 0; t < shown.TriangleCount; t++)
+            {
+                if (!wanted.Contains(shown.Polygons[t]))
+                    continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    var v = shown.Vertices[shown.Indices[t * 3 + k]];
+                    min = Vector3.Min(min, v);
+                    max = Vector3.Max(max, v);
+                }
+            }
+            if (min.X > max.X)
+                continue;
+            float distance = Vector3.Distance(cameraPosition, (min + max) / 2);
+            if (!chosen.TryGetValue(file.Path, out var best) || distance < best.Distance)
+                chosen[file.Path] = (min, max, file.IsInterior ? file.Transform : Matrix4x4.Identity, distance);
+        }
+        if (chosen.Count == 0)
+            return _frame = null;
+        var allMin = chosen.Values.Aggregate(new Vector3(float.MaxValue), (m, c) => Vector3.Min(m, c.Min));
+        var allMax = chosen.Values.Aggregate(new Vector3(float.MinValue), (m, c) => Vector3.Max(m, c.Max));
+        return _frame = ((allMin + allMax) / 2, chosen.ToDictionary(c => c.Key, c => c.Value.Placement));
+    }
+
+    // The selected polygons, orange with their edges, over the collision; preview: how the handles are moving them.
+    public void DrawSelection(ColorRenderer renderer, Matrix4x4 viewProjection, Vector3 cameraPosition,
+        IReadOnlySet<CollisionPolygon> selection, int selectionVersion, Matrix4x4? preview = null)
+    {
+        if (preview is { } moved)
+            viewProjection = moved * viewProjection;
         if (_selectionShown is null || selectionVersion != _selectionVersion)
         {
             _selectionShown = new object();
@@ -451,10 +519,13 @@ internal sealed class CollisionLayer : IDisposable
         public ColorMesh?[] Surfaces { get; set; } = surfaces;
         public int TriangleCount { get; set; } = triangleCount;
 
-        // Triangles of the game's file, and as shown (with the hand changes).
+        // Triangles of the game's file (its own space), and as shown (with the hand changes, in world space).
         public CollisionMesh? Mesh { get; init; }
         public CollisionMesh? Shown { get; set; }
         public bool WasEdited { get; set; }
+
+        // The moves the mesh was read with.
+        public IReadOnlyList<CollisionMove> Moves { get; init; } = [];
 
         public void Dispose()
         {

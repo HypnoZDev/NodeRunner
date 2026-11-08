@@ -67,3 +67,34 @@ public sealed class CollisionEdit : IEdit
         }
     }
 }
+
+// Collision polygons moved or turned (one move per file, in the file's space).
+public sealed class CollisionMoveEdit : IEdit
+{
+    private readonly CollisionEdits _edits;
+
+    public CollisionMoveEdit(CollisionEdits edits, string description, IReadOnlyList<(string Path, CollisionMove Move)> moves)
+    {
+        _edits = edits;
+        Description = description;
+        Moves = moves;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public IReadOnlyList<(string Path, CollisionMove Move)> Moves { get; }
+
+    public IEnumerable<CollisionPolygon> Polygons => Moves.SelectMany(m => m.Move.Polygons.Select(p => new CollisionPolygon(m.Path, p)));
+
+    public void Redo()
+    {
+        foreach (var (path, move) in Moves)
+            _edits.AddMove(path, move);
+    }
+
+    public void Undo()
+    {
+        foreach (var (path, move) in Moves.Reverse())
+            _edits.RemoveMove(path, move);
+    }
+}

@@ -1,3 +1,4 @@
+using NodeRunner.Data.Collisions;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Paths;
 
@@ -252,6 +253,36 @@ internal sealed class CollisionCodec : EditCodec<CollisionEdit>
         });
         var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
         return CollisionEdit.ToStates(edits, description, after);
+    }
+}
+
+internal sealed class CollisionMoveCodec : EditCodec<CollisionMoveEdit>
+{
+    public override string Tag => "collision-move";
+
+    protected override void Write(CollisionMoveEdit edit, EditWriter w) =>
+        w.WriteList(edit.Moves, m =>
+        {
+            w.Write(m.Path);
+            w.WriteList(m.Move.Polygons, w.Write);
+            w.WriteList(m.Move.Matrix, w.Write);
+        });
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var moves = r.ReadList(() =>
+        {
+            string path = r.ReadString();
+            var polygons = r.ReadList(r.ReadInt);
+            var matrix = r.ReadList(r.ReadFloat);
+            if (matrix.Count != 16)
+                throw new InvalidDataException("Collision move: 16 numbers expected.");
+            return (path, new CollisionMove([.. polygons], [.. matrix]));
+        });
+        var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
+        var edit = new CollisionMoveEdit(edits, description, moves);
+        edit.Redo();
+        return edit;
     }
 }
 

@@ -64,6 +64,45 @@ public class YbnReaderTests
         Assert.Equal(new Vector3(1), mesh.BoundsMax);
     }
 
+    [Fact]
+    public void Move_MovesSharedCornersAndKeepsTheTreeAroundThePolygons()
+    {
+        // Triangle 0 raised 5 m: its corners 0, 1, 2 move, and with them triangles 1 and 2 (they share 1 and 2), not corner 3.
+        var move = NodeRunner.Data.Collisions.CollisionMove.Of([0], Matrix4x4.CreateTranslation(0, 0, 5));
+        var (data, _) = YbnReader.Edit(Build(), 0, new HashSet<int>(), new Dictionary<int, byte>(), [move]);
+        var mesh = YbnReader.Read(data)!;
+
+        var corners = Enumerable.Range(0, 9).Select(i => mesh.Vertices[mesh.Indices[i]]).Distinct().ToList();
+        Assert.Contains(corners, c => Vector3.Distance(c, new Vector3(100, 0, 5)) < 0.01f);
+        Assert.Contains(corners, c => Vector3.Distance(c, new Vector3(101, 1, 0)) < 0.01f);
+        Assert.Equal(3, corners.Count(c => MathF.Abs(c.Z - 5) < 0.01f));
+
+        // Same corners as the change shown on the mesh read before.
+        var expected = new NodeRunner.Data.Collisions.CollisionFileEdit { Moves = [move] }.Apply(YbnReader.Read(Build())!);
+        for (int i = 0; i < 9; i++)
+            Assert.True(Vector3.Distance(expected.Vertices[expected.Indices[i]], mesh.Vertices[mesh.Indices[i]]) < 0.01f);
+
+        // The tree (geometry space) still holds every corner, and the composite's box holds the moved geometry.
+        var center = ReadVector(data, Tree + 0x40);
+        var quantum = ReadVector(data, Tree + 0x60);
+        var min = center + new Vector3(S16(data, TreeNodes), S16(data, TreeNodes + 2), S16(data, TreeNodes + 4)) * quantum;
+        var max = center + new Vector3(S16(data, TreeNodes + 6), S16(data, TreeNodes + 8), S16(data, TreeNodes + 10)) * quantum;
+        foreach (var corner in corners.Select(c => c - new Vector3(100, 0, 0)))
+        {
+            Assert.True(corner.X >= min.X - 0.01f && corner.Y >= min.Y - 0.01f && corner.Z >= min.Z - 0.01f, $"{corner} < {min}");
+            Assert.True(corner.X <= max.X + 0.01f && corner.Y <= max.Y + 0.01f && corner.Z <= max.Z + 0.01f, $"{corner} > {max}");
+        }
+        Assert.True(ReadVector(data, ChildBoxes + 16).Z >= 4.99f);
+        Assert.True(ReadVector(data, Composite + 0x20).Z >= 4.99f);
+    }
+
+    private static short S16(byte[] data, int at) => BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(at));
+
+    private static Vector3 ReadVector(byte[] data, int at) => new(
+        BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(at)),
+        BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(at + 4)),
+        BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(at + 8)));
+
     private static uint U32(byte[] data, int at) => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(at));
 
     private static byte[] Build()

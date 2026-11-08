@@ -42,6 +42,15 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return Read(data) is { } mesh ? (mesh.BoundsMin, mesh.BoundsMax) : null;
     }
 
+    public CollisionMesh? ReadMoved(string path, IReadOnlyList<CollisionMove> moves)
+    {
+        if (_files.ReadFile(path) is not { } data)
+            return null;
+        var copy = (byte[])data.Clone();
+        new BoundsFile(copy).Move(moves);
+        return Read(copy);
+    }
+
     public byte[]? RemovePolygons(string path, IReadOnlySet<int> polygons)
     {
         if (_files.ReadFile(path) is not { } data)
@@ -60,19 +69,20 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return copy;
     }
 
-    public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials)
+    public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
+        IReadOnlyList<CollisionMove> moves)
     {
         if (_files.ReadFile(path) is not { } data)
             return null;
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
-        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials);
+        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves);
         return ResourceFile.Write(header with { SystemFlags = systemFlags }, content);
     }
 
-    // The decompressed file with new materials, then without the removed polygons; when it grew, its pages become
-    // a single page large enough (offsets are unchanged: pages follow each other).
+    // The decompressed file with new materials, polygons moved, then without the removed polygons; when it grew, its
+    // pages become a single page large enough (offsets are unchanged: pages follow each other).
     public static (byte[] Content, uint SystemFlags) Edit(byte[] data, uint systemFlags, IReadOnlySet<int> removed,
-        IReadOnlyDictionary<int, byte> materials)
+        IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null)
     {
         var copy = (byte[])data.Clone();
         if (materials.Count > 0)
@@ -82,10 +92,12 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
             file.SetMaterials(0, materials, ref polygon);
             copy = file.WithAppended();
         }
-        if (removed.Count > 0)
+        if (removed.Count > 0 || moves is { Count: > 0 })
         {
+            var file = new BoundsFile(copy);
+            file.Move(moves ?? []);
             int polygon = 0;
-            new BoundsFile(copy).Remove(0, removed, ref polygon);
+            file.Remove(0, removed, ref polygon); // also rebuilds the search trees of the moved geometries
         }
 
         int pagesSize = Archives.ResourcePages.Size(systemFlags);

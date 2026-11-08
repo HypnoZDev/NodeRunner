@@ -659,6 +659,8 @@ public static partial class English
         ("supprimer une surface de collision", "delete a collision surface"),
         ("supprimer {0} surfaces de collision", "delete {0} collision surfaces"),
         ("matériau de collision : {0}", "collision material: {0}"),
+        ("déplacer des surfaces de collision", "move collision surfaces"),
+        ("tourner des surfaces de collision", "turn collision surfaces"),
 
         // Saving errors
         ("aucun YMAP du jeu utilisable comme modèle", "no game YMAP usable as a template"),
