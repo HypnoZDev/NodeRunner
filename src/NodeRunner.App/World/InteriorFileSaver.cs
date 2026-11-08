@@ -27,14 +27,26 @@ internal static class InteriorFileSaver
                     throw new InvalidDataException(L("fichier du jeu introuvable"));
                 MapFileContent written;
                 ResourceHeader header;
-                if (Source(files, library, path) is { } source && files.GetResourceHeader(path) is { } found)
+                if (interiors.Count == 1 && interiors[0] is { IsCreated: true, CopiedFromHash: not 0 } copy)
+                {
+                    // An interior duplicated from another one in this session: built again at each save from the
+                    // other one's file (as loaded), the objects being in the same order.
+                    if (library.GetArchetypeFile(copy.CopiedFromHash) is not { } original || Source(files, library, original) is not { } model
+                        || files.GetResourceHeader(original) is not { } found)
+                        throw new InvalidDataException(L("fichier de l'intérieur copié introuvable"));
+                    header = found with { GraphicsFlags = found.GraphicsFlags & 0xF0000000 };
+                    var duplicate = YtypWriter.Duplicate(model, copy.CopiedFromHash, Path.GetFileNameWithoutExtension(name));
+                    written = writer.Write(duplicate, interiors, Borrowed(files, library, YtypWriter.MissingStructures(duplicate, interiors)));
+                }
+                else if (!interiors.Any(i => i.IsCreated) && Source(files, library, path) is { } source && files.GetResourceHeader(path) is { } found)
                 {
                     header = found;
                     written = writer.Write(source, interiors, Borrowed(files, library, YtypWriter.MissingStructures(source, interiors)));
                 }
                 else if (path.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
                 {
-                    // An interior made by the user, not saved yet: a new file, modelled on a game .ytyp.
+                    // An interior made by the user in this session: a new file at each save (the one saved before no
+                    // longer matches its objects), modelled on a game .ytyp.
                     var template = Template(files, library);
                     header = template.Header;
                     written = writer.Build(template.Content, Path.GetFileNameWithoutExtension(name), interiors,

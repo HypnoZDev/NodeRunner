@@ -341,6 +341,48 @@ public sealed class MapLibrary
         StructureVersion++;
     }
 
+    // A copy of an interior under another name, kept in file (a .ytyp of the project): its objects, entity sets, rooms
+    // and portals as they are now, in the same order (its file is written from the source interior's file).
+    public Archetype DuplicateInterior(uint sourceHash, string name, string file)
+    {
+        var source = InteriorArchetype(sourceHash);
+        uint hash = Hashing.Joaat.Hash(name);
+        var copies = new Dictionary<MapEntity, MapEntity>();
+        MapEntity Copy(MapEntity definition)
+        {
+            if (!copies.TryGetValue(definition, out var copy))
+                copies[definition] = copy = definition.CopyDefinition(definition.MovedFrom is { } old ? Copy(old) : null);
+            return copy;
+        }
+
+        var archetype = new Archetype
+        {
+            NameHash = hash,
+            Kind = ArchetypeKind.Interior,
+            BoundsMin = source.BoundsMin,
+            BoundsMax = source.BoundsMax,
+            SphereCenter = source.SphereCenter,
+            SphereRadius = source.SphereRadius,
+            LodDistance = source.LodDistance,
+            Flags = source.Flags,
+            TimeFlags = source.TimeFlags,
+            TextureDictionaryHash = source.TextureDictionaryHash,
+            DrawableDictionaryHash = source.DrawableDictionaryHash,
+            PhysicsDictionaryHash = source.PhysicsDictionaryHash,
+            AssetType = source.AssetType,
+            AssetNameHash = hash,
+            IsCreated = true,
+            // A copy of a copy not saved yet has the same model file.
+            CopiedFromHash = source.IsCreated ? source.CopiedFromHash : source.NameHash,
+            InteriorEntities = [.. source.InteriorEntities.Select(Copy)],
+            InteriorEntitySets = [.. source.InteriorEntitySets.Select(s => new InteriorEntitySet(s.NameHash, [.. s.Entities.Select(Copy)]))],
+            InteriorRooms = source.InteriorRooms,
+            InteriorPortals = source.InteriorPortals,
+        };
+        AddInteriorArchetype(archetype, file);
+        return archetype;
+    }
+
     private Archetype InteriorArchetype(uint interiorHash) =>
         GetArchetype(interiorHash) is { Kind: ArchetypeKind.Interior } archetype ? archetype : throw new ArgumentException("Not an interior.", nameof(interiorHash));
 

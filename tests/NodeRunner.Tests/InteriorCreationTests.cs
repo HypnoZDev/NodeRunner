@@ -168,4 +168,48 @@ public class InteriorCreationTests
         Assert.Contains("data_file 'DLC_ITYP_REQUEST' 'stream/test_int.ytyp'", manifest);
         Assert.DoesNotContain("DLC_ITYP_REQUEST", FiveMResource.BuildManifest("Inside Rockstar", "1.0.0", ["a.ymap"]));
     }
+
+    [Fact]
+    public void A_game_interior_is_duplicated_under_a_new_name()
+    {
+        var source = YtypWriterTests.Sample();
+        var original = new YtypReader().Read(source).Archetypes.Single();
+        var library = MapLibrary.Create();
+        library.AddArchetype(original);
+        library.SetDeleted([original.InteriorEntities[1]], true);
+        var map = library.CreateCustomMap("proj_props.ymap");
+
+        var edit = InteriorDuplicateEdit.Apply(library, map, original.NameHash, "copy_int", new Vector3(10, 20, 5), Quaternion.Identity, "duplicate");
+        uint hash = Data.Hashing.Joaat.Hash("copy_int");
+        var copy = library.GetArchetype(hash)!;
+        Assert.Equal(hash, edit.Interior.ArchetypeHash);
+        Assert.Equal((true, original.NameHash), (copy.IsCreated, copy.CopiedFromHash));
+        Assert.Equal(@"noderunner_project.rpf\copy_int.ytyp", library.GetArchetypeFile(hash));
+        Assert.Equal(original.InteriorEntities.Select(e => (e.ArchetypeHash, e.IsDeleted)), copy.InteriorEntities.Select(e => (e.ArchetypeHash, e.IsDeleted)));
+        Assert.Empty(copy.InteriorEntities.Intersect(original.InteriorEntities));
+        Assert.Equal(3, edit.Interior.InteriorEntities.Count);
+
+        // Its objects are its own: moving one leaves the original as it was.
+        var before = original.InteriorEntities[0].Position;
+        var moved = edit.Interior.InteriorEntities[0];
+        moved.SetPlacement(moved.Position + new Vector3(0, 0, 2), moved.Orientation, moved.Scale);
+        Assert.Equal(before, original.InteriorEntities[0].Position);
+        Assert.Equal(before + new Vector3(0, 0, 2), copy.InteriorEntities[0].Position);
+
+        var model = YtypWriter.Duplicate(source, original.NameHash, "copy_int");
+        var back = new YtypReader().Read(new YtypWriter().Write(model, [copy]).Content);
+        Assert.Equal(hash, back.NameHash);
+        var read = back.Archetypes.Single();
+        Assert.Equal((hash, hash), (read.NameHash, read.AssetNameHash));
+        Assert.Equal([100u, 102u], read.InteriorEntities.Select(e => e.ArchetypeHash));
+        Assert.Equal(before + new Vector3(0, 0, 2), read.InteriorEntities[0].Position);
+        Assert.Equal(original.InteriorRooms.Select(r => r.Name), read.InteriorRooms.Select(r => r.Name));
+
+        var codecs = EditCodecs.ForEditor();
+        var other = MapLibrary.Create();
+        other.AddArchetype(new YtypReader().Read(source).Archetypes.Single());
+        var applied = Assert.IsType<InteriorDuplicateEdit>(codecs.Apply(codecs.Encode(edit, library), new EditContext { Library = other }));
+        Assert.Equal(edit.Interior.Position, applied.Interior.Position);
+        Assert.Equal(original.NameHash, other.GetArchetype(hash)!.CopiedFromHash);
+    }
 }

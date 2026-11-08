@@ -33,7 +33,7 @@ public sealed class YtypReader : IMapTypesReader
     private const int ArchDrawableDictionary = 100;
     private const int ArchPhysicsDictionary = 104;
     private const int ArchAssetType = 108;
-    private const int ArchAssetName = 112;
+    internal const int ArchAssetName = 112;
 
     // CMloArchetypeDef fields.
     internal const int InteriorEntities = 152;

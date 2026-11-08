@@ -378,3 +378,26 @@ internal sealed class InteriorCreateCodec : EditCodec<InteriorCreateEdit>
         return InteriorCreateEdit.Apply(r.Context.Library, map, name, position, r.ReadQuaternion(), description);
     }
 }
+
+internal sealed class InteriorDuplicateCodec : EditCodec<InteriorDuplicateEdit>
+{
+    public override string Tag => "interior-duplicate";
+
+    protected override void Write(InteriorDuplicateEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Interior.Map ?? throw new InvalidOperationException("Interior without a map."));
+        w.Write(edit.SourceHash);
+        w.Write(edit.Name);
+        w.Write(edit.Interior.Position);
+        w.Write(edit.Interior.Orientation);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        uint source = r.ReadUInt();
+        string name = r.ReadString();
+        var position = r.ReadVector3();
+        return InteriorDuplicateEdit.Apply(r.Context.Library, map, source, name, position, r.ReadQuaternion(), description);
+    }
+}

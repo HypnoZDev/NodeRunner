@@ -836,6 +836,38 @@ internal sealed class AppState
             + L("Placez des objets dedans, ajustez la salle avec ses poignées, puis Ctrl+S."));
     }
 
+    // Interior to duplicate under a new name, asked from Properties or the Edit menu (MainUi opens its window).
+    public MapEntity? DuplicateInteriorRequest { get; set; }
+
+    public string SuggestDuplicateName(uint sourceHash) =>
+        InteriorCreation.SuggestName(World.Names?.TryGet(sourceHash) ?? "mlo", IsFreeInteriorName, "_copy");
+
+    // A copy of interior's type under a new name (its own .ytyp in the project, with the same objects, entity sets,
+    // rooms and portals), placed on the ground in front of the camera, its lowest room on the ground; selected.
+    public void DuplicateInterior(MapEntity interior, string name)
+    {
+        Notice = null;
+        if (World.Maps is not { } library || !IsFreeInteriorName(name) || ProjectMap(library) is not { } map
+            || library.GetArchetype(interior.ArchetypeHash) is not { Kind: ArchetypeKind.Interior } source)
+            return;
+        var rooms = source.InteriorRooms.Skip(1).ToList();
+        float reach = rooms.Count == 0 ? 0f
+            : rooms.Max(r => MathF.Max(new Vector2(r.BoundsMin.X, r.BoundsMin.Y).Length(), new Vector2(r.BoundsMax.X, r.BoundsMax.Y).Length()));
+        float floor = rooms.Count == 0 ? 0f : rooms.Min(r => r.BoundsMin.Z);
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? Vector3.Normalize(forward) : Vector3.UnitY;
+        var point = Camera.Position + forward * (10f + Math.Min(reach, 200f));
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 2f;
+        var edit = InteriorDuplicateEdit.Apply(library, map, source.NameHash, name, point with { Z = ground - floor }, InteriorCreation.FacingAway(forward),
+            L($"Dupliquer l'intérieur sous le nom {name}"));
+        History.Add(edit);
+        World.Names?.Add(name);
+        Select(edit.Interior);
+        SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
+        Notify(L($"Intérieur « {name} » créé devant la caméra, copie de {World.Names?.Describe(source.NameHash) ?? ""} : ")
+            + L("ses objets, salles et portails sont maintenant à lui, les modifier ne change pas l'original. Ctrl+S l'enregistre dans son propre .ytyp."));
+    }
+
     // A room of 4 x 4 x 3 m in front of the camera, in the interior's space; selected.
     public void AddRoom(MapEntity interior)
     {

@@ -17,8 +17,7 @@ public static class Adding
         if (archetype is { Kind: ArchetypeKind.Interior })
         {
             // Another instance of an interior (MLO): its objects come from its archetype (MapLibrary.AddEntity).
-            return InteriorCreation.NewInstance(archetypeHash, position, orientation,
-                archetype.LodDistance > 0f ? Math.Min(archetype.LodDistance, 10000f) : InteriorCreation.DefaultLodDistance);
+            return InteriorCreation.NewInstance(archetypeHash, position, orientation, InteriorCreation.InstanceLodDistance(archetype));
         }
         float lodDistance = archetype is { LodDistance: > 0f } a ? Math.Min(a.LodDistance, 10000f) : DefaultLodDistance;
         return new MapEntity

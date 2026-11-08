@@ -213,6 +213,29 @@ public sealed class MapEntity
         return copy;
     }
 
+    // For a definition of an interior's object: the same definition for another interior archetype
+    // (MapLibrary.DuplicateInterior); movedFrom: the copy of the definition this one replaces.
+    internal MapEntity CopyDefinition(MapEntity? movedFrom) => new()
+    {
+        ArchetypeHash = ArchetypeHash,
+        Position = Position,
+        StoredRotation = StoredRotation,
+        Scale = Scale,
+        Flags = Flags,
+        Guid = Guid,
+        SourceIndex = SourceIndex,
+        ParentIndex = ParentIndex,
+        LodDistance = LodDistance,
+        ChildLodDistance = ChildLodDistance,
+        LodLevel = LodLevel,
+        ChildCount = ChildCount,
+        InteriorRoom = InteriorRoom,
+        InteriorPortal = InteriorPortal,
+        IsWindowView = IsWindowView,
+        IsDeleted = IsDeleted,
+        MovedFrom = movedFrom,
+    };
+
     private (Vector3 Position, Quaternion StoredRotation) PlacedInside(MapEntity instance) =>
         (instance.Position + Vector3.Transform(Position, instance.Orientation),
          Quaternion.Inverse(instance.Orientation * Orientation));

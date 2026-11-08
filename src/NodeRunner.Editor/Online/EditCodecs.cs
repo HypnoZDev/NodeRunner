@@ -75,7 +75,8 @@ public sealed class EditCodecs
         .Add(new RoomCodec())
         .Add(new PortalCodec())
         .Add(new InteriorLayoutCodec())
-        .Add(new InteriorCreateCodec());
+        .Add(new InteriorCreateCodec())
+        .Add(new InteriorDuplicateCodec());
 
     public bool CanShare(IEdit edit) => _byType.ContainsKey(edit.GetType());
 

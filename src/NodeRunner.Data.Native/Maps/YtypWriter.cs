@@ -150,6 +150,50 @@ public sealed class YtypWriter : IMapTypesWriter
         return document.Write().Content;
     }
 
+    // A .ytyp holding only the interior sourceHash of source, renamed name (archetype, asset and file): the model of
+    // the file of a duplicated interior, written then by Write as the source interior would be. The other archetypes
+    // and composite objects of source are no longer listed.
+    public static byte[] Duplicate(ReadOnlySpan<byte> source, uint sourceHash, string name)
+    {
+        var document = MetaDocument.Read(source);
+        int root = document.RootBlock;
+        if (root < 0 || root >= document.Blocks.Count || document.Blocks[root].Structure != YtypReader.MapTypesStructure)
+            throw new InvalidDataException("Ce fichier n'est pas un fichier de types (.ytyp).");
+        var item = PointerItems(document, (root, 0), YtypReader.TypesArchetypes)
+            .Find(i => document.Blocks[i.Block].Structure == YtypReader.InteriorArchetypeStructure && ReadUInt32(document, i, YtypReader.ArchName) == sourceHash);
+        if (item == default)
+            throw new InvalidDataException($"L'intérieur 0x{sourceHash:X8} n'est pas dans ce fichier.");
+
+        uint hash = Hashing.Joaat.Hash(name.ToLowerInvariant());
+        var data = document.Blocks[item.Block].Data;
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(item.Offset + YtypReader.ArchName), hash);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(item.Offset + YtypReader.ArchAssetName), hash);
+        BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[root].Data.AsSpan(YtypReader.TypesName), hash);
+        document.Name = name;
+
+        var pointers = new byte[PointerSize];
+        BinaryPrimitives.WriteUInt64LittleEndian(pointers, MetaDocument.Pointer(item.Block, item.Offset));
+        int pointerBlock = document.Blocks.Count;
+        document.Blocks.Add(new MetaDocument.Block(PointerArrayStructure(document), pointers));
+        SetArray(document, (root, 0), YtypReader.TypesArchetypes, pointerBlock, 0, 1);
+        if (FieldOffset(document.FindStructure(YtypReader.MapTypesStructure), "compositeEntityTypes") is { } composite)
+            SetArray(document, (root, 0), composite, 0, 0, 0);
+        return document.Write().Content;
+    }
+
+    private static int? FieldOffset(MetaDocument.StructureInfo? structure, string field)
+    {
+        if (structure is null)
+            return null;
+        uint hash = Hashing.Joaat.Hash(field);
+        for (int i = 0; i + 16 <= structure.Entries.Length; i += 16)
+        {
+            if (BinaryPrimitives.ReadUInt32LittleEndian(structure.Entries.AsSpan(i)) == hash)
+                return BinaryPrimitives.ReadInt32LittleEndian(structure.Entries.AsSpan(i + 4));
+        }
+        return null;
+    }
+
     // Checks that a structure has the size and field offsets written here (fields found by name).
     private static void CheckFields(MetaDocument.StructureInfo structure, int size, (string Name, int Offset)[] fields)
     {

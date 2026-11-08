@@ -690,5 +690,24 @@ public static partial class English
         ("Placez des objets dedans, ajustez la salle avec ses poignées, puis Ctrl+S.", "Place objects in it, adjust the room with its handles, then Ctrl+S."),
         ("aucun .ytyp du jeu avec un intérieur, utilisable comme modèle", "no game .ytyp with an interior, usable as a model"),
         ("aucun YMAP du jeu avec un intérieur, utilisable comme modèle", "no game YMAP with an interior, usable as a model"),
+
+        // Duplicated interior
+        ("{0}  Dupliquer l'intérieur sous un nouveau nom...", "Duplicate the interior under a new name..."),
+        ("Copie l'intérieur sélectionné (ou celui de l'objet sélectionné) sous un autre nom, avec ses objets, dans un .ytyp du projet : la copie se modifie sans toucher l'original.",
+            "Copies the selected interior (or that of the selected object) under another name, with its objects, in a .ytyp of the project: the copy can be edited without changing the original."),
+        ("{0}  Dupliquer sous un nouveau nom...", "Duplicate under a new name..."),
+        ("Une copie de cet intérieur avec ses objets, sous un autre nom (son propre .ytyp) : la modifier ne change pas l'original.",
+            "A copy of this interior with its objects, under another name (its own .ytyp): editing it does not change the original."),
+        ("Une copie de l'intérieur {0} sous un nouveau nom, posée devant la caméra : ",
+            "A copy of the interior {0} under a new name, placed in front of the camera: "),
+        ("mêmes objets, entity sets, salles et portails, enregistrés dans un .ytyp du projet portant son nom. ",
+            "same objects, entity sets, rooms and portals, saved in a .ytyp of the project named after it. "),
+        ("La modifier ne change pas l'original.", "Editing it does not change the original."),
+        ("{0}  Dupliquer", "Duplicate"),
+        ("Dupliquer l'intérieur sous le nom {0}", "Duplicate the interior as {0}"),
+        ("Intérieur « {0} » créé devant la caméra, copie de {1} : ", "Interior \"{0}\" created in front of the camera, a copy of {1}: "),
+        ("ses objets, salles et portails sont maintenant à lui, les modifier ne change pas l'original. Ctrl+S l'enregistre dans son propre .ytyp.",
+            "its objects, rooms and portals are now its own, editing them does not change the original. Ctrl+S saves it in its own .ytyp."),
+        ("fichier de l'intérieur copié introuvable", "file of the copied interior not found"),
     ];
 }

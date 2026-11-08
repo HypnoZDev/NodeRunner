@@ -37,6 +37,12 @@ public sealed class Archetype
 
     public uint AssetNameHash { get; init; }
 
+    // An interior made by the user in this session (not read from a file): its .ytyp is built again at each save.
+    public bool IsCreated { get; init; }
+
+    // For a created interior duplicated from another one: the interior whose file is the model of its own; 0 = none.
+    public uint CopiedFromHash { get; init; }
+
     // For an interior: the objects it contains (walls, furniture...), placed relative to the interior instance.
     public IReadOnlyList<MapEntity> InteriorEntities { get => _interiorEntities; init => _interiorEntities = value; }
     private IReadOnlyList<MapEntity> _interiorEntities = [];

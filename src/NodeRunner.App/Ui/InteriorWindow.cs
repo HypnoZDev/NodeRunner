@@ -1,10 +1,12 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.Data.Maps;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-// "New interior" window: the name of the interior (its archetype and its .ytyp file); created in front of the camera.
+// "New interior" window: the name of the interior (its archetype and its .ytyp file); created in front of the camera,
+// empty or as a copy of another interior.
 internal sealed class InteriorWindow(AppState state)
 {
     public const string Title = $"{Icons.House}  Nouvel intérieur###NouvelInterieur";
@@ -12,12 +14,23 @@ internal sealed class InteriorWindow(AppState state)
     private bool _open;
     private bool _focusName;
     private string _name = "";
+    private MapEntity? _source;
 
     public void Open()
     {
         _open = true;
         _focusName = true;
+        _source = null;
         _name = state.SuggestInteriorName();
+    }
+
+    // A copy of interior (an instance of it) under a new name.
+    public void OpenDuplicate(MapEntity interior)
+    {
+        _open = true;
+        _focusName = true;
+        _source = interior;
+        _name = state.SuggestDuplicateName(interior.ArchetypeHash);
     }
 
     public void Draw()
@@ -37,8 +50,13 @@ internal sealed class InteriorWindow(AppState state)
 
     private void DrawContent()
     {
-        Widgets.Hint(L("Un intérieur (MLO) vide, posé devant la caméra : la salle « limbo » (l'extérieur), une salle de 6 x 6 m ")
-            + L("et une porte vers l'extérieur. Il est enregistré dans un .ytyp du projet portant son nom."), wrap: true);
+        if (_source is { } source)
+            Widgets.Hint(L($"Une copie de l'intérieur {state.World.Names?.Describe(source.ArchetypeHash) ?? ""} sous un nouveau nom, posée devant la caméra : ")
+                + L("mêmes objets, entity sets, salles et portails, enregistrés dans un .ytyp du projet portant son nom. ")
+                + L("La modifier ne change pas l'original."), wrap: true);
+        else
+            Widgets.Hint(L("Un intérieur (MLO) vide, posé devant la caméra : la salle « limbo » (l'extérieur), une salle de 6 x 6 m ")
+                + L("et une porte vers l'extérieur. Il est enregistré dans un .ytyp du projet portant son nom."), wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
 
         string name = _name.Trim();
@@ -67,9 +85,12 @@ internal sealed class InteriorWindow(AppState state)
 
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.BeginDisabled(!free);
-        if ((Widgets.PrimaryButton(L($"{Icons.Check}  Créer"), 120f) || enter) && free)
+        if ((Widgets.PrimaryButton(_source is null ? L($"{Icons.Check}  Créer") : L($"{Icons.Check}  Dupliquer"), 120f) || enter) && free)
         {
-            state.CreateInterior(name);
+            if (_source is { } copied)
+                state.DuplicateInterior(copied, name);
+            else
+                state.CreateInterior(name);
             _open = false;
         }
         ImGui.EndDisabled();

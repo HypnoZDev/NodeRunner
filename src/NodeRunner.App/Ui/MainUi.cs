@@ -157,6 +157,11 @@ internal sealed class MainUi
         ProjectWindow.Draw();
         _deleteWindow.Draw();
         _settingsWindow.Draw();
+        if (_state.DuplicateInteriorRequest is { } duplicated)
+        {
+            _state.DuplicateInteriorRequest = null;
+            _interiorWindow.OpenDuplicate(duplicated);
+        }
         _interiorWindow.Draw();
         _onlineWindow.Draw();
         _errorWindow.Draw();
@@ -305,6 +310,11 @@ internal sealed class MainUi
                 _interiorWindow.Open();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Crée un intérieur vide devant la caméra (une salle et une porte), dans un .ytyp du projet."));
+            var selectedInterior = _state.Selection is { } chosen ? chosen.IsInterior ? chosen : chosen.Interior : null;
+            if (ImGui.MenuItem(L($"{Icons.House}  Dupliquer l'intérieur sous un nouveau nom..."), null, false, selectedInterior is not null) && selectedInterior is not null)
+                _interiorWindow.OpenDuplicate(selectedInterior);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Copie l'intérieur sélectionné (ou celui de l'objet sélectionné) sous un autre nom, avec ses objets, dans un .ytyp du projet : la copie se modifie sans toucher l'original."));
             if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();

@@ -315,6 +315,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (archetype is null)
             ImGui.TextColored(UiTheme.Warning, L("Type introuvable dans les fichiers .ytyp."));
+        else if (archetype.Kind == ArchetypeKind.Interior
+                 && Widgets.Button(L($"{Icons.Copy}  Dupliquer sous un nouveau nom..."),
+                     L("Une copie de cet intérieur avec ses objets, sous un autre nom (son propre .ytyp) : la modifier ne change pas l'original.")))
+            state.DuplicateInteriorRequest = entity;
     }
 
     // The room of an object of an interior, to change (the game draws an object only when its room is visible); warns
