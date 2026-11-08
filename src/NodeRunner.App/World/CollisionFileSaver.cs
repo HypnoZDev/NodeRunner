@@ -6,7 +6,8 @@ using NodeRunner.Editor;
 namespace NodeRunner.App.World;
 
 // Writes the collision files (.ybn) changed by hand, and those cut under deleted buildings at export, into a stream
-// folder. Each file is rebuilt from the game's file, read back and checked before it replaces the previous one.
+// folder. Each file is rebuilt from the game's file (or the project's original one), read back and checked before it
+// replaces the previous one.
 internal static class CollisionFileSaver
 {
     public static void Save(WorldLoader world, CollisionEdits edits, IReadOnlyList<CollisionFileCut> cuts, string folder,
@@ -44,6 +45,17 @@ internal static class CollisionFileSaver
                 var (_, content) = ResourceFile.Read(bytes);
                 _ = YbnReader.Read(content);
                 string target = Path.Combine(folder, name);
+                if (world.ProjectFiles?.StreamFileOf(path) is { } own && IsInside(own, folder))
+                {
+                    // The project's own file is replaced in place; its first version is kept to rebuild it next time.
+                    target = own;
+                    string original = world.ProjectFiles.OriginalOf(own);
+                    if (!File.Exists(original))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(original)!);
+                        File.Copy(own, original);
+                    }
+                }
                 File.WriteAllBytes(target + ".tmp", bytes);
                 File.Move(target + ".tmp", target, overwrite: true);
                 report.Saved.Add(name);
@@ -54,4 +66,8 @@ internal static class CollisionFileSaver
             }
         }
     }
+
+    private static bool IsInside(string file, string folder) =>
+        Path.GetFullPath(file).StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
 }

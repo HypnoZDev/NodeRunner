@@ -1188,7 +1188,7 @@ internal sealed class AppState
 
     private int _savedCollisionRevision;
 
-    private const string CollisionEditsFileName = "collisions.json";
+    private const string CollisionEditsFileName = Data.Collisions.CollisionEdits.FileName;
 
     // The project's collision changes (collisions.json next to projet.json); none without a project.
     private void LoadProjectEdits()
@@ -1223,6 +1223,14 @@ internal sealed class AppState
                 var before = Data.Collisions.CollisionEdits.FromJson(File.ReadAllText(file));
                 foreach (var path in before.Files.Keys.Where(p => CollisionEdits.For(p) is null))
                 {
+                    // A file of the imported mapping gets its first version back; a game's file is no longer needed.
+                    if (World.ProjectFiles?.StreamFileOf(path) is { } own)
+                    {
+                        string original = World.ProjectFiles.OriginalOf(own);
+                        if (File.Exists(original))
+                            File.Move(original, own, overwrite: true);
+                        continue;
+                    }
                     string old = Path.Combine(stream, Path.GetFileName(path));
                     if (File.Exists(old))
                         File.Delete(old);

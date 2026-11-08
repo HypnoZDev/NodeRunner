@@ -14,8 +14,13 @@ public enum CollisionKind
     Other,
 }
 
-// A map collision file and the world box it covers.
-public sealed record CollisionFile(string Path, string Name, Vector3 BoundsMin, Vector3 BoundsMax, CollisionKind Kind);
+// A map collision file and the world box it covers. An interior's file is in the interior's space: Transform places it.
+public sealed record CollisionFile(string Path, string Name, Vector3 BoundsMin, Vector3 BoundsMax, CollisionKind Kind)
+{
+    public Matrix4x4 Transform { get; init; } = Matrix4x4.Identity;
+
+    public bool IsInterior { get; init; }
+}
 
 // World box of a collision file, as listed by the game's cache files (the file is named by its hash).
 public readonly record struct CollisionBox(uint NameHash, Vector3 Min, Vector3 Max);
@@ -85,6 +90,20 @@ public sealed class CollisionCatalog
                 // Several versions (standard, hi@...) per interior: the standard one is used.
                 if (KindOf(name) == CollisionKind.Standard)
                     catalog._interiorFiles[Joaat.Hash(name)] = path;
+                continue;
+            }
+            if (path.StartsWith(GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+            {
+                // A project's file: not in the game's cache files (or with a different extent), its box is read.
+                try
+                {
+                    if (reader.ReadBox(path) is var (min, max))
+                        catalog.Add(new CollisionFile(path, name, min, max, KindOf(name)));
+                }
+                catch (InvalidDataException ex)
+                {
+                    catalog.Errors.Add($"{Path.GetFileName(path)} : {ex.Message}");
+                }
                 continue;
             }
             if (!boxes.TryGetValue(hash, out var placed))

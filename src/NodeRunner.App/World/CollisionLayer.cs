@@ -9,7 +9,8 @@ namespace NodeRunner.App.World;
 
 // Streams the map collision (.ybn, in the chosen version: peds, vehicles or other) around the camera: files within the
 // chosen radius are read and turned into triangles on a background thread (nearest first), sent to the GPU a few per
-// frame, and released when the camera moves away. Hand changes (CollisionEdits) are shown, and the triangles are kept
+// frame, and released when the camera moves away. The collision of the interiors (MLO) placed there is shown too (in the
+// peds version, the only one kept for interiors). Hand changes (CollisionEdits) are shown, and the triangles are kept
 // for selecting polygons.
 internal sealed class CollisionLayer : IDisposable
 {
@@ -20,6 +21,7 @@ internal sealed class CollisionLayer : IDisposable
     private const int MaxPendingReads = 4;
     private const int MaxMeshUploadsPerFrame = 2;
     private const float UnloadMargin = 150f;
+    private const int InteriorRefreshFrames = 30;
 
     // Lifted along the triangle normal so the surfaces do not flicker against the models they follow.
     private const float SurfaceOffset = 0.03f;
@@ -40,6 +42,8 @@ internal sealed class CollisionLayer : IDisposable
     private CollisionKind _kind;
     private CollisionEdits? _edits;
     private int _editsRevision = -1;
+    private List<CollisionFile> _interiors = [];
+    private int _interiorFrames;
 
     public CollisionLayer()
     {
@@ -105,7 +109,14 @@ internal sealed class CollisionLayer : IDisposable
 
         var position = new Vector2(cameraPosition.X, cameraPosition.Y);
         if (enabled)
+        {
+            if (_interiorFrames-- <= 0)
+            {
+                _interiorFrames = InteriorRefreshFrames;
+                FindInteriors(loader, position, radius);
+            }
             RequestFiles(position, radius);
+        }
 
         UploadArrivedFiles(renderer);
         ReleaseFarFiles(position, enabled ? radius + UnloadMargin : -1f);
@@ -123,9 +134,39 @@ internal sealed class CollisionLayer : IDisposable
         }
     }
 
+    // The interiors placed around, each with its collision file; one moved or deleted is dropped.
+    private void FindInteriors(WorldLoader loader, Vector2 position, float radius)
+    {
+        var found = new List<CollisionFile>();
+        if (_kind == CollisionKind.Standard && loader.Maps is { } library)
+        {
+            foreach (var interior in library.EntitiesAround(position, radius))
+            {
+                if (!interior.IsInterior || _catalog!.FindInteriorFile(interior.ArchetypeHash) is not { } path
+                    || GroundSnap.WorldBox(interior, library.GetArchetype(interior.ArchetypeHash)) is not var (min, max))
+                    continue;
+                found.Add(new CollisionFile(path, Path.GetFileNameWithoutExtension(path), min, max, CollisionKind.Standard)
+                {
+                    Transform = interior.Transform,
+                    IsInterior = true,
+                });
+            }
+        }
+        var kept = found.ToHashSet();
+        foreach (var file in _loaded.Keys.Where(f => f.IsInterior && !kept.Contains(f)).ToList())
+        {
+            _loaded[file].Dispose();
+            _loaded.Remove(file);
+            _selectionShown = null;
+        }
+        _pending.RemoveWhere(f => f.IsInterior && !kept.Contains(f));
+        _interiors = found;
+    }
+
     private void RequestFiles(Vector2 position, float radius)
     {
-        foreach (var file in _catalog!.FilesAround(position, radius, _kind))
+        var interiors = _interiors.Where(f => DistanceTo(f, position) <= radius).OrderBy(f => DistanceTo(f, position));
+        foreach (var file in _catalog!.FilesAround(position, radius, _kind).Concat(interiors))
         {
             if (_pending.Count >= MaxPendingReads)
                 break;
@@ -142,7 +183,8 @@ internal sealed class CollisionLayer : IDisposable
             if (result.Generation != _generation)
                 continue; // Result of a previous map.
 
-            _pending.Remove(result.File);
+            if (!_pending.Remove(result.File))
+                continue; // An interior moved or deleted meanwhile.
             if (result.Error is not null)
             {
                 Errors.Add($"{result.File.Name}.ybn : {result.Error}");
@@ -218,6 +260,8 @@ internal sealed class CollisionLayer : IDisposable
                 try
                 {
                     var mesh = catalog.Read(file);
+                    if (mesh is not null && file.IsInterior)
+                        mesh = Placed(mesh, file.Transform);
                     var shown = mesh is null ? null : edit?.Apply(mesh) ?? mesh;
                     _results.Enqueue((file, generation, mesh, shown, shown is null ? null : BuildBatches(shown, catalog.Materials), null));
                 }
@@ -233,6 +277,29 @@ internal sealed class CollisionLayer : IDisposable
         {
             // Application closing.
         }
+    }
+
+    // The triangles in world space (polygon numbers and materials unchanged).
+    private static CollisionMesh Placed(CollisionMesh mesh, Matrix4x4 transform)
+    {
+        var vertices = new Vector3[mesh.Vertices.Count];
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            vertices[i] = Vector3.Transform(mesh.Vertices[i], transform);
+            min = Vector3.Min(min, vertices[i]);
+            max = Vector3.Max(max, vertices[i]);
+        }
+        return new CollisionMesh
+        {
+            BoundsMin = vertices.Length > 0 ? min : mesh.BoundsMin,
+            BoundsMax = vertices.Length > 0 ? max : mesh.BoundsMax,
+            Vertices = vertices,
+            Indices = mesh.Indices,
+            Materials = mesh.Materials,
+            Polygons = mesh.Polygons,
+        };
     }
 
     // A copy, read by the background thread while the interface may change the original.
@@ -347,6 +414,8 @@ internal sealed class CollisionLayer : IDisposable
             file.Dispose();
         _loaded.Clear();
         _pending.Clear();
+        _interiors = [];
+        _interiorFrames = 0;
         Errors.Clear();
         _selectionShown = null;
     }

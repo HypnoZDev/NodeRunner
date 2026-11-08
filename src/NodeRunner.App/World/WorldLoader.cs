@@ -52,6 +52,9 @@ internal sealed class WorldLoader : IDisposable
 
     public CollisionCatalog? Collisions { get; private set; }
 
+    // The project's own files seen as game files (null without any).
+    public LooseFileOverlay? ProjectFiles { get; private set; }
+
     public ModelCatalog? Models { get; private set; }
 
     public IModelReader? ModelReader { get; private set; }
@@ -257,6 +260,31 @@ internal sealed class WorldLoader : IDisposable
         return maps;
     }
 
+    // The game's .ybn files that the project changed and wrote into its stream folder: not the project's own files.
+    private static HashSet<string> GameCollisionFiles(string? streamFolder)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (streamFolder is null || Path.GetDirectoryName(Path.GetFullPath(streamFolder)) is not { } project)
+            return names;
+        string file = Path.Combine(project, CollisionEdits.FileName);
+        try
+        {
+            if (File.Exists(file))
+            {
+                foreach (var path in CollisionEdits.FromJson(File.ReadAllText(file)).Files.Keys)
+                {
+                    if (!path.StartsWith(GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+                        names.Add(Path.GetFileName(path));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            // Reported when the project loads its changes.
+        }
+        return names;
+    }
+
     private void LoadMaps(RpfFileSystem files, MapSelection selection, HashSet<string>? hiddenScriptedMaps, int generation, System.Diagnostics.Stopwatch clock)
     {
         var progress = new Progress(this, generation);
@@ -264,7 +292,7 @@ internal sealed class WorldLoader : IDisposable
         {
             progress.Report(L("Lecture des packs DLC..."));
             // The project's own types, models and textures (a mapping with custom buildings) count as game files.
-            var source = LooseFileOverlay.Over(files, _saveFolder);
+            var source = LooseFileOverlay.Over(files, _saveFolder, GameCollisionFiles(_saveFolder));
             var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;
@@ -295,7 +323,7 @@ internal sealed class WorldLoader : IDisposable
             var userNames = ReadUserNames(names);
 
             progress.Report(L("Index des collisions..."));
-            var collisions = CollisionCatalog.Create(content, new YbnReader(files), new MapCacheReader(),
+            var collisions = CollisionCatalog.Create(content, new YbnReader(source), new MapCacheReader(),
                 maps.GetInteriorArchetypeHashes());
 
             // Road nodes: the game's, with the project's saved files put back (unsaved moves are dropped, like the maps').
@@ -311,6 +339,7 @@ internal sealed class WorldLoader : IDisposable
                 if (paths is not null)
                     PathNetwork = paths;
                 Collisions = collisions;
+                ProjectFiles = source as LooseFileOverlay;
                 Models = models;
                 ModelReader = new DrawableReader(source);
                 Textures = textures;

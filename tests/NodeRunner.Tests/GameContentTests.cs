@@ -77,6 +77,36 @@ public class GameContentTests
     }
 
     [Fact]
+    public void Project_collision_is_read_from_its_original_and_rewritten_game_files_are_skipped()
+    {
+        var files = BaseGame();
+        string project = Directory.CreateTempSubdirectory("nr-overlay").FullName;
+        try
+        {
+            string stream = Directory.CreateDirectory(Path.Combine(project, "stream")).FullName;
+            string originals = Directory.CreateDirectory(Path.Combine(project, "originaux")).FullName;
+            var header = new ResourceHeader(43, 0, 0);
+            byte[] Resource(byte value) => NodeRunner.Data.Native.Resources.ResourceFile.Write(header, Enumerable.Repeat(value, 64).ToArray());
+            File.WriteAllBytes(Path.Combine(stream, "mine.ybn"), Resource(2));      // changed by the project
+            File.WriteAllBytes(Path.Combine(originals, "mine.ybn"), Resource(1));   // as imported
+            File.WriteAllBytes(Path.Combine(stream, "game.ybn"), Resource(3));      // a game's file rewritten
+
+            var source = (NodeRunner.Data.Native.Archives.LooseFileOverlay)NodeRunner.Data.Native.Archives.LooseFileOverlay.Over(
+                files, stream, new HashSet<string>(["game.ybn"]));
+
+            string root = GameContent.LooseFilesRoot;
+            Assert.Equal([$@"{root}\mine.ybn"], source.EnumerateFiles(".ybn").Where(p => p.StartsWith(root)));
+            Assert.Equal(1, source.ReadFile($@"{root}\mine.ybn")![0]);
+            Assert.Equal(Path.Combine(stream, "mine.ybn"), source.StreamFileOf($@"{root}\mine.ybn"));
+            Assert.Equal(Path.Combine(originals, "mine.ybn"), source.OriginalOf(Path.Combine(stream, "mine.ybn")));
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Map_change_of_a_pack_only_applies_to_the_multiplayer_map()
     {
         var files = BaseGame();

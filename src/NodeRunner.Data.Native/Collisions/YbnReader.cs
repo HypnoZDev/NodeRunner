@@ -32,6 +32,16 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return builder.Build();
     }
 
+    public (Vector3 Min, Vector3 Max)? ReadBox(string path)
+    {
+        if (_files.ReadFile(path) is not { } data)
+            return null;
+        if (new BoundsFile(data).RootBox() is var (min, max)
+            && float.IsFinite(min.X + min.Y + min.Z + max.X + max.Y + max.Z) && min.X <= max.X && min.Y <= max.Y && min.Z <= max.Z)
+            return (min, max);
+        return Read(data) is { } mesh ? (mesh.BoundsMin, mesh.BoundsMax) : null;
+    }
+
     public byte[]? RemovePolygons(string path, IReadOnlySet<int> polygons)
     {
         if (_files.ReadFile(path) is not { } data)
@@ -167,6 +177,9 @@ internal sealed partial class BoundsFile(byte[] data)
         F32(o + 16), F32(o + 20), F32(o + 24), 0,
         F32(o + 32), F32(o + 36), F32(o + 40), 0,
         F32(o + 48), F32(o + 52), F32(o + 56), 1);
+
+    // The box of the whole file, as written in it.
+    public (Vector3 Min, Vector3 Max) RootBox() => (Vec3(BoxMinOffset), Vec3(BoxMaxOffset));
 
     public void Add(CollisionMeshBuilder builder, int o, Matrix4x4 transform, ref int polygon)
     {

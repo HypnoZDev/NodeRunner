@@ -48,7 +48,7 @@ internal sealed class CollisionQuery
                 || box.Min.Z > max.Z || box.Max.Z < min.Z)
                 continue;
             if (Read(catalog, path) is { } mesh)
-                result.Add(new PlacedCollision(mesh, interior.Transform));
+                result.Add(new PlacedCollision(edits?.Apply(path, mesh) ?? mesh, interior.Transform));
         }
         return result;
     }

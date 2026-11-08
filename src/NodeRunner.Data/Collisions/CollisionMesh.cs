@@ -26,4 +26,7 @@ public interface ICollisionReader
 {
     // Reads a .ybn file of the game, or returns null if it does not exist or holds no collision.
     CollisionMesh? Read(string path);
+
+    // The world box the file covers, without building its triangles when the reader can.
+    (Vector3 Min, Vector3 Max)? ReadBox(string path) => Read(path) is { } mesh ? (mesh.BoundsMin, mesh.BoundsMax) : null;
 }

@@ -110,6 +110,8 @@ public sealed class CollisionEdits
         Revision++;
     }
 
+    public const string FileName = "collisions.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     // Saved in the project (collisions.json): the .ybn files are rebuilt from the game's files with these changes.

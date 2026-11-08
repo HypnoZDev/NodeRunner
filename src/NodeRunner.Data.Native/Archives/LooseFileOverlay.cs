@@ -6,24 +6,33 @@ namespace NodeRunner.Data.Native.Archives;
 
 // The game's files plus the type, model and texture files of a folder (a project's "stream"), seen as one more archive
 // (GameContent.LooseFilesRoot) that is activated last: like in FiveM, they win over the game's files of the same name.
-// Maps (.ymap) and collisions (.ybn) of the folder are handled by the project itself.
+// Maps (.ymap) of the folder are handled by the project itself. A collision file (.ybn) changed in the project keeps its
+// first version in the "originaux" folder next to the stream folder: that one is read, the changes are made on it again.
 public sealed class LooseFileOverlay : IGameFileSystem
 {
-    public static readonly string[] Extensions = [".ytyp", ".ydr", ".ydd", ".yft", ".ytd"];
+    public static readonly string[] Extensions = [".ytyp", ".ydr", ".ydd", ".yft", ".ytd", ".ybn"];
+
+    public const string OriginalsFolderName = "originaux";
 
     private readonly IGameFileSystem _game;
+    private readonly string _originals;
     private readonly Dictionary<string, string> _diskPaths = new(StringComparer.OrdinalIgnoreCase);
 
-    private LooseFileOverlay(IGameFileSystem game) => _game = game;
+    private LooseFileOverlay(IGameFileSystem game, string folder)
+    {
+        _game = game;
+        _originals = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(folder)) ?? folder, OriginalsFolderName);
+    }
 
     public int FileCount => _diskPaths.Count;
 
-    // The game's file system alone when the folder is missing or holds none of these files.
-    public static IGameFileSystem Over(IGameFileSystem game, string? folder)
+    // The game's file system alone when the folder is missing or holds none of these files. Skipped: files of the folder
+    // that are not the project's own (a game's .ybn rewritten with the project's changes).
+    public static IGameFileSystem Over(IGameFileSystem game, string? folder, IReadOnlySet<string>? skipped = null)
     {
         if (folder is null || !Directory.Exists(folder))
             return game;
-        var overlay = new LooseFileOverlay(game);
+        var overlay = new LooseFileOverlay(game, folder);
         IEnumerable<string> files;
         try
         {
@@ -35,7 +44,8 @@ public sealed class LooseFileOverlay : IGameFileSystem
         }
         foreach (var file in files)
         {
-            if (Extensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
+            if (Extensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)
+                && skipped?.Contains(Path.GetFileName(file)) != true)
                 overlay._diskPaths.TryAdd($@"{GameContent.LooseFilesRoot}\{Path.GetFileName(file)}", file);
         }
         return overlay._diskPaths.Count == 0 ? game : overlay;
@@ -48,13 +58,24 @@ public sealed class LooseFileOverlay : IGameFileSystem
 
     public bool FileExists(string path) => _diskPaths.ContainsKey(path) || _game.FileExists(path);
 
+    // The file of the stream folder behind a path of this overlay, or null for a game's file.
+    public string? StreamFileOf(string path) => _diskPaths.GetValueOrDefault(path);
+
+    // Where the first version of a file of the stream folder is kept once the project changes it.
+    public string OriginalOf(string streamFile) => Path.Combine(_originals, Path.GetFileName(streamFile));
+
+    // The original when there is one: the stream folder then holds the changed file.
+    private string Source(string disk) =>
+        disk.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase) && OriginalOf(disk) is var original && File.Exists(original)
+            ? original : disk;
+
     public byte[]? ReadFile(string path)
     {
         if (!_diskPaths.TryGetValue(path, out var disk))
             return _game.ReadFile(path);
         try
         {
-            var bytes = File.ReadAllBytes(disk);
+            var bytes = File.ReadAllBytes(Source(disk));
             if (ProtectedFile.IsProtected(bytes))
                 throw ProtectedFile.Error(Path.GetFileName(disk));
             return ResourceFile.Read(bytes).Content;
@@ -76,7 +97,7 @@ public sealed class LooseFileOverlay : IGameFileSystem
         try
         {
             Span<byte> head = stackalloc byte[16];
-            using var stream = File.OpenRead(disk);
+            using var stream = File.OpenRead(Source(disk));
             stream.ReadExactly(head);
             return ResourceFile.ReadHeader(head);
         }
