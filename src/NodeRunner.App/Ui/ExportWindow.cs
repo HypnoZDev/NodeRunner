@@ -132,7 +132,14 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             int editedCollisions = state.CollisionEdits.Files.Count;
             int editedOccluders = state.OccluderEdits.StreamFileNames.Count();
             int editedInteriors = state.InteriorFilesToExport.Count;
-            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 && editedCollisions == 0 && editedOccluders == 0 && editedInteriors == 0 ? L("aucune modification à exporter") : "aucun" : $"{maps.Count} fichier(s)");
+            int projectFiles = state.ProjectFileCount;
+            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 && editedCollisions == 0 && editedOccluders == 0 && editedInteriors == 0 && projectFiles == 0 ? L("aucune modification à exporter") : "aucun" : $"{maps.Count} fichier(s)");
+            if (projectFiles > 0)
+            {
+                Widgets.Property(L("Fichiers du projet"), L("Fichiers du dossier stream du projet (modèles, textures, collisions d'un mapping ou d'un mod importé), recopiés tels quels. Un fichier modifié dans NodeRunner est écrit à leur place."));
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted(L($"{projectFiles} fichier(s)"));
+            }
             if (editedInteriors > 0)
             {
                 Widgets.Property(L("Intérieurs"), L("Fichiers .ytyp des intérieurs (MLO) dont des objets ont été déplacés"));
@@ -166,7 +173,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             DrawCheck(maps.Count);
 
         ImGui.Dummy(new Vector2(0, 4));
-        bool canExport = (maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
+        bool canExport = (maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
         ImGui.BeginDisabled(!canExport);
         if (Widgets.PrimaryButton(L($"{Icons.Package}  Exporter"), 120f) && target is not null)
             Export(maps, pathAreas, target);
@@ -416,7 +423,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
         var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion, state.CollisionEdits,
-            state.OccluderFileName, state.InteriorFilesToExport);
+            state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out var copied);
         var occluderNames = state.OccluderEdits.StreamFileNames.Concat(occlusion.Select(c => c.FileName)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         int collisionFiles = report.Saved.Count(f => f.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase));
         int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
@@ -431,6 +438,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             extra.Add(L($"{occlusionFiles} YMAP d'occlusion"));
         if (pathFiles > 0)
             extra.Add(L($"{pathFiles} pathnodes .ynd"));
+        if (copied.Count > 0)
+            extra.Add(L($"{copied.Count} fichier(s) du projet"));
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
         _result = report.Errors.Count == 0
             ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles} YMAP{extraText} exporté(s) dans {target}"), true, target)

@@ -30,10 +30,27 @@ internal static class ResourceExporter
         }
     }
 
+    // Files of the project's stream folder (models, textures, collisions of an imported mapping or mod, files saved in an
+    // earlier session): those the export does not write again are copied as they are.
+    public static List<string> ProjectFiles(string? projectStream)
+    {
+        if (projectStream is null || !Directory.Exists(projectStream))
+            return [];
+        try
+        {
+            return MappingImport.FindFiles(projectStream).Files;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
     public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
         IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts, CollisionEdits collisionEdits,
-        string occluderFileName, IReadOnlyList<string> interiorFiles)
+        string occluderFileName, IReadOnlyList<string> interiorFiles, string? projectStream, out List<string> copied)
     {
+        copied = [];
         if (Inspect(resourceFolder) == TargetState.Foreign)
             return new MapFileSaver.Report([], [L("ce dossier existe déjà et n'a pas été créé par NodeRunner")]);
 
@@ -53,20 +70,45 @@ internal static class ResourceExporter
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
         InteriorFileSaver.Save(world, interiorFiles, stream, report);
-        if (report.Saved.Count == 0 && collisionEdits.Files.Count == 0 && OccluderMaps.Capture(world, occluderFileName).IsEmpty)
+        var own = ProjectFiles(projectStream);
+        if (report.Saved.Count == 0 && collisionEdits.Files.Count == 0 && OccluderMaps.Capture(world, occluderFileName).IsEmpty && own.Count == 0)
             return report;
         CollisionFileSaver.Save(world, collisionEdits, collisionCuts, stream, report);
         OccluderFileSaver.Save(world, occlusionCuts, occluderFileName, stream, report);
+        CopyProjectFiles(own, stream, report, copied);
+        var files = report.Saved.Concat(copied).ToList();
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
-                FiveMResource.BuildManifest(Program.Author, Program.Version, report.Saved, NewTypeFiles(world, report.Saved)));
+                FiveMResource.BuildManifest(Program.Author, Program.Version, files, NewTypeFiles(world, files)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             report.Errors.Add($"{FiveMResource.ManifestFileName} : {ex.Message}");
         }
         return report;
+    }
+
+    // A file written by the export (modified map, collision...) wins over the project's copy of the same name.
+    private static void CopyProjectFiles(List<string> own, string stream, MapFileSaver.Report report, List<string> copied)
+    {
+        var written = report.Saved.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in own)
+        {
+            string name = Path.GetFileName(file);
+            if (written.Contains(name))
+                continue;
+            try
+            {
+                Directory.CreateDirectory(stream);
+                File.Copy(file, Path.Combine(stream, name), overwrite: true);
+                copied.Add(name);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                report.Errors.Add($"{name} : {ex.Message}");
+            }
+        }
     }
 
     // The .ytyp files written that the game does not have (interiors made by the user).
@@ -81,7 +123,5 @@ internal static class ResourceExporter
         return types.Where(t => !game.Contains(t)).ToList();
     }
 
-    private static bool IsStreamedFile(string path) =>
-        path.EndsWith(".ymap", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase)
-        || path.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase);
+    private static bool IsStreamedFile(string path) => MappingImport.IsStreamed(path);
 }

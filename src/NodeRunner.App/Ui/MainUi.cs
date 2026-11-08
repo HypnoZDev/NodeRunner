@@ -101,6 +101,8 @@ internal sealed class MainUi
 
     public bool ImportMappingRequested { get; set; }
 
+    public bool ImportPackageRequested { get; set; }
+
     public void ShowProjectPanel()
     {
         _showProject = true;
@@ -406,7 +408,11 @@ internal sealed class MainUi
         if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mapping...")))
             ImportMappingRequested = true;
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(L("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié."));
+            ImGui.SetTooltip(L("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié.\nAstuce : on peut aussi glisser un dossier, un .oiv ou un .zip sur la fenêtre."));
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mod OpenIV (.oiv) ou un .zip...")))
+            ImportPackageRequested = true;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L("Les fichiers de carte du mod (modèles, textures, collisions...) vont dans le dossier stream d'un nouveau projet,\nsous leur nom du jeu : ils remplacent les fichiers du jeu, prêts pour l'export en ressource FiveM."));
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))
         {

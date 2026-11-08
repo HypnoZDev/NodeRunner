@@ -71,7 +71,17 @@ internal sealed unsafe partial class MainForm : Form
         _backdrop = state.Settings.Transparency > 0f && BackdropSupported;
         _surface = new RenderSurface { Dock = DockStyle.Fill, IsWindowFrame = IsFramePoint };
         Controls.Add(_surface);
+
+        // A mapping folder, an OpenIV package (.oiv) or a .zip dropped on the window is imported as a new project.
+        _surface.AllowDrop = true;
+        _surface.DragEnter += (_, e) => e.Effect = DroppedPath(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        _surface.DragDrop += (_, e) => _droppedPath = DroppedPath(e); // Handled on the next frame, not inside Explorer's drag loop.
     }
+
+    private string? _droppedPath;
+
+    private static string? DroppedPath(DragEventArgs e) =>
+        e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths && NodeRunner.Editor.MappingImport.CanImport(paths[0]) ? paths[0] : null;
 
     // No GDI surface: the window shows only DirectX's image and, through its transparent pixels, the backdrop.
     protected override CreateParams CreateParams
@@ -1131,6 +1141,20 @@ internal sealed unsafe partial class MainForm : Form
             BrowseForMapping();
         }
 
+        if (_ui.ImportPackageRequested)
+        {
+            _ui.ImportPackageRequested = false;
+            BrowseForPackage();
+        }
+
+        if (_droppedPath is { } dropped)
+        {
+            _droppedPath = null;
+            Activate();
+            if (ConfirmLeaveChanges())
+                ImportMapping(dropped);
+        }
+
         if (_ui.CloseProjectRequested)
         {
             _ui.CloseProjectRequested = false;
@@ -1202,10 +1226,28 @@ internal sealed unsafe partial class MainForm : Form
         };
         if (dialog.ShowDialog(this) != DialogResult.OK || !ConfirmLeaveChanges())
             return;
+        ImportMapping(dialog.SelectedPath);
+    }
+
+    private void BrowseForPackage()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = L("Importer un mod OpenIV (.oiv) ou une archive .zip"),
+            Filter = L("Mods et archives (*.oiv;*.zip)|*.oiv;*.zip|Tous les fichiers (*.*)|*.*"),
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK || !ConfirmLeaveChanges())
+            return;
+        ImportMapping(dialog.FileName);
+    }
+
+    private void ImportMapping(string source)
+    {
         NodeRunner.Editor.ImportResult result;
         try
         {
-            result = NodeRunner.Editor.MappingImport.Import(dialog.SelectedPath, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack);
+            result = NodeRunner.Editor.MappingImport.Import(source, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1218,9 +1260,11 @@ internal sealed unsafe partial class MainForm : Form
             return;
         }
         _ui.ShowProjectPanel();
+        string author = result.Author is { } by ? L($" (par {by})") : "";
         string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
+        string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) du mod non repris (pas des fichiers de carte) :\n") + string.Join("\n", result.Ignored.Take(10));
         MessageBox.Show(this,
-            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} » :\n{result.Project.Folder}\n\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}"),
+            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} »{author} :\n{result.Project.Folder}\n\nLes fichiers qui portent le nom d'un fichier du jeu le remplacent (comme dans FiveM).\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}{ignored}"),
             L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 

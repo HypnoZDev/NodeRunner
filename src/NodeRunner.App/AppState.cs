@@ -1295,6 +1295,21 @@ internal sealed class AppState
 
     public string? SaveFolder => Project?.StreamFolder;
 
+    // Streamed files of the project's folder (an imported mod's models, textures, collisions...), copied by the FiveM
+    // export; read again at most every 2 s, the toolbar asks every frame.
+    public int ProjectFileCount
+    {
+        get
+        {
+            long now = Environment.TickCount64;
+            if (_projectFiles.Folder != SaveFolder || now - _projectFiles.Time > 2000)
+                _projectFiles = (SaveFolder, now, NodeRunner.App.World.ResourceExporter.ProjectFiles(SaveFolder).Count);
+            return _projectFiles.Count;
+        }
+    }
+
+    private (string? Folder, long Time, int Count) _projectFiles = (null, long.MinValue / 2, 0);
+
     public string? ProjectError { get; private set; }
 
     private const int MaxRecentProjects = 8;

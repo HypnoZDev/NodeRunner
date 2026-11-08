@@ -41,7 +41,7 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         if (Widgets.IconButton(Icons.Save, "save", saveTip, history.HasUnsavedChanges && !state.Online.IsGuest, active: false))
             save();
         ImGui.SameLine();
-        if (Widgets.IconButton(Icons.Package, "export", L("Exporter en ressource FiveM (fxmanifest.lua + YMAP dans « stream »)"), state.MapsToExport.Count > 0 || state.PathAreasToSave.Count > 0 || state.InteriorFilesToExport.Count > 0 || !state.OccluderEdits.IsEmpty))
+        if (Widgets.IconButton(Icons.Package, "export", L("Exporter en ressource FiveM (fxmanifest.lua + YMAP dans « stream »)"), state.MapsToExport.Count > 0 || state.PathAreasToSave.Count > 0 || state.InteriorFilesToExport.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0))
             export();
         ImGui.SameLine();
         if (Widgets.IconButton(Icons.Undo, "undo", history.NextUndo is { } undo ? L($"Annuler : {undo.Description} (Ctrl+Z)") : L("Annuler (Ctrl+Z)"), history.CanUndo))
