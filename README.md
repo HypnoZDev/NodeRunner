@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.1/NodeRunner-1.3.1-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -50,6 +50,9 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   invisible ni de bâtiment fantôme au loin. Un aperçu montre tout ce qui va partir avant de confirmer.
 - **Modifier les collisions** (outil 5) : cliquez sur une surface ou tracez un rectangle, puis supprimez-la (ouvrir un
   passage, retirer un mur invisible) ou changez son matériau (herbe, sable, métal...). Exporté dans la ressource FiveM.
+- **Portes** : sélectionner toutes les portes d'un bâtiment, les supprimer ou les cacher par script, copier leur
+  configuration pour qb-doorlock, voir comment elles s'ouvrent (arc, réglages du jeu), les remplacer par une autre porte
+  recalée dans l'encadrement, et vérifier les portes oubliées ou en double avant l'export.
 - Entity sets des intérieurs (mobilier des appartements, bunkers, clubs...) à afficher en direct, avec les lignes de
   script prêtes à copier.
 
@@ -69,7 +72,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.1/NodeRunner-1.3.1-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
