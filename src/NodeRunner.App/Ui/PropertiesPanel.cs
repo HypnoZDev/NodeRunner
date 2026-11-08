@@ -1017,6 +1017,35 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             state.AddRoom(interior);
     }
 
+    private string? _intEditId;
+    private int _intEditValue;
+
+    // InputInt rejects EnterReturnsTrue: the +/- buttons apply at once, typed values when the field is released.
+    private bool CommitInt(string id, ref int value, int step, int stepFast)
+    {
+        int v = value;
+        bool changed = ImGui.InputInt(id, ref v, step, stepFast);
+        bool active = ImGui.IsItemActive();
+        if (changed && active)
+        {
+            _intEditId = id;
+            _intEditValue = v;
+            return false;
+        }
+        if (changed)
+        {
+            value = v;
+            return true;
+        }
+        if (ImGui.IsItemDeactivatedAfterEdit() && _intEditId == id)
+        {
+            _intEditId = null;
+            value = _intEditValue;
+            return true;
+        }
+        return false;
+    }
+
     // A text field whose value is applied when it is released (Enter or click elsewhere); true with the typed text then.
     private bool CommitText(string id, string current, string hint, out string committed)
     {
@@ -1139,7 +1168,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             {
                 int floor = room.FloorId;
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.InputInt("##room_floor", ref floor, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                if (CommitInt("##room_floor", ref floor, 1, 1))
                     Change(room with { FloorId = floor }, L($"Étage de la salle {index}"));
             }
             Widgets.Property(L("Profondeur de l'extérieur"), L("Nombre de portails à traverser au plus pour voir l'extérieur depuis cette salle ")
@@ -1147,7 +1176,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             {
                 int depth = room.ExteriorVisibilityDepth;
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.InputInt("##room_depth", ref depth, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                if (CommitInt("##room_depth", ref depth, 1, 1))
                     Change(room with { ExteriorVisibilityDepth = Math.Max(-1, depth) }, L($"Profondeur de l'extérieur de la salle {index}"));
             }
 
@@ -1371,14 +1400,14 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             {
                 int opacity = portal.Opacity;
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.InputInt("##portal_opacity", ref opacity, 1, 10, ImGuiInputTextFlags.EnterReturnsTrue))
+                if (CommitInt("##portal_opacity", ref opacity, 1, 10))
                     Change(portal with { Opacity = Math.Max(0, opacity) }, L($"Opacité du portail {index}"));
             }
             Widgets.Property(L("Priorité du miroir"), L("Ordre de dessin quand plusieurs miroirs sont visibles (0 le plus souvent). Entrée pour valider."));
             {
                 int priority = portal.MirrorPriority;
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.InputInt("##portal_mirror", ref priority, 1, 1, ImGuiInputTextFlags.EnterReturnsTrue))
+                if (CommitInt("##portal_mirror", ref priority, 1, 1))
                     Change(portal with { MirrorPriority = Math.Max(0, priority) }, L($"Priorité du miroir du portail {index}"));
             }
             Widgets.Property(L("Occlusion audio"), L("Réglage du son à travers le portail (audio occlusion), par son nom ou son hash (0x...). ")
