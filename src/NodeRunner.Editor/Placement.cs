@@ -9,6 +9,9 @@ public readonly record struct Placement(Vector3 Position, Quaternion Orientation
     public static Placement Of(MapEntity entity) => new(entity.Position, entity.Orientation, entity.Scale);
 
     public void ApplyTo(MapEntity entity) => entity.SetPlacement(Position, Orientation, Scale);
+
+    // Object space to world, as MapEntity.Transform.
+    public Matrix4x4 Transform => Matrix4x4.CreateScale(Scale) * Matrix4x4.CreateFromQuaternion(Orientation) * Matrix4x4.CreateTranslation(Position);
 }
 
 // An object moved, turned or scaled.
@@ -20,8 +23,20 @@ public sealed class PlacementEdit(MapEntity entity, Placement before, Placement 
     public Placement Before { get; } = before;
     public Placement After { get; } = after;
 
-    public void Undo() => Before.ApplyTo(entity);
-    public void Redo() => After.ApplyTo(entity);
+    // The map collision moved with the object, if any.
+    public CollisionMoveEdit? Collision { get; set; }
+
+    public void Undo()
+    {
+        Collision?.Undo();
+        Before.ApplyTo(entity);
+    }
+
+    public void Redo()
+    {
+        After.ApplyTo(entity);
+        Collision?.Redo();
+    }
 }
 
 // Several objects moved, turned or scaled together (one undo step); the last one is the main one.
@@ -31,10 +46,23 @@ public sealed class GroupPlacementEdit(IReadOnlyList<MapEntity> entities, IReadO
     public MapEntity? Subject => entities[^1];
     public IEnumerable<MapEntity> Entities => entities;
     public IReadOnlyList<MapEntity> Selection => entities;
+    public IReadOnlyList<Placement> Before => before;
     public IReadOnlyList<Placement> After => after;
 
-    public void Undo() => Apply(before);
-    public void Redo() => Apply(after);
+    // The map collision moved with the objects, if any.
+    public CollisionMoveEdit? Collision { get; set; }
+
+    public void Undo()
+    {
+        Collision?.Undo();
+        Apply(before);
+    }
+
+    public void Redo()
+    {
+        Apply(after);
+        Collision?.Redo();
+    }
 
     private void Apply(IReadOnlyList<Placement> placements)
     {

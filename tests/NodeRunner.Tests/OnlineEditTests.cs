@@ -129,7 +129,10 @@ public class OnlineEditTests
         var before = Placement.Of(bench);
         var after = new Placement(new(31, 6, 2), Quarter, new(2, 2, 1));
         after.ApplyTo(bench);
-        Share(new PlacementEdit(bench, before, after, "Déplacer le banc"));
+        // Its map collision moved with it.
+        var follow = new CollisionMoveEdit(a.Collisions, "Déplacer le banc", [("z.ybn", CollisionMove.Of([4, 5], Matrix4x4.CreateTranslation(1, 0, 0)))]);
+        follow.Redo();
+        Share(new PlacementEdit(bench, before, after, "Déplacer le banc") { Collision = follow });
 
         var group = new[] { a.Map.Entities[1], a.Map.Entities[2] };
         var groupBefore = group.Select(Placement.Of).ToList();

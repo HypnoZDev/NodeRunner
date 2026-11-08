@@ -611,8 +611,8 @@ internal sealed class TransformGizmo(AppState state)
             _ => L("Déplacer"),
         };
         state.History.Add(drag.IsGroup
-            ? new GroupPlacementEdit(drag.Entities, drag.Starts, ends, $"{verb} {name}")
-            : new PlacementEdit(drag.Main, drag.Starts[0], ends[0], $"{verb} {name}"));
+            ? state.FollowCollision(new GroupPlacementEdit(drag.Entities, drag.Starts, ends, $"{verb} {name}"))
+            : state.FollowCollision(new PlacementEdit(drag.Main, drag.Starts[0], ends[0], $"{verb} {name}")));
     }
 
     // --- Drawing ---

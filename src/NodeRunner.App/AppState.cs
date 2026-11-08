@@ -399,12 +399,12 @@ internal sealed class AppState
         if (entities.Count == 1)
         {
             var (entity, height) = moved[0];
-            History.Add(new PlacementEdit(entity, before[0], Placement.Of(entity), L($"Poser au sol {Name(entity)}")));
+            History.Add(FollowCollision(new PlacementEdit(entity, before[0], Placement.Of(entity), L($"Poser au sol {Name(entity)}"))));
             Notify(L($"{Name(entity)} posé au sol ({(height < 0 ? L("descendu") : L("monté"))} de {MathF.Abs(height):0.00} m)."));
             return;
         }
         // One step for the whole selection (objects already on the ground included: they keep their place).
-        History.Add(new GroupPlacementEdit(entities, before, [.. entities.Select(Placement.Of)], L($"Poser au sol {entities.Count} objets")));
+        History.Add(FollowCollision(new GroupPlacementEdit(entities, before, [.. entities.Select(Placement.Of)], L($"Poser au sol {entities.Count} objets"))));
         Notify(L($"{moved.Count} objet(s) posé(s) au sol sur {entities.Count}.{missing}"), withoutGround > 0);
     }
 
@@ -1020,6 +1020,37 @@ internal sealed class AppState
         int count = _selectedCollision.Count;
         SelectCollision([], CollisionSelectMode.Replace);
         Notify(count == 1 ? L("1 surface de collision supprimée") : L($"{count} surfaces de collision supprimées"));
+    }
+
+    // A move of objects (already made) with their map collision moved too (setting CollisionFollowsObjects).
+    public IEdit FollowCollision(PlacementEdit edit)
+    {
+        edit.Collision = CollisionFollowing([(edit.Entity, edit.Before, edit.After)], edit.Description);
+        return edit;
+    }
+
+    public IEdit FollowCollision(GroupPlacementEdit edit)
+    {
+        edit.Collision = CollisionFollowing(edit.Selection.Select((e, i) => (e, edit.Before[i], edit.After[i])), edit.Description);
+        return edit;
+    }
+
+    private CollisionMoveEdit? CollisionFollowing(IEnumerable<(MapEntity Entity, Placement Before, Placement After)> moved, string description)
+    {
+        if (!Settings.CollisionFollowsObjects || World.Collisions is not { } catalog || World.Maps is not { } library)
+            return null;
+        var errors = new List<string>();
+        var moves = CollisionRemoval.Follow(catalog, CollisionEdits,
+            moved.Select(m => (m.Entity, library.GetArchetype(m.Entity.ArchetypeHash), m.Before, m.After)), errors);
+        if (errors.Count > 0)
+            Notify(L($"Collision illisible : {errors[0]}"), warning: true);
+        if (moves.Count == 0)
+            return null;
+        var edit = new CollisionMoveEdit(CollisionEdits, description, moves);
+        edit.Redo();
+        int count = moves.Sum(m => m.Move.Polygons.Length);
+        Notify(count == 1 ? L("1 surface de collision déplacée avec l'objet") : L($"{count} surfaces de collision déplacées avec l'objet"));
+        return edit;
     }
 
     // While the handles are dragged: how the selected polygons are moved (world space), drawn over the collision.

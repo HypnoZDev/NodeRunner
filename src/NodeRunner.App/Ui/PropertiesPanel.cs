@@ -144,6 +144,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Monter ou descendre l'objet jusqu'à la collision en dessous (touche Fin)"),
                 ImGui.GetContentRegionAvail().X))
                 state.PutSelectionOnGround();
+            if (entity.Interior is null && !entity.IsInterior)
+            {
+                bool follow = state.Settings.CollisionFollowsObjects;
+                if (ImGui.Checkbox(L("La collision suit l'objet"), ref follow))
+                    state.Settings.CollisionFollowsObjects = follow;
+                ImGui.SetItemTooltip(L("En déplaçant ou en tournant un bâtiment (3 m de haut ou plus), ses surfaces de collision (.ybn) bougent avec lui. Le sol en dessous reste en place."));
+            }
         }
         if (ImGui.BeginPopup("more_copies_menu"))
         {
@@ -275,7 +282,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (ImGui.IsItemActivated())
             _editStart = before;
         if (ImGui.IsItemDeactivatedAfterEdit() && Placement.Of(entity) != _editStart)
-            state.History.Add(new PlacementEdit(entity, _editStart, Placement.Of(entity), description));
+            state.History.Add(state.FollowCollision(new PlacementEdit(entity, _editStart, Placement.Of(entity), description)));
     }
 
     private void DrawFiles(MapEntity entity, MapLibrary library, HashNames names)

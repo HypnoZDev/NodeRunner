@@ -34,6 +34,90 @@ public static class CollisionRemoval
             : null;
     }
 
+    // The collision of moved objects, moved with them: the polygons inside each object's box where it was (as for a
+    // deletion: not the ground under it, nothing for objects lower than MinHeight, nor inside interiors), taken from the
+    // collision as it is now (earlier changes applied), moved by the object's own move. One move per file.
+    public static List<(string Path, CollisionMove Move)> Follow(CollisionCatalog catalog, CollisionEdits edits,
+        IEnumerable<(MapEntity Entity, Archetype? Archetype, Placement Before, Placement After)> moved, List<string> errors)
+    {
+        var items = new List<(CutVolume Volume, Matrix4x4 Move, Vector3 Min, Vector3 Max)>();
+        foreach (var (entity, archetype, before, after) in moved)
+        {
+            if (entity.Interior is not null || entity.IsInterior || archetype is null || archetype.BoundsMin == archetype.BoundsMax
+                || (archetype.BoundsMax.Z - archetype.BoundsMin.Z) * before.Scale.Z < MinHeight
+                || !Matrix4x4.Invert(before.Transform, out var toLocal))
+                continue;
+            var move = toLocal * after.Transform;
+            if (move.IsIdentity)
+                continue;
+            var (min, max) = Box(archetype.BoundsMin, archetype.BoundsMax, before.Transform);
+            items.Add((new CutVolume(toLocal, archetype.BoundsMin, archetype.BoundsMax, IncludesGround: false), move, min, max));
+        }
+        if (items.Count == 0)
+            return [];
+
+        var files = new HashSet<CollisionFile>();
+        var areaMin = new Vector2(float.MaxValue);
+        var areaMax = new Vector2(float.MinValue);
+        foreach (var item in items)
+        {
+            areaMin = Vector2.Min(areaMin, new Vector2(item.Min.X, item.Min.Y));
+            areaMax = Vector2.Max(areaMax, new Vector2(item.Max.X, item.Max.Y));
+            foreach (var kind in Kinds)
+                files.UnionWith(catalog.FilesIn(item.Min - new Vector3(CollisionCut.Margin), item.Max + new Vector3(CollisionCut.Margin), kind));
+        }
+        var meshes = new Dictionary<CollisionFile, CollisionMesh>();
+        foreach (var file in files.Where(f => !f.IsInterior))
+        {
+            try
+            {
+                if (catalog.Read(file) is { } mesh)
+                    meshes[file] = edits.Apply(file.Path, mesh);
+            }
+            catch (InvalidDataException ex)
+            {
+                errors.Add($"{Path.GetFileName(file.Path)} : {ex.Message}");
+            }
+        }
+        var ground = new Dictionary<CollisionKind, FlatSurfaces>();
+        foreach (var (file, mesh) in meshes)
+        {
+            if (!ground.TryGetValue(file.Kind, out var surfaces))
+                ground[file.Kind] = surfaces = new FlatSurfaces();
+            surfaces.Add(mesh, Matrix4x4.Identity, areaMin, areaMax);
+        }
+
+        var result = new List<(string Path, CollisionMove Move)>();
+        foreach (var (file, mesh) in meshes.OrderBy(m => m.Key.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            // A polygon goes with the first object holding it.
+            var taken = new HashSet<int>();
+            foreach (var item in items)
+            {
+                var polygons = CollisionCut.Select(mesh, Matrix4x4.Identity, [item.Volume], ground[file.Kind]);
+                polygons.ExceptWith(taken);
+                if (polygons.Count == 0)
+                    continue;
+                taken.UnionWith(polygons);
+                result.Add((file.Path, CollisionMove.Of(polygons, item.Move)));
+            }
+        }
+        return result;
+    }
+
+    private static (Vector3 Min, Vector3 Max) Box(Vector3 min, Vector3 max, Matrix4x4 transform)
+    {
+        var resultMin = new Vector3(float.MaxValue);
+        var resultMax = new Vector3(float.MinValue);
+        for (int c = 0; c < 8; c++)
+        {
+            var p = Vector3.Transform(new Vector3((c & 1) == 0 ? min.X : max.X, (c & 2) == 0 ? min.Y : max.Y, (c & 4) == 0 ? min.Z : max.Z), transform);
+            resultMin = Vector3.Min(resultMin, p);
+            resultMax = Vector3.Max(resultMax, p);
+        }
+        return (resultMin, resultMax);
+    }
+
     // The files to rewrite for these deleted objects, sorted by name.
     public static List<CollisionFileCut> Plan(CollisionCatalog catalog, IEnumerable<(MapEntity Entity, Archetype? Archetype)> removed,
         List<string> errors, bool removeGround = false)

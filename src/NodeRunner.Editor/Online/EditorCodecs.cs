@@ -14,6 +14,7 @@ internal sealed class PlacementCodec : EditCodec<PlacementEdit>
     {
         w.WriteEntity(edit.Entity);
         w.Write(edit.After);
+        CollisionMoveCodec.WriteFollowing(edit.Collision, w);
     }
 
     public override IEdit Apply(EditReader r, string description)
@@ -22,7 +23,7 @@ internal sealed class PlacementCodec : EditCodec<PlacementEdit>
         var after = r.ReadPlacement();
         var before = Placement.Of(entity);
         after.ApplyTo(entity);
-        return new PlacementEdit(entity, before, after, description);
+        return new PlacementEdit(entity, before, after, description) { Collision = CollisionMoveCodec.ReadFollowing(r, description) };
     }
 }
 
@@ -34,6 +35,7 @@ internal sealed class GroupPlacementCodec : EditCodec<GroupPlacementEdit>
     {
         w.WriteEntities(edit.Selection);
         w.WriteList(edit.After, w.Write);
+        CollisionMoveCodec.WriteFollowing(edit.Collision, w);
     }
 
     public override IEdit Apply(EditReader r, string description)
@@ -45,7 +47,7 @@ internal sealed class GroupPlacementCodec : EditCodec<GroupPlacementEdit>
         var before = entities.Select(Placement.Of).ToList();
         for (int i = 0; i < entities.Count; i++)
             after[i].ApplyTo(entities[i]);
-        return new GroupPlacementEdit(entities, before, after, description);
+        return new GroupPlacementEdit(entities, before, after, description) { Collision = CollisionMoveCodec.ReadFollowing(r, description) };
     }
 }
 
@@ -260,7 +262,18 @@ internal sealed class CollisionMoveCodec : EditCodec<CollisionMoveEdit>
 {
     public override string Tag => "collision-move";
 
-    protected override void Write(CollisionMoveEdit edit, EditWriter w) =>
+    protected override void Write(CollisionMoveEdit edit, EditWriter w) => WriteMoves(edit, w);
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var moves = ReadMoves(r);
+        var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
+        var edit = new CollisionMoveEdit(edits, description, moves);
+        edit.Redo();
+        return edit;
+    }
+
+    private static void WriteMoves(CollisionMoveEdit edit, EditWriter w) =>
         w.WriteList(edit.Moves, m =>
         {
             w.Write(m.Path);
@@ -268,18 +281,31 @@ internal sealed class CollisionMoveCodec : EditCodec<CollisionMoveEdit>
             w.WriteList(m.Move.Matrix, w.Write);
         });
 
-    public override IEdit Apply(EditReader r, string description)
+    private static List<(string, CollisionMove)> ReadMoves(EditReader r) => r.ReadList(() =>
     {
-        var moves = r.ReadList(() =>
-        {
-            string path = r.ReadString();
-            var polygons = r.ReadList(r.ReadInt);
-            var matrix = r.ReadList(r.ReadFloat);
-            if (matrix.Count != 16)
-                throw new InvalidDataException("Collision move: 16 numbers expected.");
-            return (path, new CollisionMove([.. polygons], [.. matrix]));
-        });
-        var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
+        string path = r.ReadString();
+        var polygons = r.ReadList(r.ReadInt);
+        var matrix = r.ReadList(r.ReadFloat);
+        if (matrix.Count != 16)
+            throw new InvalidDataException("Collision move: 16 numbers expected.");
+        return (path, new CollisionMove([.. polygons], [.. matrix]));
+    });
+
+    // The collision moved with objects (PlacementEdit.Collision): already applied by the caller's move.
+    public static void WriteFollowing(CollisionMoveEdit? edit, EditWriter w)
+    {
+        w.Write(edit is not null);
+        if (edit is not null)
+            WriteMoves(edit, w);
+    }
+
+    public static CollisionMoveEdit? ReadFollowing(EditReader r, string description)
+    {
+        if (!r.ReadBool())
+            return null;
+        var moves = ReadMoves(r);
+        if (r.Context.Collisions is not { } edits)
+            return null;
         var edit = new CollisionMoveEdit(edits, description, moves);
         edit.Redo();
         return edit;

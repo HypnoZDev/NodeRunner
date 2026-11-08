@@ -57,6 +57,9 @@ public sealed class AppSettings
     public float SnapRotate { get; set; } = 15f;
     public float SnapScale { get; set; } = 0.1f;
 
+    // The map collision (.ybn) under an object moved by hand moves with it.
+    public bool CollisionFollowsObjects { get; set; } = true;
+
     // Rescue copy of the unsaved changes every N minutes (data/secours); 0 = never.
     public float BackupMinutes { get; set; } = 2f;
 

@@ -661,6 +661,12 @@ public static partial class English
         ("matériau de collision : {0}", "collision material: {0}"),
         ("déplacer des surfaces de collision", "move collision surfaces"),
         ("tourner des surfaces de collision", "turn collision surfaces"),
+        ("1 surface de collision déplacée avec l'objet", "1 collision surface moved with the object"),
+        ("{0} surfaces de collision déplacées avec l'objet", "{0} collision surfaces moved with the object"),
+        ("Collision illisible : {0}", "Unreadable collision: {0}"),
+        ("La collision suit l'objet", "Collision follows the object"),
+        ("En déplaçant ou en tournant un bâtiment (3 m de haut ou plus), ses surfaces de collision (.ybn) bougent avec lui. Le sol en dessous reste en place.",
+            "When a building (3 m high or more) is moved or turned, its collision surfaces (.ybn) move with it. The ground under it stays in place."),
 
         // Saving errors
         ("aucun YMAP du jeu utilisable comme modèle", "no game YMAP usable as a template"),
