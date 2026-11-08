@@ -301,6 +301,9 @@ internal sealed unsafe partial class MainForm : Form
             Diagnostics.ErrorLog.Add(L("Carte graphique"), L("Aucune carte graphique compatible DirectX 11 : affichage en rendu logiciel (lent). ")
                 + L("Installe ou mets à jour le pilote de ta carte graphique."));
 
+        if (_state.Settings.DetachableWindows)
+            PlatformWindows.Initialize(this, _surface, _input, _graphics, _imguiRenderer);
+
         RestoreCamera();
         _surface.Resize += (_, _) => _graphics?.Resize(_surface.ClientSize.Width, _surface.ClientSize.Height);
     }
@@ -308,6 +311,7 @@ internal sealed unsafe partial class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         Application.Idle -= OnApplicationIdle;
+        PlatformWindows.Shutdown();
         SaveCamera();
         _state.World.Dispose();
         _pathNodeLayer.Dispose();
@@ -458,6 +462,7 @@ internal sealed unsafe partial class MainForm : Form
         _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
 
         UiTheme.ApplyPending();
+        PlatformWindows.NewFrame();
         ImGui.NewFrame();
         _ui.Draw();
         DrawCollisionRectangle();
@@ -480,6 +485,7 @@ internal sealed unsafe partial class MainForm : Form
             _windowAlpha.Fade(graphics.Width, graphics.Height, scene.X, scene.Y, scene.Width, scene.Height, opacity);
         ShowBackdrop(_windowAlpha is not null && opacity < 1f);
         graphics.Present(_state.Settings.VSync);
+        PlatformWindows.RenderWindows();
 
         HandleUiRequests();
         UpdateTitle();

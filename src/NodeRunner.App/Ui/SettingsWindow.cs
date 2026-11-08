@@ -420,6 +420,16 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     if (!state.TransparentWindow && settings.Transparency > 0f)
                         ImGui.TextColored(UiTheme.Warning, L("Prend effet au prochain démarrage de NodeRunner."));
                 }
+
+                Widgets.Property(L("Fenêtres détachables"), L("Un panneau (Visionneuse, Propriétés, Scène...) glissé hors de NodeRunner devient une vraie fenêtre de Windows, que l'on peut mettre sur un autre écran. Le glisser sur NodeRunner le remet dedans."));
+                bool detachable = settings.DetachableWindows;
+                if (ImGui.Checkbox("##detachable", ref detachable))
+                {
+                    settings.DetachableWindows = detachable;
+                    state.SaveSettings();
+                }
+                if (detachable != PlatformWindows.Enabled)
+                    ImGui.TextColored(UiTheme.Warning, L("Prend effet au prochain démarrage de NodeRunner."));
                 Widgets.EndProperties();
             }
         }

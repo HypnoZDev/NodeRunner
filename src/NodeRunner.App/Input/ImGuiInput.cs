@@ -7,13 +7,19 @@ namespace NodeRunner.App.Input;
 // Forwards Windows Forms mouse and keyboard events to Dear ImGui.
 internal sealed class ImGuiInput
 {
-    private Control? _control;
+    private readonly List<Control> _controls = new();
     private ImGuiMouseCursor _cursor = ImGuiMouseCursor.Arrow;
 
-    public void Attach(Control control)
+    // relativeTo: for a detached panel window, positions are sent in the coordinates of the main 3D surface.
+    public void Attach(Control control, Control? relativeTo = null)
     {
-        _control = control;
-        control.MouseMove += (_, e) => Send(io => io.AddMousePosEvent(e.X / UiTheme.Scale, e.Y / UiTheme.Scale));
+        _controls.Add(control);
+        control.Disposed += (_, _) => _controls.Remove(control);
+        control.MouseMove += (_, e) =>
+        {
+            var p = relativeTo is null ? e.Location : relativeTo.PointToClient(control.PointToScreen(e.Location));
+            Send(io => io.AddMousePosEvent(p.X / UiTheme.Scale, p.Y / UiTheme.Scale));
+        };
         control.MouseDown += (_, e) => OnMouseButton(e.Button, true);
         control.MouseUp += (_, e) => OnMouseButton(e.Button, false);
         control.MouseWheel += (_, e) => Send(io => io.AddMouseWheelEvent(0f, e.Delta / 120f));
@@ -30,10 +36,10 @@ internal sealed class ImGuiInput
     public void UpdateCursor()
     {
         var cursor = ImGui.GetMouseCursor();
-        if (_control is null || cursor == _cursor)
+        if (cursor == _cursor)
             return;
         _cursor = cursor;
-        _control.Cursor = cursor switch
+        var shown = cursor switch
         {
             ImGuiMouseCursor.TextInput => Cursors.IBeam,
             ImGuiMouseCursor.ResizeAll => Cursors.SizeAll,
@@ -45,6 +51,8 @@ internal sealed class ImGuiInput
             ImGuiMouseCursor.NotAllowed => Cursors.No,
             _ => Cursors.Default,
         };
+        foreach (var control in _controls)
+            control.Cursor = shown;
     }
 
     // Forwards an event only while an ImGui context exists.

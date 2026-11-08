@@ -285,6 +285,9 @@ public sealed class GraphicsDevice : IDisposable
         Context.RSSetViewport(new Viewport(x, y, width, height));
     }
 
+    public WindowSwapChain CreateWindowSwapChain(IntPtr window, int width, int height) =>
+        new(Device, Context, _factory, window, width, height);
+
     public void Present(bool vsync = true)
     {
         var result = _swapChain.Present(vsync ? 1u : 0u, PresentFlags.None);

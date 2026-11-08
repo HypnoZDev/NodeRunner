@@ -63,6 +63,9 @@ public sealed class AppSettings
     // Share of the Windows 11 backdrop (Mica) seen through the interface panels; 0 = opaque. Windows 11 22H2 or later.
     public float Transparency { get; set; } = 0.15f;
 
+    // Panels can be dragged out of the main window (own Windows windows, other screens). Read at start-up.
+    public bool DetachableWindows { get; set; } = true;
+
     // Interface size (1.5 = 150 %); 0 = the Windows display scale.
     public float UiScale { get; set; }
 
@@ -149,6 +152,7 @@ public sealed class AppSettings
         var d = new AppSettings();
         (VSync, MaxFps, BackgroundFps, GraphicsCard, ModelMemoryMb) = (d.VSync, d.MaxFps, d.BackgroundFps, d.GraphicsCard, d.ModelMemoryMb);
         (Language, AccentColor, Transparency, UiScale) = (d.Language, d.AccentColor, d.Transparency, d.UiScale);
+        DetachableWindows = d.DetachableWindows;
         (MouseSensitivity, FieldOfView, InvertMouseY, MovementKeys) = (d.MouseSensitivity, d.FieldOfView, d.InvertMouseY, d.MovementKeys);
         (SnapMove, SnapRotate, SnapScale, BackupMinutes, CopyFormat) = (d.SnapMove, d.SnapRotate, d.SnapScale, d.BackupMinutes, d.CopyFormat);
         (ShowSky, TimeOfDay, Fog, FogDistance) = (d.ShowSky, d.TimeOfDay, d.Fog, d.FogDistance);
