@@ -96,6 +96,39 @@ internal sealed class WorldLoader : IDisposable
     private GameContent? _vehicleDataContent;
     private Task<VehicleData>? _vehicleData;
 
+    // Door tunings (doortuning.ymt): read in the background the first time a door is selected, null until then.
+    public DoorTunings? DoorTunings
+    {
+        get
+        {
+            if (Content is not { } content)
+                return null;
+            if (_doorTuningContent != content)
+            {
+                _doorTuningContent = content;
+                _doorTunings = Task.Run(() =>
+                {
+                    try
+                    {
+                        var tunings = DoorTunings.Load(content, new DoorTuningReader());
+                        foreach (var error in tunings.Errors)
+                            Diagnostics.ErrorLog.Add(L("Réglages des portes"), error);
+                        return tunings;
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or IOException)
+                    {
+                        Diagnostics.ErrorLog.Add(L("Réglages des portes"), ex);
+                        return Data.Maps.DoorTunings.Empty;
+                    }
+                });
+            }
+            return _doorTunings is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        }
+    }
+
+    private GameContent? _doorTuningContent;
+    private Task<DoorTunings>? _doorTunings;
+
     public RpfFileSystem? Files => _files;
 
     public MapSelection Selection { get; private set; }

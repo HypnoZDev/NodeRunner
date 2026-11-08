@@ -3,6 +3,7 @@ using ImGuiNET;
 using NodeRunner.Data.Hashing;
 using NodeRunner.App.World;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Paths;
 using NodeRunner.Editor;
 
@@ -249,6 +250,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             dynamic ? null : UiTheme.Warning);
         Widgets.PropertyText(L("Drapeau de porte"), (archetype.Flags & DoorCheck.DoorFlag) != 0 ? L("oui") : L("non"),
             L($"Drapeau 0x{DoorCheck.DoorFlag:X} du type : présent sur la moitié des portes du jeu, sur presque aucun autre objet."));
+        DrawDoorTuning(entity, shape, names);
         var p = entity.Position;
         Widgets.PropertyText(L("Position (doorlock)"), L($"{p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}"),
             L("Position exacte utilisée par les scripts de serrure (objCoords). Menu ... > Copier pour doorlock."));
@@ -256,6 +258,74 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         Widgets.PropertyText(L("Hash du modèle"), $"{unchecked((int)archetype.NameHash)} / 0x{archetype.NameHash:X8}",
             L("objHash dans qb-doorlock (décimal), model dans ox_doorlock."));
         Widgets.EndProperties();
+    }
+
+    // What doortuning.ymt says of this door model: how far it opens, what opens it by itself, and a copy for a project.
+    private void DrawDoorTuning(MapEntity entity, DoorShape shape, HashNames names)
+    {
+        if (shape.Kind == DoorKind.Fixed)
+            return;
+        if (state.World.DoorTunings is not { } tunings)
+        {
+            Widgets.PropertyText(L("Réglage (doortuning)"), L("lecture..."), null);
+            return;
+        }
+        var tuning = tunings.OfModel(entity.ArchetypeHash);
+        Widgets.PropertyText(L("Réglage (doortuning)"), tuning?.Name ?? L("par défaut du jeu"),
+            tuning is null
+                ? L("Ce modèle n'est pas dans doortuning.ymt : le jeu lui donne le réglage par défaut de son type de porte ")
+                  + L("(s'ouvre dans les deux sens, ne se verrouille pas, aucune ouverture automatique).")
+                : L($"Réglage donné à ce modèle par doortuning.ymt ({tunings.ModelCount} modèles de porte y ont un réglage)."));
+        if (shape.Kind == DoorKind.Hinged)
+        {
+            var (min, max) = DoorShape.Swing(tuning);
+            string side = tuning?.StdDoorRotDir is DoorRotation.Negative or DoorRotation.Positive ? L("un seul sens") : L("les deux sens");
+            string limit = tuning is { RotationLimitAngle: > 0 } t ? L($"{t.RotationLimitAngle:0}°") : L("limite par défaut");
+            Widgets.PropertyText(L("Ouverture max"), L($"{limit}, {side}"),
+                L($"RotationLimitAngle et StdDoorRotDir. L'arc vert de la vue 3D va de {min:0}° à {max:0}° ")
+                + L("(90° de chaque côté quand le réglage ne donne pas de limite)."));
+        }
+        if (tuning is not null)
+        {
+            var openers = new List<string>();
+            var f = tuning.Flags;
+            if (f.HasFlag(DoorTuningFlags.AutoOpensForAllVehicles))
+                openers.Add(L("tous les véhicules"));
+            if (f.HasFlag(DoorTuningFlags.AutoOpensForSPVehicleWithPedsOnly) || f.HasFlag(DoorTuningFlags.AutoOpensForMPVehicleWithPedsOnly))
+                openers.Add(L("véhicules avec conducteur"));
+            if (f.HasFlag(DoorTuningFlags.AutoOpensForSPPlayerPedsOnly) || f.HasFlag(DoorTuningFlags.AutoOpensForMPPlayerPedsOnly))
+                openers.Add(L("joueurs"));
+            if (f.HasFlag(DoorTuningFlags.AutoOpensForLawEnforcement))
+                openers.Add(L("police"));
+            Widgets.PropertyText(L("S'ouvre seule pour"), openers.Count == 0 ? L("personne") : string.Join(", ", openers),
+                L("Drapeaux AutoOpensFor... du réglage (solo et Online confondus). ")
+                + (tuning.HasTriggerBox ? L("La zone qui déclenche l'ouverture est dessinée en jaune dans la vue 3D.") : ""));
+            Widgets.PropertyText(L("Verrouillée fermée"), tuning.ShouldLatchShut ? L("oui (se bloque en se refermant)") : L("non"),
+                L("ShouldLatchShut : la porte se bloque une fois refermée, comme une porte à loquet."));
+            Widgets.PropertyText(L("Poids"), L($"x{tuning.MassMultiplier:0.##}") + (tuning.BreakableByVehicle ? L(", cassable par un véhicule") : ""),
+                L("MassMultiplier (plus lourd = plus dur à pousser) et BreakableByVehicle."));
+        }
+        DoorTuningCopy(entity, tunings, tuning, names);
+    }
+
+    // The XML to paste in a doortuning.meta: the chosen tuning given to this door model.
+    private void DoorTuningCopy(MapEntity entity, DoorTunings tunings, DoorTuning? current, HashNames names)
+    {
+        Widgets.Property(L("Copier pour doortuning"), L("Copie le réglage choisi et la ligne qui le donne à ce modèle (ModelToTuneMapping), ")
+            + L("à coller dans un fichier doortuning. Utile pour une porte d'un mapping, que le jeu ne connaît pas."));
+        ImGui.SetNextItemWidth(-1);
+        if (!ImGui.BeginCombo("##door_tuning_copy", L("Choisir un réglage à copier..."), ImGuiComboFlags.HeightLarge))
+            return;
+        string model = names.TryGet(entity.ArchetypeHash) ?? $"0x{entity.ArchetypeHash:X8}";
+        foreach (var tuning in tunings.All)
+        {
+            if (ImGui.Selectable(tuning.Name, tuning == current))
+            {
+                ImGui.SetClipboardText(DoorTuningReader.Write(tuning, model));
+                state.Notify(L($"Réglage {tuning.Name} copié pour {model}."));
+            }
+        }
+        ImGui.EndCombo();
     }
 
     private string _doorQuery = "";

@@ -975,8 +975,13 @@ internal sealed unsafe partial class MainForm : Form
                 if (library.GetArchetype(door.ArchetypeHash) is not { } type || !Doors.IsDoor(names.TryGet(door.ArchetypeHash)))
                     continue;
                 var transform = door.Transform;
-                foreach (var (from, to) in DoorShape.Of(type, names.TryGet(door.ArchetypeHash)).Lines())
+                var tuning = _state.World.DoorTunings?.OfModel(door.ArchetypeHash);
+                var (min, max) = DoorShape.Swing(tuning);
+                foreach (var (from, to) in DoorShape.Of(type, names.TryGet(door.ArchetypeHash)).Lines(min, max))
                     lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorArcColor);
+                // Where vehicles or people make the door open by itself.
+                if (tuning is { HasTriggerBox: true })
+                    lines.AddBox(tuning.TriggerBoxMin, tuning.TriggerBoxMax, transform, DoorTriggerColor);
             }
         }
         lines.Flush(viewProjection, _state.Camera.Position, onTop: true);
@@ -984,6 +989,7 @@ internal sealed unsafe partial class MainForm : Form
 
     private const int MaxDoorArcs = 40;
     private static readonly Vector4 DoorArcColor = new(0.35f, 1f, 0.55f, 0.9f);
+    private static readonly Vector4 DoorTriggerColor = new(1f, 0.8f, 0.25f, 0.8f);
 
     private static readonly Vector4 MarkerColor = new(0.30f, 0.55f, 1f, 1f);
 

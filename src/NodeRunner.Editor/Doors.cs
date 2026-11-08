@@ -103,9 +103,22 @@ public readonly record struct DoorShape(DoorKind Kind, float Width, float Height
         return new DoorShape(DoorKind.Hinged, positive ? max.X : -min.X, height, min.Z, positive ? 1f : -1f);
     }
 
+    // Opening angles of a swinging door in degrees, from its doortuning: the limit (90 when the tuning gives none) on
+    // both sides, or on one side only.
+    public static (float Min, float Max) Swing(DoorTuning? tuning)
+    {
+        float limit = tuning is { RotationLimitAngle: > 0 } t ? t.RotationLimitAngle : 90f;
+        return tuning?.StdDoorRotDir switch
+        {
+            DoorRotation.Negative => (-limit, 0),
+            DoorRotation.Positive => (0, limit),
+            _ => (-limit, limit),
+        };
+    }
+
     // Lines showing how the door opens, in the model's space: swinging doors = the closed leaf and the circle swept by
-    // its edge up to 90 degrees each way; sliding = arrows along the door; garage = an arrow going up.
-    public List<(Vector3 From, Vector3 To)> Lines()
+    // its edge between the angles given (degrees); sliding = arrows along the door; garage = an arrow going up.
+    public List<(Vector3 From, Vector3 To)> Lines(float minAngle = -90f, float maxAngle = 90f)
     {
         var lines = new List<(Vector3, Vector3)>();
         float z = Bottom + 0.05f;
@@ -115,15 +128,12 @@ public readonly record struct DoorShape(DoorKind Kind, float Width, float Height
             {
                 float reach = Side * Width;
                 Vector3 At(float angle) => new(reach * MathF.Cos(angle), reach * MathF.Sin(angle), z);
+                float from = minAngle * MathF.PI / 180f, span = (maxAngle - minAngle) * MathF.PI / 180f;
                 for (int i = 0; i < ArcSegments; i++)
-                {
-                    float a = -MathF.PI / 2 + MathF.PI * i / ArcSegments;
-                    float b = -MathF.PI / 2 + MathF.PI * (i + 1) / ArcSegments;
-                    lines.Add((At(a), At(b)));
-                }
+                    lines.Add((At(from + span * i / ArcSegments), At(from + span * (i + 1) / ArcSegments)));
                 var hinge = new Vector3(0, 0, z);
-                lines.Add((hinge, At(-MathF.PI / 2)));
-                lines.Add((hinge, At(MathF.PI / 2)));
+                lines.Add((hinge, At(from)));
+                lines.Add((hinge, At(from + span)));
                 lines.Add((hinge, At(0)));
                 lines.Add((hinge, hinge + new Vector3(0, 0, Height)));
                 break;

@@ -1,5 +1,6 @@
 using System.Numerics;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Maps;
 using NodeRunner.Editor;
 using Xunit;
 
@@ -116,5 +117,51 @@ public class DoorsTests
         edit.Undo();
         Assert.Equal(1u, door.ArchetypeHash);
         Assert.Equal(new Vector3(10, 20, 30), door.Position);
+    }
+
+    private const string TuningXml = """
+        <CDoorTuningFile>
+          <NamedTuningArray>
+            <Item>
+              <Name>Vault</Name>
+              <Tuning>
+                <Flags>DontCloseWhenTouched AutoOpensForLawEnforcement</Flags>
+                <UseAutoOpenTriggerBox value="true" />
+                <CustomTriggerBox value="true" />
+                <TriggerBoxMinMax><min x="-1" y="-2" z="0" w="0" /><max x="1" y="2" z="3" w="0" /></TriggerBoxMinMax>
+                <ShouldLatchShut value="true" />
+                <MassMultiplier value="15.0" />
+                <RotationLimitAngle value="170.0" />
+                <StdDoorRotDir>StdDoorOpenNegDir</StdDoorRotDir>
+              </Tuning>
+            </Item>
+          </NamedTuningArray>
+          <ModelToTuneMapping>
+            <Item><ModelName>my_vault_door</ModelName><TuningName>Vault</TuningName></Item>
+          </ModelToTuneMapping>
+        </CDoorTuningFile>
+        """;
+
+    [Fact]
+    public void DoorTuningIsReadAndCopiedBack()
+    {
+        var reader = new DoorTuningReader();
+        var (tunings, models) = reader.Read(System.Text.Encoding.UTF8.GetBytes(TuningXml));
+        var vault = Assert.Single(tunings);
+        Assert.Equal(("my_vault_door", "Vault"), Assert.Single(models));
+        Assert.Equal(DoorTuningFlags.DontCloseWhenTouched | DoorTuningFlags.AutoOpensForLawEnforcement, vault.Flags);
+        Assert.Equal(DoorRotation.Negative, vault.StdDoorRotDir);
+        Assert.True(vault.ShouldLatchShut && vault.HasTriggerBox);
+        Assert.Equal(new Vector3(1, 2, 3), vault.TriggerBoxMax);
+        Assert.Equal((-170f, 0f), DoorShape.Swing(vault));
+        Assert.Equal((-90f, 90f), DoorShape.Swing(null));
+
+        // The copy, put back in a file, reads the same.
+        string copy = DoorTuningReader.Write(vault, "other_door");
+        int split = copy.IndexOf("<!-- ModelToTuneMapping -->", StringComparison.Ordinal);
+        string file = $"<CDoorTuningFile><NamedTuningArray>{copy[..split]}</NamedTuningArray><ModelToTuneMapping>{copy[split..]}</ModelToTuneMapping></CDoorTuningFile>";
+        var (again, againModels) = reader.Read(System.Text.Encoding.UTF8.GetBytes(file));
+        Assert.Equal(vault, Assert.Single(again));
+        Assert.Equal(("other_door", "Vault"), Assert.Single(againModels));
     }
 }
