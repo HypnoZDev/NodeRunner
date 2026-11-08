@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="NodeRunner.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NodeRunner.Data\NodeRunner.Data.csproj" />
   </ItemGroup>
 

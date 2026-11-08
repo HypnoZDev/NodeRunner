@@ -44,9 +44,12 @@ public sealed record JoinRequest(int Id, string Name, string Address);
 // too: they undo the session's last change, whoever made it.
 public sealed class OnlineSession : IDisposable
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
     public const int DefaultPort = 47800;
     public const int MaxParticipants = 5;
+
+    // A guest whose link dropped tries again this long (the relay keeps the room a minute for a host that dropped).
+    public static readonly TimeSpan ReconnectFor = TimeSpan.FromSeconds(90);
 
     private readonly IOnlineDocument _doc;
     private readonly ConcurrentQueue<(Connection Connection, MessageType Type, byte[] Data)> _incoming = new();
@@ -55,6 +58,16 @@ public sealed class OnlineSession : IDisposable
     private readonly List<(string Author, byte[] Message)> _redoLog = [];
     private readonly List<JoinRequest> _joinRequests = [];
     private TcpListener? _listener;
+    private RelayHost? _relay;
+    private string? _relayUrl;
+    private string? _code;
+    private string? _failure;
+    private readonly Dictionary<string, string> _rejoinKeys = [];
+    private string _rejoinKey = "";
+    private bool _reconnecting;
+    private DateTime _reconnectUntil;
+    private DateTime _nextAttempt;
+    private string _address = "";
     private Connection? _host;
     private SessionSnapshot? _snapshot;
     private object? _library;
@@ -87,8 +100,17 @@ public sealed class OnlineSession : IDisposable
     public string? EndReason { get; private set; }
     public bool IsOver => EndReason is not null;
 
-    // Guest: the host's map is loading (no change can be made).
-    public bool IsLoading => _loading || (Role == SessionRole.Guest && _snapshot is null);
+    // Guest: the host's map is loading, or the link is being restored (no change can be made).
+    public bool IsLoading => _loading || _reconnecting || (Role == SessionRole.Guest && _snapshot is null);
+
+    // Through the relay (code NRS-XXXX) rather than a direct address.
+    public bool ViaRelay => _relayUrl is not null;
+
+    // The session's code (host: null until the relay gave it).
+    public string? Code => _relay?.Code ?? _code;
+
+    // The link dropped and is being restored on its own.
+    public bool IsReconnecting => _reconnecting || (Role == SessionRole.Host && _relay is { IsOnline: false });
 
     // Number of changes of the session (all participants), undo and redo included.
     public int ChangeCount => _opCount;
@@ -127,37 +149,119 @@ public sealed class OnlineSession : IDisposable
         return session;
     }
 
-    // Joins the session at address ("192.168.1.20" or "192.168.1.20:47800").
-    public static OnlineSession Join(IOnlineDocument doc, string name, string appVersion, string address)
+    // Opens a session through the relay (wss://...): the relay gives its code (Code), guests join with it.
+    public static OnlineSession HostOnRelay(IOnlineDocument doc, string name, string appVersion, SessionSnapshot snapshot, string relayUrl)
     {
-        var session = new OnlineSession(doc, SessionRole.Guest, name, appVersion) { Status = L($"Connexion à {address}...") };
-        var (host, port) = ParseAddress(address);
+        var session = new OnlineSession(doc, SessionRole.Host, name, appVersion)
+        {
+            _snapshot = snapshot,
+            _library = doc.Context?.Library,
+            _relayUrl = relayUrl,
+            Status = L("Connexion au relais..."),
+        };
         _ = Task.Run(async () =>
         {
-            var client = new TcpClient(AddressFamily.InterNetworkV6) { Client = { DualMode = true } };
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                var relay = await RelayHost.OpenAsync(relayUrl, session.Arrived, timeout.Token);
+                if (session.IsOver)
+                {
+                    await relay.CloseAsync();
+                    return;
+                }
+                session._relay = relay;
+            }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException or InvalidDataException)
+            {
+                session._failure = ex is OperationCanceledException ? L("le relais ne répond pas") : ex.Message;
+            }
+        });
+        return session;
+    }
+
+    // A guest arrived through the relay (background thread).
+    private void Arrived(Link link)
+    {
+        var connection = new Connection(link, Interlocked.Increment(ref _nextId), Received, Closed);
+        lock (_connections)
+            _connections.Add(connection);
+    }
+
+    // "NRS-AB12", "nrs ab12" or "AB12" = a session code (written NRS-AB12); anything else is an address.
+    public static string? ParseCode(string text)
+    {
+        string compact = new([.. text.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant)]);
+        if (compact.StartsWith("NRS", StringComparison.Ordinal) && compact.Length == 7)
+            compact = compact[3..];
+        else if (compact.Length != 4 || text.Contains('.') || text.Contains(':'))
+            return null;
+        return compact.All(c => c is >= 'A' and <= 'Z' and not 'I' and not 'O' or >= '2' and <= '9') ? "NRS-" + compact : null;
+    }
+
+    // Joins the session with a code (through relayUrl) or at an address ("192.168.1.20" or "192.168.1.20:47800").
+    public static OnlineSession Join(IOnlineDocument doc, string name, string appVersion, string address, string? relayUrl = null)
+    {
+        var session = new OnlineSession(doc, SessionRole.Guest, name, appVersion) { _address = address.Trim() };
+        if (relayUrl is not null && ParseCode(address) is { } code)
+        {
+            session._relayUrl = relayUrl;
+            session._code = code;
+        }
+        session.Status = session._code is { } c ? L($"Connexion à la session {c}...") : L($"Connexion à {address}...");
+        session.Connect();
+        return session;
+    }
+
+    // Guest: opens the link to the host and says hello (again after a drop: the host then takes us back at once).
+    private void Connect()
+    {
+        string name = Name, appVersion = AppVersion, key = _rejoinKey, signature = _doc.Codecs.Signature;
+        string? relay = _relayUrl, code = _code;
+        string address = _address;
+        _ = Task.Run(async () =>
+        {
+            Link link;
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await client.ConnectAsync(host, port, timeout.Token);
+                if (relay is not null)
+                {
+                    link = new RelayGuestLink(new RelaySocket(await Relay.ConnectAsync(Relay.JoinUri(relay, code!), timeout.Token)));
+                }
+                else
+                {
+                    var (host, port) = ParseAddress(address);
+                    var client = new TcpClient(AddressFamily.InterNetworkV6) { Client = { DualMode = true } };
+                    try
+                    {
+                        await client.ConnectAsync(host, port, timeout.Token);
+                    }
+                    catch
+                    {
+                        client.Dispose();
+                        throw;
+                    }
+                    link = new TcpLink(client);
+                }
             }
-            catch (Exception ex) when (ex is SocketException or OperationCanceledException or ArgumentException)
+            catch (Exception ex) when (ex is SocketException or OperationCanceledException or ArgumentException or IOException)
             {
-                client.Dispose();
-                session._incoming.Enqueue((null!, MessageType.Closed, System.Text.Encoding.UTF8.GetBytes(
+                _incoming.Enqueue((null!, MessageType.Closed, System.Text.Encoding.UTF8.GetBytes(
                     ex is OperationCanceledException ? L("l'hôte ne répond pas") : ex.Message)));
                 return;
             }
-            var connection = new Connection(client, 0, session.Received, session.Closed);
-            session._host = connection;
+            var connection = new Connection(link, 0, Received, Closed);
+            _host = connection;
             connection.Send(MessageType.Hello, Payload.Build(w =>
             {
                 w.Write(ProtocolVersion);
                 w.Write(appVersion);
-                w.Write(doc.Codecs.Signature);
+                w.Write(signature);
                 w.Write(name);
+                w.Write(key);
             }));
         });
-        return session;
     }
 
     public static (string Host, int Port) ParseAddress(string address)
@@ -206,7 +310,7 @@ public sealed class OnlineSession : IDisposable
             {
                 return;
             }
-            var connection = new Connection(client, Interlocked.Increment(ref _nextId), Received, Closed);
+            var connection = new Connection(new TcpLink(client), Interlocked.Increment(ref _nextId), Received, Closed);
             lock (_connections)
                 _connections.Add(connection);
         }
@@ -223,6 +327,16 @@ public sealed class OnlineSession : IDisposable
     {
         if (IsOver)
             return;
+        if ((_failure ?? _relay?.Failure) is { } failure)
+        {
+            End(L($"Relais : {failure}. Session terminée."));
+            return;
+        }
+        if (_reconnecting && _host is null && DateTime.UtcNow >= _nextAttempt)
+        {
+            _nextAttempt = DateTime.MaxValue;
+            Connect();
+        }
         if ((Role == SessionRole.Host || (_library is not null && !_loading)) && _doc.Context?.Library != _library)
         {
             End(L("La carte a été rechargée : session terminée."));
@@ -243,7 +357,7 @@ public sealed class OnlineSession : IDisposable
                 if (Role == SessionRole.Host)
                     HandleAsHost(message.Connection, message.Type, message.Data);
                 else
-                    HandleAsGuest(message.Type, message.Data);
+                    HandleAsGuest(message.Connection, message.Type, message.Data);
             }
             catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException
                 or InvalidOperationException or ArgumentException or KeyNotFoundException)
@@ -306,6 +420,7 @@ public sealed class OnlineSession : IDisposable
                 _doc.Applied(edit, connection.Name, undo ? SessionAction.Undo : SessionAction.Redo);
                 break;
             case MessageType.Bye:
+                _rejoinKeys.Remove(connection.RejoinKey);
                 Drop(connection, null);
                 break;
         }
@@ -317,11 +432,28 @@ public sealed class OnlineSession : IDisposable
         string appVersion = r.ReadString();
         string signature = r.ReadString();
         string name = CleanName(r.ReadString());
+        string key = protocol == ProtocolVersion ? r.ReadString() : "";
         string? refusal =
             protocol != ProtocolVersion || appVersion != AppVersion || signature != _doc.Codecs.Signature
                 ? L($"Versions différentes : l'hôte a NodeRunner {AppVersion}, vous avez {appVersion}. Installez la même version.")
             : Guests().Length + 1 + _joinRequests.Count >= MaxParticipants ? L($"Session complète ({MaxParticipants} personnes maximum).")
             : null;
+        // Back after a drop: taken in again without asking (its older link is let go).
+        if (key.Length > 0 && _rejoinKeys.TryGetValue(key, out string? back) && protocol == ProtocolVersion
+            && appVersion == AppVersion && signature == _doc.Codecs.Signature)
+        {
+            foreach (var old in Guests().Where(g => g.RejoinKey == key))
+                Drop(old, null, quiet: true);
+            connection.Name = back;
+            connection.RejoinKey = key;
+            connection.Accepted = true;
+            _doc.History.ClearRedo();
+            _redoLog.Clear();
+            SendWelcome(connection);
+            UpdateParticipants();
+            _doc.Notify(L($"{back} s'est reconnecté."));
+            return;
+        }
         if (refusal is not null)
         {
             connection.Send(MessageType.Refused, Payload.Build(w => w.Write(refusal)));
@@ -344,6 +476,8 @@ public sealed class OnlineSession : IDisposable
         if (connection is null || Role != SessionRole.Host)
             return;
         connection.Accepted = true;
+        connection.RejoinKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(12));
+        _rejoinKeys[connection.RejoinKey] = connection.Name;
         // The changes undone before are dropped: a guest could not redo them.
         _doc.History.ClearRedo();
         _redoLog.Clear();
@@ -374,6 +508,7 @@ public sealed class OnlineSession : IDisposable
         connection.Send(MessageType.Welcome, Payload.Build(w =>
         {
             w.Write(connection.Name);
+            w.Write(connection.RejoinKey);
             w.Write(snapshot.ProjectName);
             w.Write(snapshot.Fingerprint);
             w.WriteBytes(snapshot.ProjectZip);
@@ -421,7 +556,7 @@ public sealed class OnlineSession : IDisposable
         SendWelcome(connection);
     }
 
-    private void Drop(Connection connection, string? reason)
+    private void Drop(Connection connection, string? reason, bool quiet = false)
     {
         lock (_connections)
             _connections.Remove(connection);
@@ -433,7 +568,10 @@ public sealed class OnlineSession : IDisposable
         {
             connection.Accepted = false;
             UpdateParticipants();
-            _doc.Notify(L($"{connection.Name} a quitté la session."));
+            if (!quiet)
+                _doc.Notify(ViaRelay && _rejoinKeys.ContainsKey(connection.RejoinKey)
+                    ? L($"{connection.Name} a perdu la connexion (il peut revenir).")
+                    : L($"{connection.Name} a quitté la session."));
         }
     }
 
@@ -451,13 +589,35 @@ public sealed class OnlineSession : IDisposable
 
     // --- Guest ---
 
-    private void HandleAsGuest(MessageType type, byte[] data)
+    private void HandleAsGuest(Connection? connection, MessageType type, byte[] data)
     {
+        if (connection is not null && connection != _host)
+            return; // an older link
         using var r = Payload.Reader(data);
         switch (type)
         {
             case MessageType.Closed:
-                End(_snapshot is null ? L($"Impossible de rejoindre : {System.Text.Encoding.UTF8.GetString(data)}.") : L("Connexion avec l'hôte perdue."));
+                string why = System.Text.Encoding.UTF8.GetString(data);
+                _host = null;
+                // Through the relay, a dropped link is restored on its own for a while.
+                if (ViaRelay && _rejoinKey.Length > 0 && connection is not { IsFinal: true })
+                {
+                    if (!_reconnecting)
+                    {
+                        _reconnecting = true;
+                        _reconnectUntil = DateTime.UtcNow + ReconnectFor;
+                        _doc.Notify(L("Connexion avec l'hôte perdue : reconnexion..."), warning: true);
+                    }
+                    if (DateTime.UtcNow < _reconnectUntil)
+                    {
+                        Status = L("Reconnexion à l'hôte...");
+                        _nextAttempt = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                        break;
+                    }
+                }
+                End(_snapshot is null ? L($"Impossible de rejoindre : {why}.")
+                    : connection is { IsFinal: true } ? L($"Session terminée ({why}).")
+                    : L("Connexion avec l'hôte perdue."));
                 break;
             case MessageType.Refused:
             case MessageType.Bye:
@@ -514,6 +674,12 @@ public sealed class OnlineSession : IDisposable
     private void OnWelcome(BinaryReader r)
     {
         Name = r.ReadString();
+        _rejoinKey = r.ReadString();
+        if (_reconnecting)
+        {
+            _reconnecting = false;
+            _doc.Notify(L("Reconnecté à l'hôte : rechargement de la session..."));
+        }
         string project = r.ReadString();
         string fingerprint = r.ReadString();
         var zip = r.ReadBytes();
@@ -673,6 +839,24 @@ public sealed class OnlineSession : IDisposable
             connection.Send(MessageType.Bye, bye);
             connection.CloseAfterSending();
         }
+        if (_relay is { } relay)
+        {
+            // Time for the goodbyes to leave, then the relay closes the room.
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500);
+                await relay.CloseAsync();
+            });
+        }
+    }
+
+    // Cuts the link as a network failure would (tests).
+    internal void CutLink()
+    {
+        if (Role == SessionRole.Guest)
+            _host?.Dispose();
+        else
+            _relay?.Cut();
     }
 
     public void Dispose() => End(L("Session fermée."));

@@ -9,7 +9,7 @@ namespace NodeRunner.Tests;
 // Sessions between "computers" in this process, over the loopback network.
 public class OnlineSessionTests
 {
-    private sealed class Doc : IOnlineDocument
+    internal sealed class Doc : IOnlineDocument
     {
         private OnlineEditTests.World _world;
 

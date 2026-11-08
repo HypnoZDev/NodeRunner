@@ -108,6 +108,9 @@ public sealed class AppSettings
 
     public string? OnlineAddress { get; set; }
 
+    // NodeRunner Online relay (wss://...); null = NodeRunner's own.
+    public string? OnlineRelay { get; set; }
+
     public bool ShowGrid { get; set; } = true;
 
     // Metres between two grid lines; 0 = automatic (10 m near the ground, 100 m high up).

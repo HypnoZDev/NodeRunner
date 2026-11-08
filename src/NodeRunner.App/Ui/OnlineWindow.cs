@@ -5,18 +5,19 @@ using NodeRunner.Editor.Online;
 
 namespace NodeRunner.App.Ui;
 
-// "Online" window (toolbar button): create a session on the open project, or join one by address; participants, join
-// requests (accept / refuse), leave.
+// "Online" window (toolbar button): create a session on the open project (code NRS-XXXX through the relay, or by
+// address on this network), or join one; participants, join requests (accept / refuse), leave.
 internal sealed class OnlineWindow(AppState state)
 {
     public const string Title = $"{Icons.Users}  Online###Online";
 
-    // Sessions stay locked until the relay (codes NRS-XXXX) is ready.
-    public static readonly bool Available = false;
+    // False locks "Create" and "Join" ("Bientôt disponible").
+    public static readonly bool Available = true;
 
     private bool _open;
     private string _name = "";
     private string _address = "";
+    private bool _local;
     private int _shownRequests;
 
     public bool IsOpen => _open;
@@ -80,16 +81,17 @@ internal sealed class OnlineWindow(AppState state)
                 : L("Ouvrez ou créez d'abord un projet : la session partage le projet ouvert."), wrap: true);
             ImGui.BeginDisabled(!Available || state.Project is null);
             if (Widgets.PrimaryButton(Available ? L("Créer une session") : L("Bientôt disponible") + "##online_host_button", -1))
-                online.Host();
+                online.Host(_local);
+            ImGui.Checkbox(L("Réseau local seulement (par adresse IP, sans Internet)"), ref _local);
             ImGui.EndDisabled();
         }
 
         if (Widgets.Section(L("Rejoindre une session"), "online_join"))
         {
-            Widgets.Hint(L("L'adresse affichée chez l'hôte (même réseau, ou réseau virtuel type Tailscale / Radmin VPN). Vos modifications non enregistrées sont enregistrées dans votre projet d'abord."), wrap: true);
+            Widgets.Hint(L("Le code donné par l'hôte (NRS-XXXX), ou son adresse IP s'il a créé une session sur le réseau local. Vos modifications non enregistrées sont enregistrées dans votre projet d'abord."), wrap: true);
             ImGui.SetNextItemWidth(-1);
             ImGui.BeginDisabled(!Available);
-            bool enter = ImGui.InputTextWithHint("##online_address", "192.168.1.20", ref _address, 64, ImGuiInputTextFlags.EnterReturnsTrue);
+            bool enter = ImGui.InputTextWithHint("##online_address", "NRS-XXXX", ref _address, 64, ImGuiInputTextFlags.EnterReturnsTrue);
             if ((Widgets.Button(Available ? L("Rejoindre") : L("Bientôt disponible") + "##online_join_button", width: -1) || enter) && Available)
                 online.Join(_address);
             ImGui.EndDisabled();
@@ -110,10 +112,33 @@ internal sealed class OnlineWindow(AppState state)
         if (Widgets.BeginProperties("##online_state", 0.3f))
         {
             Widgets.PropertyText(L("Rôle"), host ? L("Hôte (le projet est sur ce PC)") : L("Invité"));
-            Widgets.PropertyText(L("État"), session.IsLoading && !host ? session.Status : host ? L("Session ouverte") : L("Connecté"));
-            if (host)
+            string status = session.IsReconnecting ? (host ? L("Reconnexion au relais...") : session.Status)
+                : session.IsLoading && !host ? session.Status
+                : host ? (session.ViaRelay && session.Code is null ? L("Connexion au relais...") : L("Session ouverte"))
+                : L("Connecté");
+            Widgets.PropertyText(L("État"), status);
+            if (host && session.ViaRelay)
             {
-                Widgets.Property(L("Adresse"), L("À donner à vos collègues. Sur un autre réseau : réseau virtuel (Tailscale, Radmin VPN...) en attendant les codes NRS."));
+                Widgets.Property(L("Code"), L("À donner à vos collègues : ils le tapent dans « Rejoindre une session », où qu'ils soient."));
+                if (session.Code is { } code)
+                {
+                    ImGui.PushFont(UiTheme.TitleFont);
+                    ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Accent);
+                    ImGui.TextUnformatted(code);
+                    ImGui.PopStyleColor();
+                    ImGui.PopFont();
+                    ImGui.SameLine();
+                    if (Widgets.IconButton(Icons.Copy, "copy_code", L("Copier")))
+                        ImGui.SetClipboardText(code);
+                }
+                else
+                {
+                    ImGui.TextDisabled("...");
+                }
+            }
+            else if (host)
+            {
+                Widgets.Property(L("Adresse"), L("À donner à vos collègues sur le même réseau (ou un réseau virtuel : Tailscale, Radmin VPN...)."));
                 var addresses = OnlineSession.LocalAddresses();
                 if (addresses.Count == 0)
                     ImGui.TextDisabled(L("aucun réseau"));

@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
 
@@ -28,22 +27,17 @@ internal sealed class Connection : IDisposable
 {
     public const int MaxFrame = 1 << 30;
 
-    private readonly TcpClient _client;
-    private readonly NetworkStream _stream;
+    private readonly Link _link;
     private readonly Channel<byte[]> _outgoing = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Action<Connection, MessageType, byte[]> _received;
     private readonly Action<Connection, string> _closed;
     private int _isClosed;
 
-    public Connection(TcpClient client, int id, Action<Connection, MessageType, byte[]> received, Action<Connection, string> closed)
+    public Connection(Link link, int id, Action<Connection, MessageType, byte[]> received, Action<Connection, string> closed)
     {
-        _client = client;
-        _client.NoDelay = true;
-        _stream = client.GetStream();
+        _link = link;
         Id = id;
-        Address = client.Client.RemoteEndPoint is System.Net.IPEndPoint remote
-            ? (remote.Address.IsIPv4MappedToIPv6 ? remote.Address.MapToIPv4() : remote.Address).ToString()
-            : "?";
+        Address = link.Address;
         _received = received;
         _closed = closed;
         _ = Task.Run(ReadLoop);
@@ -54,6 +48,15 @@ internal sealed class Connection : IDisposable
     public string Address { get; }
     public string Name { get; set; } = "";
     public bool Accepted { get; set; }
+
+    // Given by the host when accepted: the guest comes back with it after a drop.
+    public string RejoinKey { get; set; } = "";
+
+    // Set when the link was closed by the relay: its close code.
+    public int? RelayCode { get; private set; }
+
+    // The other side is gone for good (the relay knows the session is over).
+    public bool IsFinal { get; private set; }
 
     public void Send(MessageType type, byte[] payload)
     {
@@ -74,17 +77,22 @@ internal sealed class Connection : IDisposable
         {
             while (true)
             {
-                await _stream.ReadExactlyAsync(header);
+                await _link.ReadExactlyAsync(header);
                 int length = BinaryPrimitives.ReadInt32LittleEndian(header);
                 if (length < 1 || length > MaxFrame)
                     throw new InvalidDataException(L("Message invalide."));
                 var body = new byte[length];
-                await _stream.ReadExactlyAsync(body);
+                await _link.ReadExactlyAsync(body);
                 _received(this, (MessageType)body[0], body[1..]);
             }
         }
-        catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or EndOfStreamException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidDataException)
         {
+            if (ex is RelayClosedException relay)
+            {
+                RelayCode = relay.Code;
+                IsFinal = relay.IsFinal;
+            }
             Close(ex is EndOfStreamException ? L("connexion fermée") : ex.Message);
         }
     }
@@ -94,11 +102,10 @@ internal sealed class Connection : IDisposable
         try
         {
             await foreach (var frame in _outgoing.Reader.ReadAllAsync())
-                await _stream.WriteAsync(frame);
-            await _stream.FlushAsync();
-            _client.Client.Shutdown(SocketShutdown.Send);
+                await _link.WriteAsync(frame);
+            await _link.EndAsync();
         }
-        catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
             Close(ex.Message);
         }
@@ -109,7 +116,7 @@ internal sealed class Connection : IDisposable
         if (Interlocked.Exchange(ref _isClosed, 1) != 0)
             return;
         _outgoing.Writer.TryComplete();
-        _client.Dispose();
+        _link.Dispose();
         _closed(this, reason);
     }
 

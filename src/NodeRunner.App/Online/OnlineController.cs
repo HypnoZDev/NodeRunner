@@ -37,6 +37,16 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     public static string Version => Program.Version;
 
+    public const string DefaultRelay = "wss://noderunner-relay.insiderockstar.workers.dev";
+
+    // The relay: NODERUNNER_RELAY, then settings.json, then NodeRunner's own.
+    public string RelayUrl =>
+        Environment.GetEnvironmentVariable("NODERUNNER_RELAY") is { Length: > 0 } env ? env
+        : state.Settings.OnlineRelay is { Length: > 0 } set ? set
+        : DefaultRelay;
+
+    private bool _local;
+
     // --- IOnlineDocument ---
 
     public EditCodecs Codecs => _codecs ??= OnlineEdits.Create(state.World, () => state.OccluderFileName);
@@ -96,9 +106,11 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     // A session sharing the open project: its changes are saved, then the map is loaded again from the project's
     // files, which every guest receives.
-    public void Host()
+    // local: on this network only, joined by address (no relay).
+    public void Host(bool local = false)
     {
         LastError = null;
+        _local = local;
         if (IsActive)
             return;
         if (state.Project is not { } project)
@@ -141,8 +153,15 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             using var zip = new MemoryStream();
             ZipFile.CreateFromDirectory(project.Folder, zip, CompressionLevel.Fastest, includeBaseDirectory: false);
             var snapshot = new SessionSnapshot(project.Name, zip.ToArray(), Fingerprint);
-            Session = OnlineSession.Host(this, Name, Version, snapshot);
-            state.Notify(L($"Session ouverte : donnez votre adresse à vos collègues (port {Session.Port})."));
+            if (_local)
+            {
+                Session = OnlineSession.Host(this, Name, Version, snapshot);
+                state.Notify(L($"Session ouverte : donnez votre adresse à vos collègues (port {Session.Port})."));
+            }
+            else
+            {
+                Session = OnlineSession.HostOnRelay(this, Name, Version, snapshot, RelayUrl);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -157,7 +176,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             return;
         if (string.IsNullOrWhiteSpace(address))
         {
-            LastError = L("Entrez l'adresse de l'hôte.");
+            LastError = L("Entrez le code de la session (NRS-XXXX) ou l'adresse de l'hôte.");
             return;
         }
         // The guest's own work is kept: saved in its project, or the join is refused.
@@ -178,7 +197,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         state.Settings.OnlineAddress = address.Trim();
         state.SaveSettings();
         PreviousProject = state.Project?.Folder;
-        Session = OnlineSession.Join(this, Name, Version, address);
+        Session = OnlineSession.Join(this, Name, Version, address, RelayUrl);
     }
 
     public void Leave()
@@ -211,6 +230,9 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     {
         if (_preparing && IsReady)
             FinishHosting();
+        string? code = Session?.Code;
         Session?.Update();
+        if (Session is { Role: SessionRole.Host, IsOver: false, Code: { } newCode } && code is null)
+            state.Notify(L($"Session ouverte : donnez le code {newCode} à vos collègues."));
     }
 }
