@@ -455,7 +455,7 @@ internal sealed unsafe partial class MainForm : Form
         _input.UpdateCursor();
 
         // The viewer's image first (it binds its own target), for the interface drawn below.
-        _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics);
+        _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         var scene = SceneViewport();
         PickClickedObject(scene);
         PickCollision(scene);

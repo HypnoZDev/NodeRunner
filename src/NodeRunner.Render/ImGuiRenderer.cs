@@ -121,6 +121,8 @@ float4 PS(PS_INPUT input) : SV_Target
 
     public void UnregisterTexture(IntPtr id) => _textures.Remove(id);
 
+    public IntPtr RegisterTexture(GpuTexture texture) => RegisterTexture(texture.View);
+
     private void EnsureBufferSizes(int vertexCount, int indexCount)
     {
         if (_vertexBuffer is null || _vertexBufferSize < vertexCount)

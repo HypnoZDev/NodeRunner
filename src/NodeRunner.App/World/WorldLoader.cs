@@ -73,6 +73,26 @@ internal sealed class WorldLoader : IDisposable
 
     public GameContent? Content { get; private set; }
 
+    // Vehicle palette, colours and sheets: read in the background the first time they are asked for (model viewer),
+    // null until then.
+    public VehicleData? Vehicles
+    {
+        get
+        {
+            if (Content is not { } content)
+                return null;
+            if (_vehicleDataContent != content)
+            {
+                _vehicleDataContent = content;
+                _vehicleData = Task.Run(() => VehicleData.Load(content));
+            }
+            return _vehicleData is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        }
+    }
+
+    private GameContent? _vehicleDataContent;
+    private Task<VehicleData>? _vehicleData;
+
     public RpfFileSystem? Files => _files;
 
     public MapSelection Selection { get; private set; }

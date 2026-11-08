@@ -9,7 +9,7 @@ public static partial class English
     private static Dictionary<string, string> Build()
     {
         var texts = new Dictionary<string, string>(4096, StringComparer.Ordinal);
-        foreach (var list in new[] { Common, Main, Panels, Properties, Settings, Windows })
+        foreach (var list in new[] { Common, Main, Panels, Properties, Settings, Windows, Viewer })
             foreach (var (french, english) in list)
                 texts[french] = english;
         return texts;

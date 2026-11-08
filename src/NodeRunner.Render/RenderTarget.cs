@@ -43,6 +43,40 @@ public sealed class RenderTarget : IDisposable
         return resized;
     }
 
+    // The image as 4 bytes per pixel (blue, green, red, alpha), top row first.
+    public byte[] ReadPixels()
+    {
+        if (_color is null)
+            return [];
+        using var staging = _device.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)Width,
+            Height = (uint)Height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = GraphicsDevice.ColorFormat,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+        });
+        _context.CopyResource(staging, _color);
+        var map = _context.Map(staging, 0, MapMode.Read);
+        var pixels = new byte[Width * Height * 4];
+        try
+        {
+            unsafe
+            {
+                for (int y = 0; y < Height; y++)
+                    new ReadOnlySpan<byte>((byte*)map.DataPointer + (long)y * map.RowPitch, Width * 4).CopyTo(pixels.AsSpan(y * Width * 4));
+            }
+        }
+        finally
+        {
+            _context.Unmap(staging, 0);
+        }
+        return pixels;
+    }
+
     private void Create(int width, int height)
     {
         DisposeTargets();

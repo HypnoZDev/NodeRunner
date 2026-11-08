@@ -1,12 +1,17 @@
 using System.Numerics;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Models;
+using NodeRunner.Data.Textures;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
 
 // One model (vehicle or object) read on a background thread with its textures, then put on the graphics card: the
 // model viewer's, and the car shown on a selected parking spot.
+// A texture put on the graphics card for the model, with what the file says of it.
+internal sealed record PreviewTexture(string Name, string Source, int Width, int Height, TextureFormat Format, int MipLevels,
+    GpuTexture Texture);
+
 internal sealed class PreviewModel : IDisposable
 {
     private readonly List<GpuTexture> _textures = [];
@@ -19,6 +24,14 @@ internal sealed class PreviewModel : IDisposable
     public string? Error { get; private set; }
 
     public GpuModel? Model { get; private set; }
+
+    // The model as read (meshes, shaders), and its textures; the colour texture of each mesh (null if missing).
+    public ModelData? Data { get; private set; }
+    public IReadOnlyList<PreviewTexture> Textures { get; private set; } = [];
+    public IReadOnlyList<PreviewTexture?> MeshTextures { get; private set; } = [];
+
+    // Changes when another model is put on the graphics card.
+    public int Version { get; private set; }
     public int TriangleCount => Model?.TriangleCount ?? 0;
     public int MeshCount { get; private set; }
     public int TextureCount { get; private set; }
@@ -86,6 +99,8 @@ internal sealed class PreviewModel : IDisposable
         }
 
         var uploaded = new Dictionary<TextureKey, GpuTexture?>();
+        var infos = new Dictionary<GpuTexture, PreviewTexture>();
+        var meshInfos = new PreviewTexture?[data.Meshes.Count];
         var meshTextures = new GpuTexture?[loaded.Textures.Length][];
         for (int i = 0; i < meshTextures.Length; i++)
         {
@@ -98,9 +113,15 @@ internal sealed class PreviewModel : IDisposable
                 {
                     uploaded[resolved.Key] = texture = renderer.UploadTexture(resolved.Data!);
                     if (texture is not null)
+                    {
                         _textures.Add(texture);
+                        var d = resolved.Data!;
+                        infos[texture] = new PreviewTexture(d.Name, resolved.Key.Source, d.Width, d.Height, d.Format, d.MipLevels, texture);
+                    }
                 }
                 meshTextures[i][t] = texture;
+                if (t == 0 && texture is not null && i < meshInfos.Length)
+                    meshInfos[i] = infos[texture];
             }
         }
         Model = renderer.Upload(data, meshTextures);
@@ -110,6 +131,10 @@ internal sealed class PreviewModel : IDisposable
             return false;
         }
 
+        Data = data;
+        Textures = infos.Values.OrderBy(t => t.Name, StringComparer.Ordinal).ToList();
+        MeshTextures = meshInfos;
+        Version++;
         MeshCount = data.Meshes.Count;
         TextureCount = _textures.Count;
         MissingTextures = data.Meshes
@@ -126,6 +151,10 @@ internal sealed class PreviewModel : IDisposable
     {
         Model?.Dispose();
         Model = null;
+        Data = null;
+        Textures = [];
+        MeshTextures = [];
+        Version++;
         foreach (var texture in _textures)
             texture.Dispose();
         _textures.Clear();

@@ -255,6 +255,19 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 
     public ShadowMaps? Shadows { get; set; }
 
+    // Colours of the vehicle being drawn, by VehiclePaintSlot (null: parts keep their texture colour).
+    public Vector3[]? VehiclePaint { get; set; }
+
+    // Model viewer: meshes (by number in the ModelData) not drawn, and one drawn tinted.
+    public IReadOnlySet<int>? HiddenMeshes { get; set; }
+    public int HighlightedMesh { get; set; } = -1;
+    public Vector3 HighlightColor { get; set; } = new(1.6f, 1.25f, 0.6f);
+
+    // Model viewer: triangle edges only (drawn slightly in front, to lay them over the model), and solid parts
+    // without their texture.
+    public bool Wireframe { get; set; }
+    public bool Untextured { get; set; }
+
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _context;
     private readonly ID3D11VertexShader _vertexShader;
@@ -274,6 +287,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11RasterizerState _shadowRasterizerState;
     private readonly ID3D11DepthStencilState _shadowDepthStencilState;
     private readonly ID3D11RasterizerState _doubleSidedRasterizerState;
+    private readonly ID3D11RasterizerState _wireframeRasterizerState;
     private readonly ID3D11DepthStencilState _depthStencilState;
     private readonly ID3D11DepthStencilState _translucentDepthStencilState;
     private readonly ID3D11BlendState _blendState;
@@ -334,6 +348,16 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             FillMode = FillMode.Solid,
             CullMode = CullMode.None,
             DepthClipEnable = true,
+        });
+
+        _wireframeRasterizerState = device.CreateRasterizerState(new RasterizerDescription
+        {
+            FillMode = FillMode.Wireframe,
+            CullMode = CullMode.None,
+            DepthClipEnable = true,
+            DepthBias = 2000,
+            SlopeScaledDepthBias = 1f,
+            AntialiasedLineEnable = true,
         });
 
         // Shadow images: both faces (a wall seen from behind by the sun still casts its shadow), pushed away from the
@@ -458,7 +482,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 continue;
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
-                terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored));
+                terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor)));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
@@ -496,7 +520,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var texture = textures.Length > 0 ? textures[0] : null;
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
-                r.TerrainMode, r.VertexColored);
+                r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize);
     }
@@ -610,14 +634,24 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 MeshBlendMode.Translucent => _translucentPixelShader,
                 _ => _opaquePixelShader,
             });
-            _context.RSSetState(part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
+            _context.RSSetState(Wireframe ? _wireframeRasterizerState
+                : part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
             float emission = part.Emission switch
             {
                 MeshEmission.Always => 1f,
                 MeshEmission.Night => Lighting.NightLights,
                 _ => 0f,
             };
-            var baseTexture = part.Texture ?? (part.VertexColored ? _white : translucent ? _untexturedTranslucent : _untextured);
+            // Vehicle paint: the part's colour slot, over a white base if its texture is missing.
+            var paint = VehiclePaint is { } colors && part.PaintSlot != VehiclePaintSlot.None && (int)part.PaintSlot < colors.Length
+                ? colors[(int)part.PaintSlot] : Vector3.One;
+            bool painted = VehiclePaint is not null && part.PaintSlot != VehiclePaintSlot.None;
+            if (HiddenMeshes is { } hidden && hidden.Contains(part.Mesh))
+                continue;
+            var highlight = HighlightedMesh == part.Mesh ? HighlightColor : Vector3.One;
+            SetTint(tint * paint * highlight);
+            var baseTexture = Untextured && part.BlendMode == MeshBlendMode.Opaque ? _white
+                : part.Texture ?? (part.VertexColored || painted ? _white : translucent ? _untexturedTranslucent : _untextured);
             if (terrain)
             {
                 // A missing layer shows layer 0 instead; without the mask, the vertex weights alone.
@@ -697,6 +731,15 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     // next.
     private ObjectConstants _constants;
 
+    private void SetTint(Vector3 tint)
+    {
+        var value = new Vector4(tint, 1f);
+        if (_constants.Tint == value)
+            return;
+        _constants.Tint = value;
+        WriteConstants();
+    }
+
     private void SetMesh(float emission, Vector4 terrain)
     {
         if (_constants.Emission.X == emission && _constants.Terrain == terrain)
@@ -725,6 +768,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _depthStencilState.Dispose();
         _rasterizerState.Dispose();
         _doubleSidedRasterizerState.Dispose();
+        _wireframeRasterizerState.Dispose();
         _frameBuffer.Dispose();
         _objectBuffer.Dispose();
         _shadowConstantBuffer.Dispose();
@@ -758,7 +802,8 @@ public sealed class GpuModel : IDisposable
 
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
-        MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored);
+        MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
+        int Mesh);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -795,7 +840,7 @@ public sealed class GpuModel : IDisposable
 public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
-        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored);
+        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

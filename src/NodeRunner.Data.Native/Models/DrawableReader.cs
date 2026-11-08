@@ -51,7 +51,7 @@ public sealed class DrawableReader : IModelReader
             case ".yft":
                 int main = Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
                 if (Convert(res, fileHash, main, FragmentPose(res) ?? SkeletonPose(res, main)) is { } body)
-                    models[fileHash] = AddWheels(res, body);
+                    models[fileHash] = AddWheels(res, body, main);
                 break;
 
             case ".ydd":
@@ -100,12 +100,15 @@ public sealed class DrawableReader : IModelReader
 
     // pose: where each bone is in the model (null: no skeleton). A model that is not skinned is stored relative to its
     // bone (pieces of breakable objects: planks of a bench, arm of a traffic light).
-    private static ModelData? Convert(ResourceData res, uint hash, int d, Matrix4x4[]? pose = null)
+    // shaderSource: drawable whose shaders are used when d has none (the wheels of a vehicle use the body's).
+    private static ModelData? Convert(ResourceData res, uint hash, int d, Matrix4x4[]? pose = null, int shaderSource = -1)
     {
         if (d < 0 || Models(res, d) is not { } models)
             return null;
 
         var shaders = Shaders(res, d);
+        if (shaders.Count == 0 && shaderSource >= 0)
+            shaders = Shaders(res, shaderSource);
         var meshes = new List<ModelMesh>();
         foreach (int model in models)
         {
@@ -190,7 +193,7 @@ public sealed class DrawableReader : IModelReader
     // ---- Shaders ----
 
     // What the meshes need from a shader.
-    private sealed record Shader(uint Name, uint FileName, byte RenderBucket, Dictionary<uint, string> Textures);
+    private sealed record Shader(uint Name, uint FileName, byte RenderBucket, Dictionary<uint, string> Textures, Dictionary<uint, Vector4> Vectors);
 
     private static List<Shader?> Shaders(ResourceData res, int d)
     {
@@ -216,6 +219,7 @@ public sealed class DrawableReader : IModelReader
     private static Shader ReadShader(ResourceData res, int s)
     {
         var textures = new Dictionary<uint, string>();
+        var values = new Dictionary<uint, Vector4>();
         int count = res.Byte(s + 0x10);
         ulong parametersPointer = res.UInt64(s);
         if (count > 0 && parametersPointer != 0)
@@ -232,14 +236,21 @@ public sealed class DrawableReader : IModelReader
             {
                 int p = parameters + i * 16;
                 ulong texture = res.UInt64(p + 8);
-                if (res.Byte(p) != 0 || texture == 0)
+                if (texture == 0)
                     continue;
+                if (res.Byte(p) != 0)
+                {
+                    // First vector of a value parameter.
+                    int v = res.ResolveArray(texture, 1, 16, "valeur de shader");
+                    values.TryAdd(res.UInt32(hashes + i * 4), new Vector4(F32(res, v), F32(res, v + 4), F32(res, v + 8), F32(res, v + 12)));
+                    continue;
+                }
                 // Texture reference: its name pointer is at 0x28, as in a full texture.
                 if (res.Text(res.UInt64(res.ResolveArray(texture, 1, 0x30, "texture") + 0x28), "nom de texture") is { } name)
                     textures.TryAdd(res.UInt32(hashes + i * 4), name.ToLowerInvariant());
             }
         }
-        return new Shader(res.UInt32(s + 0x08), res.UInt32(s + 0x18), res.Byte(s + 0x11), textures);
+        return new Shader(res.UInt32(s + 0x08), res.UInt32(s + 0x18), res.Byte(s + 0x11), textures, values);
     }
 
     // Shader parameters holding the colour texture, by priority. Terrain shaders blend several layers: the
@@ -250,6 +261,8 @@ public sealed class DrawableReader : IModelReader
         [Joaat.Hash("TextureSampler_layer1"), Joaat.Hash("TextureSampler_layer2"), Joaat.Hash("TextureSampler_layer3")];
 
     private static readonly uint TerrainMask = Joaat.Hash("lookupSampler");
+
+    private static readonly uint DiffuseColorParameter = Joaat.Hash("matDiffuseColor");
 
     // Terrain shaders taking their weights from the vertex colour only, or from the mask only.
     private static readonly uint TerrainVertexOnlyShader = Joaat.Hash("terrain_cb_w_4lyr_lod");
@@ -390,6 +403,9 @@ public sealed class DrawableReader : IModelReader
                 : MeshEmission.None,
             Terrain = Terrain(shader, declaration, bytes, count),
             VertexColored = hasColors && shader?.Name == VertexColorShader,
+            ShaderHash = shader?.Name ?? 0,
+            ShaderTextures = shader?.Textures ?? (IReadOnlyDictionary<uint, string>)new Dictionary<uint, string>(),
+            DiffuseColor = shader is not null && shader.Vectors.TryGetValue(DiffuseColorParameter, out var diffuse) ? diffuse : null,
         };
     }
 
@@ -560,7 +576,7 @@ public sealed class DrawableReader : IModelReader
     private static readonly HashSet<ushort> RightWheelBones = [26418, 5857, 5858, 5859, 26398];
 
     // Adds the wheels of a vehicle to its body.
-    private static ModelData AddWheels(ResourceData res, ModelData body)
+    private static ModelData AddWheels(ResourceData res, ModelData body, int main)
     {
         int group = Block(res, res.UInt64(FragPhysicsPointer), 0x30);
         int lod = group < 0 ? -1 : Block(res, res.UInt64(group + 0x10), 0x130);
@@ -596,7 +612,7 @@ public sealed class DrawableReader : IModelReader
         {
             if (childOffsets[i] < 0 || !IsWheel(bones[i]) || drawables[i] < 0 || AllModelsCount(res, drawables[i]) == 0)
                 continue;
-            own[i] = Convert(res, 0, drawables[i]);
+            own[i] = Convert(res, 0, drawables[i], shaderSource: main);
             if (FrontWheelBones.Contains(bones[i]))
                 front ??= own[i];
             else
@@ -655,6 +671,9 @@ public sealed class DrawableReader : IModelReader
         Emission = mesh.Emission,
         Terrain = mesh.Terrain,
         VertexColored = mesh.VertexColored,
+        ShaderHash = mesh.ShaderHash,
+        ShaderTextures = mesh.ShaderTextures,
+        DiffuseColor = mesh.DiffuseColor,
     };
 
     private static Vector3 Xyz(Vector4 v) => new(v.X, v.Y, v.Z);

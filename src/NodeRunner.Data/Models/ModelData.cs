@@ -46,6 +46,17 @@ public sealed class ModelMesh
 
     public TerrainBlend? Terrain { get; init; }
 
+    // Hash of the shader's name (e.g. "vehicle_paint1").
+    public uint ShaderHash { get; init; }
+
+    // Every texture of the shader, by parameter name hash (DiffuseSampler, BumpSampler...).
+    public IReadOnlyDictionary<uint, string> ShaderTextures { get; init; } = EmptyTextures;
+
+    // The shader's matDiffuseColor value (vehicles: which paint colour the part takes), null if it has none.
+    public Vector4? DiffuseColor { get; init; }
+
+    private static readonly IReadOnlyDictionary<uint, string> EmptyTextures = new Dictionary<uint, string>();
+
     public IReadOnlyList<string?> TextureNames => Terrain is null ? [DiffuseTextureName] : [DiffuseTextureName, .. Terrain.TextureNames];
 }
 

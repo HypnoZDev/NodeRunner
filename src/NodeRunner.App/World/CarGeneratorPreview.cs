@@ -33,7 +33,18 @@ internal sealed class CarGeneratorPreview : IDisposable
         }
         _model.Open(item, world);
         _model.Update(renderer);
+
+        // Paint: one of the colour combinations the game plans for the model, always the same for a given spot.
+        _paint = null;
+        if (world.Vehicles is { } vehicles)
+        {
+            var sets = vehicles.Paints.VariationOf(item.Location.ModelHash)?.ColorSets;
+            _paint = VehiclePaintColors.From(vehicles.Paints,
+                sets is { Count: > 0 } ? sets[selection.Index % sets.Count].Indices : VehiclePaintColors.Default);
+        }
     }
+
+    private Vector3[]? _paint;
 
     private ViewerItem? Choose(WorldLoader world, CarGeneratorSelection selection, CarGenerator spot)
     {
@@ -71,10 +82,12 @@ internal sealed class CarGeneratorPreview : IDisposable
         var world = Matrix4x4.CreateTranslation(-(min.X + max.X) / 2, -(min.Y + max.Y) / 2, -min.Z)
                     * Matrix4x4.CreateRotationZ(spot.Angle - MathF.PI / 2)
                     * Matrix4x4.CreateTranslation(spot.Position.X, spot.Position.Y, ground);
+        renderer.VehiclePaint = _paint;
         renderer.Begin(ModelPass.Solid);
         renderer.Draw(model, world, viewProjection, Vector3.One);
         renderer.Begin(ModelPass.Translucent);
         renderer.Draw(model, world, viewProjection, Vector3.One);
+        renderer.VehiclePaint = null;
     }
 
     public void Dispose() => _model.Dispose();
