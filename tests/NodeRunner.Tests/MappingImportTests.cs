@@ -41,6 +41,24 @@ public class MappingImportTests : IDisposable
     }
 
     [Fact]
+    public void FilesLockedByAssetEscrowAreCopiedAndListed()
+    {
+        Touch(@"shop\stream\unlocked\shop.ymap");
+        string locked = Path.Combine(_root, @"shop\stream\locked\ydr\shop_bar.ydr");
+        Directory.CreateDirectory(Path.GetDirectoryName(locked)!);
+        File.WriteAllBytes(locked, [.. "FXAP"u8, 1, 0, 0, 0, 0x52, 0xA3]);
+
+        var result = MappingImport.Import(Path.Combine(_root, "shop"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null);
+
+        Assert.Equal(2, result.Copied);
+        Assert.Equal(["shop_bar.ydr"], result.Protected);
+        Assert.True(ProtectedFile.IsProtected(Path.Combine(result.Project.StreamFolder, "shop_bar.ydr")));
+        Assert.False(ProtectedFile.IsProtected(Path.Combine(result.Project.StreamFolder, "shop.ymap")));
+        Assert.True(ProtectedFile.IsError(ProtectedFile.Error("shop_bar.ydr")));
+        Assert.False(ProtectedFile.IsError(new InvalidDataException()));
+    }
+
+    [Fact]
     public void AStreamFolderTakesItsParentsNameAndNeverOverwritesAProject()
     {
         Touch(@"pack\stream\a.ymap");

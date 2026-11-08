@@ -33,6 +33,9 @@ internal static class ErrorReport
             lists.Add(new(L("Fichiers de carte ignorés"), maps.Errors, L("Fichiers dans un autre format (XML, PSO), pas encore lus.")));
         if (world.Textures is { Errors.Count: > 0 } textures)
             lists.Add(new(L("Liens de textures illisibles"), textures.Errors, null));
+        if (state.ProtectedProjectFiles is { Count: > 0 } locked)
+            lists.Add(new(L("Modèles protégés par FiveM (Asset Escrow)"), locked,
+                L("Chiffrés par leur créateur : affichés en boîtes orange, recopiés tels quels à l'export.")));
         if (modelLayer is { Errors.Count: > 0 })
             lists.Add(new(L("Modèles ou textures illisibles"), modelLayer.Errors, null));
         if (world.Collisions is { Errors.Count: > 0 } collisionCatalog)

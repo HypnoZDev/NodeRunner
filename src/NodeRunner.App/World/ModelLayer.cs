@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 using System.Threading.Channels;
+using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
 using NodeRunner.Render;
@@ -31,7 +32,8 @@ internal sealed class ModelLayer : IDisposable
     private readonly ConcurrentDictionary<TextureKey, byte> _texturesOnGpu = new();
     private readonly Dictionary<ModelLocation, TextureKey[]> _modelTextures = new();
     private readonly HashSet<ModelLocation> _pending = new();
-    private readonly Channel<(ModelLocation Location, int Generation)> _requests = Channel.CreateUnbounded<(ModelLocation, int)>();
+    private readonly Channel<(ModelLocation Location, int Generation, Vector3 BoundsMin, Vector3 BoundsMax)> _requests =
+        Channel.CreateUnbounded<(ModelLocation, int, Vector3, Vector3)>();
     private readonly ConcurrentQueue<LoadedModel> _results = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -114,6 +116,51 @@ internal sealed class ModelLayer : IDisposable
     public long MemoryLimit { get; private set; } = long.MaxValue;
 
     public List<string> Errors { get; } = new();
+
+    private static readonly Vector4 ProtectedColor = new(1f, 0.55f, 0.12f, 0.45f);
+
+    // Stand-in for a locked model: its archetype's box, orange and see-through (the objects inside stay visible).
+    private static ModelData ProtectedBox(uint nameHash, Vector3 min, Vector3 max)
+    {
+        if (!(max.X > min.X && max.Y > min.Y && max.Z > min.Z))
+            (min, max) = (new Vector3(-0.5f), new Vector3(0.5f));
+        var positions = new List<Vector3>();
+        var normals = new List<Vector3>();
+        var indices = new List<ushort>();
+        void Face(Vector3 normal, Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+        {
+            ushort first = (ushort)positions.Count;
+            positions.AddRange([a, b, c, d]);
+            normals.AddRange([normal, normal, normal, normal]);
+            indices.AddRange([first, (ushort)(first + 1), (ushort)(first + 2), first, (ushort)(first + 2), (ushort)(first + 3)]);
+        }
+        Vector3 P(float x, float y, float z) => new(x == 0 ? min.X : max.X, y == 0 ? min.Y : max.Y, z == 0 ? min.Z : max.Z);
+        Face(-Vector3.UnitX, P(0, 0, 0), P(0, 0, 1), P(0, 1, 1), P(0, 1, 0));
+        Face(Vector3.UnitX, P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1));
+        Face(-Vector3.UnitY, P(0, 0, 0), P(1, 0, 0), P(1, 0, 1), P(0, 0, 1));
+        Face(Vector3.UnitY, P(0, 1, 0), P(0, 1, 1), P(1, 1, 1), P(1, 1, 0));
+        Face(-Vector3.UnitZ, P(0, 0, 0), P(0, 1, 0), P(1, 1, 0), P(1, 0, 0));
+        Face(Vector3.UnitZ, P(0, 0, 1), P(1, 0, 1), P(1, 1, 1), P(0, 1, 1));
+        return new ModelData
+        {
+            NameHash = nameHash,
+            BoundsMin = min,
+            BoundsMax = max,
+            Meshes =
+            [
+                new ModelMesh
+                {
+                    Positions = positions.ToArray(),
+                    Normals = normals.ToArray(),
+                    TexCoords = new Vector2[positions.Count],
+                    Colors = Enumerable.Repeat(ProtectedColor, positions.Count).ToArray(),
+                    Indices = indices.ToArray(),
+                    BlendMode = MeshBlendMode.Translucent,
+                    VertexColored = true,
+                },
+            ],
+        };
+    }
     private readonly HashSet<string> _errorSet = new();
 
     public void Update(WorldLoader loader, ModelRenderer renderer, Vector3 cameraPosition, float distanceMultiplier, int hour, bool enabled)
@@ -388,21 +435,24 @@ internal sealed class ModelLayer : IDisposable
                 if (_pending.Count >= MaxPendingReads)
                     return;
                 if (frustum.Intersects(entity.SphereCenter, entity.SphereRadius))
-                    Request(entity.Location);
+                    Request(entity);
             }
         }
         foreach (var entity in _visible)
         {
             if (_pending.Count >= MaxPendingReads)
                 return;
-            Request(entity.Location);
+            Request(entity);
         }
     }
 
-    private void Request(ModelLocation location)
+    private void Request(VisibleEntity entity)
     {
-        if (!_models.ContainsKey(location) && _pending.Add(location))
-            _requests.Writer.TryWrite((location, _generation));
+        var location = entity.Location;
+        if (_models.ContainsKey(location) || !_pending.Add(location))
+            return;
+        var archetype = _library?.GetArchetype(entity.Entity.ArchetypeHash);
+        _requests.Writer.TryWrite((location, _generation, archetype?.BoundsMin ?? Vector3.Zero, archetype?.BoundsMax ?? Vector3.Zero));
     }
 
     // Only puts in place what the reading threads already sent to the GPU: cheap, the frame doesn't stutter.
@@ -529,7 +579,7 @@ internal sealed class ModelLayer : IDisposable
     {
         try
         {
-            await foreach (var (location, generation) in _requests.Reader.ReadAllAsync(_stop.Token))
+            await foreach (var (location, generation, boundsMin, boundsMax) in _requests.Reader.ReadAllAsync(_stop.Token))
             {
                 var (reader, resolver, renderer) = (_reader, _resolver, _renderer);
                 if (generation != _generation || reader is null || renderer is null)
@@ -540,8 +590,17 @@ internal sealed class ModelLayer : IDisposable
                 try
                 {
                     // .ydd files hold many models: the last few files read are kept.
-                    var models = _recentFiles.Get(location.Path, reader.ReadModels);
-                    var model = models.GetValueOrDefault(location.ModelHash);
+                    ModelData? model;
+                    try
+                    {
+                        var models = _recentFiles.Get(location.Path, reader.ReadModels);
+                        model = models.GetValueOrDefault(location.ModelHash);
+                    }
+                    catch (InvalidDataException ex) when (ProtectedFile.IsError(ex))
+                    {
+                        // Locked by FiveM's Asset Escrow: never decrypted, its archetype's box stands in for it.
+                        model = ProtectedBox(location.ModelHash, boundsMin, boundsMax);
+                    }
                     TextureKey?[][] keys = [];
                     if (model is not null && (prepared = renderer.Prepare(model)) is not null && resolver is not null)
                     {

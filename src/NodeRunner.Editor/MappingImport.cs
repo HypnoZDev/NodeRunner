@@ -4,7 +4,11 @@ using NodeRunner.Data.FileSystem;
 namespace NodeRunner.Editor;
 
 // Ignored: package commands that give no streamed file (whole .rpf archives, xml edits...). Author: from an OpenIV package.
-public sealed record ImportResult(MapProject Project, int Copied, IReadOnlyList<string> Skipped, IReadOnlyList<string> Ignored, string? Author);
+public sealed record ImportResult(MapProject Project, int Copied, IReadOnlyList<string> Skipped, IReadOnlyList<string> Ignored, string? Author)
+{
+    // Copied files locked by FiveM's Asset Escrow (see ProtectedFile).
+    public IReadOnlyList<string> Protected { get; init; } = [];
+}
 
 // Imports a mapping made elsewhere as a new project: a FiveM resource or a plain "stream" folder, a .zip of one, or an
 // OpenIV package (.oiv, or its unzipped folder). Its streamed files are copied into the project's stream folder, where
@@ -105,13 +109,17 @@ public static class MappingImport
 
         name = plan.Name ?? name;
         var project = MapProject.Create(FreeFolder(projectsFolder, name), name, mapVersion, lastDlcPack);
+        var locked = new List<string>();
         foreach (var (file, open) in plan.Files)
         {
-            using var input = open();
-            using var output = new FileStream(Path.Combine(project.StreamFolder, file), FileMode.CreateNew, FileAccess.Write);
-            input.CopyTo(output);
+            string target = Path.Combine(project.StreamFolder, file);
+            using (var input = open())
+            using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write))
+                input.CopyTo(output);
+            if (ProtectedFile.IsProtected(target))
+                locked.Add(file);
         }
-        return new ImportResult(project, plan.Files.Count, plan.Duplicates, plan.Ignored, plan.Author);
+        return new ImportResult(project, plan.Files.Count, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked };
     }
 
     // Loose files first; a folder without any (a downloaded mod: readme + .oiv) takes the packages inside it.

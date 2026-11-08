@@ -1295,6 +1295,27 @@ internal sealed class AppState
 
     public string? SaveFolder => Project?.StreamFolder;
 
+    // Files of the project's stream folder locked by FiveM's Asset Escrow (looked for once per project).
+    public IReadOnlyList<string> ProtectedProjectFiles
+    {
+        get
+        {
+            string? folder = Project?.StreamFolder;
+            if (folder != _protectedFolder)
+            {
+                _protectedFolder = folder;
+                _protectedFiles = folder is null || !Directory.Exists(folder) ? []
+                    : Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+                        .Where(NodeRunner.Data.FileSystem.ProtectedFile.IsProtected)
+                        .Select(Path.GetFileName).OfType<string>().Order(StringComparer.OrdinalIgnoreCase).ToList();
+            }
+            return _protectedFiles;
+        }
+    }
+
+    private string? _protectedFolder;
+    private IReadOnlyList<string> _protectedFiles = [];
+
     // Streamed files of the project's folder (an imported mod's models, textures, collisions...), copied by the FiveM
     // export; read again at most every 2 s, the toolbar asks every frame.
     public int ProjectFileCount

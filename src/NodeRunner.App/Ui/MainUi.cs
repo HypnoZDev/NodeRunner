@@ -86,6 +86,7 @@ internal sealed class MainUi
     private readonly SettingsWindow _settingsWindow;
     private readonly InteriorWindow _interiorWindow;
     private readonly ErrorWindow _errorWindow;
+    private readonly ProtectedMappingWindow _protectedWindow = new();
 
     public bool BrowseGameFolderRequested { get; set; }
 
@@ -108,6 +109,9 @@ internal sealed class MainUi
         _showProject = true;
         ImGui.SetWindowFocus(ProjectPanel.Title);
     }
+
+    // After an import: explains the models locked by FiveM's Asset Escrow, if any.
+    public void ShowProtectedMapping(NodeRunner.Editor.ImportResult result) => _protectedWindow.Open(result);
 
     public string? RecentProjectRequested { get; set; }
 
@@ -167,6 +171,7 @@ internal sealed class MainUi
         _interiorWindow.Draw();
         _onlineWindow.Draw();
         _errorWindow.Draw();
+        _protectedWindow.Draw();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
         _searchPalette.Draw(); // Last: above the panels.
     }

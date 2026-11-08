@@ -1266,6 +1266,11 @@ internal sealed unsafe partial class MainForm : Form
             return;
         }
         _ui.ShowProjectPanel();
+        if (result.Protected.Count > 0)
+        {
+            _ui.ShowProtectedMapping(result);
+            return;
+        }
         string author = result.Author is { } by ? L($" (par {by})") : "";
         string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
         string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) du mod non repris (pas des fichiers de carte) :\n") + string.Join("\n", result.Ignored.Take(10));

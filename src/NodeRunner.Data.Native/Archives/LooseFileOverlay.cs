@@ -54,7 +54,10 @@ public sealed class LooseFileOverlay : IGameFileSystem
             return _game.ReadFile(path);
         try
         {
-            return ResourceFile.Read(File.ReadAllBytes(disk)).Content;
+            var bytes = File.ReadAllBytes(disk);
+            if (ProtectedFile.IsProtected(bytes))
+                throw ProtectedFile.Error(Path.GetFileName(disk));
+            return ResourceFile.Read(bytes).Content;
         }
         catch (IOException ex)
         {
