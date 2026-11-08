@@ -39,6 +39,9 @@ internal sealed class CarGeneratorLayer : IDisposable
         return [.. spot.Corners().Select(c => c - new Vector3(0, 0, drop))];
     }
 
+    // The ground under the spot, looked up now if needed (main thread).
+    public float GroundOf(WorldLoader loader, CarGenerator spot) => FindBottom(loader, _mainQuery, spot) ?? Bottom(spot);
+
     private float Bottom(CarGenerator spot) => _grounds.TryGetValue(spot.Position, out float z) ? z : spot.Position.Z - Below;
 
     // The ground under the spot, looked up and remembered (null: collisions not loaded yet).

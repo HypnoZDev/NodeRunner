@@ -907,6 +907,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (Widgets.Section(L("Véhicule"), "cargen_vehicle") && Widgets.BeginProperties("##cargen_vehicle"))
         {
+            var preview = state.SpotPreview;
+            string shown = preview.ModelName is not { } shownName ? L("aucun")
+                : preview.Error is { } previewError ? L($"{shownName} (illisible : {previewError})")
+                : preview.IsLoading ? L($"{shownName} (chargement...)")
+                : $"{shownName} · {preview.Source}";
+            Widgets.PropertyText(L("Aperçu"), shown, L("Véhicule du jeu affiché sur la place dans la vue 3D, pour juger la taille et le sens. Le jeu peut en choisir un autre."));
+
             Widgets.Property(L("Modèle"), L("Nom du modèle garé à cette place (ex. adder) ou son hash (0x...). Vide = au hasard : un modèle du groupe, sinon un véhicule de la zone."));
             if (CommitText("##cargen_model", HashText(spot.CarModel, names), L("au hasard"), out string model) && ParseHashText(model, names) is { } modelHash)
                 Commit(Current() with { CarModel = modelHash }, Change(L("modèle")));

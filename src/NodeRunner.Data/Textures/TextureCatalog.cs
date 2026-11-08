@@ -38,9 +38,11 @@ public sealed class TextureCatalog
         var parents = new Dictionary<uint, uint>();
         var errors = new List<string>();
 
-        // Every pack can bring its own gtxd file: they add up, the latest one winning for a given dictionary.
+        // Every pack can bring its own gtxd (and vehicles.meta) file: they add up, the latest one winning for a given dictionary.
         var relationshipFiles = content.EnumerateAllVersions(".ymt").Concat(content.EnumerateAllVersions(".meta"))
-            .Where(p => Path.GetFileNameWithoutExtension(p).EndsWith("gtxd", StringComparison.OrdinalIgnoreCase));
+            .Where(p => Path.GetFileNameWithoutExtension(p).EndsWith("gtxd", StringComparison.OrdinalIgnoreCase)
+                        // Vehicles: their interior and shared dictionaries (supergt_interior...).
+                        || Path.GetFileName(p).Equals("vehicles.meta", StringComparison.OrdinalIgnoreCase));
         foreach (var path in relationshipFiles)
         {
             try

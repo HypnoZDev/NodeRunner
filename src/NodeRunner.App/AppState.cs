@@ -1078,6 +1078,9 @@ internal sealed class AppState
 
     public ModelViewer Viewer { get; } = new();
 
+    // The car drawn on the selected parking spot.
+    public CarGeneratorPreview SpotPreview { get; } = new();
+
     // Map files of a FiveM export: those to save, plus the saved versions taken back when the map was loaded
     // (modified in an earlier session).
     public IReadOnlyList<MapData> MapsToExport =>

@@ -25,35 +25,6 @@ public sealed class HashNames
             _names.TryAdd(Joaat.Hash(name), name.ToLowerInvariant());
     }
 
-    private static readonly string[] ModelSetFiles =
-    [
-        @"update\update.rpf\common\data\ai\vehiclemodelsets.meta",
-        @"common.rpf\data\ai\vehiclemodelsets.meta",
-    ];
-
-    // Names of the vehicle model sets (popGroup of the parking spots: LARGE_CITY...) and of their models.
-    public int AddModelSetNames(IGameFileSystem files)
-    {
-        int before = Count;
-        foreach (var path in ModelSetFiles)
-        {
-            if (files.ReadFile(path) is not { } data)
-                continue;
-            var text = System.Text.Encoding.UTF8.GetString(data);
-            for (int at = text.IndexOf("<Name>", StringComparison.Ordinal); at >= 0; at = text.IndexOf("<Name>", at, StringComparison.Ordinal))
-            {
-                at += "<Name>".Length;
-                int end = text.IndexOf('<', at);
-                if (end < 0)
-                    break;
-                string name = text[at..end].Trim();
-                if (name.Length > 0 && !name.Any(char.IsWhiteSpace))
-                    Add(name);
-            }
-        }
-        return Count - before;
-    }
-
     // Adds the names of a text file written by the user (one name per line; empty lines and lines starting with // or
     // # are skipped).
     public int AddLines(IEnumerable<string> lines)

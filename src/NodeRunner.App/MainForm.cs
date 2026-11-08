@@ -311,6 +311,7 @@ internal sealed unsafe partial class MainForm : Form
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
+        _state.SpotPreview.Dispose();
         _modelRenderer?.Dispose();
         _modelRenderer = null;
         _skyRenderer?.Dispose();
@@ -551,6 +552,12 @@ internal sealed unsafe partial class MainForm : Form
                 () => DrawWater(viewProjection, lighting), occlusionPreview ? _occlusionCuller : null);
         else
             DrawWater(viewProjection, lighting);
+
+        // The car of the selected parking spot.
+        var previewSpot = _state.IsLayerVisible(CarGeneratorLayer.LayerName) ? _state.SelectedCarGenerator : null;
+        _state.SpotPreview.Update(_state.World, _modelRenderer, previewSpot);
+        if (previewSpot?.Spot is { } shownSpot)
+            _state.SpotPreview.Draw(_modelRenderer, shownSpot, _carGeneratorLayer.GroundOf(_state.World, shownSpot), viewProjection);
 
         bool navMeshEnabled = NavMeshLayer.Surfaces.Any(s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)));
         _navMeshLayer.Update(_state.World, lines, camera.Position, _state.Settings.NavMeshRadius, navMeshEnabled);

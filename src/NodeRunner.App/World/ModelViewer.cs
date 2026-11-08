@@ -1,6 +1,4 @@
 using System.Numerics;
-using NodeRunner.Data.Hashing;
-using NodeRunner.Data.Models;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -16,28 +14,24 @@ internal sealed class ModelViewer : IDisposable
     private const float DefaultPitch = -0.32f;
 
     private readonly Camera _camera = new() { FieldOfView = MathF.PI / 4f };
-    private readonly List<GpuTexture> _textures = [];
+    private readonly PreviewModel _model = new();
     private RenderTarget? _target;
     private IntPtr _imageId;
-    private Task<Loaded>? _loading;
-    private GpuModel? _model;
     private Vector3 _center;
     private float _radius = 1f;
 
-    private sealed record Loaded(ViewerItem Item, ModelData? Model, ResolvedTexture?[][] Textures, List<string> Errors);
+    public ViewerItem? Item => _model.Item;
+    public bool IsLoading => _model.IsLoading;
 
-    public ViewerItem? Item { get; private set; }
-    public bool IsLoading => _loading is not null;
+    public string? Error => _model.Error;
 
-    public string? Error { get; private set; }
-
-    public int TriangleCount => _model?.TriangleCount ?? 0;
-    public int MeshCount { get; private set; }
-    public int TextureCount { get; private set; }
+    public int TriangleCount => _model.TriangleCount;
+    public int MeshCount => _model.MeshCount;
+    public int TextureCount => _model.TextureCount;
     public int MissingTextureCount => MissingTextures.Count;
 
-    public IReadOnlyList<string> MissingTextures { get; private set; } = [];
-    public Vector3 Size { get; private set; }
+    public IReadOnlyList<string> MissingTextures => _model.MissingTextures;
+    public Vector3 Size => _model.BoundsMax - _model.BoundsMin;
 
     public float Yaw { get; set; } = DefaultYaw;
     public float Pitch { get => _camera.Pitch; set => _camera.Pitch = value; }
@@ -47,40 +41,7 @@ internal sealed class ModelViewer : IDisposable
 
     public IntPtr ImageId => _imageId;
 
-    public void Open(ViewerItem item, WorldLoader world)
-    {
-        if (item == Item && Error is null)
-            return;
-        Item = item;
-        Error = null;
-        var (reader, textures, textureReader) = (world.ModelReader, world.Textures, world.TextureReader);
-        _loading = Task.Run(() => Read(item, reader, textures, textureReader));
-    }
-
-    private static Loaded Read(ViewerItem item, IModelReader? reader, Data.Textures.TextureCatalog? catalog, Data.Textures.ITextureReader? textureReader)
-    {
-        var errors = new List<string>();
-        if (reader is null)
-            return new Loaded(item, null, [], [L("aucune carte chargée")]);
-        try
-        {
-            var model = reader.ReadModels(item.Location.Path).GetValueOrDefault(item.Location.ModelHash);
-            if (model is null)
-                return new Loaded(item, null, [], [L("modèle introuvable dans le fichier")]);
-            ResolvedTexture?[][] textures = [];
-            if (catalog is not null && textureReader is not null)
-            {
-                // Vehicles also take textures from the dictionary shared by all vehicles (lights, badges, interior...).
-                var fallback = item.Kind == ViewerKind.Vehicle && catalog.Locate(Joaat.Hash("vehshare")) is { } shared ? [shared] : (string[])[];
-                textures = new TextureResolver(catalog, textureReader).Resolve(item.Location, model, errors, fallback);
-            }
-            return new Loaded(item, model, textures, errors);
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException)
-        {
-            return new Loaded(item, null, [], [ex.Message]);
-        }
-    }
+    public void Open(ViewerItem item, WorldLoader world) => _model.Open(item, world);
 
     public void ResetView()
     {
@@ -97,10 +58,11 @@ internal sealed class ModelViewer : IDisposable
     // Takes the model once read, and draws the image if the interface shows it.
     public void Render(ModelRenderer renderer, ImGuiRenderer imgui, GraphicsDevice graphics)
     {
-        if (_loading is { IsCompleted: true } finished)
+        if (_model.Update(renderer))
         {
-            _loading = null;
-            Upload(renderer, finished.Result);
+            _center = (_model.BoundsMin + _model.BoundsMax) * 0.5f;
+            _radius = Math.Max(0.05f, Size.Length() * 0.5f);
+            ResetView();
         }
 
         int width = (int)RequestedSize.X, height = (int)RequestedSize.Y;
@@ -113,7 +75,7 @@ internal sealed class ModelViewer : IDisposable
                 imgui.UnregisterTexture(_imageId);
             _imageId = imgui.RegisterTexture(_target.View!);
         }
-        if (_model is null)
+        if (_model.Model is not { } model)
             return;
 
         _camera.Yaw = Yaw;
@@ -130,78 +92,16 @@ internal sealed class ModelViewer : IDisposable
             SunDirection = Vector3.Normalize(-_camera.Forward + _camera.Right * -0.4f + Vector3.UnitZ * 0.8f),
         };
         renderer.Begin(ModelPass.Solid);
-        renderer.Draw(_model, world, viewProjection, Vector3.One);
+        renderer.Draw(model, world, viewProjection, Vector3.One);
         renderer.Begin(ModelPass.Translucent);
-        renderer.Draw(_model, world, viewProjection, Vector3.One);
+        renderer.Draw(model, world, viewProjection, Vector3.One);
         renderer.Lighting = sceneLighting;
         renderer.Shadows = sceneShadows;
     }
 
-    private void Upload(ModelRenderer renderer, Loaded loaded)
-    {
-        if (loaded.Item != Item)
-            return; // Another model was asked for meanwhile.
-        if (loaded.Model is not { } data)
-        {
-            Error = string.Join(" ; ", loaded.Errors);
-            ReleaseModel();
-            return;
-        }
-
-        ReleaseModel();
-        var uploaded = new Dictionary<TextureKey, GpuTexture?>();
-        var meshTextures = new GpuTexture?[loaded.Textures.Length][];
-        for (int i = 0; i < meshTextures.Length; i++)
-        {
-            meshTextures[i] = new GpuTexture?[loaded.Textures[i].Length];
-            for (int t = 0; t < meshTextures[i].Length; t++)
-            {
-                if (loaded.Textures[i][t] is not { } resolved)
-                    continue;
-                if (!uploaded.TryGetValue(resolved.Key, out var texture))
-                {
-                    uploaded[resolved.Key] = texture = renderer.UploadTexture(resolved.Data!);
-                    if (texture is not null)
-                        _textures.Add(texture);
-                }
-                meshTextures[i][t] = texture;
-            }
-        }
-        _model = renderer.Upload(data, meshTextures);
-        if (_model is null)
-        {
-            Error = L("modèle vide");
-            return;
-        }
-
-        MeshCount = data.Meshes.Count;
-        TextureCount = _textures.Count;
-        MissingTextures = data.Meshes
-            .Where((m, i) => m.DiffuseTextureName is not null && (i >= loaded.Textures.Length || loaded.Textures[i][0] is null))
-            .Select(m => m.DiffuseTextureName!)
-            .Distinct()
-            .ToList();
-        Size = data.BoundsMax - data.BoundsMin;
-        _center = (data.BoundsMin + data.BoundsMax) * 0.5f;
-        _radius = Math.Max(0.05f, Size.Length() * 0.5f);
-        ResetView();
-    }
-
-    private void ReleaseModel()
-    {
-        _model?.Dispose();
-        _model = null;
-        foreach (var texture in _textures)
-            texture.Dispose();
-        _textures.Clear();
-        MeshCount = TextureCount = 0;
-        MissingTextures = [];
-        Size = Vector3.Zero;
-    }
-
     public void Dispose()
     {
-        ReleaseModel();
+        _model.Dispose();
         _target?.Dispose();
         _target = null;
     }

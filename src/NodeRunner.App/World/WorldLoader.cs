@@ -62,6 +62,9 @@ internal sealed class WorldLoader : IDisposable
 
     public HashNames? Names { get; private set; }
 
+    // Vehicle model sets (popGroup of the parking spots).
+    public VehicleModelSets ModelSets { get; private set; } = VehicleModelSets.Empty;
+
     // Text file of names written by the user (one per line), added to those found in the game files; read with the
     // map.
     public string? UserNamesFile { get; init; }
@@ -258,7 +261,17 @@ internal sealed class WorldLoader : IDisposable
             progress.Report(L("Index des textures..."));
             var textures = TextureCatalog.Create(content, new GtxdReader());
             var names = HashNames.FromFileNames(content, maps.GetArchetypeHashes());
-            names.AddModelSetNames(files);
+            var modelSets = VehicleModelSets.Empty;
+            try
+            {
+                modelSets = VehicleModelSets.Load(files);
+            }
+            catch (InvalidDataException ex)
+            {
+                Diagnostics.ErrorLog.Add(L("Véhicules garés"), ex);
+            }
+            foreach (var name in modelSets.AllNames)
+                names.Add(name);
             var userNames = ReadUserNames(names);
 
             progress.Report(L("Index des collisions..."));
@@ -283,6 +296,7 @@ internal sealed class WorldLoader : IDisposable
                 Textures = textures;
                 TextureReader = new YtdReader(source);
                 Names = names;
+                ModelSets = modelSets;
                 UserNames = userNames;
                 LoadDuration = clock.Elapsed;
                 IsBusy = false;

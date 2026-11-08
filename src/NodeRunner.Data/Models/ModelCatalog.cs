@@ -26,6 +26,9 @@ public sealed class ModelCatalog
         _fragments = GameFileIndex.Build(content, ".yft"),
     };
 
+    // The fragment file (.yft) of a model, by the hash of its name (a vehicle: its spawn name).
+    public string? FragmentPath(uint nameHash) => _fragments.GetValueOrDefault(nameHash);
+
     public ModelLocation? Locate(Archetype archetype)
     {
         uint asset = archetype.AssetNameHash;

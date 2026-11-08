@@ -445,5 +445,12 @@ public static partial class English
         ("couleurs", "colors"),
         ("livrée", "livery"),
         ("drapeaux", "flags"),
+        ("Aperçu", "Preview"),
+        ("Véhicule du jeu affiché sur la place dans la vue 3D, pour juger la taille et le sens. Le jeu peut en choisir un autre.", "Game vehicle shown on the spot in the 3D view, to judge size and direction. The game may pick another one."),
+        ("au hasard dans le groupe", "random pick from the group"),
+        ("exemple (le jeu choisit un véhicule de la zone)", "example (the game picks a vehicle of the area)"),
+        ("modèle de la place", "the spot's model"),
+        ("{0} (chargement...)", "{0} (loading...)"),
+        ("{0} (illisible : {1})", "{0} (unreadable: {1})"),
     ];
 }
