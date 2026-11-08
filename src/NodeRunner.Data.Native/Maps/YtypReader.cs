@@ -19,7 +19,7 @@ public sealed class YtypReader : IMapTypesReader
 
     // CMapTypes fields.
     internal const int TypesArchetypes = 24;
-    private const int TypesName = 40;
+    internal const int TypesName = 40;
 
     // CBaseArchetypeDef fields.
     private const int ArchLodDistance = 8;

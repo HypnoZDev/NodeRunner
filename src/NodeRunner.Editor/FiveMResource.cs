@@ -39,7 +39,8 @@ public static class FiveMResource
     public static bool IsGeneratedManifest(string text) =>
         text.TrimStart('﻿').StartsWith(GeneratedMarker, StringComparison.Ordinal);
 
-    public static string BuildManifest(string author, string version, IEnumerable<string> mapFiles)
+    // newTypeFiles: .ytyp files of the resource that are not game files (interiors made by the user), declared to the game.
+    public static string BuildManifest(string author, string version, IEnumerable<string> mapFiles, IEnumerable<string>? newTypeFiles = null)
     {
         var sb = new StringBuilder();
         sb.Append(GeneratedMarker).Append(' ').Append(version).Append(" (").Append(author).Append(")\n");
@@ -55,6 +56,11 @@ public static class FiveMResource
         sb.Append("version '1.0.0'\n");
         sb.Append('\n');
         sb.Append("this_is_a_map 'yes'\n");
+        var types = (newTypeFiles ?? []).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (types.Count > 0)
+            sb.Append('\n');
+        foreach (var file in types)
+            sb.Append("data_file 'DLC_ITYP_REQUEST' '").Append(StreamFolderName).Append('/').Append(file).Append("'\n");
         return sb.ToString();
     }
 }

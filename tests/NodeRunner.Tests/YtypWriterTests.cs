@@ -13,7 +13,7 @@ public class YtypWriterTests
 
     // A .ytyp holding one interior with three objects, the last two in its room, and an entity set of two objects
     // (rooms 0 and 7), and a portal of four corners.
-    private static byte[] Sample()
+    internal static byte[] Sample()
     {
         var document = new MetaDocument { Name = "sample", RootBlock = 0 };
         void Structure(uint hash, int size)

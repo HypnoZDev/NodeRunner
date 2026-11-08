@@ -667,5 +667,26 @@ public static partial class English
         ("vérification échouée (portails)", "check failed (portals)"),
         ("vérification échouée (position des objets)", "check failed (object positions)"),
         ("vérification échouée (salles)", "check failed (rooms)"),
+
+        // New interior
+        ("Nouvel intérieur", "New interior"),
+        ("{0}  Nouvel intérieur (MLO)...", "New interior (MLO)..."),
+        ("Crée un intérieur vide devant la caméra (une salle et une porte), dans un .ytyp du projet.",
+            "Creates an empty interior in front of the camera (one room and a door), in a .ytyp of the project."),
+        ("Un intérieur (MLO) vide, posé devant la caméra : la salle « limbo » (l'extérieur), une salle de 6 x 6 m ",
+            "An empty interior (MLO), placed in front of the camera: the \"limbo\" room (the outside), a 6 x 6 m room "),
+        ("et une porte vers l'extérieur. Il est enregistré dans un .ytyp du projet portant son nom.",
+            "and a door to the outside. It is saved in a .ytyp of the project named after it."),
+        ("Nom de l'intérieur (archétype) et de son fichier .ytyp", "Name of the interior (archetype) and of its .ytyp file"),
+        ("ex. hopital_int", "e.g. hospital_int"),
+        ("lettres minuscules, chiffres et _ seulement, en commençant par une lettre", "lowercase letters, digits and _ only, starting with a letter"),
+        ("ce nom est déjà utilisé par un type d'objet ou un .ytyp", "this name is already used by an object type or a .ytyp"),
+        ("stream/{0}.ytyp", "stream/{0}.ytyp"),
+        ("Créer l'intérieur {0}", "Create the interior {0}"),
+        ("Intérieur « {0} » créé devant la caméra : une salle de 6 x 6 m avec une porte vers l'extérieur. ",
+            "Interior \"{0}\" created in front of the camera: a 6 x 6 m room with a door to the outside. "),
+        ("Placez des objets dedans, ajustez la salle avec ses poignées, puis Ctrl+S.", "Place objects in it, adjust the room with its handles, then Ctrl+S."),
+        ("aucun .ytyp du jeu avec un intérieur, utilisable comme modèle", "no game .ytyp with an interior, usable as a model"),
+        ("aucun YMAP du jeu avec un intérieur, utilisable comme modèle", "no game YMAP with an interior, usable as a model"),
     ];
 }

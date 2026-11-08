@@ -339,3 +339,24 @@ internal sealed class InteriorLayoutCodec : EditCodec<InteriorLayoutEdit>
         };
     }
 }
+
+internal sealed class InteriorCreateCodec : EditCodec<InteriorCreateEdit>
+{
+    public override string Tag => "interior-create";
+
+    protected override void Write(InteriorCreateEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Interior.Map ?? throw new InvalidOperationException("Interior without a map."));
+        w.Write(edit.Name);
+        w.Write(edit.Interior.Position);
+        w.Write(edit.Interior.Orientation);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        string name = r.ReadString();
+        var position = r.ReadVector3();
+        return InteriorCreateEdit.Apply(r.Context.Library, map, name, position, r.ReadQuaternion(), description);
+    }
+}

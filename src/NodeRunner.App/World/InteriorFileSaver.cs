@@ -1,4 +1,5 @@
 using System.Numerics;
+using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Resources;
@@ -22,9 +23,25 @@ internal static class InteriorFileSaver
             try
             {
                 var interiors = library.InteriorsInFile(path);
-                if (interiors.Count == 0 || Source(files, library, path) is not { } source || files.GetResourceHeader(path) is not { } header)
+                if (interiors.Count == 0)
                     throw new InvalidDataException(L("fichier du jeu introuvable"));
-                var written = writer.Write(source, interiors, Borrowed(files, library, YtypWriter.MissingStructures(source, interiors)));
+                MapFileContent written;
+                ResourceHeader header;
+                if (Source(files, library, path) is { } source && files.GetResourceHeader(path) is { } found)
+                {
+                    header = found;
+                    written = writer.Write(source, interiors, Borrowed(files, library, YtypWriter.MissingStructures(source, interiors)));
+                }
+                else if (path.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    // An interior made by the user, not saved yet: a new file, modelled on a game .ytyp.
+                    var template = Template(files, library);
+                    header = template.Header;
+                    written = writer.Build(template.Content, Path.GetFileNameWithoutExtension(name), interiors,
+                        Borrowed(files, library, YtypWriter.MissingStructures(template.Content, interiors)));
+                }
+                else
+                    throw new InvalidDataException(L("fichier du jeu introuvable"));
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
                 Verify(file, interiors);
 
@@ -54,6 +71,26 @@ internal static class InteriorFileSaver
                 cache[path] = source = read;
             return source;
         }
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MapLibrary, Tuple<byte[], ResourceHeader>> Templates = new();
+
+    // A game .ytyp describing interiors, rooms, portals and objects, for the files of new interiors.
+    private static (byte[] Content, ResourceHeader Header) Template(Data.FileSystem.GameContent files, MapLibrary library)
+    {
+        if (Templates.TryGetValue(library, out var cached))
+            return (cached.Item1, cached.Item2);
+        foreach (uint hash in library.GetInteriorArchetypeHashes())
+        {
+            if (library.GetArchetypeFile(hash) is not { } file || file.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase)
+                || Source(files, library, file) is not { } source || !YtypWriter.CanBeTemplate(source) || files.GetResourceHeader(file) is not { } header)
+                continue;
+            // No graphics pages in a .ytyp: keep the version bits (top 4) of the graphics flags only.
+            header = header with { GraphicsFlags = header.GraphicsFlags & 0xF0000000 };
+            Templates.AddOrUpdate(library, Tuple.Create(source, header));
+            return (source, header);
+        }
+        throw new InvalidDataException(L("aucun .ytyp du jeu avec un intérieur, utilisable comme modèle"));
     }
 
     // Descriptions of the structures the file lacks (a first entity set or portal), from the first game .ytyp that has them.

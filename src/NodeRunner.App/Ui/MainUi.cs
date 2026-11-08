@@ -49,6 +49,7 @@ internal sealed class MainUi
         _roomHover = new RoomHover(state, roomLayer);
         _roomGizmo = new RoomGizmo(state);
         _deleteWindow = new DeleteWindow(state);
+        _interiorWindow = new InteriorWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
     }
 
@@ -83,6 +84,7 @@ internal sealed class MainUi
     private readonly RoomGizmo _roomGizmo;
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
+    private readonly InteriorWindow _interiorWindow;
     private readonly ErrorWindow _errorWindow;
 
     public bool BrowseGameFolderRequested { get; set; }
@@ -155,6 +157,7 @@ internal sealed class MainUi
         ProjectWindow.Draw();
         _deleteWindow.Draw();
         _settingsWindow.Draw();
+        _interiorWindow.Draw();
         _onlineWindow.Draw();
         _errorWindow.Draw();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
@@ -298,6 +301,10 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision."));
             ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.House}  Nouvel intérieur (MLO)..."), null, false, _state.World.Maps is not null))
+                _interiorWindow.Open();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Crée un intérieur vide devant la caméra (une salle et une porte), dans un .ytyp du projet."));
             if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();

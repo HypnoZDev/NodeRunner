@@ -38,7 +38,8 @@ internal static class MapFileSaver
                     // The user's own map: built whole, with a game map file as model for the descriptions.
                     var template = Template(content, library);
                     header = template.Header;
-                    written = writer.Build(template.Content, map, Path.GetFileNameWithoutExtension(name), extents);
+                    var interiorInstance = map.KeptEntities.Any(e => e.IsInterior) ? InteriorInstanceDescription(content, library) : null;
+                    written = writer.Build(template.Content, map, Path.GetFileNameWithoutExtension(name), extents, interiorInstance, library.GetArchetype);
                 }
                 else
                 {
@@ -88,6 +89,26 @@ internal static class MapFileSaver
             return (bytes, header);
         }
         throw new InvalidDataException(L("aucun YMAP du jeu utilisable comme modèle"));
+    }
+
+    private static (MapLibrary Library, Data.Native.Resources.MetaDocument.StructureInfo Info)? _interiorInstance;
+
+    // The description of interior instances, from a game map file that places some (for interiors made by the user).
+    private static Data.Native.Resources.MetaDocument.StructureInfo InteriorInstanceDescription(GameContent content, MapLibrary library)
+    {
+        if (_interiorInstance is { } cached && cached.Library == library)
+            return cached.Info;
+        foreach (var map in library.Maps)
+        {
+            if (map.IsCustom || map.FilePath is null || !map.Entities.Any(e => e.IsInterior) || content.ReadFile(map.FilePath) is not { } bytes)
+                continue;
+            if (YmapWriter.InteriorInstanceDescription(bytes) is { } info)
+            {
+                _interiorInstance = (library, info);
+                return info;
+            }
+        }
+        throw new InvalidDataException(L("aucun YMAP du jeu avec un intérieur, utilisable comme modèle"));
     }
 
     // Reads the new file back as the game data would be, and checks that every object kept is where it should be.

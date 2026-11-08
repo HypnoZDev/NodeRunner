@@ -69,6 +69,113 @@ public sealed class YtypWriter : IMapTypesWriter
         return new MapFileContent(content, pageFlags);
     }
 
+    // Fields of CMloArchetypeDef written for a new interior (offsets checked against the template's description).
+    private const int ArchHdTextureDistance = 84;
+    private const int InteriorArchetypeSize = 240;
+    private const int RoomBlend = 64;
+    public const uint DefaultRoomFlags = 0x60; // Limbo of every game interior, and most of their rooms.
+    private const float DefaultHdTextureDistance = 5f;
+
+    private static readonly (string Name, int Offset)[] CheckedInteriorFields =
+    [
+        ("lodDist", 8), ("flags", 12), ("hdTextureDist", ArchHdTextureDistance), ("name", YtypReader.ArchName),
+        ("physicsDictionary", 104), ("assetType", 108), ("assetName", 112), ("entities", YtypReader.InteriorEntities),
+        ("rooms", YtypReader.InteriorRooms), ("portals", YtypReader.InteriorPortals),
+    ];
+
+    // Builds a whole .ytyp holding new interiors made by the user (name: the file name without extension). The
+    // descriptions of the structures are taken from template (a game .ytyp with an interior that has objects, rooms
+    // and portals); each interior starts with its limbo room (room 0, SourceIndex 0), the rest is written as by Write.
+    public MapFileContent Build(ReadOnlySpan<byte> template, string name, IReadOnlyList<Archetype> interiors,
+        IReadOnlyList<MetaDocument.StructureInfo>? borrowed) =>
+        Write(Skeleton(template, name, interiors), interiors, borrowed);
+
+    internal static byte[] Skeleton(ReadOnlySpan<byte> template, string name, IReadOnlyList<Archetype> interiors)
+    {
+        var document = MetaDocument.Read(template);
+        int root = document.RootBlock;
+        if (root < 0 || root >= document.Blocks.Count || document.Blocks[root].Structure != YtypReader.MapTypesStructure)
+            throw new InvalidDataException("Le modèle n'est pas un fichier de types (.ytyp).");
+        foreach (uint needed in new[] { YtypReader.InteriorArchetypeStructure, YtypReader.RoomStructure, YtypReader.PortalStructure, YmapReader.EntityStructure })
+        {
+            if (document.FindStructure(needed) is null)
+                throw new InvalidDataException("Le modèle ne décrit pas les intérieurs, salles, portails et objets.");
+        }
+        CheckFields(document.FindStructure(YtypReader.InteriorArchetypeStructure)!, InteriorArchetypeSize, CheckedInteriorFields);
+        CheckFields(document.FindStructure(YtypReader.RoomStructure)!, YtypReader.RoomSize, [("blend", RoomBlend), ("flags", YtypReader.RoomFlags)]);
+        uint pointerStructure = PointerArrayStructure(document);
+        int rootSize = document.FindStructure(YtypReader.MapTypesStructure)?.Size ?? document.Blocks[root].Data.Length;
+        if (interiors.Any(i => i.InteriorRooms.Count == 0 || i.InteriorRooms[0].SourceIndex != 0))
+            throw new ArgumentException("A new interior starts with its limbo room (SourceIndex 0).", nameof(interiors));
+
+        document.Blocks.Clear();
+        document.Name = name;
+        var types = new byte[rootSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(types.AsSpan(YtypReader.TypesName), Hashing.Joaat.Hash(name.ToLowerInvariant()));
+        document.Blocks.Add(new MetaDocument.Block(YtypReader.MapTypesStructure, types));
+        document.RootBlock = 0;
+
+        int items = document.Blocks.Count;
+        var data = new byte[interiors.Count * InteriorArchetypeSize];
+        document.Blocks.Add(new MetaDocument.Block(YtypReader.InteriorArchetypeStructure, data));
+        var pointers = new byte[interiors.Count * PointerSize];
+        for (int i = 0; i < interiors.Count; i++)
+        {
+            var archetype = interiors[i];
+            int o = i * InteriorArchetypeSize;
+            BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(o + 8), archetype.LodDistance);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + 12), archetype.Flags);
+            BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(o + ArchHdTextureDistance), DefaultHdTextureDistance);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YtypReader.ArchName), archetype.NameHash);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + 104), archetype.PhysicsDictionaryHash);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + 108), (uint)ArchetypeAssetType.Assetless);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + 112), archetype.AssetNameHash);
+            BinaryPrimitives.WriteUInt64LittleEndian(pointers.AsSpan(i * PointerSize), MetaDocument.Pointer(items, o));
+
+            // Limbo: the outside, without a box of its own.
+            var limbo = new byte[YtypReader.RoomSize];
+            WriteVector3(limbo, YtypReader.RoomBoundsMin, new Vector3(float.MaxValue));
+            WriteVector3(limbo, YtypReader.RoomBoundsMax, new Vector3(float.MinValue));
+            WriteFloat(limbo, RoomBlend, 1f);
+            BinaryPrimitives.WriteUInt32LittleEndian(limbo.AsSpan(YtypReader.RoomFlags), DefaultRoomFlags);
+            BinaryPrimitives.WriteInt32LittleEndian(limbo.AsSpan(YtypReader.RoomExteriorVisibilityDepth), -1);
+            int roomBlock = document.Blocks.Count;
+            document.Blocks.Add(new MetaDocument.Block(YtypReader.RoomStructure, limbo));
+            SetArray(document, (items, o), YtypReader.InteriorRooms, roomBlock, 0, 1);
+            WriteString(document, (roomBlock, YtypReader.RoomName), "limbo");
+        }
+        int pointerBlock = document.Blocks.Count;
+        document.Blocks.Add(new MetaDocument.Block(pointerStructure, pointers));
+        SetArray(document, (0, 0), YtypReader.TypesArchetypes, pointerBlock, 0, interiors.Count);
+        return document.Write().Content;
+    }
+
+    // Checks that a structure has the size and field offsets written here (fields found by name).
+    private static void CheckFields(MetaDocument.StructureInfo structure, int size, (string Name, int Offset)[] fields)
+    {
+        if (structure.Size != size)
+            throw new InvalidDataException($"Taille inattendue de la structure 0x{structure.NameHash:X8} dans le modèle.");
+        var offsets = new Dictionary<uint, int>();
+        for (int i = 0; i + 16 <= structure.Entries.Length; i += 16)
+            offsets[BinaryPrimitives.ReadUInt32LittleEndian(structure.Entries.AsSpan(i))] = BinaryPrimitives.ReadInt32LittleEndian(structure.Entries.AsSpan(i + 4));
+        foreach (var (field, offset) in fields)
+        {
+            // Some names are not known under the hash the files use: only those found are checked.
+            if (offsets.TryGetValue(Hashing.Joaat.Hash(field), out int actual) && actual != offset)
+                throw new InvalidDataException($"Champ {field} à un emplacement inattendu dans le modèle.");
+        }
+    }
+
+    // Whether a .ytyp describes everything a new interior needs (Build): interiors, rooms, portals and objects.
+    public static bool CanBeTemplate(ReadOnlySpan<byte> source)
+    {
+        var document = MetaDocument.Read(source);
+        return document.RootBlock >= 0 && document.RootBlock < document.Blocks.Count
+            && document.Blocks[document.RootBlock].Structure == YtypReader.MapTypesStructure
+            && new[] { YtypReader.InteriorArchetypeStructure, YtypReader.RoomStructure, YtypReader.PortalStructure, YmapReader.EntityStructure }
+                .All(s => document.FindStructure(s) is not null);
+    }
+
     // The description of a structure in a .ytyp, null if it has none.
     public static MetaDocument.StructureInfo? Structure(ReadOnlySpan<byte> source, uint structure) =>
         MetaDocument.Read(source).FindStructure(structure);
@@ -199,7 +306,8 @@ public sealed class YtypWriter : IMapTypesWriter
                 originals[source].CopyTo(data, o);
             else
             {
-                template ??= AnyEntity(document) ?? throw new InvalidDataException("aucun objet modèle dans ce fichier");
+                // Every field of a new object is written: a file without objects (a new interior) starts from zeros.
+                template ??= AnyEntity(document) ?? new byte[YmapReader.EntitySize];
                 template.CopyTo(data, o);
                 YmapWriter.WriteNewEntityFields(data, o, added[i]);
             }
@@ -487,7 +595,7 @@ public sealed class YtypWriter : IMapTypesWriter
                     return document.Blocks[listBlock].Structure;
             }
         }
-        throw new InvalidDataException("aucune liste de salles dans ce fichier");
+        return UIntStructure; // A new file: no list yet.
     }
 
     private static byte[]? AnyEntity(MetaDocument document)

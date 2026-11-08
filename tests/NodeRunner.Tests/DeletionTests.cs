@@ -13,10 +13,10 @@ public class DeletionTests
     private const uint OtherLod = 0x10, BuildingLod = 0x11, BuildingA = 0x20, BuildingB = 0x21, Bench = 0x30;
 
     // One entity of a test map: model, parent index, level, number of children, flags (8 = parent in the parent map).
-    private readonly record struct Item(uint Archetype, int ParentIndex, LodLevel Level, int ChildCount = 0, uint Flags = 0);
+    internal readonly record struct Item(uint Archetype, int ParentIndex, LodLevel Level, int ChildCount = 0, uint Flags = 0);
 
     // A minimal binary .ymap: the map header (CMapData), the list of entities and the entities (CEntityDef).
-    private static byte[] BuildYmap(uint name, uint parent, params Item[] items)
+    internal static byte[] BuildYmap(uint name, uint parent, params Item[] items)
     {
         var document = new MetaDocument { RootBlock = 0 };
         document.Structures.Add(Structure(3545841574, 512)); // CMapData
@@ -51,7 +51,7 @@ public class DeletionTests
         return document.Write().Content;
     }
 
-    private static MetaDocument.StructureInfo Structure(uint hash, int size)
+    internal static MetaDocument.StructureInfo Structure(uint hash, int size)
     {
         var info = new byte[0x20];
         BinaryPrimitives.WriteUInt32LittleEndian(info, hash);

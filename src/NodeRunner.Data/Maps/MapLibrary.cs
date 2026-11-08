@@ -10,7 +10,7 @@ public sealed class MapLibrary
 {
     public const float CellSize = 100f;
 
-    private readonly Dictionary<uint, Archetype> _archetypes = new();
+    private Dictionary<uint, Archetype> _archetypes = new();
     // Once loaded, the maps and cells are read by background threads while the editor adds to them: the lists are
     // then replaced by new ones, never changed in place.
     private List<MapData> _maps = new();
@@ -33,7 +33,7 @@ public sealed class MapLibrary
         _archetypes.Values.Where(a => a.InteriorEntitySets.Any(s => s.NameHash == setHash)).Select(a => a.NameHash).ToList();
 
     public string? GetArchetypeFile(uint nameHash) => _archetypeFiles.GetValueOrDefault(nameHash);
-    private readonly Dictionary<uint, string> _archetypeFiles = new();
+    private Dictionary<uint, string> _archetypeFiles = new();
 
     // The interiors (MLO) defined in one archetype file, in no particular order.
     public List<Archetype> InteriorsInFile(string path) => _archetypeFiles
@@ -327,6 +327,19 @@ public sealed class MapLibrary
     }
 
     internal void AddArchetype(Archetype archetype) => _archetypes[archetype.NameHash] = archetype;
+
+    // A new interior made by the user, kept in file (a .ytyp of the project). New dictionaries, not changed in place:
+    // background threads may be looking archetypes up.
+    public void AddInteriorArchetype(Archetype archetype, string file)
+    {
+        if (archetype.Kind != ArchetypeKind.Interior)
+            throw new ArgumentException("Not an interior.", nameof(archetype));
+        if (_archetypes.ContainsKey(archetype.NameHash))
+            throw new ArgumentException("An object type of that name already exists.", nameof(archetype));
+        _archetypes = new Dictionary<uint, Archetype>(_archetypes) { [archetype.NameHash] = archetype };
+        _archetypeFiles = new Dictionary<uint, string>(_archetypeFiles) { [archetype.NameHash] = file };
+        StructureVersion++;
+    }
 
     private Archetype InteriorArchetype(uint interiorHash) =>
         GetArchetype(interiorHash) is { Kind: ArchetypeKind.Interior } archetype ? archetype : throw new ArgumentException("Not an interior.", nameof(interiorHash));

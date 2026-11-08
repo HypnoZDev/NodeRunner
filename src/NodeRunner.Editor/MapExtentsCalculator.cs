@@ -27,7 +27,22 @@ public static class MapExtentsCalculator
         var empty = new MapExtents(new Vector3(float.MaxValue), new Vector3(float.MinValue), new Vector3(float.MaxValue), new Vector3(float.MinValue));
         var extents = empty;
         foreach (var entity in map.KeptEntities)
+        {
             Include(ref extents, entity, archetypes);
+            if (!entity.IsInterior)
+                continue;
+            // An interior made by the user: its objects and rooms (its archetype has no box of its own).
+            foreach (var inside in entity.InteriorEntities.Where(e => !e.IsDeleted))
+                Include(ref extents, inside, archetypes);
+            var rooms = archetypes(entity.ArchetypeHash)?.InteriorRooms ?? [];
+            for (int r = 1; r < rooms.Count; r++)
+            {
+                var (min, max) = WorldBox(rooms[r].BoundsMin, rooms[r].BoundsMax, entity.Transform);
+                var reach = new Vector3(entity.LodDistance);
+                extents = new MapExtents(Vector3.Min(extents.StreamingMin, min - reach), Vector3.Max(extents.StreamingMax, max + reach),
+                    Vector3.Min(extents.EntitiesMin, min), Vector3.Max(extents.EntitiesMax, max));
+            }
+        }
         return extents == empty ? default : extents;
     }
 

@@ -796,6 +796,48 @@ internal sealed class AppState
 
     // --- Rooms and portals of interiors ---
 
+    // Whether name can be given to a new interior: valid, and no object type (of the game or of the project) has it.
+    public bool IsFreeInteriorName(string name) =>
+        InteriorCreation.IsValidName(name) && World.Maps is { } library && library.GetArchetype(Data.Hashing.Joaat.Hash(name)) is null
+        && !TypeFileNames().Contains(name + ".ytyp");
+
+    private (GameContent Content, HashSet<string> Names)? _typeFileNames;
+
+    // File names of every .ytyp loaded (game and project): a new interior's file must not replace one.
+    private HashSet<string> TypeFileNames()
+    {
+        if (World.Content is not { } content)
+            return [];
+        if (_typeFileNames is not { } cached || cached.Content != content)
+            _typeFileNames = cached = (content, content.EnumerateFiles(".ytyp", withInactiveFallback: true).Select(Path.GetFileName).OfType<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        return cached.Names;
+    }
+
+    public string SuggestInteriorName() =>
+        InteriorCreation.SuggestName(Project?.ResourceName ?? "mlo", IsFreeInteriorName);
+
+    // A new interior on the ground in front of the camera, its door facing it, in the project's map; selected, with
+    // its rooms and portals shown.
+    public void CreateInterior(string name)
+    {
+        Notice = null;
+        if (World.Maps is not { } library || !IsFreeInteriorName(name) || ProjectMap(library) is not { } map)
+            return;
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? Vector3.Normalize(forward) : Vector3.UnitY;
+        var point = Camera.Position + forward * 10f;
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 2f;
+        var edit = InteriorCreateEdit.Apply(library, map, name, point with { Z = ground }, InteriorCreation.FacingAway(forward), L($"Créer l'intérieur {name}"));
+        History.Add(edit);
+        World.Names?.Add(name);
+        Select(edit.Interior);
+        SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
+        SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.OutsidePortals), true);
+        Notify(L($"Intérieur « {name} » créé devant la caméra : une salle de 6 x 6 m avec une porte vers l'extérieur. ")
+            + L("Placez des objets dedans, ajustez la salle avec ses poignées, puis Ctrl+S."));
+    }
+
     // A room of 4 x 4 x 3 m in front of the camera, in the interior's space; selected.
     public void AddRoom(MapEntity interior)
     {
@@ -954,6 +996,8 @@ internal sealed class AppState
             var maps = history.All
                 .SelectMany(e => e.Entities)
                 .Where(entity => entity.Interior is null).Select(entity => entity.Map)
+                // The project's maps placing an interior whose portals changed: the instance stores its number of exits.
+                .Concat(history.All.OfType<IInteriorEdit>().Select(e => e.Interior.Map).Where(m => m is { IsCustom: true }))
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()

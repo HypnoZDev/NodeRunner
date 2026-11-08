@@ -58,9 +58,16 @@ public sealed class YmapWriter : IMapDataWriter
         ("tintValue", EntityTint),
     ];
 
+    // CMloInstanceDef fields after those of CEntityDef.
+    private const int InstanceDefaultEntitySets = 136;
+    private const int InstanceExitPortals = 152;
+
     // Builds a whole map file for a map made by the user (IsCustom), which can hold added objects: the descriptions
-    // of the structures are taken from template (any game map file with ordinary objects), the rest is new.
-    public MapFileContent Build(ReadOnlySpan<byte> template, MapData map, string name, MapExtents extents)
+    // of the structures are taken from template (any game map file with ordinary objects), the rest is new. Interior
+    // instances (of interiors made by the user) need interiorInstance, the description of CMloInstanceDef taken from
+    // a game map that has one, and archetypes (their number of portals to the outside).
+    public MapFileContent Build(ReadOnlySpan<byte> template, MapData map, string name, MapExtents extents,
+        MetaDocument.StructureInfo? interiorInstance = null, Func<uint, Archetype?>? archetypes = null)
     {
         var document = MetaDocument.Read(template);
         int root = document.RootBlock;
@@ -77,6 +84,13 @@ public sealed class YmapWriter : IMapDataWriter
 
         MetaDocument? saved = map.SavedContent is { } content ? MetaDocument.Read(content) : null;
         var savedItems = saved is null ? [] : EntityItems(saved, saved.Blocks[saved.RootBlock].Data);
+
+        if (map.KeptEntities.Any(e => e.IsInterior) && document.FindStructure(YmapReader.InteriorInstanceStructure) is null)
+        {
+            if (interiorInstance is null || interiorInstance.Size != YmapReader.InteriorInstanceSize)
+                throw new InvalidDataException("Description des intérieurs placés (CMloInstanceDef) introuvable.");
+            document.Structures.Add(interiorInstance);
+        }
 
         // The new document: the template's descriptions, new blocks.
         document.Blocks.Clear();
@@ -98,33 +112,38 @@ public sealed class YmapWriter : IMapDataWriter
         // Entities, in blocks of at most MaxBlockLength bytes, then the array of pointers to them.
         var items = new List<(int Block, int Offset)>();
         var current = new List<byte>();
+        uint currentStructure = YmapReader.EntityStructure;
         void Flush()
         {
             if (current.Count == 0)
                 return;
-            document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, current.ToArray()));
+            document.Blocks.Add(new MetaDocument.Block(currentStructure, current.ToArray()));
             current.Clear();
         }
         var fresh = new HashSet<int>();
         foreach (var entity in kept)
         {
-            if (entity.IsInterior)
-                throw new InvalidDataException("Les intérieurs ne sont pas pris en charge dans un YMAP du projet.");
+            uint structure = entity.IsInterior ? YmapReader.InteriorInstanceStructure : YmapReader.EntityStructure;
+            int size = entity.IsInterior ? YmapReader.InteriorInstanceSize : YmapReader.EntitySize;
             byte[] item;
             if (entity.SourceIndex >= 0 && saved is not null && entity.SourceIndex < savedItems.Count
-                && saved.Blocks[savedItems[entity.SourceIndex].Block].Structure == YmapReader.EntityStructure)
+                && saved.Blocks[savedItems[entity.SourceIndex].Block].Structure == structure)
             {
                 var (b, o) = savedItems[entity.SourceIndex];
-                item = saved.Blocks[b].Data.AsSpan(o, YmapReader.EntitySize).ToArray();
+                item = saved.Blocks[b].Data.AsSpan(o, size).ToArray();
                 item.AsSpan(EntityExtensions, 16).Clear(); // Would point into the old file.
+                if (entity.IsInterior)
+                    item.AsSpan(InstanceDefaultEntitySets, 16).Clear();
             }
             else
             {
-                item = (byte[])entityTemplate.Clone();
+                // Every field of a new interior instance is written: it starts from zeros.
+                item = entity.IsInterior ? new byte[size] : (byte[])entityTemplate.Clone();
                 fresh.Add(items.Count);
             }
-            if (current.Count + item.Length > MetaDocument.MaxBlockLength)
+            if (current.Count > 0 && (structure != currentStructure || current.Count + item.Length > MetaDocument.MaxBlockLength))
                 Flush();
+            currentStructure = structure;
             items.Add((document.Blocks.Count, current.Count));
             current.AddRange(item);
         }
@@ -135,6 +154,9 @@ public sealed class YmapWriter : IMapDataWriter
             if (fresh.Contains(i))
                 WriteNewEntityFields(document.Blocks[items[i].Block].Data, items[i].Offset, kept[i]);
             WriteEntity(document, items[i], kept[i]);
+            if (kept[i].IsInterior)
+                BinaryPrimitives.WriteInt32LittleEndian(document.Blocks[items[i].Block].Data.AsSpan(items[i].Offset + InstanceExitPortals),
+                    archetypes?.Invoke(kept[i].ArchetypeHash)?.InteriorPortals.Count(p => p.RoomFrom == 0 || p.RoomTo == 0) ?? 0);
         }
 
         if (items.Count > 0)
@@ -152,6 +174,10 @@ public sealed class YmapWriter : IMapDataWriter
         var (bytes, pageFlags) = document.Write();
         return new MapFileContent(bytes, pageFlags);
     }
+
+    // The description of interior instances (CMloInstanceDef) in a map file, null if it has none.
+    public static MetaDocument.StructureInfo? InteriorInstanceDescription(ReadOnlySpan<byte> source) =>
+        MetaDocument.Read(source).FindStructure(YmapReader.InteriorInstanceStructure);
 
     internal static void WriteNewEntityFields(byte[] data, int o, MapEntity entity)
     {
@@ -176,6 +202,8 @@ public sealed class YmapWriter : IMapDataWriter
         uint flags = 0, contentFlags = 0;
         foreach (var entity in entities)
         {
+            if (entity.IsInterior)
+                contentFlags |= 8;
             switch (entity.LodLevel)
             {
                 case LodLevel.Hd or LodLevel.OrphanHd:

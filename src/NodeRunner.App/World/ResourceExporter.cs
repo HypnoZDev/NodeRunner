@@ -60,13 +60,25 @@ internal static class ResourceExporter
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
-                FiveMResource.BuildManifest(Program.Author, Program.Version, report.Saved));
+                FiveMResource.BuildManifest(Program.Author, Program.Version, report.Saved, NewTypeFiles(world, report.Saved)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             report.Errors.Add($"{FiveMResource.ManifestFileName} : {ex.Message}");
         }
         return report;
+    }
+
+    // The .ytyp files written that the game does not have (interiors made by the user).
+    private static List<string> NewTypeFiles(WorldLoader world, IEnumerable<string> saved)
+    {
+        var types = saved.Where(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (types.Count == 0 || world.Content is not { } content)
+            return [];
+        var game = content.EnumerateFiles(".ytyp", withInactiveFallback: true)
+            .Where(p => !p.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+            .Select(Path.GetFileName).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return types.Where(t => !game.Contains(t)).ToList();
     }
 
     private static bool IsStreamedFile(string path) =>

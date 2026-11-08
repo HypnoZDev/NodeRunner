@@ -14,7 +14,7 @@ public sealed class YmapReader : IMapDataReader
 
     private const int MapDataSize = 512;
     internal const int EntitySize = 128;
-    private const int InteriorInstanceSize = 160; // An entity followed by interior-specific fields.
+    internal const int InteriorInstanceSize = 160; // An entity followed by interior-specific fields.
 
     // CMapData fields.
     private const int MapName = 8;
