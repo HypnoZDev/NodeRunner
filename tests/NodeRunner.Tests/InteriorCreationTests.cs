@@ -124,6 +124,44 @@ public class InteriorCreationTests
     }
 
     [Fact]
+    public void An_interior_is_copied_with_its_objects()
+    {
+        var (library, map, edit) = Created();
+        var chair = new MapEntity { ArchetypeHash = 555, Position = new Vector3(1, 1, 0), StoredRotation = Quaternion.Identity, InteriorRoom = 1 };
+        var kept = library.AddToInterior(edit.Interior, chair);
+        var gone = library.AddToInterior(edit.Interior, new MapEntity { ArchetypeHash = 556, Position = Vector3.Zero, StoredRotation = Quaternion.Identity, InteriorRoom = 1 });
+        library.SetDeleted([gone], true);
+
+        var copied = ObjectCopy.Copy([edit.Interior], library.GetArchetype);
+        var pasted = ObjectCopy.Paste(copied, new Vector3(500, 0, 10), library.GetArchetype);
+        var add = AddEdit.Apply(library, map, pasted, "paste");
+        var copy = add.Selection.Single();
+        Assert.True(copy.IsInterior);
+        Assert.Equal(edit.Interior.ArchetypeHash, copy.ArchetypeHash);
+        // The bottom of its rooms on the ground, turned like the original.
+        Assert.Equal(10 - InteriorCreation.RoomMin.Z, copy.Position.Z, 3);
+        Assert.True(Quaternion.Dot(edit.Interior.Orientation, copy.Orientation) > 0.9999f);
+        Assert.Equal(2, copy.InteriorEntities.Count);
+        Assert.False(copy.InteriorEntities.Single(e => e.ArchetypeHash == 555).IsDeleted);
+        Assert.True(copy.InteriorEntities.Single(e => e.ArchetypeHash == 556).IsDeleted);
+        Assert.Equal(copy.Position + Vector3.Transform(new Vector3(1, 1, 0), copy.Orientation),
+            copy.InteriorEntities.Single(e => e.ArchetypeHash == 555).Position);
+
+        // Moving an object of the original moves it in the copy too.
+        kept.SetPlacement(kept.Position + Vector3.UnitZ, kept.Orientation, kept.Scale);
+        Assert.Equal(1f, copy.InteriorEntities.Single(e => e.ArchetypeHash == 555).Position.Z - copy.Position.Z, 3);
+
+        var codecs = EditCodecs.ForEditor();
+        var message = codecs.Encode(add, library);
+        var other = MapLibrary.Create();
+        codecs.Apply(codecs.Encode(edit, library), new EditContext { Library = other });
+        var applied = Assert.IsType<AddEdit>(codecs.Apply(message, new EditContext { Library = other })).Selection.Single();
+        Assert.True(applied.IsInterior);
+        Assert.Equal(copy.Position, applied.Position);
+        Assert.True(Quaternion.Dot(copy.Orientation, applied.Orientation) > 0.9999f);
+    }
+
+    [Fact]
     public void New_type_files_are_declared_in_the_manifest()
     {
         string manifest = FiveMResource.BuildManifest("Inside Rockstar", "1.0.0", ["a.ymap", "test_int.ytyp"], ["test_int.ytyp"]);

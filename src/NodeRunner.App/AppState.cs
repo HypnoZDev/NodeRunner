@@ -414,22 +414,15 @@ internal sealed class AppState
 
     public IReadOnlyList<CopiedObject> Copied { get; private set; } = [];
 
-    // Ctrl+C: remembers the selected objects (interiors excepted: they cannot be added yet).
+    // Ctrl+C: remembers the selected objects; an interior (MLO) is pasted as another instance of it, with its objects.
     public void CopySelection()
     {
         if (World.Maps is not { } library || SelectedEntities is not { Count: > 0 } selected)
             return;
-        var copied = selected.Where(e => !e.IsInterior).ToList();
-        if (copied.Count == 0)
-        {
-            Notify(L("Les intérieurs (MLO) ne peuvent pas encore être copiés."), warning: true);
-            return;
-        }
-        Copied = ObjectCopy.Copy(copied, library.GetArchetype);
-        string skipped = copied.Count < selected.Count ? L(" (intérieurs non copiés)") : "";
-        Notify(copied.Count == 1
-            ? L($"{World.Names?.Describe(copied[0].ArchetypeHash) ?? L("Objet")} copié{skipped}. Ctrl+V pour le coller au centre de la vue.")
-            : L($"{copied.Count} objets copiés{skipped}. Ctrl+V pour les coller au centre de la vue."));
+        Copied = ObjectCopy.Copy(selected, library.GetArchetype);
+        Notify(selected.Count > 1 ? L($"{selected.Count} objets copiés. Ctrl+V pour les coller au centre de la vue.")
+            : selected[0].IsInterior ? L($"Intérieur {World.Names?.Describe(selected[0].ArchetypeHash) ?? ""} copié. Ctrl+V pour en placer une autre copie au centre de la vue (même .ytyp du jeu, mêmes objets).")
+            : L($"{World.Names?.Describe(selected[0].ArchetypeHash) ?? L("Objet")} copié. Ctrl+V pour le coller au centre de la vue."));
     }
 
     public bool PasteRequest { get; set; }
@@ -443,10 +436,15 @@ internal sealed class AppState
             return;
         var pasted = ObjectCopy.Paste(Copied, ground, library.GetArchetype);
         string name = pasted.Count == 1 ? World.Names?.Describe(pasted[0].ArchetypeHash) ?? $"0x{pasted[0].ArchetypeHash:X8}" : $"{pasted.Count} objets";
-        if (AddToInterior(library, pasted, L($"Coller {name}")) is { } inside)
+        // An interior never goes inside another one.
+        if (!pasted.Any(e => e.IsInterior) && AddToInterior(library, pasted, L($"Coller {name}")) is { } inside)
             pasted = inside;
         else
+        {
             History.Add(AddEdit.Apply(library, map, pasted, L($"Coller {name}")));
+            if (pasted.FirstOrDefault(e => e.IsInterior) is { } interior)
+                Notify(L($"Copie de l'intérieur {World.Names?.Describe(interior.ArchetypeHash) ?? ""} placée dans le YMAP du projet. Ses objets, salles et portails restent ceux de son .ytyp : les modifier change toutes ses copies."));
+        }
         SelectAll(pasted);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;

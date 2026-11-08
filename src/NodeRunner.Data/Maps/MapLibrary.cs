@@ -375,6 +375,8 @@ public sealed class MapLibrary
     {
         map.AddEntity(entity);
         entity.Map = map;
+        if (entity.IsInterior && entity.InteriorEntities.Count == 0 && entity.EntitySets.Count == 0)
+            PlaceInteriorContents(entity);
         AddToCell(entity, copy: true);
         EntityCount++;
         StructureVersion++;
@@ -611,6 +613,24 @@ public sealed class MapLibrary
                 if (archetype.InteriorEntitySets.Count > 0)
                     instance.EntitySets = archetype.InteriorEntitySets.Select(set => PlaceEntitySet(set, instance)).ToList();
             }
+        }
+    }
+
+    // A new instance of an interior already placed elsewhere: its objects as they are now (deleted ones stay deleted).
+    private void PlaceInteriorContents(MapEntity instance)
+    {
+        if (GetArchetype(instance.ArchetypeHash) is not { Kind: ArchetypeKind.Interior } archetype)
+            return;
+        instance.InteriorEntities = archetype.InteriorEntities.Select(e => Placed(e, instance)).ToList();
+        instance.EntitySets = archetype.InteriorEntitySets.Select(set => PlaceEntitySet(set, instance)).ToList();
+        foreach (var inside in instance.EntitySets.SelectMany(s => s.Entities))
+            inside.IsDeleted = inside.Definition?.IsDeleted == true;
+
+        static MapEntity Placed(MapEntity definition, MapEntity instance)
+        {
+            var copy = definition.PlaceInside(instance);
+            copy.IsDeleted = definition.IsDeleted;
+            return copy;
         }
     }
 

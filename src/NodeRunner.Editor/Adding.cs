@@ -14,6 +14,12 @@ public static class Adding
     // distance.
     public static MapEntity NewEntity(uint archetypeHash, Archetype? archetype, Vector3 position, Quaternion orientation)
     {
+        if (archetype is { Kind: ArchetypeKind.Interior })
+        {
+            // Another instance of an interior (MLO): its objects come from its archetype (MapLibrary.AddEntity).
+            return InteriorCreation.NewInstance(archetypeHash, position, orientation,
+                archetype.LodDistance > 0f ? Math.Min(archetype.LodDistance, 10000f) : InteriorCreation.DefaultLodDistance);
+        }
         float lodDistance = archetype is { LodDistance: > 0f } a ? Math.Min(a.LodDistance, 10000f) : DefaultLodDistance;
         return new MapEntity
         {

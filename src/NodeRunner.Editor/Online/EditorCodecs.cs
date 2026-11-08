@@ -62,8 +62,26 @@ internal sealed class AddCodec : EditCodec<AddEdit>
     public override IEdit Apply(EditReader r, string description)
     {
         var map = r.ReadMap();
-        return AddEdit.Apply(r.Context.Library, map, r.ReadList(r.ReadNewEntity), description);
+        var library = r.Context.Library;
+        return AddEdit.Apply(library, map, r.ReadList(r.ReadNewEntity).Select(e => AsInterior(e, library)).ToList(), description);
     }
+
+    // An added interior instance (its type is an interior): the stored rotation is already that of an instance.
+    private static MapEntity AsInterior(MapEntity e, Data.Maps.MapLibrary library) =>
+        library.GetArchetype(e.ArchetypeHash) is not { Kind: Data.Maps.ArchetypeKind.Interior } ? e : new MapEntity
+        {
+            ArchetypeHash = e.ArchetypeHash,
+            Position = e.Position,
+            StoredRotation = e.StoredRotation,
+            Scale = e.Scale,
+            Flags = e.Flags,
+            Guid = e.Guid,
+            LodDistance = e.LodDistance,
+            ChildLodDistance = e.ChildLodDistance,
+            LodLevel = e.LodLevel,
+            ParentIndex = e.ParentIndex,
+            IsInterior = true,
+        };
 }
 
 internal sealed class InteriorAddCodec : EditCodec<InteriorAddEdit>

@@ -65,14 +65,14 @@ public static class InteriorCreation
     // Limbo of every game interior, and most of their rooms.
     public const uint DefaultRoomFlags = 0x60;
 
-    public static MapEntity NewInstance(uint archetypeHash, Vector3 position, Quaternion orientation) => new()
+    public static MapEntity NewInstance(uint archetypeHash, Vector3 position, Quaternion orientation, float lodDistance = DefaultLodDistance) => new()
     {
         ArchetypeHash = archetypeHash,
         Position = position,
         StoredRotation = orientation, // Interior instances keep their world orientation as it is.
         Flags = InstanceFlags,
         Guid = (uint)Random.Shared.Next(1, int.MaxValue),
-        LodDistance = DefaultLodDistance,
+        LodDistance = lodDistance,
         LodLevel = LodLevel.OrphanHd,
         IsInterior = true,
     };
