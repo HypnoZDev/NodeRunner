@@ -297,6 +297,23 @@ internal sealed class AppState
         Notify(L($"{what} : dans {target}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S)."));
     }
 
+    // Gives the selected objects another type (model), same place; objects of interiors are left out.
+    public void SetSelectionArchetype(uint archetypeHash)
+    {
+        if (World.Maps is not { } library || library.GetArchetype(archetypeHash) is not { } archetype
+            || archetype.Kind == Data.Maps.ArchetypeKind.Interior)
+            return;
+        var changing = SelectedEntities.Where(e => ArchetypeEdit.CanChange(e) && e.ArchetypeHash != archetypeHash).ToList();
+        if (changing.Count == 0)
+            return;
+        string name = World.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        string what = changing.Count == 1 ? World.Names?.Describe(changing[0].ArchetypeHash) ?? $"0x{changing[0].ArchetypeHash:X8}" : L($"{changing.Count} objets");
+        var edit = ArchetypeEdit.Apply(changing, archetypeHash, L($"Remplacer {what} par {name}"));
+        History.Add(edit);
+        SelectAll(edit.Selection);
+        Notify(L($"{what} remplacé(s) par {name}."));
+    }
+
     public const int AutomaticRoom = -2;
 
     // Lift of the point tested against the rooms: an object standing on a floor is just above the room's bottom.

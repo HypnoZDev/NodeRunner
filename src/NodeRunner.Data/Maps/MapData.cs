@@ -78,7 +78,21 @@ public sealed class MapData
 // An object placed on the map: which model (archetype), where, how it is turned and scaled.
 public sealed class MapEntity
 {
-    public required uint ArchetypeHash { get; init; }
+    public required uint ArchetypeHash { get => _archetypeHash; init => _archetypeHash = _fileArchetypeHash = value; }
+    private uint _archetypeHash;
+
+    // The type stored in the file the object was read from (ArchetypeHash differs once SetArchetype changed it).
+    public uint FileArchetypeHash => _fileArchetypeHash;
+    private uint _fileArchetypeHash;
+
+    // Replaces the object's model by another type (an object of a map file, not of an interior).
+    public void SetArchetype(uint archetypeHash)
+    {
+        if (Interior is not null || IsInterior)
+            throw new InvalidOperationException("The type of an interior or of an object inside one cannot be changed.");
+        _archetypeHash = archetypeHash;
+        Revision++;
+    }
 
     public required Vector3 Position { get => _position; init => _position = value; }
     private Vector3 _position;

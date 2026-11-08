@@ -23,7 +23,7 @@ public sealed class YmapWriter : IMapDataWriter
         {
             if (entity.SourceIndex < 0)
                 continue;
-            if (entity.SourceIndex >= sources.Count || ReadUInt32(document, sources[entity.SourceIndex], YmapReader.EntityArchetype) != entity.ArchetypeHash)
+            if (entity.SourceIndex >= sources.Count || ReadUInt32(document, sources[entity.SourceIndex], YmapReader.EntityArchetype) != entity.FileArchetypeHash)
                 throw new InvalidDataException($"L'objet n° {entity.SourceIndex + 1} du fichier n'est pas celui de la carte chargée.");
         }
 
@@ -276,6 +276,7 @@ public sealed class YmapWriter : IMapDataWriter
     {
         var data = document.Blocks[item.Block].Data;
         int o = item.Offset;
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.EntityArchetype), entity.ArchetypeHash);
         WriteVector3(data, o + YmapReader.EntityPosition, entity.Position);
         var r = entity.StoredRotation;
         WriteVector3(data, o + YmapReader.EntityRotation, new Vector3(r.X, r.Y, r.Z));

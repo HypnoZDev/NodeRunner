@@ -78,7 +78,8 @@ public sealed class EditCodecs
         .Add(new InteriorLayoutCodec())
         .Add(new InteriorCreateCodec())
         .Add(new InteriorDuplicateCodec())
-        .Add(new CarGeneratorCodec());
+        .Add(new CarGeneratorCodec())
+        .Add(new ArchetypeCodec());
 
     public bool CanShare(IEdit edit) => _byType.ContainsKey(edit.GetType());
 

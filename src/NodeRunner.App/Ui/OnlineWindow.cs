@@ -12,7 +12,7 @@ internal sealed class OnlineWindow(AppState state)
     public const string Title = $"{Icons.Users}  Online###Online";
 
     // False locks "Create" and "Join" ("Bientôt disponible").
-    public static readonly bool Available = true;
+    public static readonly bool Available = false;
 
     private bool _open;
     private string _name = "";

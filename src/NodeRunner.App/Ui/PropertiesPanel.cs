@@ -291,7 +291,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             return;
 
         var archetype = library.GetArchetype(entity.ArchetypeHash);
-        Widgets.PropertyText(L("Type (archétype)"), names.Describe(entity.ArchetypeHash));
+        if (ArchetypeEdit.CanChange(entity))
+            ArchetypeChoice(entity, library, names);
+        else
+            Widgets.PropertyText(L("Type (archétype)"), names.Describe(entity.ArchetypeHash));
         if (archetype is not null)
         {
             FileRow(L("Défini dans"), library.GetArchetypeFile(entity.ArchetypeHash));
@@ -332,6 +335,82 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
     // The room of an object of an interior, to change (the game draws an object only when its room is visible); warns
     // when the object stands in another room's box.
+    private const int MaxTypeChoices = 40;
+    private string _typeQuery = "";
+    private string? _typeListQuery;
+    private List<(uint Hash, string Name)> _typeMatches = [];
+    private (MapLibrary Library, int Count, (uint Hash, string Name)[] Types)? _typeNames;
+
+    // The object's type, to replace by another one (search by name, or a name / hash typed then Enter).
+    private void ArchetypeChoice(MapEntity entity, MapLibrary library, HashNames names)
+    {
+        Widgets.Property(L("Type (archétype)"), L("Remplace le modèle de l'objet par un autre type, à la même place. ")
+            + L("S'applique aux objets sélectionnés (pas aux objets des intérieurs) ; Ctrl+Z pour annuler."));
+        ImGui.SetNextItemWidth(-1);
+        if (!ImGui.BeginCombo("##archetype", names.Describe(entity.ArchetypeHash), ImGuiComboFlags.HeightLarge))
+            return;
+        if (ImGui.IsWindowAppearing())
+        {
+            _typeQuery = "";
+            ImGui.SetKeyboardFocusHere();
+        }
+        ImGui.SetNextItemWidth(-1);
+        bool enter = ImGui.InputTextWithHint("##archetype_query", L("Rechercher un type (ex. prop_pot_plant_02c)"), ref _typeQuery, 128,
+            ImGuiInputTextFlags.EnterReturnsTrue);
+
+        string query = _typeQuery.Trim();
+        if (_typeListQuery != query || _typeNames?.Library != library)
+        {
+            _typeListQuery = query;
+            _typeMatches = FindTypes(query, library, names);
+        }
+        if (enter && query.Length > 0)
+        {
+            // Exact name or hash typed (a type whose name is unknown), else the first match.
+            uint? parsed = Data.Hashing.HashText.TryParse(query);
+            uint typed = parsed ?? Joaat.Hash(query.ToLowerInvariant());
+            uint? chosen = IsPlaceable(library, typed) ? typed : _typeMatches.Count > 0 ? _typeMatches[0].Hash : null;
+            if (chosen is { } c)
+            {
+                if (parsed is null && c == typed && Data.Hashing.HashText.IsName(query) && names.TryGet(c) is null)
+                    names.Add(query);
+                state.SetSelectionArchetype(c);
+                ImGui.CloseCurrentPopup();
+            }
+        }
+        ImGui.Separator();
+        if (_typeMatches.Count == 0)
+            ImGui.TextDisabled(query.Length == 0 ? L("Taper un nom pour chercher.") : L("Aucun type trouvé."));
+        foreach (var (hash, name) in _typeMatches)
+        {
+            if (ImGui.Selectable($"{name}##type{hash}", hash == entity.ArchetypeHash) && hash != entity.ArchetypeHash)
+                state.SetSelectionArchetype(hash);
+        }
+        ImGui.EndCombo();
+    }
+
+    private static bool IsPlaceable(MapLibrary library, uint hash) =>
+        library.GetArchetype(hash) is { } archetype && archetype.Kind != ArchetypeKind.Interior;
+
+    private List<(uint Hash, string Name)> FindTypes(string query, MapLibrary library, HashNames names)
+    {
+        if (query.Length == 0)
+            return [];
+        if (_typeNames is not { } cached || cached.Library != library)
+        {
+            var types = library.GetArchetypeHashes().Where(h => IsPlaceable(library, h))
+                .Select(h => (h, names.Describe(h))).ToArray();
+            _typeNames = cached = (library, types.Length, types);
+        }
+        return cached.Types
+            .Select(t => (t.Hash, t.Name, At: t.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t.At >= 0)
+            .OrderBy(t => t.At == 0 ? (t.Name.Length == query.Length ? 0 : 1) : 2).ThenBy(t => t.Name.Length).ThenBy(t => t.Name, StringComparer.Ordinal)
+            .Take(MaxTypeChoices)
+            .Select(t => (t.Hash, t.Name))
+            .ToList();
+    }
+
     private void RoomChoice(MapEntity entity, MapEntity interior, Archetype mlo)
     {
         Widgets.Property(L("Salle"), L("Le jeu n'affiche un objet que quand sa salle est visible : un objet rangé dans la mauvaise salle ")

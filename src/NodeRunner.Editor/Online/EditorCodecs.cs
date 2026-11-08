@@ -138,6 +138,23 @@ internal sealed class EntityRoomCodec : EditCodec<EntityRoomEdit>
     }
 }
 
+internal sealed class ArchetypeCodec : EditCodec<ArchetypeEdit>
+{
+    public override string Tag => "archetype";
+
+    protected override void Write(ArchetypeEdit edit, EditWriter w)
+    {
+        w.WriteEntities(edit.Selection);
+        w.Write(edit.Archetype);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var entities = r.ReadEntities();
+        return ArchetypeEdit.Apply(entities, r.ReadUInt(), description);
+    }
+}
+
 internal sealed class EntitySetCodec : EditCodec<EntitySetEdit>
 {
     public override string Tag => "entity-set";
