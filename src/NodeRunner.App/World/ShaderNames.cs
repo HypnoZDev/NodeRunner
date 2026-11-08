@@ -50,7 +50,7 @@ internal static class ShaderNames
         "water_decal", "radar", "sky_system", "clouds_altitude", "distance_map", "blend_2lyr", "minimap", "weapon_normal_spec_tnt",
         "weapon_normal_spec_alpha", "weapon_normal_spec_cutout_palette", "weapon_normal_spec_detail_palette",
         "weapon_normal_spec_detail_tnt", "weapon_normal_spec_palette", "weapon_emissive_tnt", "weapon_emissivestrong_alpha",
-    }.ToDictionary(Joaat.Hash, n => n);
+    }.DistinctBy(Joaat.Hash).ToDictionary(Joaat.Hash, n => n);
 
     // Texture parameters, with what they hold.
     private static readonly Dictionary<uint, (string Name, string Role)> Samplers = new (string, string)[]
@@ -67,7 +67,7 @@ internal static class ShaderNames
         ("WrinkleSampler_A", "Rides A"), ("WrinkleSampler_B", "Rides B"), ("WrinkleMaskSampler_0", "Masque de rides"),
         ("StubbleSampler", "Barbe"), ("noiseSampler", "Bruit"), ("FlowSampler", "Écoulement"), ("FoamSampler", "Écume"),
         ("DiffuseSamplerPhase2", "Couleur (phase 2)"), ("ComboHeightSamplerFur01", "Hauteur de fourrure"), ("diffuseSampler2", "Couleur 2"),
-    }.ToDictionary(s => Joaat.Hash(s.Item1), s => s);
+    }.DistinctBy(s => Joaat.Hash(s.Item1)).ToDictionary(s => Joaat.Hash(s.Item1), s => s);
 
     public static string Shader(uint hash) => hash == 0 ? L("(aucun)") : Shaders.GetValueOrDefault(hash) ?? $"0x{hash:X8}";
 
