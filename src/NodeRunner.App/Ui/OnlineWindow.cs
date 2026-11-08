@@ -79,7 +79,7 @@ internal sealed class OnlineWindow(AppState state)
                 ? L($"Partage le projet « {project.Name} » : il est enregistré, sa carte rechargée, puis vos collègues le reçoivent. Jusqu'à {OnlineSession.MaxParticipants} personnes ; seul l'hôte enregistre et exporte.")
                 : L("Ouvrez ou créez d'abord un projet : la session partage le projet ouvert."), wrap: true);
             ImGui.BeginDisabled(!Available || state.Project is null);
-            if (Widgets.PrimaryButton(Available ? L("Créer une session") : L("Bientôt disponible"), -1))
+            if (Widgets.PrimaryButton(Available ? L("Créer une session") : L("Bientôt disponible") + "##online_host_button", -1))
                 online.Host();
             ImGui.EndDisabled();
         }
@@ -90,7 +90,7 @@ internal sealed class OnlineWindow(AppState state)
             ImGui.SetNextItemWidth(-1);
             ImGui.BeginDisabled(!Available);
             bool enter = ImGui.InputTextWithHint("##online_address", "192.168.1.20", ref _address, 64, ImGuiInputTextFlags.EnterReturnsTrue);
-            if ((Widgets.Button(Available ? L("Rejoindre") : L("Bientôt disponible"), width: -1) || enter) && Available)
+            if ((Widgets.Button(Available ? L("Rejoindre") : L("Bientôt disponible") + "##online_join_button", width: -1) || enter) && Available)
                 online.Join(_address);
             ImGui.EndDisabled();
         }
