@@ -1017,6 +1017,31 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             state.AddRoom(interior);
     }
 
+    // The portal flattened onto the nearest wall of one of its rooms (limbo has none); null without a room.
+    private static InteriorPortal? SnapToWall(Archetype archetype, InteriorPortal portal)
+    {
+        if (portal.Corners.Count == 0)
+            return null;
+        var center = portal.Corners.Aggregate(Vector3.Zero, (a, c) => a + c) / portal.Corners.Count;
+        (int Axis, float Wall, float Distance)? best = null;
+        foreach (int r in new[] { portal.RoomFrom, portal.RoomTo })
+        {
+            if (r <= 0 || r >= archetype.InteriorRooms.Count)
+                continue;
+            var room = archetype.InteriorRooms[r];
+            for (int axis = 0; axis < 3; axis++)
+                foreach (float wall in new[] { room.BoundsMin[axis], room.BoundsMax[axis] })
+                {
+                    float distance = MathF.Abs(center[axis] - wall);
+                    if (best is null || distance < best.Value.Distance)
+                        best = (axis, wall, distance);
+                }
+        }
+        if (best is not { } b)
+            return null;
+        return portal with { Corners = [.. portal.Corners.Select(c => { c[b.Axis] = b.Wall; return c; })] };
+    }
+
     private string? _intEditId;
     private int _intEditValue;
 
@@ -1352,6 +1377,14 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.Property("");
             if (Widgets.Button(L($"{Icons.RefreshCw}  Inverser les salles"), L("Échange « De la salle » et « Vers la salle ».")))
                 Change(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }, L($"Inverser les salles du portail {index}"));
+            Widgets.Property("");
+            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Recoller au mur"), L("Pose le portail sur le mur le plus proche d'une de ses salles, sans changer sa taille.")))
+            {
+                if (SnapToWall(archetype, portal) is { } snapped)
+                    Change(snapped, L($"Recoller au mur le portail {index}"));
+                else
+                    state.Notify(L("Le portail ne touche aucune salle (seulement l'extérieur)."));
+            }
             portal = archetype.InteriorPortals[index];
             if (portal.RoomFrom == portal.RoomTo)
                 Widgets.Hint(L("Le portail relie une salle à elle-même : le jeu ne s'en sert pas."), wrap: true);

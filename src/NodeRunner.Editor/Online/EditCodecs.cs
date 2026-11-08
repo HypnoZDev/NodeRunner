@@ -45,7 +45,7 @@ public sealed class LocalEditAttribute(string reason) : Attribute
 public sealed class EditCodecs
 {
     // Raised when the message layout itself changes.
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     private readonly Dictionary<Type, EditCodec> _byType = [];
     private readonly Dictionary<string, EditCodec> _byTag = [];

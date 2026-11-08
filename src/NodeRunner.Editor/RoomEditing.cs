@@ -10,9 +10,12 @@ public interface IInteriorEdit
 }
 
 // A room of an interior changed (box, name, settings), in every instance of the interior.
-public sealed class RoomEdit(MapLibrary library, MapEntity interior, int index, InteriorRoom before, InteriorRoom after, string description)
-    : IEdit, IInteriorEdit
+public sealed class RoomEdit(MapLibrary library, MapEntity interior, int index, InteriorRoom before, InteriorRoom after, string description,
+    IReadOnlyList<PortalChange>? portals = null) : IEdit, IInteriorEdit
 {
+    // Portals that moved with the room (those lying on a dragged wall).
+    public IReadOnlyList<PortalChange> Portals { get; } = portals ?? [];
+
     public MapEntity Interior { get; } = interior;
 
     public InteriorRoom After => after;
@@ -24,18 +27,33 @@ public sealed class RoomEdit(MapLibrary library, MapEntity interior, int index, 
     public IEnumerable<MapEntity> Entities => [];
 
     // Applies the change and returns the step to record.
-    public static RoomEdit Apply(MapLibrary library, MapEntity interior, int index, InteriorRoom after, string description)
+    public static RoomEdit Apply(MapLibrary library, MapEntity interior, int index, InteriorRoom after, string description,
+        IReadOnlyList<(int Index, InteriorPortal After)>? portals = null)
     {
         var archetype = library.GetArchetype(interior.ArchetypeHash) ?? throw new ArgumentException("Unknown interior.", nameof(interior));
         var before = archetype.InteriorRooms[index];
-        library.SetRoom(interior.ArchetypeHash, index, after);
-        return new RoomEdit(library, interior, index, before, after, description);
+        var changes = (portals ?? []).Select(p => new PortalChange(p.Index, archetype.InteriorPortals[p.Index], p.After)).ToList();
+        var edit = new RoomEdit(library, interior, index, before, after, description, changes);
+        edit.Redo();
+        return edit;
     }
 
-    public void Undo() => library.SetRoom(Interior.ArchetypeHash, Index, before);
+    public void Undo()
+    {
+        library.SetRoom(Interior.ArchetypeHash, Index, before);
+        foreach (var p in Portals)
+            library.SetPortal(Interior.ArchetypeHash, p.Index, p.Before);
+    }
 
-    public void Redo() => library.SetRoom(Interior.ArchetypeHash, Index, after);
+    public void Redo()
+    {
+        library.SetRoom(Interior.ArchetypeHash, Index, after);
+        foreach (var p in Portals)
+            library.SetPortal(Interior.ArchetypeHash, p.Index, p.After);
+    }
 }
+
+public sealed record PortalChange(int Index, InteriorPortal Before, InteriorPortal After);
 
 // A portal of an interior changed (corners, rooms, settings), in every instance of the interior.
 public sealed class PortalEdit(MapLibrary library, MapEntity interior, int index, InteriorPortal before, InteriorPortal after, string description)

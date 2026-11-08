@@ -19,6 +19,8 @@ internal sealed class RoomGizmo(AppState state)
     private enum Part { None, Face, Center, Arrow, Corner, Edge }
 
     // Face: axis * 2 + (1 for the max side); Corner and Edge: corner number (an edge goes from it to the next one).
+    internal const float WallTolerance = 0.3f; // Metres: a portal this close to a wall is on it.
+
     private readonly record struct Handle(Part Part, int Index = 0);
 
     private sealed class Drag
@@ -28,6 +30,7 @@ internal sealed class RoomGizmo(AppState state)
         public required Handle Handle;
         public InteriorRoom? RoomStart;
         public InteriorPortal? PortalStart;
+        public List<(int Index, InteriorPortal Start)> Followers = [];
         public Vector3 Origin;         // Interior space: the grabbed handle.
         public Vector3 Direction;      // Along a line: its direction; in a plane: its normal.
         public float StartParameter;
@@ -222,6 +225,8 @@ internal sealed class RoomGizmo(AppState state)
             Origin = place.Point,
             Direction = place.Direction,
         };
+        if (drag.RoomStart is { } startRoom)
+            drag.Followers = Followers(archetype, target.Index, startRoom, place.Handle);
         if (place.Line)
         {
             if (GizmoMath.ClosestAxisParameter(place.Point, place.Direction, _rayOrigin, _rayDirection) is not { } t)
@@ -277,6 +282,11 @@ internal sealed class RoomGizmo(AppState state)
                 max += delta;
             }
             library.SetRoom(hash, drag.Target.Index, room with { BoundsMin = min, BoundsMax = max });
+            var shift = drag.Handle.Part == Part.Face
+                ? (drag.Handle.Index % 2 == 1 ? max - room.BoundsMax : min - room.BoundsMin)
+                : delta;
+            foreach (var (i, start) in drag.Followers)
+                library.SetPortal(hash, i, start with { Corners = [.. start.Corners.Select(c => c + shift)] });
             var size = max - min;
             drag.Feedback = drag.Handle.Part == Part.Face
                 ? $"{size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m"
@@ -310,7 +320,11 @@ internal sealed class RoomGizmo(AppState state)
     {
         uint hash = drag.Target.Interior.ArchetypeHash;
         if (drag.RoomStart is { } room)
+        {
             library.SetRoom(hash, drag.Target.Index, room);
+            foreach (var (i, start) in drag.Followers)
+                library.SetPortal(hash, i, start);
+        }
         else if (drag.PortalStart is { } portal)
             library.SetPortal(hash, drag.Target.Index, portal);
     }
@@ -322,9 +336,31 @@ internal sealed class RoomGizmo(AppState state)
         int index = drag.Target.Index;
         string verb = drag.Handle.Part is Part.Center or Part.Arrow ? L("Déplacer") : L("Redimensionner");
         if (drag.RoomStart is { } room && archetype.InteriorRooms[index] is var roomEnd && roomEnd != room)
-            state.History.Add(new RoomEdit(library, interior, index, room, roomEnd, L($"{verb} la salle {index}")));
+            state.History.Add(new RoomEdit(library, interior, index, room, roomEnd, L($"{verb} la salle {index}"),
+                [.. drag.Followers.Select(f => new PortalChange(f.Index, f.Start, archetype.InteriorPortals[f.Index]))]));
         else if (drag.PortalStart is { } portal && archetype.InteriorPortals[index] is var portalEnd && !portalEnd.SameAs(portal))
             state.History.Add(new PortalEdit(library, interior, index, portal, portalEnd, L($"{verb} le portail {index}")));
+    }
+
+    // Portals that move with the room: all of its portals when the whole room moves, those lying on the wall otherwise.
+    private static List<(int, InteriorPortal)> Followers(Archetype archetype, int roomIndex, InteriorRoom room, Handle handle)
+    {
+        var result = new List<(int, InteriorPortal)>();
+        for (int i = 0; i < archetype.InteriorPortals.Count; i++)
+        {
+            var portal = archetype.InteriorPortals[i];
+            if ((portal.RoomFrom != roomIndex && portal.RoomTo != roomIndex) || portal.Corners.Count == 0)
+                continue;
+            if (handle.Part == Part.Face)
+            {
+                int axis = handle.Index / 2;
+                float wall = handle.Index % 2 == 1 ? room.BoundsMax[axis] : room.BoundsMin[axis];
+                if (portal.Corners.Any(c => MathF.Abs(c[axis] - wall) > WallTolerance))
+                    continue;
+            }
+            result.Add((i, portal));
+        }
+        return result;
     }
 
     // --- Drawing ---

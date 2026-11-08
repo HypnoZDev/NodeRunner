@@ -287,13 +287,16 @@ internal sealed class RoomCodec : EditCodec<RoomEdit>
         w.WriteEntity(edit.Interior);
         w.Write(edit.Index);
         w.Write(edit.After);
+        w.WriteList(edit.Portals, p => { w.Write(p.Index); w.Write(p.After); });
     }
 
     public override IEdit Apply(EditReader r, string description)
     {
         var interior = r.ReadEntity();
         int index = r.ReadInt();
-        return RoomEdit.Apply(r.Context.Library, interior, index, r.ReadRoom(), description);
+        var room = r.ReadRoom();
+        var portals = r.ReadList(() => (r.ReadInt(), r.ReadPortal()));
+        return RoomEdit.Apply(r.Context.Library, interior, index, room, description, portals);
     }
 }
 
