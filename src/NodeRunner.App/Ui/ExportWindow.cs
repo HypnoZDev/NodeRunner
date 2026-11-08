@@ -257,9 +257,31 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
                         ImGui.SetTooltip(L("Sélectionner la boîte et y aller"));
                     continue;
                 }
+                if (item.Entities is { } entities && d < entities.Count)
+                {
+                    if (ImGui.Selectable(L($"{Icons.Crosshair}  {Widgets.Fit(detail, ImGui.GetContentRegionAvail().X - 30 * UiTheme.Scale)}##ent{index}_{d}")))
+                    {
+                        state.Select(entities[d]);
+                        state.FocusOn(entities[d]);
+                    }
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                        ImGui.SetTooltip(L("Sélectionner l'objet et y aller"));
+                    continue;
+                }
                 ImGui.TextUnformatted(Widgets.Fit(detail, ImGui.GetContentRegionAvail().X));
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                     ImGui.SetTooltip(detail);
+            }
+            if (item.Entities is { Count: > 1 } all
+                && Widgets.Button(L($"{Icons.MousePointer}  Sélectionner ({all.Count})##selall{index}"),
+                    L("Sélectionne ces objets dans la vue 3D (Suppr pour les supprimer).")))
+            {
+                var alive = all.Where(e => !e.IsDeleted).ToList();
+                if (alive.Count > 0)
+                {
+                    state.SelectAll(alive);
+                    state.FocusOn(alive[0]);
+                }
             }
             foreach (var (conflict, n) in (item.Merge ?? []).Select((c, n) => (c, n)))
             {

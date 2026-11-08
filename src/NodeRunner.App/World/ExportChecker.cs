@@ -8,9 +8,10 @@ namespace NodeRunner.App.World;
 
 // One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.
 // Merge: the other versions of the same map file whose changes can be taken into ours. Occluders: the box of each
-// detail line, shown on click.
+// detail line, shown on click. Entities: the object of each detail line, selected on click.
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
-    IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null);
+    IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null,
+    IReadOnlyList<MapEntity>? Entities = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
@@ -152,6 +153,8 @@ internal static class ExportChecker
         var scenery = new List<string>();
         var sceneryEntities = new List<(MapEntity, Archetype?)>();
         int removedTotal = 0;
+        var removedDoors = new List<string>();
+        var movedDoors = new List<DoorCheck.MovedDoor>();
         if (world.Content is { } content)
         {
             var reader = new YmapReader();
@@ -170,6 +173,9 @@ internal static class ExportChecker
                 }
                 var removed = RemovedEntities.Find(original.Entities, kept);
                 removedTotal += removed.Count;
+                var doors = DoorCheck.Changed(original.Entities, kept, names.TryGet);
+                removedDoors.AddRange(doors.Removed.Select(d => $"{names.Describe(d.ArchetypeHash)} ({fileName})"));
+                movedDoors.AddRange(doors.Moved);
                 foreach (var entity in removed)
                 {
                     var archetype = world.Maps?.GetArchetype(entity.ArchetypeHash);
@@ -247,10 +253,61 @@ internal static class ExportChecker
                 L("Leur version simplifiée (LOD) représente aussi d'autres objets : elle est gardée.")));
         }
 
+        CheckDoors(input, world, names, sceneryEntities.Select(s => s.Item1).ToList(), removedDoors, movedDoors, items);
         CheckOccluders(world, names, items);
 
         summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);
+    }
+
+    // Doors left where a building was deleted, doors at the same place, game doors moved or removed (door lock scripts
+    // find doors by their position), door models of the project that will not open.
+    private static void CheckDoors(Input input, WorldLoader world, HashNames names, List<MapEntity> deletedScenery,
+        List<string> removedDoors, List<DoorCheck.MovedDoor> movedDoors, List<ExportCheckItem> items)
+    {
+        if (world.Maps is not { } library)
+            return;
+        string Describe(MapEntity e) => L($"{names.Describe(e.ArchetypeHash)} ({e.Position.X:0.00}, {e.Position.Y:0.00}, {e.Position.Z:0.00})");
+        void Add(bool problem, string title, List<MapEntity> entities, string advice) =>
+            items.Add(new ExportCheckItem(problem, title, Limit(entities.Select(Describe).ToList()), advice, Entities: entities.Take(MaxDetails).ToList()));
+
+        var left = deletedScenery.Where(e => !Doors.IsDoor(names.TryGet(e.ArchetypeHash)))
+            .SelectMany(e => Doors.Of(e, library, names.TryGet)).Distinct().ToList();
+        if (left.Count > 0)
+            Add(true, left.Count == 1 ? L("1 porte reste à la place d'un bâtiment supprimé") : L($"{left.Count} portes restent à la place d'un bâtiment supprimé"), left,
+                L("Les portes sont des objets à part : elles flotteront dans le vide en jeu. Cliquez sur « Sélectionner » puis Suppr, ")
+                + L("ou gardez-les si un autre bâtiment les utilise."));
+
+        var kept = input.Maps.SelectMany(m => m.Kept)
+            .Where(e => e.LodLevel is LodLevel.Hd or LodLevel.OrphanHd && Doors.IsDoor(names.TryGet(e.ArchetypeHash))).ToList();
+        var pairs = DoorCheck.Duplicates(kept, library.EntitiesAround, names.TryGet);
+        if (pairs.Count > 0)
+            Add(true, pairs.Count == 1 ? L("2 portes au même endroit") : L($"{pairs.Count} paires de portes au même endroit"),
+                pairs.SelectMany(p => new[] { p.A, p.B }).Distinct().ToList(),
+                L("Souvent une nouvelle porte posée sans supprimer celle du jeu : les deux se chevauchent et la porte semble ")
+                + L("bloquée ou clignote. Supprimez celle qui est en trop."));
+
+        if (movedDoors.Count > 0 || removedDoors.Count > 0)
+        {
+            var lines = movedDoors.Select(m => L($"{Describe(m.Current)} : déplacée de {System.Numerics.Vector3.Distance(m.Original.Position, m.Current.Position):0.00} m"))
+                .Concat(removedDoors.Select(r => L($"{r} : supprimée"))).ToList();
+            int count = lines.Count;
+            items.Add(new ExportCheckItem(false,
+                count == 1 ? L("1 porte du jeu déplacée ou supprimée") : L($"{count} portes du jeu déplacées ou supprimées"),
+                Limit(lines),
+                L("Les scripts de serrure (qb-doorlock, ox_doorlock...) trouvent une porte par son modèle et sa position exacte : ")
+                + L("si votre serveur verrouille ces portes, mettez sa configuration à jour (sélectionnez-les, puis Propriétés > ... > ")
+                + L("Copier pour doorlock)."),
+                Entities: movedDoors.Take(MaxDetails).Select(m => m.Current).ToList()));
+        }
+
+        var frozen = kept.Where(e => library.GetArchetype(e.ArchetypeHash) is { } a && DoorCheck.IsFrozen(a, library.GetArchetypeFile(e.ArchetypeHash)))
+            .GroupBy(e => e.ArchetypeHash).Select(g => g.First()).ToList();
+        if (frozen.Count > 0)
+            Add(false, frozen.Count == 1 ? L("1 modèle de porte du projet ne s'ouvrira pas") : L($"{frozen.Count} modèles de porte du projet ne s'ouvriront pas"), frozen,
+                L($"Leur type (archétype, dans le .ytyp) n'a pas le drapeau « Dynamic » (0x{DoorCheck.DynamicFlag:X}) : le jeu les garde figées. ")
+                + L($"Dans Sollumz, cochez « Dynamic » dans les drapeaux de l'archétype (les portes du jeu ont aussi 0x{DoorCheck.DoorFlag:X}), ")
+                + L("puis réexportez le .ytyp. Ignorez ce message si la porte doit rester fermée."));
     }
 
     // The boxes made or changed by hand, against the buildings, interiors, roads and the other boxes around them.

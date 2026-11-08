@@ -1,4 +1,5 @@
 using System.Numerics;
+using NodeRunner.Data.Maps;
 using NodeRunner.Editor;
 using Xunit;
 
@@ -50,5 +51,31 @@ public class DoorsTests
             + "CreateModelHide(0.00, 0.00, 0.00, 0.5, 0x3073333B, true)", ModelHideScript.Hide(models, CopyFormat.Lua));
         Assert.Contains("API.CreateModelHide(1.23f, -2.00f, 30.50f, 0.5f, (uint)API.GetHashKey(\"v_ilev_fh_frntdoor\"), true);",
             ModelHideScript.Hide(models, CopyFormat.CSharp));
+    }
+
+    private static MapEntity Entity(uint hash, Vector3 position, uint guid = 0) =>
+        new() { ArchetypeHash = hash, Position = position, StoredRotation = Quaternion.Identity, Guid = guid, LodLevel = LodLevel.Hd };
+
+    private static string? Name(uint hash) => hash switch { 1 => "v_ilev_door_a", 2 => "v_ilev_door_b", _ => "prop_bench_01a" };
+
+    [Fact]
+    public void MovedAndRemovedGameDoorsAreFound()
+    {
+        var original = new[] { Entity(1, new Vector3(0, 0, 0), 10), Entity(2, new Vector3(5, 0, 0), 11), Entity(3, new Vector3(9, 0, 0), 12) };
+        var current = new[] { Entity(1, new Vector3(0.5f, 0, 0), 10), Entity(3, new Vector3(20, 0, 0), 12) };
+        var (removed, moved) = DoorCheck.Changed(original, current, Name);
+        Assert.Equal(2u, Assert.Single(removed).ArchetypeHash);
+        Assert.Same(current[0], Assert.Single(moved).Current);
+    }
+
+    [Fact]
+    public void DoorsAtTheSamePlaceAreReportedOnce()
+    {
+        var a = Entity(1, new Vector3(0, 0, 0));
+        var b = Entity(2, new Vector3(0.1f, 0, 0));
+        var far = Entity(2, new Vector3(3, 0, 0));
+        var all = new[] { a, b, far };
+        var pairs = DoorCheck.Duplicates([a, b, far], (_, _) => all, Name);
+        Assert.Single(pairs);
     }
 }
