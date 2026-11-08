@@ -33,7 +33,14 @@ internal static class MapFileSaver
                 var extents = MapExtentsCalculator.Compute(map, library.GetArchetype);
                 MapFileContent written;
                 ResourceHeader header;
-                if (map.IsCustom)
+                if (map.IsCustom && map.SavedContent is { } saved && !map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior))
+                {
+                    // A map read from the project's files (imported or saved earlier): starts from it, so that what
+                    // the editor does not handle (parking spots, lights, extensions...) is kept.
+                    header = Template(content, library).Header;
+                    written = writer.Write(saved, map, extents);
+                }
+                else if (map.IsCustom)
                 {
                     // The user's own map: built whole, with a game map file as model for the descriptions.
                     var template = Template(content, library);

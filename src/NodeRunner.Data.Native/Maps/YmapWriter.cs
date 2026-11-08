@@ -22,15 +22,21 @@ public sealed class YmapWriter : IMapDataWriter
         foreach (var entity in map.Entities)
         {
             if (entity.SourceIndex < 0)
-                throw new InvalidDataException("L'ajout d'objets n'est pas encore pris en charge.");
+                continue;
             if (entity.SourceIndex >= sources.Count || ReadUInt32(document, sources[entity.SourceIndex], YmapReader.EntityArchetype) != entity.ArchetypeHash)
                 throw new InvalidDataException($"L'objet n° {entity.SourceIndex + 1} du fichier n'est pas celui de la carte chargée.");
         }
 
         var kept = map.KeptEntities.ToList();
+        var added = kept.Where(e => e.SourceIndex < 0).ToList();
+        var newItems = added.Count == 0 ? [] : AppendEntities(document, mapData, sources, added);
+        var items = new List<(int Block, int Offset)>(kept.Count);
+        int next = 0;
         foreach (var entity in kept)
-            WriteEntity(document, sources[entity.SourceIndex], entity);
-        WriteEntityPointers(document, mapData, kept.Select(e => sources[e.SourceIndex]).ToList());
+            items.Add(entity.SourceIndex >= 0 ? sources[entity.SourceIndex] : newItems[next++]);
+        for (int i = 0; i < kept.Count; i++)
+            WriteEntity(document, items[i], kept[i]);
+        WriteEntityPointers(document, mapData, items);
         WriteCarGenerators(document, mapData, map.CarGenerators);
 
         WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
@@ -249,7 +255,7 @@ public sealed class YmapWriter : IMapDataWriter
     // Where each entity of the file is (block, offset), in the order the reader numbers them (SourceIndex).
     private static List<(int Block, int Offset)> EntityItems(MetaDocument document, byte[] mapData)
     {
-        var items = new List<(int, int)>();
+        var items = new List<(int Block, int Offset)>();
         var (arrayBlock, arrayOffset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(mapData.AsSpan(YmapReader.MapEntities)));
         int count = BinaryPrimitives.ReadUInt16LittleEndian(mapData.AsSpan(YmapReader.MapEntities + 8));
         if (count == 0 || arrayBlock < 0)
@@ -287,13 +293,61 @@ public sealed class YmapWriter : IMapDataWriter
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.EntityChildCount), entity.Children.Count(c => !c.IsDeleted));
     }
 
+    // Ordinary objects added to an existing file (a map imported or saved earlier): new blocks after the file's, each
+    // object starting from one of the file's. Returns where each one is, in the order given.
+    private static List<(int Block, int Offset)> AppendEntities(MetaDocument document, byte[] mapData,
+        List<(int Block, int Offset)> sources, List<MapEntity> added)
+    {
+        if (added.Any(e => e.IsInterior))
+            throw new InvalidDataException("L'ajout d'un intérieur à ce fichier n'est pas encore pris en charge.");
+        int found = sources.FindIndex(i => document.Blocks[i.Block].Structure == YmapReader.EntityStructure);
+        if (found < 0)
+            throw new InvalidDataException("L'ajout d'objets à un fichier sans objet n'est pas encore pris en charge.");
+        CheckEntityLayout(document);
+        var source = sources[found];
+        var template = document.Blocks[source.Block].Data.AsSpan(source.Offset, YmapReader.EntitySize).ToArray();
+
+        var items = new List<(int Block, int Offset)>();
+        var current = new List<byte>();
+        foreach (var entity in added)
+        {
+            if (current.Count + template.Length > MetaDocument.MaxBlockLength)
+            {
+                document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, current.ToArray()));
+                current.Clear();
+            }
+            items.Add((document.Blocks.Count, current.Count));
+            current.AddRange(template);
+        }
+        document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, current.ToArray()));
+        for (int i = 0; i < added.Count; i++)
+            WriteNewEntityFields(document.Blocks[items[i].Block].Data, items[i].Offset, added[i]);
+
+        var (flags, contentFlags) = MapFlags(added);
+        BinaryPrimitives.WriteUInt32LittleEndian(mapData.AsSpan(16), BinaryPrimitives.ReadUInt32LittleEndian(mapData.AsSpan(16)) | flags);
+        BinaryPrimitives.WriteUInt32LittleEndian(mapData.AsSpan(20), BinaryPrimitives.ReadUInt32LittleEndian(mapData.AsSpan(20)) | contentFlags);
+        return items;
+    }
+
     private static void WriteEntityPointers(MetaDocument document, byte[] mapData, List<(int Block, int Offset)> items)
     {
         var field = mapData.AsSpan(YmapReader.MapEntities);
         var (arrayBlock, arrayOffset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(field));
         int count = BinaryPrimitives.ReadUInt16LittleEndian(field[8..]);
         if (items.Count > count)
-            throw new InvalidDataException("L'ajout d'objets n'est pas encore pris en charge.");
+        {
+            // More objects than the file's array holds: a new array, same structure.
+            if (arrayBlock < 0)
+                throw new InvalidDataException("L'ajout d'objets à un fichier sans objet n'est pas encore pris en charge.");
+            var pointers = new byte[items.Count * PointerSize];
+            for (int i = 0; i < items.Count; i++)
+                BinaryPrimitives.WriteUInt64LittleEndian(pointers.AsSpan(i * PointerSize), MetaDocument.Pointer(items[i].Block, items[i].Offset));
+            document.Blocks.Add(new MetaDocument.Block(document.Blocks[arrayBlock].Structure, pointers));
+            BinaryPrimitives.WriteUInt64LittleEndian(field, MetaDocument.Pointer(document.Blocks.Count - 1, 0));
+            BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)items.Count);
+            BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count);
+            return;
+        }
         if (arrayBlock < 0)
             return; // No entities before, none now.
 

@@ -92,6 +92,26 @@ public class CarGeneratorTests
     }
 
     [Fact]
+    public void Objects_added_to_a_map_file_with_parking_spots_keep_the_spots()
+    {
+        var file = BuildYmap((new Vector3(10, 20, 30), new Vector2(0, 5), 2.5f, 0xABCD));
+        var map = new YmapReader().Read(file);
+        var library = Data.Maps.MapLibrary.Create((map, "imported.ymap"));
+        map.Entities[0].SetPlacement(new Vector3(1, 2, 3), Quaternion.Identity, Vector3.One);
+        for (int i = 0; i < 300; i++) // More than one block of objects.
+            library.AddEntity(map, Editor.Adding.NewEntity(0x5000u + (uint)i, null, new Vector3(i, 0, 0), Quaternion.Identity));
+
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, Editor.MapExtentsCalculator.Compute(map, _ => null)).Content);
+
+        Assert.Equal(map.CarGenerators, written.CarGenerators);
+        Assert.Equal(301, written.Entities.Count);
+        Assert.Equal(new Vector3(1, 2, 3), written.Entities[0].Position);
+        Assert.Equal(0x5000u + 299, written.Entities[300].ArchetypeHash);
+        Assert.Equal(new Vector3(299, 0, 0), written.Entities[300].Position);
+        Assert.True(written.StreamingExtentsMax.X >= 299f);
+    }
+
+    [Fact]
     public void A_map_file_without_parking_spots_reads_an_empty_list() =>
         Assert.Empty(new YmapReader().Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd))).CarGenerators);
 }

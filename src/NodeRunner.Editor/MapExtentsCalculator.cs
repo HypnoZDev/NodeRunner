@@ -8,10 +8,11 @@ public static class MapExtentsCalculator
 {
     public static MapExtents Compute(MapData map, Func<uint, Archetype?> archetypes)
     {
-        if (map.IsCustom)
+        // A map read from the project's files keeps its own boxes, which may cover more than its objects (lights...).
+        if (map.IsCustom && (map.SavedContent is null || map.KeptEntities.Any(e => e.IsInterior)))
             return ComputeExact(map, archetypes);
         var extents = MapExtents.Of(map);
-        foreach (var entity in map.KeptEntities.Where(e => e.Revision > 0))
+        foreach (var entity in map.KeptEntities.Where(e => e.Revision > 0 || e.SourceIndex < 0))
         {
             Include(ref extents, entity, archetypes);
             foreach (var inside in entity.InteriorEntities)
