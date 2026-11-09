@@ -1271,12 +1271,29 @@ internal sealed unsafe partial class MainForm : Form
     }
 
     // XML exports the import turns into game files, by game extension.
-    private static readonly Dictionary<string, Func<NodeRunner.Data.FileSystem.XmlExport, byte[]>> XmlConverters = new()
+    private Dictionary<string, Func<NodeRunner.Data.FileSystem.XmlExport, byte[]>> XmlConverters => new()
     {
         [".ybn"] = export => NodeRunner.Data.Native.Collisions.YbnXml.Convert(export.Text),
         [".ytd"] = NodeRunner.Data.Native.Textures.YtdXml.Convert,
         [".ydr"] = NodeRunner.Data.Native.Models.YdrXml.Convert,
+        [".ytyp"] = export => NodeRunner.Data.Native.Maps.YtypXml.Convert(export, MetaSchema()),
     };
+
+    private (NodeRunner.Data.Native.Archives.RpfFileSystem Files, NodeRunner.Data.Native.Resources.MetaSchema Schema)? _metaSchema;
+
+    // Descriptions of the game's Meta structures, for the .ytyp exports: from its .ytyp files, then its .ymap files if
+    // one is missing.
+    private NodeRunner.Data.Native.Resources.MetaSchema MetaSchema()
+    {
+        if (_state.World.Files is not { } files)
+            throw new InvalidDataException(L("les fichiers de GTA V doivent être chargés (ils décrivent le format des .ytyp)"));
+        if (_metaSchema is { } cached && cached.Files == files)
+            return cached.Schema;
+        IEnumerable<byte[]> Read(string extension) => files.EnumerateFiles(extension).Select(files.ReadFile).OfType<byte[]>();
+        var schema = new NodeRunner.Data.Native.Resources.MetaSchema(Read(".ytyp"), Read(".ymap"));
+        _metaSchema = (files, schema);
+        return schema;
+    }
 
     private void ImportMapping(string source)
     {

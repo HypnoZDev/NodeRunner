@@ -547,6 +547,7 @@ public static partial class English
         ("\n\nDont {0} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.", "\n\nIncluding {0} XML export(s) (Sollumz, CodeWalker) converted to game files."),
         ("{0} (XML pas encore pris en charge)", "{0} (XML not supported yet)"),
         ("{0} (conversion impossible : {1})", "{0} (cannot convert: {1})"),
+        ("les fichiers de GTA V doivent être chargés (ils décrivent le format des .ytyp)", "the GTA V files must be loaded (they describe the .ytyp format)"),
         ("Aucun fichier de carte (.ymap, .ybn, .ytyp, .ydr..., ou leur export XML) ni mod OpenIV (.oiv) à importer ici.", "No map file (.ymap, .ybn, .ytyp, .ydr..., or their XML export) or OpenIV mod (.oiv) to import here."),
         ("Choisis un dossier, un mod OpenIV (.oiv) ou une archive .zip.", "Choose a folder, an OpenIV mod (.oiv) or a .zip archive."),
         ("Importer un mod OpenIV (.oiv) ou une archive .zip", "Import an OpenIV mod (.oiv) or a .zip archive"),

@@ -120,6 +120,9 @@ public sealed class MetaDocument
         return document;
     }
 
+    // A document with this one's header and nothing else.
+    public MetaDocument CreateEmpty() => new() { _header = (byte[])_header.Clone() };
+
     public StructureInfo? FindStructure(uint nameHash) => Structures.Find(s => s.NameHash == nameHash);
 
     public static ulong Pointer(int block, int offset) => (ulong)(uint)(block + 1) | ((ulong)(uint)offset << 12);
