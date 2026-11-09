@@ -77,10 +77,13 @@ internal static class ResourceExporter
         OccluderFileSaver.Save(world, occlusionCuts, occluderFileName, stream, report);
         CopyProjectFiles(own, stream, report, copied);
         var files = report.Saved.Concat(copied).ToList();
+        var newTypes = NewTypeFiles(world, files);
+        ManifestFileSaver.Save(world, files, newTypes, stream, report);
+        files = report.Saved.Concat(copied).ToList();
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
-                FiveMResource.BuildManifest(Program.Author, Program.Version, files, NewTypeFiles(world, files)));
+                FiveMResource.BuildManifest(Program.Author, Program.Version, files, newTypes));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

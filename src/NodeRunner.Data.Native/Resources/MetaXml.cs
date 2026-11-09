@@ -61,7 +61,7 @@ public static class MetaXml
         uint.TryParse(name.StartsWith("hash_", StringComparison.OrdinalIgnoreCase) ? name.AsSpan(5) : [], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out hash);
 
     // The game hashes some names as written (case kept), others in lower case: both are tried against what is known.
-    private static uint Resolve(string name, Func<uint, bool> known)
+    internal static uint Resolve(string name, Func<uint, bool> known)
     {
         if (IsHashName(name, out uint hash))
             return hash;
@@ -468,12 +468,12 @@ public static class MetaXml
         }
     }
 
-    private static string Value(XElement element) => element.Attribute("value")?.Value ?? element.Value;
+    internal static string Value(XElement element) => element.Attribute("value")?.Value ?? element.Value;
 
-    private static IEnumerable<string> Tokens(string text, params char[] more) =>
+    internal static IEnumerable<string> Tokens(string text, params char[] more) =>
         text.Split([' ', '\t', '\r', '\n', ',', .. more], StringSplitOptions.RemoveEmptyEntries);
 
-    private static float[] Vector(XElement element, int count, float missing)
+    internal static float[] Vector(XElement element, int count, float missing)
     {
         string[] axes = ["x", "y", "z", "w"];
         var values = new float[count];
@@ -490,7 +490,7 @@ public static class MetaXml
         return values;
     }
 
-    private static bool ParseBoolean(string text)
+    internal static bool ParseBoolean(string text)
     {
         text = text.Trim();
         if (bool.TryParse(text, out bool value))
@@ -498,10 +498,10 @@ public static class MetaXml
         return TryParseInteger(text, out long number) ? number != 0 : throw new FormatException($"« {text} » n'est pas vrai / faux");
     }
 
-    private static long ParseInteger(string text) =>
+    internal static long ParseInteger(string text) =>
         TryParseInteger(text, out long value) ? value : throw new FormatException($"« {text.Trim()} » n'est pas un nombre entier");
 
-    private static bool TryParseInteger(string text, out long value)
+    internal static bool TryParseInteger(string text, out long value)
     {
         text = text.Trim();
         if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
@@ -517,7 +517,7 @@ public static class MetaXml
         return false;
     }
 
-    private static float ParseFloat(string text) =>
+    internal static float ParseFloat(string text) =>
         float.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float value)
             ? value
             : throw new FormatException($"« {text.Trim()} » n'est pas un nombre");
