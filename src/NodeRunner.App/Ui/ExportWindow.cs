@@ -445,7 +445,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
         var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion, state.CollisionEdits,
-            state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out var copied);
+            state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out var copied, out var fromLibrary);
         var occluderNames = state.OccluderEdits.StreamFileNames.Concat(occlusion.Select(c => c.FileName)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         int collisionFiles = report.Saved.Count(f => f.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase));
         int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
@@ -462,6 +462,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             extra.Add(L($"{pathFiles} pathnodes .ynd"));
         if (copied.Count > 0)
             extra.Add(L($"{copied.Count} fichier(s) du projet"));
+        if (fromLibrary.Count > 0)
+            extra.Add(L($"{fromLibrary.Count} fichier(s) de la bibliothèque"));
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
         _result = report.Errors.Count == 0
             ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles} YMAP{extraText} exporté(s) dans {target}"), true, target)

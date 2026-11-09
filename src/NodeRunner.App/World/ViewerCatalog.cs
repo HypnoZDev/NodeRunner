@@ -9,16 +9,21 @@ internal enum ViewerKind { Vehicle, Object }
 // A model the viewer can open: its name (spawn name for a vehicle, archetype for an object) and where it is.
 internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Location)
 {
+    // Pack of the prop library the object type comes from, null for the game's.
+    public string? Pack { get; init; }
+
     public uint ArchetypeHash => Name.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                                  && uint.TryParse(Name.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint hash)
         ? hash : Joaat.Hash(Name);
 }
 
-// Everything the model viewer lists: the vehicles of the game (DLC included) and the object types of the map.
+// Everything the model viewer lists: the vehicles of the game (DLC included), the object types of the map and those of
+// the prop library.
 internal sealed partial class ViewerCatalog
 {
     public required IReadOnlyList<ViewerItem> Vehicles { get; init; }
     public required IReadOnlyList<ViewerItem> Objects { get; init; }
+    public IReadOnlyList<ViewerItem> Library { get; init; } = [];
 
     // Vehicle archives: levels\gta5\vehicles.rpf, and in DLC packs levels\gta5\vehicles\<pack>vehicles.rpf
     // (tuning parts are in "vehiclemods", not listed).
@@ -31,6 +36,7 @@ internal sealed partial class ViewerCatalog
     {
         var vehicles = new List<ViewerItem>();
         var objects = new List<ViewerItem>();
+        var props = new List<ViewerItem>();
         if (world.Models is not { } models)
             return new ViewerCatalog { Vehicles = vehicles, Objects = objects };
 
@@ -51,7 +57,10 @@ internal sealed partial class ViewerCatalog
                 if (library.GetArchetype(hash) is not { IsShadowOrReflectionProxy: false } archetype
                     || models.Locate(archetype) is not { } location)
                     continue;
-                objects.Add(new ViewerItem(names.Describe(hash), ViewerKind.Object, location));
+                var item = new ViewerItem(names.Describe(hash), ViewerKind.Object, location);
+                objects.Add(item);
+                if (library.GetArchetypeFile(hash) is { } file && Data.FileSystem.GameContent.IsLibraryFile(file))
+                    props.Add(item with { Pack = world.ProjectFiles?.LibraryFileOf(file)?.Pack ?? "" });
             }
         }
 
@@ -62,6 +71,11 @@ internal sealed partial class ViewerCatalog
             int byKind = a.Name.StartsWith("0x", StringComparison.Ordinal).CompareTo(b.Name.StartsWith("0x", StringComparison.Ordinal));
             return byKind != 0 ? byKind : string.CompareOrdinal(a.Name, b.Name);
         });
-        return new ViewerCatalog { Vehicles = vehicles, Objects = objects };
+        props.Sort((a, b) =>
+        {
+            int byPack = string.Compare(a.Pack, b.Pack, StringComparison.OrdinalIgnoreCase);
+            return byPack != 0 ? byPack : string.CompareOrdinal(a.Name, b.Name);
+        });
+        return new ViewerCatalog { Vehicles = vehicles, Objects = objects, Library = props };
     }
 }

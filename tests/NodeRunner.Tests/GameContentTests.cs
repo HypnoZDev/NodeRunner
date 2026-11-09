@@ -376,7 +376,7 @@ public class GameContentTests
     private static byte[] Utf8(string text) => Encoding.UTF8.GetBytes(text);
 
     // In-memory game files: archive paths and file contents.
-    private sealed class FakeGameFiles : IGameFileSystem
+    internal sealed class FakeGameFiles : IGameFileSystem
     {
         private readonly HashSet<string> _archives = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);

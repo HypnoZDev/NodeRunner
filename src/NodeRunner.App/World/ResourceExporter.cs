@@ -48,9 +48,10 @@ internal static class ResourceExporter
 
     public static MapFileSaver.Report Export(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
         IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts, CollisionEdits collisionEdits,
-        string occluderFileName, IReadOnlyList<string> interiorFiles, string? projectStream, out List<string> copied)
+        string occluderFileName, IReadOnlyList<string> interiorFiles, string? projectStream, out List<string> copied, out List<string> fromLibrary)
     {
         copied = [];
+        fromLibrary = [];
         if (Inspect(resourceFolder) == TargetState.Foreign)
             return new MapFileSaver.Report([], [L("ce dossier existe déjà et n'a pas été créé par NodeRunner")]);
 
@@ -76,10 +77,11 @@ internal static class ResourceExporter
         CollisionFileSaver.Save(world, collisionEdits, collisionCuts, stream, report);
         OccluderFileSaver.Save(world, occlusionCuts, occluderFileName, stream, report);
         CopyProjectFiles(own, stream, report, copied);
-        var files = report.Saved.Concat(copied).ToList();
+        fromLibrary = LibraryFileSaver.Copy(world, stream, report.Saved.Concat(copied).ToList(), report);
+        var files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();
         var newTypes = NewTypeFiles(world, files);
         ManifestFileSaver.Save(world, files, newTypes, stream, report);
-        files = report.Saved.Concat(copied).ToList();
+        files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
@@ -121,7 +123,7 @@ internal static class ResourceExporter
         if (types.Count == 0 || world.Content is not { } content)
             return [];
         var game = content.EnumerateFiles(".ytyp", withInactiveFallback: true)
-            .Where(p => !p.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+            .Where(p => !Data.FileSystem.GameContent.IsLooseFile(p))
             .Select(Path.GetFileName).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
         return types.Where(t => !game.Contains(t)).ToList();
     }

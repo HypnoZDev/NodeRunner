@@ -52,8 +52,13 @@ internal sealed class WorldLoader : IDisposable
 
     public CollisionCatalog? Collisions { get; private set; }
 
-    // The project's own files seen as game files (null without any).
+    // The project's own files and the prop library's, seen as game files (null without any).
     public LooseFileOverlay? ProjectFiles { get; private set; }
+
+    // Folder of the prop library shared by every project, read with the map.
+    public string? LibraryFolder { get => _libraryFolder; set => _libraryFolder = value; }
+
+    private volatile string? _libraryFolder;
 
     public ModelCatalog? Models { get; private set; }
 
@@ -324,8 +329,9 @@ internal sealed class WorldLoader : IDisposable
         try
         {
             progress.Report(L("Lecture des packs DLC..."));
-            // The project's own types, models and textures (a mapping with custom buildings) count as game files.
-            var source = LooseFileOverlay.Over(files, _saveFolder, GameCollisionFiles(_saveFolder));
+            // The project's own types, models and textures (a mapping with custom buildings) and the library's count as
+            // game files.
+            var source = LooseFileOverlay.Over(files, _saveFolder, GameCollisionFiles(_saveFolder), _libraryFolder);
             var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;

@@ -40,6 +40,16 @@ public sealed class GameContent
     // Virtual archive holding the files of the open project (LooseFileOverlay), activated after every pack.
     public const string LooseFilesRoot = "noderunner_project.rpf";
 
+    // Virtual archive holding the files of the prop library (LooseFileOverlay), activated after every pack, before the
+    // project's.
+    public const string LibraryRoot = "noderunner_library.rpf";
+
+    // A file of the project or of the library, not of the game.
+    public static bool IsLooseFile(string path) =>
+        path.StartsWith(LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase) || IsLibraryFile(path);
+
+    public static bool IsLibraryFile(string path) => path.StartsWith(LibraryRoot + "\\", StringComparison.OrdinalIgnoreCase);
+
     private readonly IGameFileSystem _files;
     private readonly HashSet<string> _archives = new(StringComparer.OrdinalIgnoreCase);
 
@@ -79,6 +89,8 @@ public sealed class GameContent
         var content = new GameContent(files) { Selection = selection };
         content.AddBaseLayer();
         content.ApplyDlcPacks(reader, selection);
+        if (content._archives.Contains(LibraryRoot))
+            content._roots[LibraryRoot] = content._sequence++;
         if (content._archives.Contains(LooseFilesRoot))
             content._roots[LooseFilesRoot] = content._sequence++;
         return content;

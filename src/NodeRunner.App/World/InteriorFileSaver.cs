@@ -94,7 +94,7 @@ internal static class InteriorFileSaver
             return (cached.Item1, cached.Item2);
         foreach (uint hash in library.GetInteriorArchetypeHashes())
         {
-            if (library.GetArchetypeFile(hash) is not { } file || file.StartsWith(Data.FileSystem.GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase)
+            if (library.GetArchetypeFile(hash) is not { } file || Data.FileSystem.GameContent.IsLooseFile(file)
                 || Source(files, library, file) is not { } source || !YtypWriter.CanBeTemplate(source) || files.GetResourceHeader(file) is not { } header)
                 continue;
             // No graphics pages in a .ytyp: keep the version bits (top 4) of the graphics flags only.

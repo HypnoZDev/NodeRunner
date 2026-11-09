@@ -57,6 +57,6 @@ public static class DoorCheck
 
     // A door model of the project (imported or made in another tool) that the game will not let open.
     public static bool IsFrozen(Archetype archetype, string? file) =>
-        file is not null && file.StartsWith(GameContent.LooseFilesRoot, StringComparison.OrdinalIgnoreCase)
+        file is not null && GameContent.IsLooseFile(file)
         && (archetype.Flags & DynamicFlag) == 0;
 }

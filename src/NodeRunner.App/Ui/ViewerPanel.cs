@@ -17,7 +17,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
 {
     public const string Title = $"{Icons.Box}  Visionneuse###Visionneuse";
 
-    private static string[] Filters => [L("Véhicules"), L("Objets")];
+    private static string[] Filters => [L("Véhicules"), L("Objets"), L("Bibliothèque")];
     private const float ListWidth = 230f;
     private const float InspectorWidth = 340f;
 
@@ -184,12 +184,20 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private void DrawList()
     {
         string[] labels = _catalog is { } c
-            ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})"]
+            ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})", $"{Filters[2]} ({Widgets.Count(c.Library.Count)})"]
             : Filters;
         Widgets.Segmented("viewer_filter", labels, ref _filter,
-            [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)")]);
+            [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)"),
+             L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource.")]);
         ImGui.SetNextItemWidth(-float.Epsilon);
-        Widgets.SearchField("##viewer_search", _filter == 0 ? L("Véhicule (ex. adder)") : L("Type (ex. prop_bench)"), ref _search);
+        Widgets.SearchField("##viewer_search", _filter switch
+        {
+            0 => L("Véhicule (ex. adder)"),
+            1 => L("Type (ex. prop_bench)"),
+            _ => L("Prop ou pack"),
+        }, ref _search);
+        if (_filter == 2)
+            DrawLibraryButtons();
 
         if (_catalog is null)
         {
@@ -198,6 +206,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
 
         UpdateRows();
+        if (_filter == 2 && _catalog.Library.Count == 0)
+        {
+            Widgets.Hint(L("Bibliothèque vide. Ajoute un pack de props addons (dossier d'une ressource FiveM ou .zip avec ses .ytyp, .ydr et .ytd) : ses props seront disponibles dans tous les projets."), wrap: true);
+            return;
+        }
         Widgets.Hint(_rows.Count == 0 ? L("Aucun résultat") : L($"{Widgets.Count(_rows.Count)} modèle(s)"));
         if (!ImGui.BeginChild("##viewer_rows", Vector2.Zero, ImGuiChildFlags.None))
         {
@@ -235,12 +248,23 @@ internal sealed unsafe class ViewerPanel(AppState state)
             {
                 var item = _rows[i];
                 ImGui.PushID(i);
-                string icon = item.Kind == ViewerKind.Vehicle ? Icons.Car : Icons.Box;
+                string icon = item.Kind == ViewerKind.Vehicle ? Icons.Car : item.Pack is null ? Icons.Box : Icons.Package;
                 if (ImGui.Selectable($"{icon}  {item.Name}", item.Location == Viewer.Item?.Location))
                     Open(item);
+                if (_filter == 2 && !string.IsNullOrEmpty(item.Pack))
+                {
+                    // Pack name, dimmed, on the right of the row.
+                    string pack = Widgets.Fit(item.Pack, ImGui.GetItemRectSize().X * 0.45f);
+                    float width = ImGui.CalcTextSize(pack).X;
+                    var max = ImGui.GetItemRectMax();
+                    ImGui.GetWindowDrawList().AddText(new Vector2(max.X - width - 4f, ImGui.GetItemRectMin().Y),
+                        ImGui.GetColorU32(UiTheme.TextMuted), pack);
+                }
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
                 {
-                    string tip = item.Location.Path;
+                    string tip = item.Pack is { } from
+                        ? L($"Pack : {(from.Length == 0 ? L("(racine de la bibliothèque)") : from)}\n{state.World.ProjectFiles?.LibraryFileOf(item.Location.Path)?.Disk ?? item.Location.Path}")
+                        : item.Location.Path;
                     if (item.Kind == ViewerKind.Vehicle && vehicles?.VehicleOf(item.Location.ModelHash) is { Count: > 0 } sheet)
                         tip = $"{VehicleInfoCatalog.Value(sheet, "vehicleMakeName")} {VehicleInfoCatalog.Value(sheet, "gameName")} · {ClassName(VehicleInfoCatalog.Value(sheet, "vehicleClass"))}\n{tip}";
                     ImGui.SetTooltip(tip);
@@ -258,13 +282,41 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (_rowsBuiltFor == (_filter, _search, _catalog))
             return;
         _rowsBuiltFor = (_filter, _search, _catalog);
-        var source = _filter == 0 ? _catalog!.Vehicles : _catalog!.Objects;
+        var source = _filter switch { 0 => _catalog!.Vehicles, 1 => _catalog!.Objects, _ => _catalog!.Library };
         string search = _search.Trim().ToLowerInvariant();
         _rows = search.Length == 0
             ? source.ToList()
-            : source.Where(r => r.Name.Contains(search, StringComparison.Ordinal))
+            : source.Where(r => r.Name.Contains(search, StringComparison.Ordinal) || r.Pack?.Contains(search, StringComparison.OrdinalIgnoreCase) == true)
                 .OrderBy(r => r.Name.StartsWith(search, StringComparison.Ordinal) ? 0 : 1)
                 .ToList();
+    }
+
+    private void DrawLibraryButtons()
+    {
+        if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Ajouter un pack...##library_add"), L("Copie un pack (dossier d'une ressource FiveM, dossier stream) dans la bibliothèque, puis recharge la carte.")))
+            state.LibraryRequest = LibraryAction.AddFolder;
+        ImGui.SameLine(0, 4f);
+        if (Widgets.Button(L(".zip...##library_zip"), L("Ajoute un pack livré en archive .zip (un .rar ou un .7z est à décompresser d'abord).")))
+            state.LibraryRequest = LibraryAction.AddZip;
+        ImGui.SameLine(0, 4f);
+        if (Widgets.IconButton(Icons.FolderOpen, "library_open", L("Ouvrir le dossier de la bibliothèque (après y avoir copié ou retiré un pack à la main : bouton Recharger)")))
+            OpenLibraryFolder(state);
+        ImGui.SameLine(0, 4f);
+        if (Widgets.IconButton(Icons.RefreshCw, "library_reload", L("Relire la bibliothèque (recharge la carte)")))
+            state.LibraryRequest = LibraryAction.Reload;
+    }
+
+    public static void OpenLibraryFolder(AppState state)
+    {
+        try
+        {
+            Directory.CreateDirectory(state.LibraryFolder);
+            System.Diagnostics.Process.Start("explorer.exe", $"\"{state.LibraryFolder}\"");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            state.Notify(L($"Dossier de la bibliothèque inaccessible : {ex.Message}"), warning: true);
+        }
     }
 
     // ---- View ----

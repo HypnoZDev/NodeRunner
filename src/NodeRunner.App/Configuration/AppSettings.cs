@@ -99,6 +99,9 @@ public sealed class AppSettings
 
     public string? ProjectsFolder { get; set; }
 
+    // Prop library shared by every project (null = Documents/NodeRunner/Bibliothèque).
+    public string? LibraryFolder { get; set; }
+
     public string? ExportFolder { get; set; }
 
     public string? ExportResourceName { get; set; }

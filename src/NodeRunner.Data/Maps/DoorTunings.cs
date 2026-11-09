@@ -78,7 +78,7 @@ public sealed class DoorTunings
         var all = content.EnumerateAllVersions(".ymt").Concat(content.EnumerateAllVersions(".meta"))
             .Where(p => Path.GetFileNameWithoutExtension(p).Equals("doortuning", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        bool IsProject(string p) => p.StartsWith(GameContent.LooseFilesRoot, StringComparison.OrdinalIgnoreCase);
+        bool IsProject(string p) => GameContent.IsLooseFile(p);
         bool IsYmt(string p) => p.EndsWith(".ymt", StringComparison.OrdinalIgnoreCase);
         var game = all.Where(p => !IsProject(p)).ToList();
         if (game.Any(IsYmt))

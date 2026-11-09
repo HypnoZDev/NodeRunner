@@ -92,7 +92,7 @@ public sealed class CollisionCatalog
                     catalog._interiorFiles[Joaat.Hash(name)] = path;
                 continue;
             }
-            if (path.StartsWith(GameContent.LooseFilesRoot + "\\", StringComparison.OrdinalIgnoreCase))
+            if (GameContent.IsLooseFile(path))
             {
                 // A project's file: not in the game's cache files (or with a different extent), its box is read.
                 try

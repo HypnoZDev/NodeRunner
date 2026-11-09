@@ -220,6 +220,9 @@ internal sealed class AppState
     // Object type to add, waiting for the main form to find the ground at the centre of the 3D view; 0 if none.
     public uint PlaceRequest { get; set; }
 
+    // Prop library action asked from a panel, carried out by the main window (dialogs).
+    public LibraryAction LibraryRequest { get; set; }
+
     // Result of the last editing command (add an object, put it on the ground...), shown a few seconds in the status
     // bar.
     public (string Text, bool IsWarning, DateTime Time)? Notice { get; private set; }
@@ -1448,6 +1451,25 @@ internal sealed class AppState
     public string ProjectsFolder => Settings.ProjectsFolder
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NodeRunner");
 
+    // Prop library shared by every project (addon packs).
+    public string LibraryFolder => Settings.LibraryFolder ?? DefaultLibraryFolder;
+
+    public static string DefaultLibraryFolder =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NodeRunner", "Bibliothèque");
+
+    // Reads the library again (pack added, other folder): the map is loaded again, as when a project opens.
+    public string? ReloadLibrary(string? folder)
+    {
+        if (Online.Blocks() is { } blocked)
+            return blocked;
+        Settings.LibraryFolder = folder;
+        SaveSettings();
+        World.LibraryFolder = LibraryFolder;
+        LoadProjectEdits();
+        World.RequestMapReload();
+        return null;
+    }
+
     public void RestoreProject()
     {
         MigrateSaveFolder();
@@ -1677,7 +1699,7 @@ internal sealed class AppState
     {
         Paths = paths;
         Settings = settings;
-        World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName) };
+        World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName), LibraryFolder = LibraryFolder };
         Online = new NodeRunner.App.Online.OnlineController(this);
         Backup = new AutoBackup(this);
     }
@@ -1754,3 +1776,5 @@ public enum TransformTool
     Scale,
     Collision,
 }
+
+internal enum LibraryAction { None, AddFolder, AddZip, ChooseFolder, Default, Reload }

@@ -495,6 +495,20 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     settings.ProjectsFolder = null;
                     state.SaveSettings();
                 }
+
+                Widgets.Property(L("Bibliothèque de props"), L("Packs de props addons partagés par tous les projets (un sous-dossier par pack). Changer de dossier recharge la carte."));
+                string library = state.LibraryFolder;
+                ImGui.TextUnformatted(Widgets.Fit(library, FolderTextWidth));
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(library);
+                if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir...##library_folder")))
+                    state.LibraryRequest = LibraryAction.ChooseFolder;
+                ImGui.SameLine();
+                if (Widgets.Button(L("Ouvrir##library_folder"), L("Ouvre ce dossier dans l'Explorateur Windows.")))
+                    ViewerPanel.OpenLibraryFolder(state);
+                ImGui.SameLine();
+                if (Widgets.Button(L("Par défaut##library_folder"), L("Documents\\NodeRunner\\Bibliothèque"), enabled: settings.LibraryFolder is not null))
+                    state.LibraryRequest = LibraryAction.Default;
                 Widgets.EndProperties();
             }
         }

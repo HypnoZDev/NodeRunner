@@ -1188,6 +1188,12 @@ internal sealed unsafe partial class MainForm : Form
             BrowseForProjectFolder();
         }
 
+        if (_state.LibraryRequest is var library and not LibraryAction.None)
+        {
+            _state.LibraryRequest = LibraryAction.None;
+            HandleLibraryRequest(library);
+        }
+
         if (_droppedPaths is { } dropped)
         {
             _droppedPaths = null;
@@ -1334,6 +1340,92 @@ internal sealed unsafe partial class MainForm : Form
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
         AddToProject([dialog.SelectedPath]);
+    }
+
+    private void HandleLibraryRequest(LibraryAction action)
+    {
+        string library = _state.LibraryFolder;
+        string start = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        switch (action)
+        {
+            case LibraryAction.AddFolder:
+            {
+                using var dialog = new FolderBrowserDialog
+                {
+                    Description = L("Choisis le pack de props à ajouter à la bibliothèque (dossier d'une ressource FiveM ou dossier stream)."),
+                    UseDescriptionForTitle = true,
+                    InitialDirectory = start,
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    AddLibraryPack(dialog.SelectedPath);
+                break;
+            }
+            case LibraryAction.AddZip:
+            {
+                using var dialog = new OpenFileDialog
+                {
+                    Title = L("Ajouter un pack de props (.zip) à la bibliothèque"),
+                    Filter = L("Archives .zip (*.zip)|*.zip"),
+                    InitialDirectory = start,
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    AddLibraryPack(dialog.FileName);
+                break;
+            }
+            case LibraryAction.ChooseFolder:
+            {
+                using var dialog = new FolderBrowserDialog
+                {
+                    Description = L("Dossier de la bibliothèque de props (un sous-dossier par pack)."),
+                    UseDescriptionForTitle = true,
+                    InitialDirectory = Directory.Exists(library) ? library : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    ShowNewFolderButton = true,
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK && ConfirmLeaveChanges())
+                    ReloadLibrary(dialog.SelectedPath);
+                break;
+            }
+            case LibraryAction.Default:
+                if (ConfirmLeaveChanges())
+                    ReloadLibrary(null);
+                break;
+            case LibraryAction.Reload:
+                if (ConfirmLeaveChanges())
+                    ReloadLibrary(_state.Settings.LibraryFolder);
+                break;
+        }
+    }
+
+    // Copies a pack into the prop library, then loads the map again so that its props can be placed.
+    private void AddLibraryPack(string source)
+    {
+        string library = _state.LibraryFolder;
+        string name = NodeRunner.Editor.PropLibrary.PackName(source);
+        if (NodeRunner.Editor.PropLibrary.HasPack(source, library)
+            && MessageBox.Show(this, L($"La bibliothèque a déjà un pack « {name} ». Le remplacer ?"), L("Bibliothèque de props"),
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+        if (!ConfirmLeaveChanges())
+            return;
+        try
+        {
+            NodeRunner.Editor.PropLibrary.AddPack(source, library);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            MessageBox.Show(this, L($"Le pack n'a pas pu être ajouté :\n{ex.Message}"), L("Bibliothèque de props"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        if (ReloadLibrary(_state.Settings.LibraryFolder))
+            _state.Notify(L($"Pack « {name} » ajouté à la bibliothèque, carte rechargée (Visionneuse > Bibliothèque)."));
+    }
+
+    private bool ReloadLibrary(string? folder)
+    {
+        if (_state.ReloadLibrary(folder) is not { } error)
+            return true;
+        MessageBox.Show(this, error, L("Bibliothèque de props"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        return false;
     }
 
     // Converts and copies the files into the open project's stream folder, then loads its map again.

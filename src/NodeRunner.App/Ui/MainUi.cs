@@ -434,6 +434,22 @@ internal sealed class MainUi
             AddFolderRequested = true;
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(L("Ajoute tout un dossier au projet ouvert (dossier d'export de Sollumz, dossier stream...), sous-dossiers compris."));
+        if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
+        {
+            if (ImGui.MenuItem(L("Ajouter un pack (dossier)...")))
+                _state.LibraryRequest = LibraryAction.AddFolder;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(L("Copie un pack de props addons (ressource FiveM, dossier stream) dans la bibliothèque :\nses props sont disponibles dans tous les projets (Visionneuse > Bibliothèque > Placer)."));
+            if (ImGui.MenuItem(L("Ajouter un pack (.zip)...")))
+                _state.LibraryRequest = LibraryAction.AddZip;
+            if (ImGui.MenuItem(L("Ouvrir le dossier de la bibliothèque")))
+                ViewerPanel.OpenLibraryFolder(_state);
+            if (ImGui.MenuItem(L("Relire la bibliothèque")))
+                _state.LibraryRequest = LibraryAction.Reload;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(L("Après avoir copié ou retiré un pack à la main dans le dossier : recharge la carte."));
+            ImGui.EndMenu();
+        }
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))
         {
