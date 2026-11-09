@@ -1270,12 +1270,19 @@ internal sealed unsafe partial class MainForm : Form
         ImportMapping(dialog.FileName);
     }
 
+    // XML exports the import turns into game files, by game extension.
+    private static readonly Dictionary<string, Func<string, byte[]>> XmlConverters = new()
+    {
+        [".ybn"] = NodeRunner.Data.Native.Collisions.YbnXml.Convert,
+    };
+
     private void ImportMapping(string source)
     {
         NodeRunner.Editor.ImportResult result;
         try
         {
-            result = NodeRunner.Editor.MappingImport.Import(source, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack);
+            result = NodeRunner.Editor.MappingImport.Import(source, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack,
+                XmlConverters);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1295,9 +1302,10 @@ internal sealed unsafe partial class MainForm : Form
         }
         string author = result.Author is { } by ? L($" (par {by})") : "";
         string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
-        string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) du mod non repris (pas des fichiers de carte) :\n") + string.Join("\n", result.Ignored.Take(10));
+        string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) non repris :\n") + string.Join("\n", result.Ignored.Take(10));
+        string converted = result.Converted == 0 ? "" : L($"\n\nDont {result.Converted} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.");
         MessageBox.Show(this,
-            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} »{author} :\n{result.Project.Folder}\n\nLes fichiers qui portent le nom d'un fichier du jeu le remplacent (comme dans FiveM).\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{skipped}{ignored}"),
+            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} »{author} :\n{result.Project.Folder}\n\nLes fichiers qui portent le nom d'un fichier du jeu le remplacent (comme dans FiveM).\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{converted}{skipped}{ignored}"),
             L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 

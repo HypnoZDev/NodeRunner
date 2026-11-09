@@ -8,6 +8,9 @@ public sealed record ImportResult(MapProject Project, int Copied, IReadOnlyList<
 {
     // Copied files locked by FiveM's Asset Escrow (see ProtectedFile).
     public IReadOnlyList<string> Protected { get; init; } = [];
+
+    // XML exports (Sollumz, CodeWalker) converted to game files, among Copied.
+    public int Converted { get; init; }
 }
 
 // Imports a mapping made elsewhere as a new project: a FiveM resource or a plain "stream" folder, a .zip of one, or an
@@ -22,6 +25,15 @@ public static class MappingImport
 
     public static bool IsStreamed(string name) => StreamedExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase);
 
+    // A streamed file exported as XML by Sollumz or CodeWalker ("name.ybn.xml").
+    public static bool IsXmlExport(string name) =>
+        name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && IsStreamed(name[..^4]);
+
+    private static bool IsImported(string name) => IsStreamed(name) || IsXmlExport(name);
+
+    // Game file name of an imported file ("name.ybn.xml" -> "name.ybn").
+    private static string TargetName(string name) => IsXmlExport(name) ? name[..^4] : name;
+
     public static bool IsArchive(string path) => ArchiveExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
     // What can be dropped on the window or picked: a folder, a .oiv or a .zip.
@@ -29,16 +41,16 @@ public static class MappingImport
 
     // Streamed files anywhere under the folder (resources often nest them: stream/maps/..., several resources...).
     // One file per name: FiveM streams by name, the first one found wins.
-    public static (List<string> Files, List<string> Duplicates) FindFiles(string folder)
+    public static (List<string> Files, List<string> Duplicates) FindFiles(string folder, bool withXmlExports = false)
     {
         var files = new List<string>();
         var duplicates = new List<string>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase))
         {
-            if (!IsStreamed(file))
+            if (!(IsStreamed(file) || withXmlExports && IsXmlExport(file)))
                 continue;
-            if (names.Add(Path.GetFileName(file)))
+            if (names.Add(TargetName(Path.GetFileName(file))))
                 files.Add(file);
             else
                 duplicates.Add(Path.GetRelativePath(folder, file));
@@ -60,7 +72,7 @@ public static class MappingImport
     {
         public string? Name;
         public string? Author;
-        public readonly List<(string Name, Func<Stream> Open)> Files = [];
+        public readonly List<(string Name, string Source, Func<Stream> Open)> Files = [];
         public readonly List<string> Duplicates = [];
         public readonly List<string> Ignored = [];
         public readonly List<IDisposable> Archives = [];
@@ -68,8 +80,8 @@ public static class MappingImport
 
         public void Add(string name, string shown, Func<Stream> open)
         {
-            if (_names.Add(name))
-                Files.Add((name, open));
+            if (_names.Add(TargetName(name)))
+                Files.Add((TargetName(name), name, open));
             else
                 Duplicates.Add(shown);
         }
@@ -81,7 +93,10 @@ public static class MappingImport
         }
     }
 
-    public static ImportResult Import(string source, string projectsFolder, MapVersion mapVersion, string? lastDlcPack)
+    // xmlConverters: by game extension (".ybn"), turns an XML export into the game file; XML exports of other types
+    // are left out.
+    public static ImportResult Import(string source, string projectsFolder, MapVersion mapVersion, string? lastDlcPack,
+        IReadOnlyDictionary<string, Func<string, byte[]>>? xmlConverters = null)
     {
         source = Path.GetFullPath(source.TrimEnd('\\', '/'));
         using var plan = new Plan();
@@ -105,27 +120,51 @@ public static class MappingImport
                 AddFolder(plan, source);
         }
         if (plan.Files.Count == 0)
-            throw new InvalidDataException(L("Aucun fichier de carte (.ymap, .ybn, .ytyp, .ydr...) ni mod OpenIV (.oiv) à importer ici."));
+            throw new InvalidDataException(L("Aucun fichier de carte (.ymap, .ybn, .ytyp, .ydr..., ou leur export XML) ni mod OpenIV (.oiv) à importer ici."));
 
         name = plan.Name ?? name;
         var project = MapProject.Create(FreeFolder(projectsFolder, name), name, mapVersion, lastDlcPack);
         var locked = new List<string>();
-        foreach (var (file, open) in plan.Files)
+        int copied = 0, converted = 0;
+        foreach (var (file, sourceName, open) in plan.Files)
         {
             string target = Path.Combine(project.StreamFolder, file);
+            if (IsXmlExport(sourceName))
+            {
+                if (xmlConverters?.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant()) is not { } convert)
+                {
+                    plan.Ignored.Add(L($"{sourceName} (XML pas encore pris en charge)"));
+                    continue;
+                }
+                try
+                {
+                    string xml;
+                    using (var reader = new StreamReader(open()))
+                        xml = reader.ReadToEnd();
+                    File.WriteAllBytes(target, convert(xml));
+                    converted++;
+                    copied++;
+                }
+                catch (InvalidDataException ex)
+                {
+                    plan.Ignored.Add(L($"{sourceName} (conversion impossible : {ex.Message})"));
+                }
+                continue;
+            }
             using (var input = open())
             using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write))
                 input.CopyTo(output);
+            copied++;
             if (ProtectedFile.IsProtected(target))
                 locked.Add(file);
         }
-        return new ImportResult(project, plan.Files.Count, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked };
+        return new ImportResult(project, copied, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked, Converted = converted };
     }
 
     // Loose files first; a folder without any (a downloaded mod: readme + .oiv) takes the packages inside it.
     private static void AddFolder(Plan plan, string folder)
     {
-        var (files, duplicates) = FindFiles(folder);
+        var (files, duplicates) = FindFiles(folder, withXmlExports: true);
         foreach (var file in files)
             plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file));
         plan.Duplicates.AddRange(duplicates);
@@ -180,7 +219,7 @@ public static class MappingImport
             }
             return;
         }
-        foreach (var entry in zip.Entries.Where(e => e.Name.Length > 0 && IsStreamed(e.Name)).OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
+        foreach (var entry in zip.Entries.Where(e => e.Name.Length > 0 && IsImported(e.Name)).OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
             plan.Add(entry.Name, $"{archive} : {entry.FullName}", entry.Open);
     }
 
