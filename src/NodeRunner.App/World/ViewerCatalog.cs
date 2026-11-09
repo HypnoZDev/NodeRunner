@@ -57,13 +57,11 @@ internal sealed partial class ViewerCatalog
                 if (library.GetArchetype(hash) is not { IsShadowOrReflectionProxy: false } archetype
                     || models.Locate(archetype) is not { } location)
                     continue;
-                var item = new ViewerItem(names.Describe(hash), ViewerKind.Object, location);
-                objects.Add(item);
-                if (library.GetArchetypeFile(hash) is { } file && Data.FileSystem.GameContent.IsLibraryFile(file))
-                    props.Add(item with { Pack = world.ProjectFiles?.LibraryFileOf(file)?.Pack ?? "" });
+                objects.Add(new ViewerItem(names.Describe(hash), ViewerKind.Object, location));
             }
         }
 
+        props = LibraryItems(world);
         vehicles.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
         // Readable names first, the names only known by their hash ("0x...") at the end.
         objects.Sort((a, b) =>
@@ -71,11 +69,29 @@ internal sealed partial class ViewerCatalog
             int byKind = a.Name.StartsWith("0x", StringComparison.Ordinal).CompareTo(b.Name.StartsWith("0x", StringComparison.Ordinal));
             return byKind != 0 ? byKind : string.CompareOrdinal(a.Name, b.Name);
         });
+        return new ViewerCatalog { Vehicles = vehicles, Objects = objects, Library = props };
+    }
+
+    // The object types of the prop library, by pack then name.
+    public static List<ViewerItem> LibraryItems(WorldLoader world)
+    {
+        var props = new List<ViewerItem>();
+        if (world.Maps is not { } library || world.Names is not { } names || world.Models is not { } models
+            || world.ProjectFiles is not { LibraryFileCount: > 0 } overlay)
+            return props;
+        foreach (uint hash in library.GetArchetypeHashes())
+        {
+            if (library.GetArchetypeFile(hash) is not { } file || !Data.FileSystem.GameContent.IsLibraryFile(file)
+                || library.GetArchetype(hash) is not { IsShadowOrReflectionProxy: false } archetype
+                || models.Locate(archetype) is not { } location)
+                continue;
+            props.Add(new ViewerItem(names.Describe(hash), ViewerKind.Object, location) { Pack = overlay.LibraryFileOf(file)?.Pack ?? "" });
+        }
         props.Sort((a, b) =>
         {
             int byPack = string.Compare(a.Pack, b.Pack, StringComparison.OrdinalIgnoreCase);
             return byPack != 0 ? byPack : string.CompareOrdinal(a.Name, b.Name);
         });
-        return new ViewerCatalog { Vehicles = vehicles, Objects = objects, Library = props };
+        return props;
     }
 }

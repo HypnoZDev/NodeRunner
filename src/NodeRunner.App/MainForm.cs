@@ -472,6 +472,7 @@ internal sealed unsafe partial class MainForm : Form
 
         // The viewer's image first (it binds its own target), for the interface drawn below.
         _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
+        _state.Thumbnails.Render(_modelRenderer!, imguiRenderer, graphics, _state.World);
         var scene = SceneViewport();
         PickClickedObject(scene);
         PickCollision(scene);
@@ -939,14 +940,17 @@ internal sealed unsafe partial class MainForm : Form
             return;
         uint archetype = _state.PlaceRequest;
         bool paste = _state.PasteRequest;
+        var at = _state.PlacePoint ?? new Vector2(0.5f, 0.5f);
         _state.PlaceRequest = 0;
         _state.PasteRequest = false;
+        _state.PlacePoint = null;
         var camera = _state.Camera;
         Vector3? ground = null;
         if (_state.IsLayerVisible(ModelLayer.LayerName))
         {
             var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
-            ground = _modelLayer.PickPoint(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, scene.Width / 2, scene.Height / 2);
+            ground = _modelLayer.PickPoint(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height,
+                Math.Clamp((int)(at.X * scene.Width), 0, scene.Width - 1), Math.Clamp((int)(at.Y * scene.Height), 0, scene.Height - 1));
         }
         if (ground is not { } point || Vector3.Distance(point, camera.Position) > 500f)
             point = camera.Position + camera.Forward * 15f;
@@ -1288,9 +1292,23 @@ internal sealed unsafe partial class MainForm : Form
         ImportMapping(dialog.FileName);
     }
 
-    // Dropped with a project open: added to it, or imported as a new project.
+    // Dropped with a project open: added to it, or imported as a new project. A pack of addon props can go to the
+    // library instead.
     private void ImportDropped(string[] paths)
     {
+        if (paths.Length == 1 && NodeRunner.Editor.PropLibrary.LooksLikePack(paths[0]))
+        {
+            var library = MessageBox.Show(this,
+                L($"« {Path.GetFileName(paths[0].TrimEnd('\\', '/'))} » ressemble à un pack de props addons.\n\nOui : l'ajouter à la bibliothèque (disponible dans tous les projets).\nNon : l'importer comme un mapping (projet)."),
+                L("Bibliothèque de props"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (library == DialogResult.Yes)
+            {
+                AddLibraryPack(paths[0]);
+                return;
+            }
+            if (library != DialogResult.No)
+                return;
+        }
         if (_state.Project is { } project)
         {
             string what = paths.Length == 1 ? $"« {Path.GetFileName(paths[0].TrimEnd('\\', '/'))} »" : L($"{paths.Length} éléments");

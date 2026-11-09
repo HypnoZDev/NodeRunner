@@ -223,6 +223,12 @@ internal sealed class AppState
     // Prop library action asked from a panel, carried out by the main window (dialogs).
     public LibraryAction LibraryRequest { get; set; }
 
+    // Where to put the object of PlaceRequest: a point of the 3D view (0..1 of its width and height), null = its centre.
+    public System.Numerics.Vector2? PlacePoint { get; set; }
+
+    // Pictures of the library's props (Library panel).
+    public World.LibraryThumbnails Thumbnails { get; private set; } = null!;
+
     // Result of the last editing command (add an object, put it on the ground...), shown a few seconds in the status
     // bar.
     public (string Text, bool IsWarning, DateTime Time)? Notice { get; private set; }
@@ -1700,6 +1706,7 @@ internal sealed class AppState
         Paths = paths;
         Settings = settings;
         World = new WorldLoader { UserNamesFile = Path.Combine(paths.DataDirectory, UserNamesFileName), LibraryFolder = LibraryFolder };
+        Thumbnails = new World.LibraryThumbnails(Path.Combine(paths.DataDirectory, "vignettes"));
         Online = new NodeRunner.App.Online.OnlineController(this);
         Backup = new AutoBackup(this);
     }

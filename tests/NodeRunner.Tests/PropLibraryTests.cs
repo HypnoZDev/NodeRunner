@@ -108,6 +108,31 @@ public class PropLibraryTests
     }
 
     [Fact]
+    public void A_pack_has_types_and_no_maps()
+    {
+        string root = Directory.CreateTempSubdirectory("nr-library").FullName;
+        try
+        {
+            string pack = Directory.CreateDirectory(Path.Combine(root, "pack", "stream")).FullName;
+            File.WriteAllBytes(Path.Combine(pack, "logos.ytyp"), Resource);
+            File.WriteAllBytes(Path.Combine(pack, "logo.ydr"), Resource);
+            Assert.True(PropLibrary.LooksLikePack(Path.Combine(root, "pack")));
+
+            string zip = Path.Combine(root, "pack.zip");
+            ZipFile.CreateFromDirectory(Path.Combine(root, "pack"), zip);
+            Assert.True(PropLibrary.LooksLikePack(zip));
+
+            File.WriteAllBytes(Path.Combine(pack, "island.ymap"), Resource);
+            Assert.False(PropLibrary.LooksLikePack(Path.Combine(root, "pack")));
+            Assert.False(PropLibrary.LooksLikePack(Path.Combine(pack, "logo.ydr")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Dependencies_are_the_files_of_the_placed_library_types()
     {
         string lib = GameContent.LibraryRoot;

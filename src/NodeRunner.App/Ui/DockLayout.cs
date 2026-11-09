@@ -13,40 +13,43 @@ internal static unsafe partial class DockLayout
     private const float RightRatio = 0.27f;
     private const float RightBottomRatio = 0.42f;
     private const float LeftBottomRatio = 0.48f;
+    private const float CenterBottomRatio = 0.26f;
 
     public static (Vector2 Position, Vector2 Size) SceneArea { get; private set; }
 
     // Submits the dock space; call each frame before the panels. reset rebuilds the default layout: two panels
-    // stacked on the left, two on the right.
-    public static void Draw(bool reset, string leftTop, string leftBottom, string rightTop, string rightBottom)
+    // stacked on the left, two on the right, one under the 3D view.
+    public static void Draw(bool reset, string leftTop, string leftBottom, string rightTop, string rightBottom, string bottom)
     {
         var viewport = ImGui.GetMainViewport();
         // Renamed when the panel window IDs change, so that the default layout is rebuilt.
-        uint id = ImGui.GetID("NodeRunnerDockSpace6");
+        uint id = ImGui.GetID("NodeRunnerDockSpace7");
         if (reset || igDockBuilderGetNode(id) is null)
-            BuildDefault(id, viewport.WorkSize, leftTop, leftBottom, rightTop, rightBottom);
+            BuildDefault(id, viewport.WorkSize, leftTop, leftBottom, rightTop, rightBottom, bottom);
 
         ImGui.DockSpaceOverViewport(id, viewport,
             ImGuiDockNodeFlags.PassthruCentralNode | ImGuiDockNodeFlags.NoDockingOverCentralNode);
         SceneArea = FindSceneArea(id, viewport);
     }
 
-    private static void BuildDefault(uint id, Vector2 size, string leftTop, string leftBottom, string rightTop, string rightBottom)
+    private static void BuildDefault(uint id, Vector2 size, string leftTop, string leftBottom, string rightTop, string rightBottom, string bottom)
     {
         igDockBuilderRemoveNode(id);
         igDockBuilderAddNode(id, DockSpaceNodeFlag);
         igDockBuilderSetNodeSize(id, size);
 
-        uint leftId, rest, rightId, center, rightBottomId, rightTopId, leftBottomId, leftTopId;
+        uint leftId, rest, rightId, center, rightBottomId, rightTopId, leftBottomId, leftTopId, bottomId, sceneId;
         igDockBuilderSplitNode(id, ImGuiDir.Left, LeftRatio, &leftId, &rest);
         igDockBuilderSplitNode(rest, ImGuiDir.Right, RightRatio / (1f - LeftRatio), &rightId, &center);
         igDockBuilderSplitNode(rightId, ImGuiDir.Down, RightBottomRatio, &rightBottomId, &rightTopId);
         igDockBuilderSplitNode(leftId, ImGuiDir.Down, LeftBottomRatio, &leftBottomId, &leftTopId);
+        igDockBuilderSplitNode(center, ImGuiDir.Down, CenterBottomRatio, &bottomId, &sceneId);
 
         igDockBuilderDockWindow(leftTop, leftTopId);
         igDockBuilderDockWindow(leftBottom, leftBottomId);
         igDockBuilderDockWindow(rightTop, rightTopId);
         igDockBuilderDockWindow(rightBottom, rightBottomId);
+        igDockBuilderDockWindow(bottom, bottomId);
         igDockBuilderFinish(id);
     }
 

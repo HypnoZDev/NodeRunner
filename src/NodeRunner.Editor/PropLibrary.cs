@@ -44,6 +44,37 @@ public static class PropLibrary
         return target;
     }
 
+    // A folder or .zip of addon props: object types (.ytyp) and no maps (.ymap), which would make it a mapping.
+    public static bool LooksLikePack(string source)
+    {
+        try
+        {
+            IEnumerable<string> names;
+            if (Directory.Exists(source))
+                names = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories);
+            else if (File.Exists(source) && Path.GetExtension(source).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                using var zip = ZipFile.OpenRead(source);
+                names = zip.Entries.Select(e => e.FullName).ToList();
+            }
+            else
+                return false;
+            bool types = false;
+            foreach (var name in names)
+            {
+                string extension = Path.GetExtension(name).ToLowerInvariant();
+                if (extension == ".ymap")
+                    return false;
+                types |= extension == ".ytyp";
+            }
+            return types;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return false;
+        }
+    }
+
     public static string PackName(string source) =>
         Path.GetFileNameWithoutExtension(Path.GetFullPath(source.TrimEnd('\\', '/')));
 

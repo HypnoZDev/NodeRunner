@@ -12,6 +12,9 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
 
     private IReadOnlyList<DlcPackInfo> _knownPacks = [];
 
+    public Action? ToggleLibrary { get; init; }
+    public Func<bool>? IsLibraryShown { get; init; }
+
     public void Draw()
     {
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8, PaddingY));
@@ -70,6 +73,10 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         Widgets.ToolbarSeparator();
         if (Widgets.ToolbarButton(Icons.Search, L("Rechercher"), L("Rechercher un objet, un YMAP, un type ou aller à une position FiveM (Ctrl+K)")))
             openSearch();
+        ImGui.SameLine();
+        if (Widgets.ToolbarButton(Icons.LibraryBig, L("Bibliothèque"), L("Bibliothèque de props addons : vignettes, packs, favoris ; glisser un prop dans la vue 3D pour le placer."),
+                active: IsLibraryShown?.Invoke() == true))
+            ToggleLibrary?.Invoke();
 
         Widgets.ToolbarSeparator();
         var online = state.Online;

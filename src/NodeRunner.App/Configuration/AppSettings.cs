@@ -102,6 +102,9 @@ public sealed class AppSettings
     // Prop library shared by every project (null = Documents/NodeRunner/Bibliothèque).
     public string? LibraryFolder { get; set; }
 
+    // Favourite props of the library (type names).
+    public List<string> LibraryFavorites { get; set; } = [];
+
     public string? ExportFolder { get; set; }
 
     public string? ExportResourceName { get; set; }

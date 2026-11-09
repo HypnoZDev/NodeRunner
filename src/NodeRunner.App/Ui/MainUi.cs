@@ -21,6 +21,7 @@ internal sealed class MainUi
     private bool _showProperties = true;
     private bool _showScene = true;
     private bool _showViewer;
+    private bool _showLibrary = true;
     private bool _showArchives;
     private bool _showProject;
     private bool _showImGuiDemo;
@@ -31,6 +32,7 @@ internal sealed class MainUi
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
+        _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer);
@@ -41,7 +43,11 @@ internal sealed class MainUi
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);
-        _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle);
+        _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)
+        {
+            ToggleLibrary = ToggleLibrary,
+            IsLibraryShown = () => _showLibrary,
+        };
         _errorWindow = new ErrorWindow(state, modelLayer, collisionLayer, navMeshLayer);
         _statusBar = new StatusBar(state, modelLayer, _errorWindow.Open);
         _viewportOverlay = new ViewportOverlay(state, cameraController);
@@ -61,15 +67,22 @@ internal sealed class MainUi
         ImGui.SetWindowFocus(ViewerPanel.Title);
     }
 
-    // Viewer opened on its Library tab (after a pack is added), at the next frame.
+    // Library panel shown (after a pack is added), at the next frame.
     public void ShowLibrary()
     {
-        _viewerPanel.ShowLibrary();
-        _showViewer = true;
-        _focusViewer = true;
+        _showLibrary = true;
+        _focusLibrary = true;
     }
 
-    private bool _focusViewer;
+    public void ToggleLibrary()
+    {
+        _showLibrary = !_showLibrary;
+        _focusLibrary = _showLibrary;
+    }
+
+    public bool IsLibraryShown => _showLibrary;
+
+    private bool _focusLibrary;
 
     private void OpenFileInViewer(string path)
     {
@@ -90,6 +103,7 @@ internal sealed class MainUi
     private readonly ViewportOverlay _viewportOverlay;
     private readonly ExportWindow _exportWindow;
     private readonly ViewerPanel _viewerPanel;
+    private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
     private readonly RoomGizmo _roomGizmo;
@@ -160,7 +174,7 @@ internal sealed class MainUi
         // The bars first: the panels and the 3D view share what is left of the window.
         _toolbar.Draw();
         _statusBar.Draw();
-        DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title);
+        DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title, LibraryPanel.Title);
         _resetLayout = false;
         _gizmo.Update(blocked: _searchPalette.IsOpen);
         _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
@@ -169,14 +183,15 @@ internal sealed class MainUi
         _viewportOverlay.Draw();
         if (_showLayers) DrawLayersWindow();
         if (_showScene) _scenePanel.Draw(ref _showScene);
+        if (_showLibrary) _libraryPanel.Draw(ref _showLibrary);
         if (_showProperties) _propertiesPanel.Draw(ref _showProperties);
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
         if (_showArchives) _archivePanel.Draw(ref _showArchives);
         if (_showProject) _projectPanel.Draw(ref _showProject);
-        if (_focusViewer)
+        if (_focusLibrary && _showLibrary)
         {
-            _focusViewer = false;
-            ImGui.SetWindowFocus(L(ViewerPanel.Title));
+            _focusLibrary = false;
+            ImGui.SetWindowFocus(L(LibraryPanel.Title));
         }
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
         else _state.Viewer.RequestedSize = Vector2.Zero;
@@ -363,12 +378,13 @@ internal sealed class MainUi
             ImGui.MenuItem(L(LayersTitle), null, ref _showLayers);
             ImGui.MenuItem(L(PropertiesPanel.Title), null, ref _showProperties);
             ImGui.MenuItem(L(StatusPanel.Title), null, ref _showStatus);
+            ImGui.MenuItem(L(LibraryPanel.Title), null, ref _showLibrary);
             ImGui.MenuItem(L(ViewerPanel.Title), null, ref _showViewer);
             ImGui.MenuItem(L(ArchivePanel.Title), null, ref _showArchives);
             ImGui.MenuItem(L(ProjectPanel.Title), null, ref _showProject);
             if (ImGui.MenuItem(L("Réinitialiser la disposition des panneaux")))
             {
-                _showLayers = _showScene = _showProperties = _showStatus = true;
+                _showLayers = _showScene = _showProperties = _showStatus = _showLibrary = true;
                 _resetLayout = true;
             }
             ImGui.Separator();
