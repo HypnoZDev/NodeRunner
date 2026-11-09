@@ -1,21 +1,13 @@
-using System.Buffers.Binary;
-using System.Numerics;
-using System.Text;
-using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Native.Resources;
 using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Textures;
 
-// Writes a complete texture dictionary (.ytd, resource version 13): dictionary, textures and names in one system page,
+// Writes a complete texture dictionary (.ytd, resource version 13): dictionary, textures and names in system pages,
 // pixels in graphics pages (a texture never crosses the end of a page).
 internal static class YtdBuilder
 {
     private const int Version = 13;
-    private const ulong SystemBase = 0x50000000;
-    private const ulong GraphicsBase = 0x60000000;
-    private const int MinPageSize = 0x2000;
-    private const int MaxBasePageSize = 0x200 << 15;
 
     // Most common virtual table words of the game's files.
     private const uint DictionaryVft = 0x40573510;
@@ -26,106 +18,59 @@ internal static class YtdBuilder
 
     public static byte[] Build(List<XmlTexture> textures)
     {
+        var builder = new ResourceBuilder();
+        WriteDictionary(builder, textures);
+        return builder.Build(Version);
+    }
+
+    // The dictionary block (the file's root when it is the first block added) and the block of each texture, by name
+    // hash (drawables point their shaders at them).
+    internal static (ResourceBuilder.Block Dictionary, Dictionary<uint, ResourceBuilder.Block> Textures) WriteDictionary(
+        ResourceBuilder builder, List<XmlTexture> textures)
+    {
         // The game looks textures up by name hash: sorted.
         textures = [.. textures.OrderBy(t => t.Data.NameHash)];
         int count = textures.Count;
+        var dictionary = builder.Add(DictionaryLength);
+        var hashes = builder.Add(4 * count);
+        var list = builder.Add(8 * count);
 
-        var (positions, pageSize, pageCount) = LayoutPixels(textures.Select(t => t.Data.Data.Length).ToList());
-        int graphicsBase = Math.Min(pageSize, MaxBasePageSize);
-        int graphicsUnits = pageCount * (pageSize / graphicsBase);
-        int graphicsChunks = (graphicsUnits >> 4) + BitOperations.PopCount((uint)graphicsUnits & 0xF);
+        dictionary.U32(0, DictionaryVft);
+        dictionary.U32(0x04, 1);
+        dictionary.U32(0x18, 1);
+        builder.Pointer(dictionary, 0x20, hashes);
+        dictionary.U16(0x28, count);
+        dictionary.U16(0x2A, count);
+        builder.Pointer(dictionary, 0x30, list);
+        dictionary.U16(0x38, count);
+        dictionary.U16(0x3A, count);
 
-        // System segment.
-        int length = 0;
-        int Alloc(int size)
-        {
-            int at = (length + 15) & ~15;
-            length = at + size;
-            return at;
-        }
-        int dictionary = Alloc(DictionaryLength);
-        int pagesInfo = Alloc(16 + 8 * (1 + graphicsChunks));
-        int hashes = Alloc(4 * count);
-        int list = Alloc(8 * count);
-        var textureAt = textures.Select(_ => Alloc(TextureLength)).ToArray();
-        var nameAt = textures.Select(t => Alloc(Encoding.ASCII.GetByteCount(t.Data.Name) + 1)).ToArray();
-
-        int systemSize = MinPageSize;
-        while (systemSize < length)
-            systemSize *= 2;
-        if (systemSize > MaxBasePageSize)
-            throw new InvalidDataException("Trop de textures dans un seul dictionnaire.");
-        var content = new byte[systemSize + pageCount * pageSize];
-        void U16(int o, int v) => BinaryPrimitives.WriteUInt16LittleEndian(content.AsSpan(o), (ushort)v);
-        void U32(int o, uint v) => BinaryPrimitives.WriteUInt32LittleEndian(content.AsSpan(o), v);
-        void U64(int o, ulong v) => BinaryPrimitives.WriteUInt64LittleEndian(content.AsSpan(o), v);
-
-        U32(dictionary, DictionaryVft);
-        U32(dictionary + 0x04, 1);
-        U64(dictionary + 0x08, SystemBase + (ulong)pagesInfo);
-        U32(dictionary + 0x18, 1);
-        U64(dictionary + 0x20, SystemBase + (ulong)hashes);
-        U16(dictionary + 0x28, count);
-        U16(dictionary + 0x2A, count);
-        U64(dictionary + 0x30, SystemBase + (ulong)list);
-        U16(dictionary + 0x38, count);
-        U16(dictionary + 0x3A, count);
-
-        content[pagesInfo + 8] = 1;
-        content[pagesInfo + 9] = (byte)graphicsChunks;
-
+        var blocks = new Dictionary<uint, ResourceBuilder.Block>();
         for (int i = 0; i < count; i++)
         {
             var x = textures[i];
             var tex = x.Data;
-            int t = textureAt[i];
-            U32(hashes + 4 * i, tex.NameHash);
-            U64(list + 8 * i, SystemBase + (ulong)t);
+            var t = builder.Add(TextureLength);
+            hashes.U32(4 * i, tex.NameHash);
+            builder.Pointer(list, 8 * i, t);
+            blocks[tex.NameHash] = t;
 
-            U32(t, TextureVft);
-            U32(t + 0x04, 1);
-            U64(t + 0x28, SystemBase + (ulong)nameAt[i]);
-            U16(t + 0x30, 1);
-            U16(t + 0x32, x.Unknown32);
-            U32(t + 0x40, x.UsageData);
-            U32(t + 0x48, x.ExtraFlags);
-            U16(t + 0x50, tex.Width);
-            U16(t + 0x52, tex.Height);
-            U16(t + 0x54, 1);
-            U16(t + 0x56, Stride(tex.Format, tex.Width));
-            U32(t + 0x58, GameFormat(tex.Format));
-            content[t + 0x5D] = (byte)tex.MipLevels;
-            U64(t + 0x70, GraphicsBase + (ulong)positions[i]);
-
-            Encoding.ASCII.GetBytes(tex.Name, content.AsSpan(nameAt[i]));
-            tex.Data.CopyTo(content.AsSpan(systemSize + positions[i]));
+            t.U32(0, TextureVft);
+            t.U32(0x04, 1);
+            builder.Pointer(t, 0x28, builder.String(tex.Name));
+            t.U16(0x30, 1);
+            t.U16(0x32, x.Unknown32);
+            t.U32(0x40, x.UsageData);
+            t.U32(0x48, x.ExtraFlags);
+            t.U16(0x50, tex.Width);
+            t.U16(0x52, tex.Height);
+            t.U16(0x54, 1);
+            t.U16(0x56, Stride(tex.Format, tex.Width));
+            t.U32(0x58, GameFormat(tex.Format));
+            t.U8(0x5D, tex.MipLevels);
+            builder.Pointer(t, 0x70, builder.Add(tex.Data, graphics: true));
         }
-
-        uint systemFlags = ((uint)(Version >> 4) & 0xF) << 28 | MetaDocument.PageFlags(1, systemSize);
-        uint graphicsFlags = ((uint)Version & 0xF) << 28 | MetaDocument.PageFlags(graphicsUnits, graphicsBase);
-        return ResourceFile.Write(new ResourceHeader(Version, systemFlags, graphicsFlags), content);
-    }
-
-    // Pixels of each texture, biggest first, in the first page with room left (pages of one size, a power of two).
-    private static (int[] Positions, int PageSize, int PageCount) LayoutPixels(List<int> sizes)
-    {
-        int pageSize = MinPageSize;
-        while (pageSize < sizes.Max())
-            pageSize *= 2;
-        var used = new List<int>();
-        var positions = new int[sizes.Count];
-        foreach (int i in Enumerable.Range(0, sizes.Count).OrderByDescending(i => sizes[i]))
-        {
-            int page = used.FindIndex(u => pageSize - u >= sizes[i]);
-            if (page < 0)
-            {
-                page = used.Count;
-                used.Add(0);
-            }
-            positions[i] = page * pageSize + used[page];
-            used[page] = Math.Min(pageSize, (used[page] + sizes[i] + 15) & ~15);
-        }
-        return (positions, pageSize, used.Count);
+        return (dictionary, blocks);
     }
 
     // Bytes per row of pixels (for compressed formats: a row of 4 x 4 blocks divided by 4), as in the game's files.

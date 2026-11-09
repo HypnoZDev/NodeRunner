@@ -28,6 +28,7 @@ internal sealed class YbnBuilder
 
     private byte[] _data = new byte[0x4000];
     private int _length;
+    private ulong _address = SystemBase;
 
     public static byte[] Build(XmlBound root)
     {
@@ -44,6 +45,15 @@ internal sealed class YbnBuilder
         return ResourceFile.Write(new ResourceHeader(Version, systemFlags, graphicsFlags), content);
     }
 
+    // Bounds embedded in another resource (a drawable's collision), written for the address it will have there: no
+    // page list. Its length does not depend on the address.
+    internal static byte[] BuildEmbedded(XmlBound root, ulong address)
+    {
+        var builder = new YbnBuilder { _address = address };
+        builder.Write(root, isRoot: false);
+        return builder._data.AsSpan(0, builder._length).ToArray();
+    }
+
     private int Alloc(int size)
     {
         int at = (_length + 15) & ~15;
@@ -54,7 +64,7 @@ internal sealed class YbnBuilder
         return at;
     }
 
-    private static ulong Pointer(int offset) => SystemBase + (ulong)offset;
+    private ulong Pointer(int offset) => _address + (ulong)offset;
 
     private Span<byte> At(int o, int n) => _data.AsSpan(o, n);
     private void U8(int o, byte v) => _data[o] = v;

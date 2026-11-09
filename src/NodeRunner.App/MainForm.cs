@@ -1275,6 +1275,7 @@ internal sealed unsafe partial class MainForm : Form
     {
         [".ybn"] = export => NodeRunner.Data.Native.Collisions.YbnXml.Convert(export.Text),
         [".ytd"] = NodeRunner.Data.Native.Textures.YtdXml.Convert,
+        [".ydr"] = NodeRunner.Data.Native.Models.YdrXml.Convert,
     };
 
     private void ImportMapping(string source)
