@@ -1417,7 +1417,10 @@ internal sealed unsafe partial class MainForm : Form
             return;
         }
         if (ReloadLibrary(_state.Settings.LibraryFolder))
+        {
+            _ui.ShowLibrary();
             _state.Notify(L($"Pack « {name} » ajouté à la bibliothèque, carte rechargée (Visionneuse > Bibliothèque)."));
+        }
     }
 
     private bool ReloadLibrary(string? folder)

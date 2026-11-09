@@ -61,6 +61,16 @@ internal sealed class MainUi
         ImGui.SetWindowFocus(ViewerPanel.Title);
     }
 
+    // Viewer opened on its Library tab (after a pack is added), at the next frame.
+    public void ShowLibrary()
+    {
+        _viewerPanel.ShowLibrary();
+        _showViewer = true;
+        _focusViewer = true;
+    }
+
+    private bool _focusViewer;
+
     private void OpenFileInViewer(string path)
     {
         _viewerPanel.OpenFile(path);
@@ -163,6 +173,11 @@ internal sealed class MainUi
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
         if (_showArchives) _archivePanel.Draw(ref _showArchives);
         if (_showProject) _projectPanel.Draw(ref _showProject);
+        if (_focusViewer)
+        {
+            _focusViewer = false;
+            ImGui.SetWindowFocus(L(ViewerPanel.Title));
+        }
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
         else _state.Viewer.RequestedSize = Vector2.Zero;
         if (_showAbout) DrawAboutWindow();

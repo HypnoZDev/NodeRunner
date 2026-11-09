@@ -291,6 +291,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 .ToList();
     }
 
+    public void ShowLibrary()
+    {
+        _filter = 2;
+        _search = "";
+    }
+
     private void DrawLibraryButtons()
     {
         if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Ajouter un pack...##library_add"), L("Copie un pack (dossier d'une ressource FiveM, dossier stream) dans la bibliothèque, puis recharge la carte.")))
