@@ -11,6 +11,9 @@ public sealed record ImportResult(MapProject Project, int Copied, IReadOnlyList<
 
     // XML exports (Sollumz, CodeWalker) converted to game files, among Copied.
     public int Converted { get; init; }
+
+    // Files of the project replaced by a file of the same name, among Copied (AddToProject).
+    public int Replaced { get; init; }
 }
 
 // Imports a mapping made elsewhere as a new project: a FiveM resource or a plain "stream" folder, a .zip of one, or an
@@ -36,8 +39,9 @@ public static class MappingImport
 
     public static bool IsArchive(string path) => ArchiveExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
-    // What can be dropped on the window or picked: a folder, a .oiv or a .zip.
-    public static bool CanImport(string path) => Directory.Exists(path) || File.Exists(path) && IsArchive(path);
+    // What can be dropped on the window or picked: a folder, a .oiv, a .zip, or a map file or its XML export.
+    public static bool CanImport(string path) =>
+        Directory.Exists(path) || File.Exists(path) && (IsArchive(path) || IsImported(Path.GetFileName(path)));
 
     // Streamed files anywhere under the folder (resources often nest them: stream/maps/..., several resources...).
     // One file per name: FiveM streams by name, the first one found wins.
@@ -97,39 +101,91 @@ public static class MappingImport
     // xmlConverters: by game extension (".ybn"), turns an XML export into the game file; XML exports of other types
     // are left out.
     public static ImportResult Import(string source, string projectsFolder, MapVersion mapVersion, string? lastDlcPack,
+        IReadOnlyDictionary<string, Func<XmlExport, byte[]>>? xmlConverters = null) =>
+        Import([source], projectsFolder, mapVersion, lastDlcPack, xmlConverters);
+
+    // sources: folders, archives and single files, imported together in a new project.
+    public static ImportResult Import(IReadOnlyList<string> sources, string projectsFolder, MapVersion mapVersion, string? lastDlcPack,
         IReadOnlyDictionary<string, Func<XmlExport, byte[]>>? xmlConverters = null)
     {
-        source = Path.GetFullPath(source.TrimEnd('\\', '/'));
-        using var plan = new Plan();
-        string name;
-        if (File.Exists(source))
-        {
-            if (!IsArchive(source))
-                throw new InvalidDataException(L("Choisis un dossier, un mod OpenIV (.oiv) ou une archive .zip."));
-            AddArchive(plan, source);
-            name = Path.GetFileNameWithoutExtension(source);
-        }
-        else
-        {
-            // A folder named "stream" is not a good project name: take its parent's.
-            name = Path.GetFileName(source);
-            if (string.Equals(name, FiveMResource.StreamFolderName, StringComparison.OrdinalIgnoreCase) && Path.GetDirectoryName(source) is { } parent)
-                name = Path.GetFileName(parent);
-            if (OivPackage.IsPackageFolder(source))
-                AddPackageFolder(plan, source);
-            else
-                AddFolder(plan, source);
-        }
-        if (plan.Files.Count == 0)
-            throw new InvalidDataException(L("Aucun fichier de carte (.ymap, .ybn, .ytyp, .ydr..., ou leur export XML) ni mod OpenIV (.oiv) à importer ici."));
-
+        using var plan = Collect(sources, out string name);
         name = plan.Name ?? name;
         var project = MapProject.Create(FreeFolder(projectsFolder, name), name, mapVersion, lastDlcPack);
+        return Copy(plan, project, xmlConverters);
+    }
+
+    // Adds files to an existing project (a new export from Blender...): a file of the same name in its stream folder is
+    // replaced.
+    public static ImportResult AddToProject(IReadOnlyList<string> sources, MapProject project,
+        IReadOnlyDictionary<string, Func<XmlExport, byte[]>>? xmlConverters = null)
+    {
+        using var plan = Collect(sources, out _);
+        Directory.CreateDirectory(project.StreamFolder);
+        return Copy(plan, project, xmlConverters);
+    }
+
+    // The files to import; name: that of the first folder or archive, or of the folder of the first single file.
+    private static Plan Collect(IReadOnlyList<string> sources, out string name)
+    {
+        var plan = new Plan();
+        name = "";
+        try
+        {
+            foreach (string path in sources)
+            {
+                string source = Path.GetFullPath(path.TrimEnd('\\', '/'));
+                string sourceName;
+                if (File.Exists(source) && IsArchive(source))
+                {
+                    AddArchive(plan, source);
+                    sourceName = Path.GetFileNameWithoutExtension(source);
+                }
+                else if (File.Exists(source))
+                {
+                    string fileName = Path.GetFileName(source);
+                    if (!IsImported(fileName))
+                        throw new InvalidDataException(L($"{fileName} n'est ni un fichier de carte ni un export XML."));
+                    string directory = Path.GetDirectoryName(source)!;
+                    plan.Add(fileName, fileName, () => File.OpenRead(source), Sibling(directory));
+                    sourceName = Path.GetFileName(directory);
+                }
+                else if (Directory.Exists(source))
+                {
+                    // A folder named "stream" is not a good project name: take its parent's.
+                    sourceName = Path.GetFileName(source);
+                    if (string.Equals(sourceName, FiveMResource.StreamFolderName, StringComparison.OrdinalIgnoreCase) && Path.GetDirectoryName(source) is { } parent)
+                        sourceName = Path.GetFileName(parent);
+                    if (OivPackage.IsPackageFolder(source))
+                        AddPackageFolder(plan, source);
+                    else
+                        AddFolder(plan, source);
+                }
+                else
+                    throw new InvalidDataException(L("Choisis un dossier, un mod OpenIV (.oiv) ou une archive .zip."));
+                if (name.Length == 0)
+                    name = sourceName;
+            }
+            if (plan.Files.Count == 0)
+                throw new InvalidDataException(L("Aucun fichier de carte (.ymap, .ybn, .ytyp, .ydr..., ou leur export XML) ni mod OpenIV (.oiv) à importer ici."));
+            return plan;
+        }
+        catch
+        {
+            plan.Dispose();
+            throw;
+        }
+    }
+
+    // Each file is written next to its target first: a failure never leaves half a file in the project.
+    private static ImportResult Copy(Plan plan, MapProject project, IReadOnlyDictionary<string, Func<XmlExport, byte[]>>? xmlConverters)
+    {
         var locked = new List<string>();
-        int copied = 0, converted = 0;
+        int copied = 0, converted = 0, replaced = 0;
         foreach (var (file, sourceName, open, readSibling) in plan.Files)
         {
             string target = Path.Combine(project.StreamFolder, file);
+            string temporary = target + ".tmp";
+            bool existed = File.Exists(target);
             if (IsXmlExport(sourceName))
             {
                 if (xmlConverters?.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant()) is not { } convert)
@@ -142,41 +198,46 @@ public static class MappingImport
                     string xml;
                     using (var reader = new StreamReader(open()))
                         xml = reader.ReadToEnd();
-                    File.WriteAllBytes(target, convert(new XmlExport(sourceName, xml, readSibling)));
+                    File.WriteAllBytes(temporary, convert(new XmlExport(sourceName, xml, readSibling)));
                     converted++;
-                    copied++;
                 }
                 catch (InvalidDataException ex)
                 {
                     plan.Ignored.Add(L($"{sourceName} (conversion impossible : {ex.Message})"));
+                    continue;
                 }
-                continue;
             }
-            using (var input = open())
-            using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write))
+            else
+            {
+                using var input = open();
+                using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write);
                 input.CopyTo(output);
+            }
+            File.Move(temporary, target, overwrite: true);
             copied++;
+            if (existed)
+                replaced++;
             if (ProtectedFile.IsProtected(target))
                 locked.Add(file);
         }
-        return new ImportResult(project, copied, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked, Converted = converted };
+        return new ImportResult(project, copied, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked, Converted = converted, Replaced = replaced };
     }
+
+    // Reads a file by path relative to a folder (the images of a .ytd.xml...).
+    private static Func<string, byte[]?> Sibling(string directory) => relative =>
+    {
+        if (!IsSafeRelative(relative))
+            return null;
+        string sibling = Path.Combine(directory, relative);
+        return File.Exists(sibling) ? File.ReadAllBytes(sibling) : null;
+    };
 
     // Loose files first; a folder without any (a downloaded mod: readme + .oiv) takes the packages inside it.
     private static void AddFolder(Plan plan, string folder)
     {
         var (files, duplicates) = FindFiles(folder, withXmlExports: true);
         foreach (var file in files)
-        {
-            string directory = Path.GetDirectoryName(file)!;
-            plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file), relative =>
-            {
-                if (!IsSafeRelative(relative))
-                    return null;
-                string sibling = Path.Combine(directory, relative);
-                return File.Exists(sibling) ? File.ReadAllBytes(sibling) : null;
-            });
-        }
+            plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file), Sibling(Path.GetDirectoryName(file)!));
         plan.Duplicates.AddRange(duplicates);
         if (files.Count > 0)
             return;

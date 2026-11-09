@@ -30,6 +30,9 @@ public sealed class MapProject
 
     public string? ExportFolder { get; set; }
 
+    // The folder files were last added from (an export folder of Sollumz...), offered again next time.
+    public string? LastAddFolder { get; set; }
+
     // Name (without extension) of the project's own map, holding the objects added by the user; chosen once, from the
     // resource name, so that it never changes afterwards (null until the first object is added).
     public string? AddedMapName { get; set; }

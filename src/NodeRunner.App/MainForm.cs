@@ -72,16 +72,17 @@ internal sealed unsafe partial class MainForm : Form
         _surface = new RenderSurface { Dock = DockStyle.Fill, IsWindowFrame = IsFramePoint };
         Controls.Add(_surface);
 
-        // A mapping folder, an OpenIV package (.oiv) or a .zip dropped on the window is imported as a new project.
+        // Mapping folders, OpenIV packages (.oiv), .zip archives, map files or their XML exports dropped on the window are
+        // added to the open project or imported as a new one.
         _surface.AllowDrop = true;
-        _surface.DragEnter += (_, e) => e.Effect = DroppedPath(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
-        _surface.DragDrop += (_, e) => _droppedPath = DroppedPath(e); // Handled on the next frame, not inside Explorer's drag loop.
+        _surface.DragEnter += (_, e) => e.Effect = DroppedPaths(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        _surface.DragDrop += (_, e) => _droppedPaths = DroppedPaths(e); // Handled on the next frame, not inside Explorer's drag loop.
     }
 
-    private string? _droppedPath;
+    private string[]? _droppedPaths;
 
-    private static string? DroppedPath(DragEventArgs e) =>
-        e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths && NodeRunner.Editor.MappingImport.CanImport(paths[0]) ? paths[0] : null;
+    private static string[]? DroppedPaths(DragEventArgs e) =>
+        e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } paths && paths.All(NodeRunner.Editor.MappingImport.CanImport) ? paths : null;
 
     // No GDI surface: the window shows only DirectX's image and, through its transparent pixels, the backdrop.
     protected override CreateParams CreateParams
@@ -1175,12 +1176,23 @@ internal sealed unsafe partial class MainForm : Form
             BrowseForPackage();
         }
 
-        if (_droppedPath is { } dropped)
+        if (_ui.AddFilesRequested)
         {
-            _droppedPath = null;
+            _ui.AddFilesRequested = false;
+            BrowseForProjectFiles();
+        }
+
+        if (_ui.AddFolderRequested)
+        {
+            _ui.AddFolderRequested = false;
+            BrowseForProjectFolder();
+        }
+
+        if (_droppedPaths is { } dropped)
+        {
+            _droppedPaths = null;
             Activate();
-            if (ConfirmLeaveChanges())
-                ImportMapping(dropped);
+            ImportDropped(dropped);
         }
 
         if (_ui.CloseProjectRequested)
@@ -1270,6 +1282,108 @@ internal sealed unsafe partial class MainForm : Form
         ImportMapping(dialog.FileName);
     }
 
+    // Dropped with a project open: added to it, or imported as a new project.
+    private void ImportDropped(string[] paths)
+    {
+        if (_state.Project is { } project)
+        {
+            string what = paths.Length == 1 ? $"« {Path.GetFileName(paths[0].TrimEnd('\\', '/'))} »" : L($"{paths.Length} éléments");
+            var answer = MessageBox.Show(this,
+                L($"Ajouter {what} au projet « {project.Name} » ?\n\nOui : ajouter au projet ouvert (les fichiers du même nom sont remplacés).\nNon : créer un nouveau projet."),
+                L("Importer"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (answer == DialogResult.Yes)
+            {
+                AddToProject(paths);
+                return;
+            }
+            if (answer != DialogResult.No)
+                return;
+        }
+        if (ConfirmLeaveChanges())
+            ImportMapping(paths);
+    }
+
+    private const string ProjectFilesFilter = "*.ymap;*.ytyp;*.ybn;*.ydr;*.ydd;*.yft;*.ytd;*.ynd;*.ynv;*.ymf;*.ycd;*.ymt;*.xml;*.zip;*.oiv";
+
+    private void BrowseForProjectFiles()
+    {
+        if (_state.Project is null)
+            return;
+        using var dialog = new OpenFileDialog
+        {
+            Title = L("Ajouter des fichiers au projet"),
+            Filter = L($"Fichiers de carte, exports XML (Sollumz, CodeWalker), archives|{ProjectFilesFilter}|Tous les fichiers (*.*)|*.*"),
+            Multiselect = true,
+            InitialDirectory = _state.Project.LastAddFolder is { } last && Directory.Exists(last) ? last : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        AddToProject(dialog.FileNames);
+    }
+
+    private void BrowseForProjectFolder()
+    {
+        if (_state.Project is null)
+            return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = L("Choisis le dossier à ajouter au projet (export de Sollumz, dossier stream...) : ses sous-dossiers sont compris."),
+            UseDescriptionForTitle = true,
+            InitialDirectory = _state.Project.LastAddFolder is { } last && Directory.Exists(last) ? last : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        AddToProject([dialog.SelectedPath]);
+    }
+
+    // Converts and copies the files into the open project's stream folder, then loads its map again.
+    private void AddToProject(IReadOnlyList<string> sources)
+    {
+        if (_state.Project is not { } project || !ConfirmLeaveChanges())
+            return;
+        NodeRunner.Editor.ImportResult result;
+        try
+        {
+            result = NodeRunner.Editor.MappingImport.AddToProject(sources, project, XmlConverters);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            MessageBox.Show(this, L($"Les fichiers n'ont pas pu être ajoutés :\n{ex.Message}"), L("Ajouter au projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        string first = Path.GetFullPath(sources[0].TrimEnd('\\', '/'));
+        project.LastAddFolder = Directory.Exists(first) ? first : Path.GetDirectoryName(first);
+        try
+        {
+            project.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Only the folder offered next time is lost.
+        }
+        if (result.Copied > 0 && _state.OpenProject(project.Folder) is { } error)
+        {
+            MessageBox.Show(this, L($"Le projet n'a pas pu être rechargé :\n{error}"), L("Ajouter au projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        if (result.Protected.Count > 0)
+        {
+            _ui.ShowProtectedMapping(result);
+            return;
+        }
+        string replaced = result.Replaced == 0 ? "" : L($" (dont {result.Replaced} remplacé(s))");
+        string converted = result.Converted == 0 ? "" : L($"\n\nDont {result.Converted} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.");
+        string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
+        string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) non repris :\n") + string.Join("\n", result.Ignored.Take(10));
+        if (result.Copied > 0 && result.Ignored.Count == 0 && result.Skipped.Count == 0)
+        {
+            _state.Notify(L($"{result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée."));
+            return;
+        }
+        MessageBox.Show(this, L($"{result.Copied} fichier(s) ajouté(s) au projet « {project.Name} »{replaced}.{converted}{skipped}{ignored}"),
+            L("Ajouter au projet"), MessageBoxButtons.OK, result.Copied > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
     // XML exports the import turns into game files, by game extension.
     private Dictionary<string, Func<NodeRunner.Data.FileSystem.XmlExport, byte[]>> XmlConverters => new()
     {
@@ -1295,12 +1409,14 @@ internal sealed unsafe partial class MainForm : Form
         return schema;
     }
 
-    private void ImportMapping(string source)
+    private void ImportMapping(string source) => ImportMapping([source]);
+
+    private void ImportMapping(IReadOnlyList<string> sources)
     {
         NodeRunner.Editor.ImportResult result;
         try
         {
-            result = NodeRunner.Editor.MappingImport.Import(source, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack,
+            result = NodeRunner.Editor.MappingImport.Import(sources, _state.ProjectsFolder, _state.Settings.MapVersion, _state.Settings.LastDlcPack,
                 XmlConverters);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)

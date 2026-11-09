@@ -106,6 +106,10 @@ internal sealed class MainUi
 
     public bool ImportPackageRequested { get; set; }
 
+    public bool AddFilesRequested { get; set; }
+
+    public bool AddFolderRequested { get; set; }
+
     public void ShowProjectPanel()
     {
         _showProject = true;
@@ -421,6 +425,15 @@ internal sealed class MainUi
             ImportPackageRequested = true;
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(L("Les fichiers de carte du mod (modèles, textures, collisions...) vont dans le dossier stream d'un nouveau projet,\nsous leur nom du jeu : ils remplacent les fichiers du jeu, prêts pour l'export en ressource FiveM."));
+        bool hasProject = _state.Project is not null;
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter des fichiers au projet..."), null, false, hasProject))
+            AddFilesRequested = true;
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Ajoute des fichiers au projet ouvert : .ydr, .ytyp, .ybn... ou leurs exports XML (Sollumz, CodeWalker), convertis au passage.\nUn fichier du même nom déjà dans le projet est remplacé (nouvel export depuis Blender), puis la carte est rechargée.\nAstuce : on peut aussi glisser les fichiers sur la fenêtre."));
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter un dossier au projet..."), null, false, hasProject))
+            AddFolderRequested = true;
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Ajoute tout un dossier au projet ouvert (dossier d'export de Sollumz, dossier stream...), sous-dossiers compris."));
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))
         {

@@ -41,6 +41,34 @@ public class MappingImportTests : IDisposable
     }
 
     [Fact]
+    public void FilesAddedToAProjectReplaceThoseOfTheSameName()
+    {
+        Touch(@"first\stream\a.ymap");
+        var project = MappingImport.Import(Path.Combine(_root, "first"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null).Project;
+        Touch(@"blender\a.ymap");
+        Touch(@"blender\sub\b.ybn");
+        Touch(@"blender\c.ytyp.xml");
+        Touch(@"single\d.ydr");
+
+        var result = MappingImport.AddToProject([Path.Combine(_root, "blender"), Path.Combine(_root, @"single\d.ydr")], project,
+            new Dictionary<string, Func<XmlExport, byte[]>> { [".ytyp"] = export => [.. "ytyp:"u8, .. System.Text.Encoding.ASCII.GetBytes(export.FileName)] });
+
+        Assert.Equal(4, result.Copied);
+        Assert.Equal(1, result.Replaced);
+        Assert.Equal(1, result.Converted);
+        Assert.Equal(@"blender\a.ymap", File.ReadAllText(Path.Combine(project.StreamFolder, "a.ymap")));
+        Assert.Equal("ytyp:c.ytyp.xml", File.ReadAllText(Path.Combine(project.StreamFolder, "c.ytyp")));
+        Assert.True(File.Exists(Path.Combine(project.StreamFolder, "b.ybn")));
+        Assert.True(File.Exists(Path.Combine(project.StreamFolder, "d.ydr")));
+        Assert.Empty(Directory.EnumerateFiles(project.StreamFolder, "*.tmp"));
+
+        Assert.True(MappingImport.CanImport(Path.Combine(_root, @"single\d.ydr")));
+        Touch(@"single\notes.txt");
+        Assert.False(MappingImport.CanImport(Path.Combine(_root, @"single\notes.txt")));
+        Assert.Throws<InvalidDataException>(() => MappingImport.AddToProject([Path.Combine(_root, @"single\notes.txt")], project));
+    }
+
+    [Fact]
     public void FilesLockedByAssetEscrowAreCopiedAndListed()
     {
         Touch(@"shop\stream\unlocked\shop.ymap");
