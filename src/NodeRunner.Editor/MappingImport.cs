@@ -72,16 +72,17 @@ public static class MappingImport
     {
         public string? Name;
         public string? Author;
-        public readonly List<(string Name, string Source, Func<Stream> Open)> Files = [];
+        public readonly List<(string Name, string Source, Func<Stream> Open, Func<string, byte[]?> ReadSibling)> Files = [];
         public readonly List<string> Duplicates = [];
         public readonly List<string> Ignored = [];
         public readonly List<IDisposable> Archives = [];
         private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
 
-        public void Add(string name, string shown, Func<Stream> open)
+        // readSibling: reads a file by path relative to this one's folder (the images of a .ytd.xml...).
+        public void Add(string name, string shown, Func<Stream> open, Func<string, byte[]?>? readSibling = null)
         {
             if (_names.Add(TargetName(name)))
-                Files.Add((TargetName(name), name, open));
+                Files.Add((TargetName(name), name, open, readSibling ?? (_ => null)));
             else
                 Duplicates.Add(shown);
         }
@@ -96,7 +97,7 @@ public static class MappingImport
     // xmlConverters: by game extension (".ybn"), turns an XML export into the game file; XML exports of other types
     // are left out.
     public static ImportResult Import(string source, string projectsFolder, MapVersion mapVersion, string? lastDlcPack,
-        IReadOnlyDictionary<string, Func<string, byte[]>>? xmlConverters = null)
+        IReadOnlyDictionary<string, Func<XmlExport, byte[]>>? xmlConverters = null)
     {
         source = Path.GetFullPath(source.TrimEnd('\\', '/'));
         using var plan = new Plan();
@@ -126,7 +127,7 @@ public static class MappingImport
         var project = MapProject.Create(FreeFolder(projectsFolder, name), name, mapVersion, lastDlcPack);
         var locked = new List<string>();
         int copied = 0, converted = 0;
-        foreach (var (file, sourceName, open) in plan.Files)
+        foreach (var (file, sourceName, open, readSibling) in plan.Files)
         {
             string target = Path.Combine(project.StreamFolder, file);
             if (IsXmlExport(sourceName))
@@ -141,7 +142,7 @@ public static class MappingImport
                     string xml;
                     using (var reader = new StreamReader(open()))
                         xml = reader.ReadToEnd();
-                    File.WriteAllBytes(target, convert(xml));
+                    File.WriteAllBytes(target, convert(new XmlExport(sourceName, xml, readSibling)));
                     converted++;
                     copied++;
                 }
@@ -166,7 +167,16 @@ public static class MappingImport
     {
         var (files, duplicates) = FindFiles(folder, withXmlExports: true);
         foreach (var file in files)
-            plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file));
+        {
+            string directory = Path.GetDirectoryName(file)!;
+            plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file), relative =>
+            {
+                if (!IsSafeRelative(relative))
+                    return null;
+                string sibling = Path.Combine(directory, relative);
+                return File.Exists(sibling) ? File.ReadAllBytes(sibling) : null;
+            });
+        }
         plan.Duplicates.AddRange(duplicates);
         if (files.Count > 0)
             return;
@@ -220,8 +230,22 @@ public static class MappingImport
             return;
         }
         foreach (var entry in zip.Entries.Where(e => e.Name.Length > 0 && IsImported(e.Name)).OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
-            plan.Add(entry.Name, $"{archive} : {entry.FullName}", entry.Open);
+        {
+            string directory = OivPackage.NormalizePath(entry.FullName)[..^entry.Name.Length];
+            plan.Add(entry.Name, $"{archive} : {entry.FullName}", entry.Open, relative =>
+            {
+                if (!IsSafeRelative(relative) || !entries.TryGetValue(OivPackage.NormalizePath(directory + relative), out var sibling))
+                    return null;
+                using var input = sibling.Open();
+                using var bytes = new MemoryStream();
+                input.CopyTo(bytes);
+                return bytes.ToArray();
+            });
+        }
     }
+
+    private static bool IsSafeRelative(string path) =>
+        path.Length > 0 && !Path.IsPathRooted(path) && !path.Split('/', '\\').Contains("..");
 
     private static OivPackage ReadPackage(Plan plan, string xml)
     {

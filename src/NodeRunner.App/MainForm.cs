@@ -1271,9 +1271,10 @@ internal sealed unsafe partial class MainForm : Form
     }
 
     // XML exports the import turns into game files, by game extension.
-    private static readonly Dictionary<string, Func<string, byte[]>> XmlConverters = new()
+    private static readonly Dictionary<string, Func<NodeRunner.Data.FileSystem.XmlExport, byte[]>> XmlConverters = new()
     {
-        [".ybn"] = NodeRunner.Data.Native.Collisions.YbnXml.Convert,
+        [".ybn"] = export => NodeRunner.Data.Native.Collisions.YbnXml.Convert(export.Text),
+        [".ytd"] = NodeRunner.Data.Native.Textures.YtdXml.Convert,
     };
 
     private void ImportMapping(string source)

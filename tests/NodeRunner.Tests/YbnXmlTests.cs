@@ -111,7 +111,7 @@ public class YbnXmlTests : IDisposable
         File.WriteAllText(Path.Combine(stream, "mymap.ymap"), "ymap");
 
         var result = MappingImport.Import(Path.Combine(_root, "mymap"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null,
-            new Dictionary<string, Func<string, byte[]>> { [".ybn"] = YbnXml.Convert });
+            new Dictionary<string, Func<XmlExport, byte[]>> { [".ybn"] = e => YbnXml.Convert(e.Text) });
 
         Assert.Equal(2, result.Copied);
         Assert.Equal(1, result.Converted);
