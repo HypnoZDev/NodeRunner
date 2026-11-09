@@ -101,11 +101,11 @@ internal static class Widgets
     }
 
     // Search field filling the width: magnifier on the left, a cross on the right to clear it.
-    public static bool SearchField(string id, string hint, ref string text, uint maxLength = 128, ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
+    public static bool SearchField(string id, string hint, ref string text, uint maxLength = 128, ImGuiInputTextFlags flags = ImGuiInputTextFlags.None, float width = -float.Epsilon)
     {
         var padding = ImGui.GetStyle().FramePadding;
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(30f, padding.Y + 1f));
-        ImGui.SetNextItemWidth(-float.Epsilon);
+        ImGui.SetNextItemWidth(width);
         ImGui.SetNextItemAllowOverlap();
         bool changed = ImGui.InputTextWithHint(id, hint, ref text, maxLength, flags);
         ImGui.PopStyleVar();

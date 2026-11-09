@@ -86,8 +86,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
 
     private void DrawToolbar()
     {
-        ImGui.SetNextItemWidth(Math.Min(240f, ImGui.GetContentRegionAvail().X * 0.3f));
-        Widgets.SearchField("##library_search", L("Prop ou pack"), ref _search);
+        Widgets.SearchField("##library_search", L("Prop ou pack"), ref _search, width: Math.Min(240f, ImGui.GetContentRegionAvail().X * 0.3f));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(Math.Min(220f, ImGui.GetContentRegionAvail().X * 0.3f));
         string current = _pack switch
@@ -123,10 +122,12 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         if (Widgets.Button(L($"{Icons.Box}  Visionneuse##library_view"), L("Ouvre le prop dans la visionneuse (pièces, textures, capture)."), enabled: _selected is not null))
             openInViewer(_selected!.ArchetypeHash);
 
-        // Pack actions and picture size, on the right.
+        // Pack actions and picture size, on the right (on a second line when the panel is narrow).
+        float last = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
         float right = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
         float actions = 4 * 30f + 130f;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 8f, right - actions));
+        if (last + 8f + actions <= right)
+            ImGui.SameLine(right - actions);
         ImGui.SetNextItemWidth(110f);
         ImGui.SliderFloat("##library_size", ref _tile, MinTile, MaxTile, "");
         if (ImGui.IsItemHovered())

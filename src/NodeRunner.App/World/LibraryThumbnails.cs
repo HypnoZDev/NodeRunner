@@ -109,14 +109,30 @@ internal sealed class LibraryThumbnails(string cacheFolder) : IDisposable
         Evict(imgui);
     }
 
+    // Drawn from the front and from behind: a flat sign seen from its back is a dark shape, the brighter side wins.
     private byte[] Draw(ModelRenderer renderer, GraphicsDevice graphics, GpuModel model)
+    {
+        var front = Draw(renderer, graphics, model, Yaw);
+        var back = Draw(renderer, graphics, model, Yaw + MathF.PI);
+        return Brightness(back) > Brightness(front) * 1.1 ? back : front;
+    }
+
+    private static double Brightness(byte[] bgra)
+    {
+        double sum = 0;
+        for (int i = 0; i + 3 < bgra.Length; i += 4)
+            sum += (bgra[i] + bgra[i + 1] + bgra[i + 2]) * (bgra[i + 3] / 255.0);
+        return sum;
+    }
+
+    private byte[] Draw(ModelRenderer renderer, GraphicsDevice graphics, GpuModel model, float yaw)
     {
         _target ??= new RenderTarget(graphics.Device, graphics.Context);
         _target.Begin(Size, Size, Vector4.Zero);
         var center = (_model.BoundsMin + _model.BoundsMax) * 0.5f;
         float radius = Math.Max(0.05f, (_model.BoundsMax - _model.BoundsMin).Length() * 0.5f);
         float distance = radius / MathF.Sin(_camera.FieldOfView * 0.5f) * 0.95f;
-        _camera.Yaw = Yaw;
+        _camera.Yaw = yaw;
         _camera.Pitch = Pitch;
         _camera.NearPlane = Math.Max(0.01f, distance * 0.02f);
         _camera.Position = -_camera.Forward * distance;
@@ -205,7 +221,7 @@ internal sealed class LibraryThumbnails(string cacheFolder) : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
-        return $"{item.Location.Path}|{item.Location.ModelHash}|{disk}|{stamp}";
+        return $"2|{item.Location.Path}|{item.Location.ModelHash}|{disk}|{stamp}";
     }
 
     private static string FileName(ViewerItem item, string key)
