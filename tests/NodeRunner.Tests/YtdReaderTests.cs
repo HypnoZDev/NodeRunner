@@ -42,6 +42,32 @@ public class YtdReaderTests
         Assert.Throws<InvalidDataException>(() => YtdReader.Read(data, header));
     }
 
+    [Fact]
+    public void Read_UnderstandsTheEnhancedLayout()
+    {
+        var data = new byte[SystemSize + 0x100];
+        var s = data.AsSpan();
+        BinaryPrimitives.WriteUInt64LittleEndian(s[0x30..], 0x50000040);
+        BinaryPrimitives.WriteUInt16LittleEndian(s[0x38..], 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(s[0x40..], 0x50000100);
+        Encoding.ASCII.GetBytes("Road_Dirt\0").CopyTo(s[0x400..]);
+        BinaryPrimitives.WriteUInt16LittleEndian(s[0x118..], 8);
+        BinaryPrimitives.WriteUInt16LittleEndian(s[0x11A..], 8);
+        s[0x11F] = 0x48; // BC1 sRGB
+        s[0x122] = 4;
+        BinaryPrimitives.WriteUInt64LittleEndian(s[0x128..], 0x50000400);
+        BinaryPrimitives.WriteUInt64LittleEndian(s[0x138..], 0x60000000);
+        for (int i = 0; i < 0x100; i++)
+            data[SystemSize + i] = (byte)i;
+
+        var road = YtdReader.Read(data, new ResourceHeader(YtdReader.EnhancedVersion, MetaDocument.PageFlags(1, SystemSize), 0x50000000))
+            .Single().Value;
+
+        Assert.Equal(("road_dirt", 8, 8, 4, TextureFormat.Bc1), (road.Name, road.Width, road.Height, road.MipLevels, road.Format));
+        // Each level at its exact size: 4 blocks, then one block for 4x4, 2x2 and 1x1.
+        Assert.Equal(Enumerable.Range(0, 32 + 8 * 3).Select(i => (byte)i), road.Data);
+    }
+
     // Dictionary at 0, its list of 3 texture pointers at 0x40, textures at 0x100, 0x200 and 0x300 (the last one in an
     // unknown format, skipped), names from 0x400; pixels of the first at graphics 0, of the second at graphics 0x100.
     private static (byte[] Data, ResourceHeader Header) Build()

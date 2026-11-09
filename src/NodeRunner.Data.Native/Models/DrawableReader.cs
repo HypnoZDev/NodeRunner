@@ -141,7 +141,7 @@ public sealed class DrawableReader : IModelReader
             BoundsMin = Vec3(res, d + BoundsMinOffset),
             BoundsMax = Vec3(res, d + BoundsMaxOffset),
             Meshes = meshes,
-            EmbeddedTextures = dictionary >= 0 ? YtdReader.ReadDictionary(res, dictionary) : new Dictionary<uint, TextureData>(),
+            EmbeddedTextures = dictionary >= 0 ? YtdReader.ReadDictionary(res, dictionary, false) : new Dictionary<uint, TextureData>(),
         };
     }
 

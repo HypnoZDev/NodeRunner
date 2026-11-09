@@ -27,8 +27,11 @@ public sealed class YtdReader : ITextureReader
     public static Dictionary<uint, TextureData> Read(ReadOnlySpan<byte> data, ResourceHeader header)
     {
         var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
-        return ReadDictionary(res, 0);
+        return ReadDictionary(res, 0, header.Version == EnhancedVersion);
     }
+
+    // .ytd version of GTA V Enhanced (13 in the original release).
+    public const int EnhancedVersion = 5;
 
     // Texture dictionary (pgDictionary): 0x30 pointer to the list of texture pointers, 0x38 their count.
     private const int TexturesPointer = 0x30;
@@ -44,7 +47,15 @@ public sealed class YtdReader : ITextureReader
     private const int DataPointer = 0x70;
     private const int TextureLength = 0x90;
 
-    internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset)
+    // Enhanced texture (rage::sga::Texture), 0x80 bytes.
+    private const int EnhancedWidth = 0x18;
+    private const int EnhancedHeight = 0x1A;
+    private const int EnhancedFormat = 0x1F;
+    private const int EnhancedLevels = 0x22;
+    private const int EnhancedData = 0x38;
+    private const int EnhancedLength = 0x80;
+
+    internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset, bool enhanced)
     {
         var textures = new Dictionary<uint, TextureData>();
         int count = res.UInt16(offset + TexturesCount);
@@ -54,7 +65,10 @@ public sealed class YtdReader : ITextureReader
             ulong pointer = res.UInt64(list + i * 8);
             if (pointer == 0)
                 continue;
-            if (ReadTexture(res, res.ResolveArray(pointer, 1, TextureLength, "texture")) is { } texture)
+            var texture = enhanced
+                ? ReadEnhancedTexture(res, res.ResolveArray(pointer, 1, EnhancedLength, "texture"))
+                : ReadTexture(res, res.ResolveArray(pointer, 1, TextureLength, "texture"));
+            if (texture is not null)
                 textures[texture.NameHash] = texture;
         }
         return textures;
@@ -72,7 +86,30 @@ public sealed class YtdReader : ITextureReader
         if (name is null || pixels == 0 || format == TextureFormat.Unknown || width == 0 || height == 0)
             return null;
 
-        int length = PixelsLength(stride, height, levels);
+        return Texture(res, name, width, height, levels, format, pixels, PixelsLength(stride, height, levels));
+    }
+
+    private static TextureData? ReadEnhancedTexture(ResourceData res, int t)
+    {
+        string? name = res.Text(res.UInt64(t + NamePointer), "nom de texture");
+        int width = res.UInt16(t + EnhancedWidth);
+        int height = res.UInt16(t + EnhancedHeight);
+        var format = EnhancedFormatOf(res.Byte(t + EnhancedFormat));
+        int levels = Math.Max(1, (int)res.Byte(t + EnhancedLevels));
+        ulong pixels = res.UInt64(t + EnhancedData);
+        if (name is null || pixels == 0 || format == TextureFormat.Unknown || width == 0 || height == 0)
+            return null;
+
+        // Mip levels one after the other, each at its exact size.
+        int length = 0;
+        for (int i = 0; i < levels; i++)
+            length += TextureLayout.Pitch(format, width >> i, height >> i).SlicePitch;
+        return Texture(res, name, width, height, levels, format, pixels, length);
+    }
+
+    private static TextureData Texture(ResourceData res, string name, int width, int height, int levels, TextureFormat format,
+        ulong pixels, int length)
+    {
         int start = res.ResolveArray(pixels, length, 1, "pixels de " + name);
         name = name.ToLowerInvariant();
         return new TextureData
@@ -116,6 +153,23 @@ public sealed class YtdReader : ITextureReader
         28 => TextureFormat.A8,
         32 => TextureFormat.R8G8B8A8,    // A8B8G8R8
         50 => TextureFormat.L8,
+        _ => TextureFormat.Unknown,
+    };
+
+    // Enhanced formats (rage::sga::BufferFormat, close to DXGI). sRGB variants hold the same bytes.
+    internal static TextureFormat EnhancedFormatOf(byte code) => code switch
+    {
+        0x47 or 0x48 => TextureFormat.Bc1,
+        0x4A or 0x4B => TextureFormat.Bc2,
+        0x4D or 0x4E => TextureFormat.Bc3,
+        0x50 => TextureFormat.Bc4,
+        0x53 => TextureFormat.Bc5,
+        0x62 or 0x63 => TextureFormat.Bc7,
+        0x57 or 0x5B => TextureFormat.B8G8R8A8,
+        0x1C or 0x1D => TextureFormat.R8G8B8A8,
+        0x56 => TextureFormat.B5G5R5A1,
+        0x41 => TextureFormat.A8,
+        0x3D => TextureFormat.L8,
         _ => TextureFormat.Unknown,
     };
 }
