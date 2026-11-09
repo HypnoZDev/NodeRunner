@@ -34,7 +34,24 @@ public class DrawableReaderTests
         Assert.Null(mesh.Terrain);
     }
 
-    private static byte[] Build()
+    [Fact]
+    public void Read_UnderstandsTheEnhancedLayout()
+    {
+        var header = new ResourceHeader(DrawableReader.EnhancedDrawableVersion, MetaDocument.PageFlags(1, SystemSize), 0);
+        var mesh = Assert.Single(Assert.Single(DrawableReader.Read(Build(enhanced: true), header, "prop_test", ".ydr")).Value.Meshes);
+
+        Assert.Equal([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)], mesh.Positions);
+        Assert.All(mesh.Normals, n => Assert.Equal(Vector3.UnitZ, n));
+        Assert.Equal(new Vector2(0, 1), mesh.TexCoords[2]);
+        Assert.Equal([0, 1, 2], mesh.Indices.Select(i => (int)i));
+        // Parameters renamed by Enhanced come back under their original names.
+        Assert.Equal("wall_brick", mesh.DiffuseTextureName);
+        Assert.Equal("wall_brick", mesh.ShaderTextures[Joaat.Hash("DiffuseSampler")]);
+        Assert.Equal(new Vector4(2, 5, 5, 1), mesh.DiffuseColor);
+        Assert.Equal(MeshBlendMode.Cutout, mesh.BlendMode);
+    }
+
+    private static byte[] Build(bool enhanced = false)
     {
         var d = new byte[SystemSize + 0x200];
         void P(int at, int target, bool graphics = false) =>
@@ -60,32 +77,67 @@ public class DrawableReaderTests
         P(0x340, 0x368);
         P(0x360, 0x400);
 
-        // Shader group -> shader "default", cut out (bucket 3), one texture parameter.
+        // Shader group -> shader "default", cut out (bucket 3), one texture parameter (texture block at 0x600).
         P(0x210, 0x240);
         U16(0x218, 1);
         P(0x240, 0x260);
-        P(0x260, 0x2A0);
-        U32(0x268, Joaat.Hash("default"));
-        d[0x270] = 1;
-        d[0x271] = 3;
-        P(0x2A8, 0x600);
-        U32(0x2B0, Joaat.Hash("DiffuseSampler"));
         P(0x600 + 0x28, 0x640);
         Encoding.ASCII.GetBytes("Wall_Brick\0").CopyTo(d, 0x640);
-
-        // Geometry -> vertex buffer (3 vertices of 32 bytes) and index buffer (3 indices).
         P(0x418, 0x500);
         P(0x438, 0x580);
-        U16(0x508, 32);
-        P(0x510, 0, graphics: true);
-        U32(0x518, 3);
-        P(0x530, 0x5C0);
-        U32(0x588, 3);
-        P(0x590, 0x100, graphics: true);
-        // Declaration: position (bit 0, float3), normal (bit 3, float3), texture coordinates (bit 6, float2).
-        U32(0x5C0, 1 | 8 | 64);
-        U16(0x5C4, 32);
-        BinaryPrimitives.WriteUInt64LittleEndian(d.AsSpan(0x5C8), 0x6UL | 0x6UL << 12 | 0x5UL << 24);
+
+        if (enhanced)
+        {
+            // Shader: constant buffers, textures, parameter table (1 buffer, 1 texture, 2 parameters), bucket.
+            U32(0x260, Joaat.Hash("default"));
+            P(0x268, 0x6E0);
+            P(0x270, 0x6C0);
+            P(0x280, 0x6A0);
+            d[0x299] = 3;
+            d[0x6A0] = 1;
+            d[0x6A1] = 1;
+            d[0x6A4] = 2;
+            U32(0x6A8, Joaat.Hash("DiffuseTex"));
+            U32(0x6B0, Joaat.Hash("DiffuseColor"));
+            U32(0x6B4, 3 | 16u << 20);
+            P(0x6C0, 0x600);
+            P(0x6E0, 0x700);
+            F(0x700, 2); F(0x704, 5); F(0x708, 5); F(0x70C, 1);
+
+            // Vertex buffer: count, stride, data, declaration (offsets of position, normal and uv, then their formats).
+            U32(0x508, 3);
+            U16(0x50C, 32);
+            P(0x518, 0, graphics: true);
+            P(0x538, 0x800);
+            U32(0x800 + 4 * 4, 12);
+            U32(0x800 + 28 * 4, 24);
+            d[0x800 + 260] = 6;
+            d[0x800 + 264] = 6;
+            d[0x800 + 288] = 16;
+            U32(0x588, 3);
+            P(0x598, 0x100, graphics: true);
+        }
+        else
+        {
+            P(0x260, 0x2A0);
+            U32(0x268, Joaat.Hash("default"));
+            d[0x270] = 1;
+            d[0x271] = 3;
+            P(0x2A8, 0x600);
+            U32(0x2B0, Joaat.Hash("DiffuseSampler"));
+
+            // Vertex buffer (3 vertices of 32 bytes) and index buffer (3 indices).
+            U16(0x508, 32);
+            P(0x510, 0, graphics: true);
+            U32(0x518, 3);
+            P(0x530, 0x5C0);
+            U32(0x588, 3);
+            P(0x590, 0x100, graphics: true);
+            // Declaration: position (bit 0, float3), normal (bit 3, float3), texture coordinates (bit 6, float2).
+            U32(0x5C0, 1 | 8 | 64);
+            U16(0x5C4, 32);
+            BinaryPrimitives.WriteUInt64LittleEndian(d.AsSpan(0x5C8), 0x6UL | 0x6UL << 12 | 0x5UL << 24);
+        }
 
         Vector2[] corners = [new(0, 0), new(1, 0), new(0, 1)];
         for (int v = 0; v < 3; v++)

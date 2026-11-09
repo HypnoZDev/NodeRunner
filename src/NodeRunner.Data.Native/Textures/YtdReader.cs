@@ -26,8 +26,8 @@ public sealed class YtdReader : ITextureReader
 
     public static Dictionary<uint, TextureData> Read(ReadOnlySpan<byte> data, ResourceHeader header)
     {
-        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
-        return ReadDictionary(res, 0, header.Version == EnhancedVersion);
+        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags)) { Enhanced = header.Version == EnhancedVersion };
+        return ReadDictionary(res, 0);
     }
 
     // .ytd version of GTA V Enhanced (13 in the original release).
@@ -55,7 +55,7 @@ public sealed class YtdReader : ITextureReader
     private const int EnhancedData = 0x38;
     private const int EnhancedLength = 0x80;
 
-    internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset, bool enhanced)
+    internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset)
     {
         var textures = new Dictionary<uint, TextureData>();
         int count = res.UInt16(offset + TexturesCount);
@@ -65,7 +65,7 @@ public sealed class YtdReader : ITextureReader
             ulong pointer = res.UInt64(list + i * 8);
             if (pointer == 0)
                 continue;
-            var texture = enhanced
+            var texture = res.Enhanced
                 ? ReadEnhancedTexture(res, res.ResolveArray(pointer, 1, EnhancedLength, "texture"))
                 : ReadTexture(res, res.ResolveArray(pointer, 1, TextureLength, "texture"));
             if (texture is not null)

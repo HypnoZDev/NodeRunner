@@ -38,7 +38,10 @@ public sealed class DrawableReader : IModelReader
 
     public static Dictionary<uint, ModelData> Read(ReadOnlySpan<byte> data, ResourceHeader header, string name, string extension)
     {
-        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
+        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags))
+        {
+            Enhanced = header.Version is EnhancedDrawableVersion or EnhancedFragmentVersion,
+        };
         uint fileHash = Joaat.Hash(name);
         var models = new Dictionary<uint, ModelData>();
         switch (extension.ToLowerInvariant())
@@ -75,6 +78,10 @@ public sealed class DrawableReader : IModelReader
         }
         return models;
     }
+
+    // Versions of GTA V Enhanced (.ydr / .ydd and .yft; 165 and 162 in the original release).
+    public const int EnhancedDrawableVersion = 159;
+    public const int EnhancedFragmentVersion = 171;
 
     private static int Block(ResourceData res, ulong pointer, int length) =>
         pointer == 0 ? -1 : res.ResolveArray(pointer, 1, length, "bloc");
@@ -141,7 +148,7 @@ public sealed class DrawableReader : IModelReader
             BoundsMin = Vec3(res, d + BoundsMinOffset),
             BoundsMax = Vec3(res, d + BoundsMaxOffset),
             Meshes = meshes,
-            EmbeddedTextures = dictionary >= 0 ? YtdReader.ReadDictionary(res, dictionary, false) : new Dictionary<uint, TextureData>(),
+            EmbeddedTextures = dictionary >= 0 ? YtdReader.ReadDictionary(res, dictionary) : new Dictionary<uint, TextureData>(),
         };
     }
 
@@ -208,7 +215,7 @@ public sealed class DrawableReader : IModelReader
         for (int i = 0; i < count; i++)
         {
             int s = Block(res, res.UInt64(pointers + i * 8), 0x30);
-            shaders.Add(s < 0 ? null : ReadShader(res, s));
+            shaders.Add(s < 0 ? null : res.Enhanced ? ReadEnhancedShader(res, s) : ReadShader(res, s));
         }
         return shaders;
     }
@@ -253,6 +260,82 @@ public sealed class DrawableReader : IModelReader
         return new Shader(res.UInt32(s + 0x08), res.UInt32(s + 0x18), res.Byte(s + 0x11), textures, values);
     }
 
+    // Enhanced shader (0x40 bytes): 0x00 name hash, 0x08 constant buffers (one pointer each), 0x10 texture pointers,
+    // 0x20 parameter table, 0x39 render bucket. Table: 0x00 buffer count, 0x01 texture count, 0x04 parameter count, then
+    // 8 bytes per parameter: name hash, then bits 0-1 kind (0 texture, 3 constant), 2-9 texture index (2-7 buffer
+    // index for a constant), 8-19 offset in the buffer, 20-31 length.
+    private static Shader ReadEnhancedShader(ResourceData res, int s)
+    {
+        var textures = new Dictionary<uint, string>();
+        var values = new Dictionary<uint, Vector4>();
+        uint name = res.UInt32(s);
+        ulong tablePointer = res.UInt64(s + 0x20);
+        if (tablePointer != 0)
+        {
+            int table = res.ResolveArray(tablePointer, 1, 8, "paramètres de shader");
+            int bufferCount = res.Byte(table);
+            int textureCount = res.Byte(table + 1);
+            int count = res.Byte(table + 4);
+            int items = res.ResolveArray(tablePointer + 8, count, 8, "paramètres de shader");
+            ulong buffersPointer = res.UInt64(s + 0x08);
+            ulong texturesPointer = res.UInt64(s + 0x10);
+            int buffers = bufferCount > 0 && buffersPointer != 0 ? res.ResolveArray(buffersPointer, bufferCount, 8, "valeurs de shader") : -1;
+            int texturePointers = textureCount > 0 && texturesPointer != 0 ? res.ResolveArray(texturesPointer, textureCount, 8, "textures de shader") : -1;
+            for (int i = 0; i < count; i++)
+            {
+                uint hash = res.UInt32(items + i * 8);
+                hash = EnhancedParameterNames.GetValueOrDefault(hash, hash);
+                uint info = res.UInt32(items + i * 8 + 4);
+                switch (info & 3)
+                {
+                    case 0:
+                    {
+                        int index = (int)((info >> 2) & 0xFF);
+                        if (texturePointers < 0 || index >= textureCount || res.UInt64(texturePointers + index * 8) is not (> 0 and var texture))
+                            break;
+                        if (res.Text(res.UInt64(res.ResolveArray(texture, 1, 0x30, "texture") + 0x28), "nom de texture") is { } textureName)
+                            textures.TryAdd(hash, textureName.ToLowerInvariant());
+                        break;
+                    }
+                    case 3:
+                    {
+                        int index = (int)((info >> 2) & 0x3F);
+                        int offset = (int)((info >> 8) & 0xFFF);
+                        int floats = Math.Min(4, (int)(info >> 20) / 4);
+                        if (buffers < 0 || index >= bufferCount || floats == 0 || res.UInt64(buffers + index * 8) is not (> 0 and var buffer))
+                            break;
+                        int v = res.ResolveArray(buffer + (ulong)offset, floats, 4, "valeur de shader");
+                        var value = new Vector4(F32(res, v), floats > 1 ? F32(res, v + 4) : 0, floats > 2 ? F32(res, v + 8) : 0,
+                            floats > 3 ? F32(res, v + 12) : 0);
+                        values.TryAdd(hash, value);
+                        break;
+                    }
+                }
+            }
+        }
+        return new Shader(name, EnhancedPresets.GetValueOrDefault(name), res.Byte(s + 0x39), textures, values);
+    }
+
+    // Enhanced renames the shader parameters (from the shader sources): back to the names of the original release,
+    // which everything else uses.
+    private static readonly Dictionary<uint, uint> EnhancedParameterNames = new (string Enhanced, string Original)[]
+    {
+        ("DiffuseTex", "DiffuseSampler"), ("DiffuseTex2", "DiffuseSampler2"), ("DiffuseHfTex", "DiffuseHfSampler"),
+        ("BumpTex", "BumpSampler"), ("SpecularTex", "SpecSampler"), ("DetailTex", "DetailSampler"),
+        ("DirtTex", "DirtSampler"), ("damagetexture", "DamageSampler"), ("TintPaletteTex", "TintPaletteSampler"),
+        ("PlateBgTex", "PlateBgSampler"), ("heightTexture", "heightSampler"), ("lookupTexture", "lookupSampler"),
+        ("DiffuseTexture_layer0", "TextureSampler_layer0"), ("DiffuseTexture_layer1", "TextureSampler_layer1"),
+        ("DiffuseTexture_layer2", "TextureSampler_layer2"), ("DiffuseTexture_layer3", "TextureSampler_layer3"),
+        ("BumpTexture_layer0", "BumpSampler_layer0"), ("BumpTexture_layer1", "BumpSampler_layer1"),
+        ("BumpTexture_layer2", "BumpSampler_layer2"), ("BumpTexture_layer3", "BumpSampler_layer3"),
+        ("DiffuseColor", "matDiffuseColor"), ("DiffuseColor2", "matDiffuseColor2"),
+        ("SpecularColor", "specularIntensityMult"), ("Specular", "specularFalloffMult"), ("Bumpiness", "bumpiness"),
+        ("EmissiveMultiplier", "emissiveMultiplier"),
+    }.ToDictionary(p => Joaat.Hash(p.Enhanced), p => Joaat.Hash(p.Original));
+
+    // Enhanced shaders no longer name their preset file: the tree presets carry the shader's name.
+    private static readonly Dictionary<uint, uint> EnhancedPresets = TreePresetNames.ToDictionary(Joaat.Hash, n => Joaat.Hash(n + ".sps"));
+
     // Shader parameters holding the colour texture, by priority. Terrain shaders blend several layers: the
     // first one is the colour texture, the others are in TerrainBlend.
     private static readonly uint[] ColorSamplers = [Joaat.Hash("DiffuseSampler"), Joaat.Hash("TextureSampler_layer0")];
@@ -284,14 +367,17 @@ public sealed class DrawableReader : IModelReader
     private static readonly uint TintSampler = Joaat.Hash("DiffuseHfSampler");
 
     // Presets of the tree and bush shaders (hash of the file name).
-    private static readonly HashSet<uint> TreePresets = new[]
-    {
+    private static readonly HashSet<uint> TreePresets = TreePresetNames.Select(n => Joaat.Hash(n + ".sps")).ToHashSet();
+
+    // A property, so that the fields above can use it (fields are initialised in order).
+    private static string[] TreePresetNames =>
+    [
         "trees", "trees_camera_aligned", "trees_camera_facing", "trees_lod", "trees_lod2", "trees_lod2d", "trees_lod_tnt",
         "trees_normal", "trees_normal_diffspec", "trees_normal_diffspec_tnt", "trees_normal_spec",
         "trees_normal_spec_camera_aligned", "trees_normal_spec_camera_aligned_tnt", "trees_normal_spec_camera_facing",
         "trees_normal_spec_camera_facing_tnt", "trees_normal_spec_tnt", "trees_normal_spec_wind", "trees_shadow_proxy",
         "trees_tnt",
-    }.Select(n => Joaat.Hash(n + ".sps")).ToHashSet();
+    ];
 
     private static readonly HashSet<uint> AlwaysEmissiveShaders = new[]
     {
@@ -320,28 +406,32 @@ public sealed class DrawableReader : IModelReader
     private static ModelMesh? ConvertGeometry(ResourceData res, int g, Shader? shader, List<Shader?> shaders)
     {
         // Vertex buffer: 0x08 stride, 0x10 data, 0x18 count, 0x20 second copy of the data, 0x30 declaration.
+        // Enhanced: 0x08 count, 0x0C stride, 0x18 data, 0x38 declaration.
+        bool enhanced = res.Enhanced;
         int buffer = Block(res, res.UInt64(g + 0x18), 0x40);
         if (buffer < 0)
             return null;
-        ulong dataPointer = res.UInt64(buffer + 0x10);
-        if (dataPointer == 0)
+        ulong dataPointer = res.UInt64(buffer + (enhanced ? 0x18 : 0x10));
+        if (dataPointer == 0 && !enhanced)
             dataPointer = res.UInt64(buffer + 0x20);
         if (dataPointer == 0)
             return null;
-        int declarationOffset = Block(res, res.UInt64(buffer + 0x30), 16)
+        int count = (int)res.UInt32(buffer + (enhanced ? 0x08 : 0x18));
+        int bufferStride = res.UInt16(buffer + (enhanced ? 0x0C : 0x08));
+        ulong declarationPointer = res.UInt64(buffer + (enhanced ? 0x38 : 0x30));
+        int declarationOffset = Block(res, declarationPointer, enhanced ? VertexDeclaration.EnhancedLength : 16)
             is >= 0 and var found ? found : throw new InvalidDataException("Format des sommets absent.");
-        var declaration = new VertexDeclaration(res.UInt32(declarationOffset), res.UInt16(declarationOffset + 4),
-            res.UInt64(declarationOffset + 8));
-        int count = (int)res.UInt32(buffer + 0x18);
-        int bufferStride = res.UInt16(buffer + 0x08);
+        var declaration = enhanced
+            ? VertexDeclaration.Enhanced(res, declarationOffset, bufferStride)
+            : VertexDeclaration.Original(res.UInt32(declarationOffset), res.UInt16(declarationOffset + 4), res.UInt64(declarationOffset + 8));
         ReadOnlySpan<byte> bytes = count * bufferStride == 0 ? [] : res.Bytes(res.ResolveArray(dataPointer, (long)count * bufferStride, 1, "sommets"), count * bufferStride);
 
-        // Index buffer: 0x08 count, 0x10 indices (16 bits).
-        int indexBuffer = Block(res, res.UInt64(g + 0x38), 0x60);
+        // Index buffer: 0x08 count, 0x10 indices (16 bits); Enhanced: indices at 0x18.
+        int indexBuffer = Block(res, res.UInt64(g + 0x38), enhanced ? 0x40 : 0x60);
         if (indexBuffer < 0)
             return null;
         int indexCount = (int)res.UInt32(indexBuffer + 0x08);
-        ulong indicesPointer = res.UInt64(indexBuffer + 0x10);
+        ulong indicesPointer = res.UInt64(indexBuffer + (enhanced ? 0x18 : 0x10));
         if (indexCount == 0 || indicesPointer == 0)
             return null;
         ReadOnlySpan<byte> indexBytes = res.Bytes(res.ResolveArray(indicesPointer, indexCount, 2, "indices"), indexCount * 2);
@@ -466,13 +556,74 @@ public sealed class DrawableReader : IModelReader
         return new TerrainBlend { LayerNames = layers, MaskName = mask, Mode = mode, Weights = weights, MaskTexCoords = maskCoords };
     }
 
-    // Vertex layout: one flag bit per component present, 4 bits of storage type per component; components follow one
-    // another in bit order.
-    private readonly record struct VertexDeclaration(uint Flags, int Stride, ulong Types)
+    // Where each vertex component (numbered as in the original release: 0 position, 3 normal, 4 and 5 colours, 6 to 13
+    // texture coordinates...) is in a vertex, and how it is stored.
+    private sealed class VertexDeclaration
     {
-        public bool Has(int component) => ((Flags >> component) & 1) != 0;
+        private const int Components = 16;
+        private readonly int[] _offsets = new int[Components];
+        private readonly int[] _types = new int[Components];
 
-        private int Type(int component) => (int)((Types >> (component * 4)) & 0xF);
+        public int Stride { get; private init; }
+
+        // Original release: one flag bit per component present, 4 bits of storage type per component; components follow
+        // one another in bit order.
+        public static VertexDeclaration Original(uint flags, int stride, ulong types)
+        {
+            var declaration = new VertexDeclaration { Stride = stride };
+            int offset = 0;
+            for (int k = 0; k < Components; k++)
+            {
+                declaration._offsets[k] = -1;
+                if (((flags >> k) & 1) == 0)
+                    continue;
+                int type = (int)((types >> (k * 4)) & 0xF);
+                declaration._offsets[k] = offset;
+                declaration._types[k] = type;
+                offset += Size(type);
+            }
+            return declaration;
+        }
+
+        // Enhanced (0x140 bytes): offset of each of the 52 semantics (uint32), then 52 bytes of stride, then 52 bytes of
+        // format (0 = absent).
+        public const int EnhancedLength = 0x140;
+
+        public static VertexDeclaration Enhanced(ResourceData res, int at, int stride)
+        {
+            var declaration = new VertexDeclaration { Stride = stride };
+            Array.Fill(declaration._offsets, -1);
+            for (int semantic = 0; semantic < 52; semantic++)
+            {
+                int format = res.Byte(at + 260 + semantic);
+                int component = ComponentOf(semantic);
+                if (format == 0 || component < 0)
+                    continue;
+                declaration._offsets[component] = (int)res.UInt32(at + semantic * 4);
+                declaration._types[component] = format switch
+                {
+                    2 => 7,   // float4
+                    6 => 6,   // float3
+                    10 => 3,  // half4
+                    16 => 5,  // float2
+                    34 => 1,  // half2
+                    28 => 9,  // rgba8 unorm
+                    24 => 11, // 10-10-10-2
+                    _ => 0,
+                };
+            }
+            return declaration;
+        }
+
+        // Semantics: position, normal, tangent, blend weights, blend indices, colours 0-1, texture coordinates 0-5.
+        private static int ComponentOf(int semantic) => semantic switch
+        {
+            0 => 0, 4 => 3, 8 => 14, 16 => 1, 20 => 2, 24 => 4, 25 => 5,
+            >= 28 and <= 33 => semantic - 22,
+            _ => -1,
+        };
+
+        public bool Has(int component) => _offsets[component] >= 0;
 
         // Bytes of each storage type: half2, float, half4, (unused), float2, float3, float4, ubyte4, colour, rgba8 snorm.
         private static int Size(int type) => type switch
@@ -481,23 +632,12 @@ public sealed class DrawableReader : IModelReader
             _ => 0,
         };
 
-        private int Offset(int component)
-        {
-            int offset = 0;
-            for (int k = 0; k < component; k++)
-            {
-                if (Has(k))
-                    offset += Size(Type(k));
-            }
-            return offset;
-        }
-
         public Vector4 Read(ReadOnlySpan<byte> bytes, int vertexStart, int component)
         {
             if (!Has(component))
                 return Vector4.Zero;
-            int o = vertexStart + Offset(component);
-            return Type(component) switch
+            int o = vertexStart + _offsets[component];
+            return _types[component] switch
             {
                 2 => new Vector4(F(bytes, o), 0, 0, 0),
                 5 => new Vector4(F(bytes, o), F(bytes, o + 4), 0, 0),
@@ -506,6 +646,7 @@ public sealed class DrawableReader : IModelReader
                 1 => new Vector4(H(bytes, o), H(bytes, o + 2), 0, 0),
                 3 => new Vector4(H(bytes, o), H(bytes, o + 2), H(bytes, o + 4), H(bytes, o + 6)),
                 9 => new Vector4(B(bytes, o), B(bytes, o + 1), B(bytes, o + 2), B(bytes, o + 3)),
+                11 => Packed(bytes, o),
                 _ => Vector4.Zero,
             };
         }
@@ -513,6 +654,16 @@ public sealed class DrawableReader : IModelReader
         private static float F(ReadOnlySpan<byte> b, int at) => at + 4 <= b.Length ? BinaryPrimitives.ReadSingleLittleEndian(b[at..]) : 0f;
         private static float H(ReadOnlySpan<byte> b, int at) => at + 2 <= b.Length ? (float)BinaryPrimitives.ReadHalfLittleEndian(b[at..]) : 0f;
         private static float B(ReadOnlySpan<byte> b, int at) => at < b.Length ? b[at] / 255f : 0f;
+
+        // Three 10-bit values from -1 to 1 and a 2-bit one.
+        private static Vector4 Packed(ReadOnlySpan<byte> b, int at)
+        {
+            if (at + 4 > b.Length)
+                return Vector4.Zero;
+            uint v = BinaryPrimitives.ReadUInt32LittleEndian(b[at..]);
+            static float Signed(uint x) => x / 1023f * 2f - 1f;
+            return new Vector4(Signed(v & 0x3FF), Signed((v >> 10) & 0x3FF), Signed((v >> 20) & 0x3FF), (v >> 30) / 3f);
+        }
     }
 
     // ---- Skeleton ----

@@ -21,6 +21,9 @@ internal readonly ref struct ResourceData
         _graphicsStart = graphicsStart;
     }
 
+    // Set for the resources of GTA V Enhanced, whose textures, shaders and vertex buffers are laid out differently.
+    public bool Enhanced { get; init; }
+
     public int Length => _data.Length;
 
     public byte Byte(int offset) => Slice(offset, 1)[0];
