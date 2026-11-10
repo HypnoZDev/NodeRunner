@@ -121,6 +121,7 @@ internal sealed class ImGuiInput
             Keys.Space => ImGuiKey.Space,
             Keys.Enter => ImGuiKey.Enter,
             Keys.Escape => ImGuiKey.Escape,
+            Keys.Oemcomma => ImGuiKey.Comma,
             Keys.ShiftKey or Keys.LShiftKey => ImGuiKey.LeftShift,
             Keys.RShiftKey => ImGuiKey.RightShift,
             Keys.ControlKey or Keys.LControlKey => ImGuiKey.LeftCtrl,

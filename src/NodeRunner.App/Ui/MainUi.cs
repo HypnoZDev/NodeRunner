@@ -43,7 +43,8 @@ internal sealed class MainUi
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);
-        _toolbar = new Toolbar(state, DrawProjectMenuItems, () => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)
+        _shortcutsWindow = new ShortcutsWindow(state);
+        _toolbar = new Toolbar(state, DrawToolbarProjectMenu,() => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)
         {
             ToggleLibrary = ToggleLibrary,
             IsLibraryShown = () => _showLibrary,
@@ -82,6 +83,13 @@ internal sealed class MainUi
 
     public bool IsLibraryShown => _showLibrary;
 
+    private void ToggleViewer()
+    {
+        _showViewer = !_showViewer;
+        if (_showViewer)
+            ImGui.SetWindowFocus(ViewerPanel.Title);
+    }
+
     private bool _focusLibrary;
 
     private void OpenFileInViewer(string path)
@@ -112,6 +120,7 @@ internal sealed class MainUi
     private readonly SettingsWindow _settingsWindow;
     private readonly InteriorWindow _interiorWindow;
     private readonly ErrorWindow _errorWindow;
+    private readonly ShortcutsWindow _shortcutsWindow;
     private readonly ProtectedMappingWindow _protectedWindow = new();
 
     public bool BrowseGameFolderRequested { get; set; }
@@ -209,6 +218,7 @@ internal sealed class MainUi
         _onlineWindow.Draw();
         _errorWindow.Draw();
         _protectedWindow.Draw();
+        _shortcutsWindow.Draw();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
         _searchPalette.Draw(); // Last: above the panels.
     }
@@ -236,6 +246,20 @@ internal sealed class MainUi
         }
         if (ImGui.IsKeyPressed(ImGuiKey.End, false))
             _state.PutSelectionOnGround();
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.N))
+            ProjectWindow.Open();
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.O))
+            OpenProjectRequested = true;
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E))
+            _exportWindow.Open();
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Comma))
+            _settingsWindow.Open();
+        if (ImGui.IsKeyPressed(ImGuiKey.F1, false))
+            _shortcutsWindow.Toggle();
+        if (ImGui.IsKeyPressed(ImGuiKey.F2, false))
+            ToggleViewer();
+        if (ImGui.IsKeyPressed(ImGuiKey.F3, false))
+            _showArchives = !_showArchives;
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.C))
             _state.CopySelection();
         else if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.V) && _state.Copied.Count > 0)
@@ -295,20 +319,13 @@ internal sealed class MainUi
 
         if (Menu(L("Fichier")))
         {
-            DrawProjectMenuItems();
+            DrawFileProjectItems();
             ImGui.Separator();
             int toSave = _state.PendingSaveCount;
             if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), "Ctrl+S", false, toSave > 0))
                 SaveRequested = true;
-            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM...")))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E"))
                 _exportWindow.Open();
-            if (ImGui.MenuItem(L($"{Icons.Users}  Online..."), null, _onlineWindow.IsOpen))
-                _onlineWindow.Toggle();
-            ImGui.Separator();
-            if (ImGui.MenuItem(L("Choisir le dossier de GTA V...")))
-                BrowseGameFolderRequested = true;
-            if (ImGui.MenuItem(L("Relancer la détection automatique")))
-                _state.RedetectGame(clearManualChoice: true);
             ImGui.Separator();
             if (ImGui.MenuItem(L("Quitter")))
                 ExitRequested = true;
@@ -332,11 +349,11 @@ internal sealed class MainUi
                 _state.PasteRequest = true;
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute une copie au sol, au centre de la vue 3D, dans le YMAP du projet (le groupe garde sa disposition)."));
-            ImGui.Separator();
             int group = _state.DeletableSelection.Count;
             if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer l'objet sélectionné..."),
                 L("Suppr"), false, group > 0))
                 _state.RequestDelete();
+            ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Fin"), false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
@@ -350,6 +367,33 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision."));
             ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
+                _searchPalette.Open();
+            ImGui.Separator();
+            ImGui.TextDisabled(history.Count == 0 ? L("Aucune modification") : L($"{history.Count} modification(s), pas encore enregistrée(s)"));
+            ImGui.EndMenu();
+        }
+
+        if (Menu(L("Projet")))
+        {
+            DrawProjectContentItems();
+            ImGui.EndMenu();
+        }
+
+        if (Menu(L("Créer")))
+        {
+            if (ImGui.MenuItem(L($"{Icons.Package}  Placer un prop de la bibliothèque...")))
+                ShowLibrary();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Ouvre la bibliothèque de props : double-clic sur un prop, ou glisser-le dans la vue 3D."));
+            if (ImGui.MenuItem(L($"{Icons.Box}  Placer un objet du jeu...")))
+            {
+                _showViewer = true;
+                ImGui.SetWindowFocus(ViewerPanel.Title);
+            }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Ouvre la visionneuse : cherche un objet ou un véhicule du jeu, puis « Placer »."));
+            ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.House}  Nouvel intérieur (MLO)..."), null, false, _state.World.Maps is not null))
                 _interiorWindow.Open();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
@@ -359,16 +403,36 @@ internal sealed class MainUi
                 _interiorWindow.OpenDuplicate(selectedInterior);
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Copie l'intérieur sélectionné (ou celui de l'objet sélectionné) sous un autre nom, avec ses objets, dans un .ytyp du projet : la copie se modifie sans toucher l'original."));
+            ImGui.Separator();
             if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();
                 ImGui.EndMenu();
             }
+            ImGui.EndMenu();
+        }
+
+        if (Menu(L("Outils")))
+        {
+            ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
+            if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
+            {
+                bool shown = _showLibrary;
+                if (ImGui.MenuItem(L("Afficher la bibliothèque"), null, ref shown))
+                {
+                    if (shown) ShowLibrary();
+                    else _showLibrary = false;
+                }
+                ImGui.Separator();
+                DrawLibraryItems();
+                ImGui.EndMenu();
+            }
+            ImGui.MenuItem(L(ArchivePanel.Title), "F3", ref _showArchives);
+            if (ImGui.MenuItem(L($"{Icons.Users}  Online..."), null, _onlineWindow.IsOpen))
+                _onlineWindow.Toggle();
             ImGui.Separator();
-            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
-                _searchPalette.Open();
-            ImGui.Separator();
-            ImGui.TextDisabled(history.Count == 0 ? L("Aucune modification") : L($"{history.Count} modification(s), pas encore enregistrée(s)"));
+            if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres..."), "Ctrl+,"))
+                _settingsWindow.Open();
             ImGui.EndMenu();
         }
 
@@ -378,15 +442,7 @@ internal sealed class MainUi
             ImGui.MenuItem(L(LayersTitle), null, ref _showLayers);
             ImGui.MenuItem(L(PropertiesPanel.Title), null, ref _showProperties);
             ImGui.MenuItem(L(StatusPanel.Title), null, ref _showStatus);
-            ImGui.MenuItem(L(LibraryPanel.Title), null, ref _showLibrary);
-            ImGui.MenuItem(L(ViewerPanel.Title), null, ref _showViewer);
-            ImGui.MenuItem(L(ArchivePanel.Title), null, ref _showArchives);
             ImGui.MenuItem(L(ProjectPanel.Title), null, ref _showProject);
-            if (ImGui.MenuItem(L("Réinitialiser la disposition des panneaux")))
-            {
-                _showLayers = _showScene = _showProperties = _showStatus = _showLibrary = true;
-                _resetLayout = true;
-            }
             ImGui.Separator();
             bool showGrid = _state.Settings.ShowGrid;
             if (ImGui.MenuItem(L("Grille au sol"), "G", ref showGrid))
@@ -394,15 +450,22 @@ internal sealed class MainUi
                 _state.Settings.ShowGrid = showGrid;
                 _state.SaveSettings();
             }
-            if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres d'affichage...")))
-                _settingsWindow.Open();
+            if (ImGui.MenuItem(L("Réinitialiser la disposition des panneaux")))
+            {
+                _showLayers = _showScene = _showProperties = _showStatus = _showLibrary = true;
+                _resetLayout = true;
+            }
+#if DEBUG
             ImGui.Separator();
             ImGui.MenuItem(L("Démo ImGui (développeurs)"), null, ref _showImGuiDemo);
+#endif
             ImGui.EndMenu();
         }
 
         if (Menu(L("Aide")))
         {
+            if (ImGui.MenuItem(L("Raccourcis clavier"), "F1"))
+                _shortcutsWindow.Toggle();
             if (ImGui.MenuItem(L($"{Icons.TriangleAlert}  Erreurs et rapport...")))
                 _errorWindow.Open();
             ImGui.Separator();
@@ -412,7 +475,7 @@ internal sealed class MainUi
         }
 
         // Author credit, right-aligned before the window buttons.
-        string credit = $"{Program.Name} par {Program.Author}";
+        string credit = L($"{Program.Name} par {Program.Author}");
         float creditX = ImGui.GetWindowWidth() - WindowChrome.ButtonWidth * 3 - ImGui.CalcTextSize(credit).X - 16f;
         if (creditX > ImGui.GetCursorPosX())
         {
@@ -442,45 +505,21 @@ internal sealed class MainUi
             _state.DeleteSelectedOccluder();
     }
 
-    private void DrawProjectMenuItems()
+    // Toolbar's project button: the project items of both the File and Project menus.
+    private void DrawToolbarProjectMenu()
     {
-        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Nouveau projet...")))
+        DrawFileProjectItems();
+        ImGui.Separator();
+        DrawProjectContentItems();
+    }
+
+    // File menu: new, open, recent, close.
+    private void DrawFileProjectItems()
+    {
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Nouveau projet..."), "Ctrl+N"))
             ProjectWindow.Open();
-        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet...")))
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet..."), "Ctrl+O"))
             OpenProjectRequested = true;
-        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mapping...")))
-            ImportMappingRequested = true;
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(L("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié.\nAstuce : on peut aussi glisser un dossier, un .oiv ou un .zip sur la fenêtre."));
-        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mod OpenIV (.oiv) ou un .zip...")))
-            ImportPackageRequested = true;
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(L("Les fichiers de carte du mod (modèles, textures, collisions...) vont dans le dossier stream d'un nouveau projet,\nsous leur nom du jeu : ils remplacent les fichiers du jeu, prêts pour l'export en ressource FiveM."));
-        bool hasProject = _state.Project is not null;
-        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter des fichiers au projet..."), null, false, hasProject))
-            AddFilesRequested = true;
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(L("Ajoute des fichiers au projet ouvert : .ydr, .ytyp, .ybn... ou leurs exports XML (Sollumz, CodeWalker), convertis au passage.\nUn fichier du même nom déjà dans le projet est remplacé (nouvel export depuis Blender), puis la carte est rechargée.\nAstuce : on peut aussi glisser les fichiers sur la fenêtre."));
-        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter un dossier au projet..."), null, false, hasProject))
-            AddFolderRequested = true;
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(L("Ajoute tout un dossier au projet ouvert (dossier d'export de Sollumz, dossier stream...), sous-dossiers compris."));
-        if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
-        {
-            if (ImGui.MenuItem(L("Ajouter un pack (dossier)...")))
-                _state.LibraryRequest = LibraryAction.AddFolder;
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(L("Copie un pack de props addons (ressource FiveM, dossier stream) dans la bibliothèque :\nses props sont disponibles dans tous les projets (Visionneuse > Bibliothèque > Placer)."));
-            if (ImGui.MenuItem(L("Ajouter un pack (.zip)...")))
-                _state.LibraryRequest = LibraryAction.AddZip;
-            if (ImGui.MenuItem(L("Ouvrir le dossier de la bibliothèque")))
-                ViewerPanel.OpenLibraryFolder(_state);
-            if (ImGui.MenuItem(L("Relire la bibliothèque")))
-                _state.LibraryRequest = LibraryAction.Reload;
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(L("Après avoir copié ou retiré un pack à la main dans le dossier : recharge la carte."));
-            ImGui.EndMenu();
-        }
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))
         {
@@ -500,15 +539,54 @@ internal sealed class MainUi
             }
             ImGui.EndMenu();
         }
-        if (_state.Project is { } project)
-        {
-            if (ImGui.MenuItem(L($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)")))
-                ShowProjectPanel();
-            if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir le dossier du projet")) && Directory.Exists(project.Folder))
-                System.Diagnostics.Process.Start("explorer.exe", project.Folder);
-            if (ImGui.MenuItem(L($"{Icons.X}  Fermer le projet")))
-                CloseProjectRequested = true;
-        }
+        if (ImGui.MenuItem(L($"{Icons.X}  Fermer le projet"), null, false, _state.Project is not null))
+            CloseProjectRequested = true;
+    }
+
+    // Project menu: imports, files added to the open project, project contents.
+    private void DrawProjectContentItems()
+    {
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mapping...")))
+            ImportMappingRequested = true;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L("Ouvre le mapping de quelqu'un d'autre (ressource FiveM ou dossier stream) dans un nouveau projet.\nLes fichiers sont copiés : le dossier d'origine n'est pas modifié.\nAstuce : on peut aussi glisser un dossier, un .oiv ou un .zip sur la fenêtre."));
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Importer un mod OpenIV (.oiv) ou un .zip...")))
+            ImportPackageRequested = true;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L("Les fichiers de carte du mod (modèles, textures, collisions...) vont dans le dossier stream d'un nouveau projet,\nsous leur nom du jeu : ils remplacent les fichiers du jeu, prêts pour l'export en ressource FiveM."));
+        ImGui.Separator();
+        bool hasProject = _state.Project is not null;
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter des fichiers au projet..."), null, false, hasProject))
+            AddFilesRequested = true;
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Ajoute des fichiers au projet ouvert : .ydr, .ytyp, .ybn... ou leurs exports XML (Sollumz, CodeWalker), convertis au passage.\nUn fichier du même nom déjà dans le projet est remplacé (nouvel export depuis Blender), puis la carte est rechargée.\nAstuce : on peut aussi glisser les fichiers sur la fenêtre."));
+        if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Ajouter un dossier au projet..."), null, false, hasProject))
+            AddFolderRequested = true;
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Ajoute tout un dossier au projet ouvert (dossier d'export de Sollumz, dossier stream...), sous-dossiers compris."));
+        ImGui.Separator();
+        if (ImGui.MenuItem(L($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)"), null, false, hasProject))
+            ShowProjectPanel();
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir le dossier du projet"), null, false, hasProject)
+            && _state.Project is { } project && Directory.Exists(project.Folder))
+            System.Diagnostics.Process.Start("explorer.exe", project.Folder);
+    }
+
+    // Tools > Props library: managing the packs.
+    private void DrawLibraryItems()
+    {
+        if (ImGui.MenuItem(L("Ajouter un pack (dossier)...")))
+            _state.LibraryRequest = LibraryAction.AddFolder;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L("Copie un pack de props addons (ressource FiveM, dossier stream) dans la bibliothèque :\nses props sont disponibles dans tous les projets (Visionneuse > Bibliothèque > Placer)."));
+        if (ImGui.MenuItem(L("Ajouter un pack (.zip)...")))
+            _state.LibraryRequest = LibraryAction.AddZip;
+        if (ImGui.MenuItem(L("Ouvrir le dossier de la bibliothèque")))
+            ViewerPanel.OpenLibraryFolder(_state);
+        if (ImGui.MenuItem(L("Relire la bibliothèque")))
+            _state.LibraryRequest = LibraryAction.Reload;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L("Après avoir copié ou retiré un pack à la main dans le dossier : recharge la carte."));
     }
 
     private void DrawLayersWindow()
