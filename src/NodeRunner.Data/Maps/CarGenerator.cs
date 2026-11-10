@@ -32,6 +32,9 @@ public sealed record CarGenerator
     // Place in the map file's list, -1 for a spot added by the user.
     public int SourceIndex { get; init; } = -1;
 
+    // Deleted by the user: left in the list (the other spots keep their number), not written to the file.
+    public bool IsDeleted { get; init; }
+
     public float Length => Orientation.Length();
 
     // Heading of the car, in radians from the X axis (east), counterclockwise.

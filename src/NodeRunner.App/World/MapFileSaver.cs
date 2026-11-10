@@ -33,12 +33,14 @@ internal static class MapFileSaver
                 var extents = MapExtentsCalculator.Compute(map, library.GetArchetype);
                 MapFileContent written;
                 ResourceHeader header;
+                // A project's map getting its first parking spots: their description is taken from a game map.
+                var carGenerator = map.IsCustom && map.KeptCarGenerators.Any() ? CarGeneratorDescription(content, library) : null;
                 if (map.IsCustom && map.SavedContent is { } saved && !map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior))
                 {
                     // A map read from the project's files (imported or saved earlier): starts from it, so that what
                     // the editor does not handle (parking spots, lights, extensions...) is kept.
                     header = Template(content, library).Header;
-                    written = writer.Write(saved, map, extents);
+                    written = writer.Write(saved, map, extents, carGenerator);
                 }
                 else if (map.IsCustom)
                 {
@@ -46,7 +48,7 @@ internal static class MapFileSaver
                     var template = Template(content, library);
                     header = template.Header;
                     var interiorInstance = map.KeptEntities.Any(e => e.IsInterior) ? InteriorInstanceDescription(content, library) : null;
-                    written = writer.Build(template.Content, map, Path.GetFileNameWithoutExtension(name), extents, interiorInstance, library.GetArchetype);
+                    written = writer.Build(template.Content, map, Path.GetFileNameWithoutExtension(name), extents, interiorInstance, library.GetArchetype, carGenerator);
                 }
                 else
                 {
@@ -118,6 +120,26 @@ internal static class MapFileSaver
         throw new InvalidDataException(L("aucun YMAP du jeu avec un intérieur, utilisable comme modèle"));
     }
 
+    private static (MapLibrary Library, Data.Native.Resources.MetaDocument.StructureInfo Info)? _carGenerator;
+
+    // The description of parking spots, from a game map file that has some.
+    private static Data.Native.Resources.MetaDocument.StructureInfo CarGeneratorDescription(GameContent content, MapLibrary library)
+    {
+        if (_carGenerator is { } cached && cached.Library == library)
+            return cached.Info;
+        foreach (var map in library.Maps)
+        {
+            if (map.IsCustom || map.FilePath is null || map.CarGenerators.Count == 0 || content.ReadFile(map.FilePath) is not { } bytes)
+                continue;
+            if (YmapWriter.CarGeneratorDescription(bytes) is { } info)
+            {
+                _carGenerator = (library, info);
+                return info;
+            }
+        }
+        throw new InvalidDataException(L("aucun YMAP du jeu avec des places de véhicules, utilisable comme modèle"));
+    }
+
     // Reads the new file back as the game data would be, and checks that every object kept is where it should be.
     private static void Verify(byte[] file, MapData map)
     {
@@ -133,5 +155,9 @@ internal static class MapFileSaver
             if (a.ArchetypeHash != b.ArchetypeHash || a.Position != b.Position || a.StoredRotation != b.StoredRotation || a.Scale.Z != b.Scale.Z)
                 throw new InvalidDataException(L($"vérification échouée (objet n° {i + 1})"));
         }
+        var spots = map.KeptCarGenerators.ToList();
+        if (written.CarGenerators.Count != spots.Count
+            || written.CarGenerators.Where((s, i) => s.Position != spots[i].Position || s.Orientation != spots[i].Orientation || s.CarModel != spots[i].CarModel).Any())
+            throw new InvalidDataException(L("vérification échouée (places de véhicules)"));
     }
 }

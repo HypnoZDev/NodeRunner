@@ -677,10 +677,12 @@ internal sealed class AppState
             Select(null);
             SelectedOccluder = new OccluderSelection(boxEdit.File, OcclusionLayerPart.Boxes, boxEdit.Index);
         }
-        else if (edit is CarGeneratorEdit spotEdit)
+        else if (edit is ICarGeneratorEdit spotEdit)
         {
+            // A spot deleted again (an addition undone, a deletion redone) leaves nothing selected.
             Select(null);
-            SelectedCarGenerator = new CarGeneratorSelection(spotEdit.Map, spotEdit.Index);
+            var spot = new CarGeneratorSelection(spotEdit.Map, spotEdit.Index);
+            SelectedCarGenerator = spot.Spot is null ? null : spot;
         }
         else if (edit is OccluderPresenceEdit presenceEdit)
         {
@@ -714,6 +716,46 @@ internal sealed class AppState
         }
         else if (edit is { Selection.Count: > 0 })
             SelectAll(edit.Selection);
+    }
+
+    // --- Parking spots ---
+
+    // A new parking spot (5 x 3 m, any car) 12 m in front of the camera, facing away from it, in the project's own
+    // map; selected, with the "move" tool.
+    public void AddCarGenerator()
+    {
+        Notice = null;
+        if (World.Maps is not { } library || ProjectMap(library) is not { } map)
+            return;
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(forward) : System.Numerics.Vector3.UnitY;
+        var point = Camera.Position + forward * 12f;
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 10f;
+        var spot = new CarGenerator
+        {
+            // The game's spots are about 1 m above the road (the car is put on the ground below).
+            Position = point with { Z = ground + 1f },
+            Orientation = new System.Numerics.Vector2(forward.X, forward.Y) * 5f,
+            Width = 3f,
+            Flags = 0xE60, // The most common value in the game's spots.
+        };
+        var edit = CarGeneratorAddEdit.Apply(map, spot, L("Ajouter une place de véhicule"));
+        History.Add(edit);
+        SetLayerVisible(CarGeneratorLayer.LayerName, true);
+        Select(null);
+        SelectedCarGenerator = new CarGeneratorSelection(map, edit.Index);
+        if (Tool == TransformTool.Select)
+            Tool = TransformTool.Move;
+        Notify(L($"Place de véhicule ajoutée dans {Path.GetFileName(map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+    }
+
+    public void DeleteSelectedCarGenerator()
+    {
+        if (SelectedCarGenerator is not { } selected)
+            return;
+        History.Add(CarGeneratorDeleteEdit.Apply(selected.Map, selected.Index, L($"Supprimer la place de véhicule {selected.Index}")));
+        SelectedCarGenerator = null;
+        Notify(L($"Place de véhicule {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
     // --- Occluders ---
@@ -1159,7 +1201,7 @@ internal sealed class AppState
                 .Where(entity => entity.Interior is null).Select(entity => entity.Map)
                 // The project's maps placing an interior whose portals changed: the instance stores its number of exits.
                 .Concat(history.All.OfType<IInteriorEdit>().Select(e => e.Interior.Map).Where(m => m is { IsCustom: true }))
-                .Concat(history.All.OfType<CarGeneratorEdit>().Select(e => e.Map))
+                .Concat(history.All.OfType<ICarGeneratorEdit>().Select(e => e.Map))
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()

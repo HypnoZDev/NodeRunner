@@ -112,6 +112,83 @@ public class CarGeneratorTests
     }
 
     [Fact]
+    public void A_deleted_parking_spot_is_left_out_and_the_others_keep_their_bytes()
+    {
+        var file = BuildYmap((new Vector3(10, 20, 30), new Vector2(0, 5), 2.5f, 0xABCD), (new Vector3(-4, 1, 2), new Vector2(3, 0), 3f, 0),
+            (new Vector3(7, 7, 7), new Vector2(1, 0), 2f, 0x77));
+        var map = new YmapReader().Read(file);
+        var original = map.CarGenerators.ToList();
+        var edit = Editor.CarGeneratorDeleteEdit.Apply(map, 1, "test");
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content);
+        Assert.Equal(2, written.CarGenerators.Count);
+        Assert.Equal(original[0], written.CarGenerators[0]);
+        Assert.Equal(original[2] with { SourceIndex = 1 }, written.CarGenerators[1]);
+
+        // All deleted: no spot left in the file.
+        var first = Editor.CarGeneratorDeleteEdit.Apply(map, 0, "test");
+        var last = Editor.CarGeneratorDeleteEdit.Apply(map, 2, "test");
+        Assert.Empty(new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content).CarGenerators);
+
+        // Undone: the file written as it was.
+        last.Undo();
+        first.Undo();
+        edit.Undo();
+        Assert.Equal(original, new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content).CarGenerators);
+    }
+
+    [Fact]
+    public void Parking_spots_are_added_to_a_map_file_with_or_without_spots()
+    {
+        var spot = new Data.Maps.CarGenerator { Position = new Vector3(100, 50, 3), Orientation = new Vector2(0, 5), Width = 3f, Flags = 0xE60, CarModel = 0x99 };
+
+        // A file with spots: the new one goes after them.
+        var file = BuildYmap((new Vector3(10, 20, 30), new Vector2(0, 5), 2.5f, 0xABCD));
+        var map = new YmapReader().Read(file);
+        Editor.CarGeneratorAddEdit.Apply(map, spot, "test");
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, Editor.MapExtentsCalculator.Compute(map, _ => null)).Content);
+        Assert.Equal(2, written.CarGenerators.Count);
+        Assert.Equal(map.CarGenerators[0], written.CarGenerators[0]);
+        Assert.Equal(spot with { SourceIndex = 1 }, written.CarGenerators[1]);
+        // Loaded from far enough around the new spot.
+        Assert.True(written.StreamingExtentsMax.X >= 100 + Editor.MapExtentsCalculator.AddedSpotReach);
+
+        // A file without spots: needs the description of CCarGen.
+        var plain = DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd));
+        var bare = new YmapReader().Read(plain);
+        Editor.CarGeneratorAddEdit.Apply(bare, spot, "test");
+        var extents = Editor.MapExtentsCalculator.Compute(bare, _ => null);
+        Assert.Throws<InvalidDataException>(() => new YmapWriter().Write(plain, bare, extents));
+        var description = YmapWriter.CarGeneratorDescription(file);
+        Assert.NotNull(description);
+        var added = new YmapReader().Read(new YmapWriter().Write(plain, bare, extents, description).Content);
+        Assert.Single(added.Entities);
+        Assert.Equal(spot with { SourceIndex = 0 }, Assert.Single(added.CarGenerators));
+    }
+
+    [Fact]
+    public void A_project_map_with_parking_spots_only_is_built()
+    {
+        var template = DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd));
+        var library = Data.Maps.MapLibrary.Create((new YmapReader().Read(template), "template.ymap"));
+        var map = library.CreateCustomMap("proj_props.ymap");
+        var spot = new Data.Maps.CarGenerator { Position = new Vector3(-30, 40, 5), Orientation = new Vector2(4, 0), Width = 2.5f, Flags = 0xE60 };
+        Editor.CarGeneratorAddEdit.Apply(map, spot, "test");
+        Editor.CarGeneratorAddEdit.Apply(map, spot with { Position = new Vector3(0, 0, 1) }, "test").Undo();
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+
+        Assert.Throws<InvalidDataException>(() => new YmapWriter().Build(template, map, "proj_props", extents));
+        var description = YmapWriter.CarGeneratorDescription(BuildYmap((Vector3.Zero, Vector2.UnitX, 1f, 0)));
+        var written = new YmapReader().Read(new YmapWriter().Build(template, map, "proj_props", extents, carGenerator: description).Content);
+
+        Assert.Empty(written.Entities);
+        Assert.Equal(spot with { SourceIndex = 0 }, Assert.Single(written.CarGenerators));
+        Assert.True(written.StreamingExtentsMin.X <= -30 - Editor.MapExtentsCalculator.AddedSpotReach + 0.01f);
+        Assert.True(written.EntitiesExtentsMin.X <= written.EntitiesExtentsMax.X);
+    }
+
+    [Fact]
     public void A_map_file_without_parking_spots_reads_an_empty_list() =>
         Assert.Empty(new YmapReader().Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd))).CarGenerators);
 }

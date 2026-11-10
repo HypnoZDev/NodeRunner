@@ -583,5 +583,14 @@ public static partial class English
             "Simple mode: files, LOD, settings and rooms are in Advanced mode."),
         ("Supprimer les {0} objets sélectionnés (Suppr)", "Delete the {0} selected objects (Del)"),
         ("Supprimer l'objet (Suppr)", "Delete the object (Del)"),
+        ("{0}  Place de véhicule garé", "{0}  Parking spot (car generator)"),
+        ("Ajoute une place (car generator) au sol devant la caméra, dans le YMAP du projet : le jeu peut y garer un véhicule. À régler ensuite dans Propriétés ou avec les poignées.",
+            "Adds a parking spot (car generator) on the ground in front of the camera, in the project's YMAP: the game may park a vehicle there. Adjust it afterwards in Properties or with the handles."),
+        ("Ajouter une place de véhicule", "Add a parking spot"),
+        ("Place de véhicule ajoutée dans {0}. Ctrl+Z pour annuler.", "Parking spot added to {0}. Ctrl+Z to undo."),
+        ("Place de véhicule {0} supprimée de {1}. Ctrl+Z pour annuler.", "Parking spot {0} deleted from {1}. Ctrl+Z to undo."),
+        ("Supprimer la place de véhicule {0}", "Delete parking spot {0}"),
+        ("aucun YMAP du jeu avec des places de véhicules, utilisable comme modèle", "no game YMAP with parking spots to use as a model"),
+        ("vérification échouée (places de véhicules)", "check failed (parking spots)"),
     ];
 }

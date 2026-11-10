@@ -299,6 +299,8 @@ internal sealed class MainUi
                 _state.DeleteSelectedCollision();
             else if (_state.SelectedOccluder is not null)
                 _state.DeleteSelectedOccluder();
+            else if (_state.SelectedCarGenerator is not null)
+                _state.DeleteSelectedCarGenerator();
             else if (_state.SelectedRoom is not null)
                 _state.DeleteSelectedRoom();
             else if (_state.SelectedPortal is not null)
@@ -466,6 +468,10 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Copie l'intérieur sélectionné (ou celui de l'objet sélectionné) sous un autre nom, avec ses objets, dans un .ytyp du projet : la copie se modifie sans toucher l'original."));
             ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.Car}  Place de véhicule garé"), null, false, _state.World.Maps is not null))
+                _state.AddCarGenerator();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Ajoute une place (car generator) au sol devant la caméra, dans le YMAP du projet : le jeu peut y garer un véhicule. À régler ensuite dans Propriétés ou avec les poignées."));
             if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();

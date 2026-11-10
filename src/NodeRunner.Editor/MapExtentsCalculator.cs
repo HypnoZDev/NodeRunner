@@ -19,8 +19,7 @@ public static class MapExtentsCalculator
                 Include(ref extents, inside, archetypes);
         }
         // The game's streaming boxes hold every parking spot of their map (measured: 47 884 spots, none outside).
-        foreach (var spot in map.CarGenerators)
-            extents = extents with { StreamingMin = Vector3.Min(extents.StreamingMin, spot.Position), StreamingMax = Vector3.Max(extents.StreamingMax, spot.Position) };
+        IncludeSpots(ref extents, map);
         return extents;
     }
 
@@ -47,7 +46,32 @@ public static class MapExtentsCalculator
                     Vector3.Min(extents.EntitiesMin, min), Vector3.Max(extents.EntitiesMax, max));
             }
         }
+        IncludeSpots(ref extents, map);
+        // A map with spots only: its objects' box is around the spots.
+        if (extents.EntitiesMin.X > extents.EntitiesMax.X && map.KeptCarGenerators.Any())
+            extents = extents with
+            {
+                EntitiesMin = map.KeptCarGenerators.Select(s => s.Position).Aggregate(Vector3.Min),
+                EntitiesMax = map.KeptCarGenerators.Select(s => s.Position).Aggregate(Vector3.Max),
+            };
         return extents == empty ? default : extents;
+    }
+
+    // From how far a parking spot added by the user must be loaded (the game's spots get no margin: their files'
+    // streaming boxes already hold them, measured on 47 884 spots).
+    public const float AddedSpotReach = 150f;
+
+    private static void IncludeSpots(ref MapExtents extents, MapData map)
+    {
+        foreach (var spot in map.KeptCarGenerators)
+        {
+            var reach = new Vector3(spot.SourceIndex < 0 ? AddedSpotReach : 0f);
+            extents = extents with
+            {
+                StreamingMin = Vector3.Min(extents.StreamingMin, spot.Position - reach),
+                StreamingMax = Vector3.Max(extents.StreamingMax, spot.Position + reach),
+            };
+        }
     }
 
     private static void Include(ref MapExtents extents, MapEntity entity, Func<uint, Archetype?> archetypes)

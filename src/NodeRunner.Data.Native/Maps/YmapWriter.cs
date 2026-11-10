@@ -10,7 +10,11 @@ public sealed class YmapWriter : IMapDataWriter
 {
     private const int PointerSize = 8;
 
-    public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents)
+    public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents) => Write(source, map, extents, null);
+
+    // carGenerator: the description of parking spots (CCarGen), from a game map that has some, for a file that does
+    // not describe them yet and gets its first spots.
+    public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents, MetaDocument.StructureInfo? carGenerator)
     {
         var document = MetaDocument.Read(source);
         int root = document.RootBlock;
@@ -37,7 +41,7 @@ public sealed class YmapWriter : IMapDataWriter
         for (int i = 0; i < kept.Count; i++)
             WriteEntity(document, items[i], kept[i]);
         WriteEntityPointers(document, mapData, items);
-        WriteCarGenerators(document, mapData, map.CarGenerators);
+        WriteCarGenerators(document, mapData, map.CarGenerators, carGenerator);
 
         WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
         WriteVector3(mapData, YmapReader.MapStreamingMax, extents.StreamingMax);
@@ -74,7 +78,8 @@ public sealed class YmapWriter : IMapDataWriter
     // instances (of interiors made by the user) need interiorInstance, the description of CMloInstanceDef taken from
     // a game map that has one, and archetypes (their number of portals to the outside).
     public MapFileContent Build(ReadOnlySpan<byte> template, MapData map, string name, MapExtents extents,
-        MetaDocument.StructureInfo? interiorInstance = null, Func<uint, Archetype?>? archetypes = null)
+        MetaDocument.StructureInfo? interiorInstance = null, Func<uint, Archetype?>? archetypes = null,
+        MetaDocument.StructureInfo? carGenerator = null)
     {
         var document = MetaDocument.Read(template);
         int root = document.RootBlock;
@@ -89,9 +94,16 @@ public sealed class YmapWriter : IMapDataWriter
         uint pointerStructure = document.Blocks[MetaDocument.DecodePointer(
             BinaryPrimitives.ReadUInt64LittleEndian(templateMapData.AsSpan(YmapReader.MapEntities))).Block].Structure;
 
-        if (map.CarGenerators.Count > 0)
-            throw new InvalidDataException("Les places de véhicules d'une carte créée ne sont pas encore prises en charge.");
         MetaDocument? saved = map.SavedContent is { } content ? MetaDocument.Read(content) : null;
+        var spots = map.KeptCarGenerators.ToList();
+        if (spots.Count > 0 && document.FindStructure(YmapReader.CarGeneratorStructure) is null)
+        {
+            if (carGenerator is null || carGenerator.Size != YmapReader.CarGeneratorSize)
+                throw new InvalidDataException("Description des places de véhicules (CCarGen) introuvable.");
+            document.Structures.Add(carGenerator);
+        }
+        // The spots of the saved file, as they were read (SourceIndex).
+        var savedSpots = saved is null ? null : CarGeneratorArray(saved, saved.Blocks[saved.RootBlock].Data);
         var savedItems = saved is null ? [] : EntityItems(saved, saved.Blocks[saved.RootBlock].Data);
 
         if (map.KeptEntities.Any(e => e.IsInterior) && document.FindStructure(YmapReader.InteriorInstanceStructure) is null)
@@ -180,9 +192,21 @@ public sealed class YmapWriter : IMapDataWriter
             BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count);
         }
 
+        if (spots.Count > 0)
+        {
+            var spotItems = NewCarGeneratorItems(spots, i => savedSpots is { } a && i < a.Count
+                ? saved!.Blocks[a.Block].Data.AsSpan(a.Offset + i * YmapReader.CarGeneratorSize, YmapReader.CarGeneratorSize) : default);
+            document.Blocks.Add(new MetaDocument.Block(YmapReader.CarGeneratorStructure, spotItems));
+            SetArray(mapData, YmapReader.MapCarGenerators, document.Blocks.Count - 1, spots.Count);
+        }
+
         var (bytes, pageFlags) = document.Write();
         return new MapFileContent(bytes, pageFlags);
     }
+
+    // The description of parking spots (CCarGen) in a map file, null if it has none.
+    public static MetaDocument.StructureInfo? CarGeneratorDescription(ReadOnlySpan<byte> source) =>
+        MetaDocument.Read(source).FindStructure(YmapReader.CarGeneratorStructure);
 
     // The description of interior instances (CMloInstanceDef) in a map file, null if it has none.
     public static MetaDocument.StructureInfo? InteriorInstanceDescription(ReadOnlySpan<byte> source) =>
@@ -361,38 +385,112 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count); // Capacity.
     }
 
-    // The parking spots, written in place (same number, same order as in the file).
-    private static void WriteCarGenerators(MetaDocument document, byte[] mapData, IReadOnlyList<CarGenerator> spots)
+    // The parking spots: written in place when none was added or deleted (the file's bytes are kept as they are),
+    // otherwise as a new array, each spot of the file starting from its own bytes.
+    private static void WriteCarGenerators(MetaDocument document, byte[] mapData, IReadOnlyList<CarGenerator> spots,
+        MetaDocument.StructureInfo? description)
+    {
+        var old = CarGeneratorArray(document, mapData);
+        int count = old?.Count ?? 0;
+        var kept = spots.Where(s => !s.IsDeleted).ToList();
+        if (spots.Any(s => s.SourceIndex >= count))
+            throw new InvalidDataException("Les places de véhicules ne sont pas celles du fichier.");
+        if (kept.Count == count && kept.Select((s, i) => s.SourceIndex == i).All(same => same))
+        {
+            if (old is not { } a)
+                return;
+            var data = document.Blocks[a.Block].Data;
+            for (int i = 0; i < count; i++)
+                WriteCarGenerator(data, a.Offset + i * YmapReader.CarGeneratorSize, kept[i]);
+            return;
+        }
+
+        if (kept.Count == 0)
+        {
+            SetArray(mapData, YmapReader.MapCarGenerators, -1, 0);
+            return;
+        }
+        if (document.FindStructure(YmapReader.CarGeneratorStructure) is null)
+        {
+            if (description is null || description.Size != YmapReader.CarGeneratorSize)
+                throw new InvalidDataException("Description des places de véhicules (CCarGen) introuvable.");
+            document.Structures.Add(description);
+        }
+        byte[]? oldData = old is { } o ? document.Blocks[o.Block].Data : null;
+        var items = NewCarGeneratorItems(kept, i => oldData is null ? default
+            : oldData.AsSpan(old!.Value.Offset + i * YmapReader.CarGeneratorSize, YmapReader.CarGeneratorSize));
+        // The file's array alone in its block (as in the game files): the block is reused, nothing is left unused.
+        if (old is { Offset: 0 } whole && document.Blocks[whole.Block].Data.Length == whole.Count * YmapReader.CarGeneratorSize)
+        {
+            document.Blocks[whole.Block].Data = items;
+            SetArray(mapData, YmapReader.MapCarGenerators, whole.Block, kept.Count);
+        }
+        else
+        {
+            document.Blocks.Add(new MetaDocument.Block(YmapReader.CarGeneratorStructure, items));
+            SetArray(mapData, YmapReader.MapCarGenerators, document.Blocks.Count - 1, kept.Count);
+        }
+    }
+
+    private delegate ReadOnlySpan<byte> OriginalItem(int sourceIndex);
+
+    // The items of a new array of spots: a spot of the file starts from its bytes (original(SourceIndex)), a new one
+    // from zeros (no field before the position, nothing after the livery).
+    private static byte[] NewCarGeneratorItems(List<CarGenerator> spots, OriginalItem original)
+    {
+        var items = new byte[spots.Count * YmapReader.CarGeneratorSize];
+        for (int i = 0; i < spots.Count; i++)
+        {
+            int o = i * YmapReader.CarGeneratorSize;
+            if (spots[i].SourceIndex >= 0)
+            {
+                var bytes = original(spots[i].SourceIndex);
+                if (bytes.Length == YmapReader.CarGeneratorSize)
+                    bytes.CopyTo(items.AsSpan(o));
+            }
+            WriteCarGenerator(items, o, spots[i]);
+        }
+        return items;
+    }
+
+    // Where the file's array of spots is, null without spots.
+    private static (int Block, int Offset, int Count)? CarGeneratorArray(MetaDocument document, byte[] mapData)
     {
         var field = mapData.AsSpan(YmapReader.MapCarGenerators);
         int count = BinaryPrimitives.ReadUInt16LittleEndian(field[8..]);
-        if (spots.Count != count || spots.Where((s, i) => s.SourceIndex != i).Any())
-            throw new InvalidDataException("L'ajout ou la suppression de places de véhicules n'est pas encore pris en charge.");
         if (count == 0)
-            return;
+            return null;
         var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(field));
-        if (block < 0 || document.Blocks[block].Structure != YmapReader.CarGeneratorStructure)
+        if (block < 0 || block >= document.Blocks.Count || document.Blocks[block].Structure != YmapReader.CarGeneratorStructure)
             throw new InvalidDataException("Places de véhicules (CCarGen) introuvables dans le fichier.");
-        var data = document.Blocks[block].Data;
-        if (offset + count * YmapReader.CarGeneratorSize > data.Length)
+        if (offset + count * YmapReader.CarGeneratorSize > document.Blocks[block].Data.Length)
             throw new InvalidDataException("Places de véhicules (CCarGen) tronquées dans le fichier.");
-        for (int i = 0; i < count; i++)
-        {
-            var spot = spots[i];
-            int o = offset + i * YmapReader.CarGeneratorSize;
-            WriteVector3(data, o + YmapReader.CarPosition, spot.Position);
-            WriteFloat(data, o + YmapReader.CarOrientX, spot.Orientation.X);
-            WriteFloat(data, o + YmapReader.CarOrientY, spot.Orientation.Y);
-            WriteFloat(data, o + YmapReader.CarPerpendicularLength, spot.Width);
-            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarModel), spot.CarModel);
-            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarFlags), spot.Flags);
-            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1), spot.Color1);
-            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 4), spot.Color2);
-            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 8), spot.Color3);
-            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 12), spot.Color4);
-            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarPopGroup), spot.PopGroup);
-            data[o + YmapReader.CarLivery] = (byte)(sbyte)spot.Livery;
-        }
+        return (block, offset, count);
+    }
+
+    // An array field of CMapData (pointer, count, capacity) set to the start of block, or emptied (count 0).
+    private static void SetArray(byte[] mapData, int fieldOffset, int block, int count)
+    {
+        var field = mapData.AsSpan(fieldOffset);
+        BinaryPrimitives.WriteUInt64LittleEndian(field, count == 0 ? 0 : MetaDocument.Pointer(block, 0));
+        BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)count);
+        BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)count);
+    }
+
+    private static void WriteCarGenerator(byte[] data, int o, CarGenerator spot)
+    {
+        WriteVector3(data, o + YmapReader.CarPosition, spot.Position);
+        WriteFloat(data, o + YmapReader.CarOrientX, spot.Orientation.X);
+        WriteFloat(data, o + YmapReader.CarOrientY, spot.Orientation.Y);
+        WriteFloat(data, o + YmapReader.CarPerpendicularLength, spot.Width);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarModel), spot.CarModel);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarFlags), spot.Flags);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1), spot.Color1);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 4), spot.Color2);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 8), spot.Color3);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.CarColor1 + 12), spot.Color4);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.CarPopGroup), spot.PopGroup);
+        data[o + YmapReader.CarLivery] = (byte)(sbyte)spot.Livery;
     }
 
     private static uint ReadUInt32(MetaDocument document, (int Block, int Offset) item, int field) =>

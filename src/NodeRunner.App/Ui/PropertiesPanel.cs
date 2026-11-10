@@ -1157,6 +1157,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         string copied = state.FormatPosition(spot.Position, heading);
         if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
             ImGui.SetClipboardText(copied);
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Annulable avec Ctrl+Z.")))
+        {
+            state.DeleteSelectedCarGenerator();
+            return;
+        }
 
         var map = selection.Map;
         int index = selection.Index;
@@ -1304,7 +1310,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (!Simple && Widgets.Section(L("Fichier"), "cargen_file") &&Widgets.BeginProperties("##cargen_file"))
         {
             Widgets.PropertyText(L("YMAP"), file, selection.Map.FilePath);
-            Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.CarGenerators.Count} place(s)"));
+            Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.KeptCarGenerators.Count()} place(s)"));
             Widgets.EndProperties();
         }
         Widgets.Hint(L("Le jeu peut garer un véhicule à cette place quand le joueur passe à proximité. Échap pour désélectionner ; ")

@@ -79,6 +79,8 @@ public sealed class EditCodecs
         .Add(new InteriorCreateCodec())
         .Add(new InteriorDuplicateCodec())
         .Add(new CarGeneratorCodec())
+        .Add(new CarGeneratorAddCodec())
+        .Add(new CarGeneratorDeleteCodec())
         .Add(new ArchetypeCodec())
         .Add(new DoorReplaceCodec());
 

@@ -91,8 +91,8 @@ public class OnlineEditTests
                 }
             }
         }
-        foreach (var spot in w.Map.CarGenerators)
-            text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery}\n");
+        foreach (var spot in w.Library.Maps.SelectMany(m => m.CarGenerators))
+            text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery} {spot.SourceIndex} del={spot.IsDeleted}\n");
         var archetype = w.Library.GetArchetype(InteriorHash)!;
         foreach (var room in archetype.InteriorRooms)
             text.Append(CultureInfo.InvariantCulture, $"room {room.Name} {V(room.BoundsMin)} {V(room.BoundsMax)} {room.Flags}\n");
@@ -209,6 +209,11 @@ public class OnlineEditTests
         var spotAfter = spotBefore with { Position = new(41, 2, 0.5f), Orientation = new(-4, 0), Width = 3f, CarModel = 0xB779A091, Flags = 0x1, Color1 = 5, Color4 = 7, PopGroup = 0x99, Livery = 2 };
         a.Map.SetCarGenerator(0, spotAfter);
         Share(new CarGeneratorEdit(a.Map, 0, spotBefore, spotAfter, "Modifier la place"));
+
+        // A parking spot added to the project's map, the map file's one deleted.
+        var projectMap = a.Library.FindCustomMap("proj_props.ymap") ?? a.Library.CreateCustomMap("proj_props.ymap");
+        Share(CarGeneratorAddEdit.Apply(projectMap, new CarGenerator { Position = new(9, 8, 7), Orientation = new(0, 5), Width = 3f, Flags = 0xE60, CarModel = 0x55 }, "Ajouter une place"));
+        Share(CarGeneratorDeleteEdit.Apply(a.Map, 0, "Supprimer la place"));
 
         // Undone and redone the same way on both computers.
         while (a.History.CanUndo)

@@ -45,6 +45,16 @@ public sealed class MapData
         Interlocked.Increment(ref _carGeneratorRevision);
     }
 
+    // Adds a spot at the end of the list and returns its number.
+    public int AddCarGenerator(CarGenerator spot)
+    {
+        _carGenerators = [.. _carGenerators, spot];
+        Interlocked.Increment(ref _carGeneratorRevision);
+        return _carGenerators.Count - 1;
+    }
+
+    public IEnumerable<CarGenerator> KeptCarGenerators => CarGenerators.Where(s => !s.IsDeleted);
+
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }
 

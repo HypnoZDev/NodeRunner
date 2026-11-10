@@ -10,7 +10,7 @@ namespace NodeRunner.App.World;
 // A parking spot of a map file.
 internal sealed record CarGeneratorSelection(MapData Map, int Index)
 {
-    public CarGenerator? Spot => Index >= 0 && Index < Map.CarGenerators.Count ? Map.CarGenerators[Index] : null;
+    public CarGenerator? Spot => Index >= 0 && Index < Map.CarGenerators.Count && !Map.CarGenerators[Index].IsDeleted ? Map.CarGenerators[Index] : null;
 }
 
 // The parking spots near the camera: a translucent box the size of the spot, with an arrow towards the front of the car.
@@ -239,6 +239,8 @@ internal sealed class CarGeneratorLayer : IDisposable
             for (int i = 0; i < list.Count; i++)
             {
                 var spot = list[i];
+                if (spot.IsDeleted)
+                    continue;
                 float reach = Radius + spot.Length;
                 if (Vector2.DistanceSquared(new Vector2(spot.Position.X, spot.Position.Y), center) > reach * reach)
                     continue;

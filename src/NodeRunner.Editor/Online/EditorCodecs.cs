@@ -549,3 +549,67 @@ internal sealed class CarGeneratorCodec : EditCodec<CarGeneratorEdit>
         return new CarGeneratorEdit(map, index, before, after, description);
     }
 }
+
+internal sealed class CarGeneratorAddCodec : EditCodec<CarGeneratorAddEdit>
+{
+    public override string Tag => "car-generator-add";
+
+    protected override void Write(CarGeneratorAddEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+        var s = edit.Spot;
+        w.Write(s.Position);
+        w.Write(s.Orientation.X);
+        w.Write(s.Orientation.Y);
+        w.Write(s.Width);
+        w.Write(s.CarModel);
+        w.Write(s.Flags);
+        w.Write(s.Color1);
+        w.Write(s.Color2);
+        w.Write(s.Color3);
+        w.Write(s.Color4);
+        w.Write(s.PopGroup);
+        w.Write(s.Livery);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        // Spots are only added at the end: the same number on every computer.
+        if (r.ReadInt() != map.CarGenerators.Count)
+            throw new InvalidDataException("Parking spots differ here.");
+        var spot = new CarGenerator
+        {
+            Position = r.ReadVector3(),
+            Orientation = new System.Numerics.Vector2(r.ReadFloat(), r.ReadFloat()),
+            Width = r.ReadFloat(),
+            CarModel = r.ReadUInt(),
+            Flags = r.ReadUInt(),
+            Color1 = r.ReadInt(),
+            Color2 = r.ReadInt(),
+            Color3 = r.ReadInt(),
+            Color4 = r.ReadInt(),
+            PopGroup = r.ReadUInt(),
+            Livery = r.ReadInt(),
+        };
+        return CarGeneratorAddEdit.Apply(map, spot, description);
+    }
+}
+
+internal sealed class CarGeneratorDeleteCodec : EditCodec<CarGeneratorDeleteEdit>
+{
+    public override string Tag => "car-generator-delete";
+
+    protected override void Write(CarGeneratorDeleteEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        return CarGeneratorDeleteEdit.Apply(map, r.ReadInt(), description);
+    }
+}
