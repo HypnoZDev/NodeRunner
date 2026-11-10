@@ -29,6 +29,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         (L("Occlusion"), Icons.ScanEye, OcclusionLayer.Parts.Select(OcclusionLayer.LayerName).ToArray()),
         (L("Véhicules garés"), Icons.Car, [CarGeneratorLayer.LayerName]),
         (L("Zones de timecycle"), Icons.Sunset, [TimecycleLayer.LayerName]),
+        (L("Lumières LOD"), Icons.Moon, [LodLightLayer.LayerName]),
     ];
 
     private static readonly (Vector3 Direction, string Label, Vector4 Color)[] Axes =

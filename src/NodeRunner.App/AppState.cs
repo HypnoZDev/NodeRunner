@@ -150,6 +150,20 @@ internal sealed class AppState
 
     private TimecycleSelection? _selectedTimecycle;
     private MapLibrary? _selectedTimecycleLibrary;
+
+    // A distant light selected in the 3D view (an object selection clears it). Forgotten when the map is loaded again.
+    public LodLightSelection? SelectedLodLight
+    {
+        get => _selectedLodLightLibrary == World.Maps && _selectedLodLight is { Light: not null } l ? l : null;
+        set
+        {
+            _selectedLodLight = value;
+            _selectedLodLightLibrary = World.Maps;
+        }
+    }
+
+    private LodLightSelection? _selectedLodLight;
+    private MapLibrary? _selectedLodLightLibrary;
     private MapLibrary? _selectedCarGeneratorLibrary;
 
     public void Select(MapEntity? entity)
@@ -159,6 +173,7 @@ internal sealed class AppState
         SelectedOccluder = null;
         SelectedCarGenerator = null;
         SelectedTimecycle = null;
+        SelectedLodLight = null;
         SelectedRoom = null;
         SelectedPortal = null;
         if (entity is not null)
@@ -1796,7 +1811,7 @@ internal sealed class AppState
     private static bool IsHiddenByDefault(string layer) =>
         layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
         || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName
-        || layer == TimecycleLayer.LayerName;
+        || layer == TimecycleLayer.LayerName || layer == LodLightLayer.LayerName;
 
     public void SetLayerVisible(string layer, bool visible)
     {

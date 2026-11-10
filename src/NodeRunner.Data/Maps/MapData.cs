@@ -55,6 +55,15 @@ public sealed class MapData
 
     public IEnumerable<CarGenerator> KeptCarGenerators => CarGenerators.Where(s => !s.IsDeleted);
 
+    // Lights seen from far away (a distlodlights file), and their details (a lodlights file, child of that one).
+    public IReadOnlyList<DistantLodLight> DistantLights { get; init; } = [];
+    public IReadOnlyList<LodLight> LodLights { get; init; } = [];
+
+    // Of a distlodlights file: how many of its first lights are street lights, and its size category (0 small,
+    // 1 medium, 2 large, as in the file names).
+    public int DistantStreetLights { get; init; }
+    public int DistantCategory { get; init; }
+
     // Zones where the game changes the look of the picture.
     public IReadOnlyList<TimecycleModifier> TimecycleModifiers { get => _timecycleModifiers; init => _timecycleModifiers = value.ToList(); }
     private List<TimecycleModifier> _timecycleModifiers = [];

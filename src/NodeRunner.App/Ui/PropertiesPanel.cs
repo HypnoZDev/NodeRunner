@@ -100,6 +100,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             DrawCarGenerator(carGenerator, spot, state.World.Names ?? new HashNames());
         else if (state.SelectedTimecycle is { Zone: { } zone } timecycle)
             DrawTimecycle(timecycle, zone, state.World.Names ?? new HashNames());
+        else if (state.SelectedLodLight is { Light: { } light } lodLight)
+            DrawLodLight(lodLight, light);
         else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
                  && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
             DrawRoom(room, roomInterior, roomLibrary);
@@ -1317,6 +1319,95 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         Widgets.Hint(L("Le jeu peut garer un véhicule à cette place quand le joueur passe à proximité. Échap pour désélectionner ; ")
             + L("masquez le calque Véhicules garés pour sélectionner les objets."), wrap: true);
+    }
+
+    // Hours when a light is on, from its mask (bit n = on during hour n), as ranges: "de 20 h à 6 h".
+    internal static string LightHours(uint mask)
+    {
+        mask &= 0xFFFFFF;
+        if (mask == 0xFFFFFF)
+            return L("toute la journée");
+        if (mask == 0)
+            return L("jamais");
+        bool On(int hour) => (mask >> ((hour % 24 + 24) % 24) & 1) != 0;
+        var ranges = new List<string>();
+        for (int h = 0; h < 24; h++)
+        {
+            if (!On(h) || On(h - 1))
+                continue;
+            int end = h;
+            while (On(end + 1) && end + 1 < h + 24)
+                end++;
+            ranges.Add(L($"de {h} h à {(end + 1) % 24} h"));
+        }
+        return string.Join(", ", ranges);
+    }
+
+    private void DrawLodLight(LodLightSelection selection, DistantLodLight light)
+    {
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L($"{Icons.Moon}  Lumière LOD {selection.Index}"));
+        ImGui.PopFont();
+        string distantFile = Path.GetFileName(selection.Distant.FilePath ?? "");
+        Widgets.Hint($"{Icons.File}  {distantFile}");
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à la lumière")))
+            state.FocusOn(light.Position, 6f);
+        ImGui.SameLine();
+        string copied = state.FormatPosition(light.Position, null);
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
+            ImGui.SetClipboardText(copied);
+
+        static string V(Vector3 v) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{v.X:0.00}, {v.Y:0.00}, {v.Z:0.00}");
+        var details = selection.Details;
+        if (Widgets.Section(L("Lumière"), "lodlight_light") && Widgets.BeginProperties("##lodlight_light"))
+        {
+            if (details is { } type)
+                Widgets.PropertyText(L("Type"), type.Type switch
+                {
+                    LodLightType.Point => L("Ponctuelle (dans toutes les directions)"),
+                    LodLightType.Spot => L("Spot (dans une direction)"),
+                    LodLightType.Capsule => L("Tube"),
+                    var other => L($"Inconnu ({(int)other})"),
+                });
+            Widgets.Property(L("Couleur"), L("Couleur de la lumière (rouge, vert, bleu de 0 à 255)."));
+            var color = new Vector4(light.Red / 255f, light.Green / 255f, light.Blue / 255f, 1f);
+            ImGui.ColorButton("##lodlight_color", color, ImGuiColorEditFlags.NoTooltip | ImGuiColorEditFlags.NoAlpha, new Vector2(ImGui.GetFrameHeight() * 1.6f, ImGui.GetFrameHeight()));
+            ImGui.SameLine();
+            ImGui.TextUnformatted($"{light.Red}  {light.Green}  {light.Blue}");
+            Widgets.PropertyText(L("Intensité"), $"{light.Intensity} / 255", L("Force de la lumière vue de loin."));
+            Widgets.PropertyText(L("Position"), V(light.Position));
+            if (details is { } d)
+            {
+                Widgets.PropertyText(L("Allumée"), LightHours(d.HourMask), L("Heures où le jeu allume la lumière."));
+                Widgets.PropertyText(L("Portée"), $"{d.Falloff:0.0} m", L("Distance éclairée autour de la lumière (cercle dans la vue 3D)."));
+                if (!Simple)
+                {
+                    Widgets.PropertyText(L("Exposant de la portée"), $"{d.FalloffExponent:0.##}", L("Vitesse à laquelle la lumière baisse avec la distance."));
+                    Widgets.PropertyText(L("Direction"), V(d.Direction), L("Sens dans lequel éclaire un spot (ligne dans la vue 3D)."));
+                    Widgets.PropertyText(L("Cône"), L($"intérieur {d.ConeInnerAngle}, extérieur {d.ConeOuterAngleOrCapExt}"),
+                        L("Ouverture d'un spot, ou longueur d'un tube (valeurs brutes du fichier, de 0 à 255)."));
+                    Widgets.PropertyText(L("Halo"), $"{d.CoronaIntensity} / 255", L("Force du halo (corona) autour de la lumière."));
+                    Widgets.PropertyText(L("Hash"), $"0x{d.Hash:X8}", L("Identifiant de la lumière d'origine sur son objet."));
+                    Widgets.PropertyText(L("Drapeaux"), $"0x{d.TimeAndStateFlags:X8}", L("Heures (bits 0 à 23), réglages (24, 25), type (26 à 28)."));
+                }
+            }
+            else
+                Widgets.PropertyText(L("Détails"), L("aucun"), L("Ce fichier de lumières lointaines n'a pas de fichier lodlights pour cette lumière."));
+            Widgets.EndProperties();
+        }
+        if (!Simple && Widgets.Section(L("Fichiers"), "lodlight_files") && Widgets.BeginProperties("##lodlight_files"))
+        {
+            Widgets.PropertyText(L("Lumières lointaines"), distantFile, selection.Distant.FilePath);
+            Widgets.PropertyText(L("Détails"), Path.GetFileName(selection.Lod?.FilePath ?? "") is { Length: > 0 } lodFile ? lodFile : L("aucun"), selection.Lod?.FilePath);
+            Widgets.PropertyText(L("Catégorie"), selection.Distant.DistantCategory switch { 0 => L("petite"), 1 => L("moyenne"), 2 => L("grande"), var c => c.ToString() },
+                L("Taille des lumières du fichier (small, medium, large dans son nom)."));
+            Widgets.PropertyText(L("Lampadaires"), selection.Index < selection.Distant.DistantStreetLights ? L("oui") : L("non"),
+                L("Les premières lumières de chaque fichier sont des lampadaires de rue."));
+            Widgets.PropertyText(L("Dans ce fichier"), L($"{selection.Distant.DistantLights.Count} lumière(s)"));
+            Widgets.EndProperties();
+        }
+        Widgets.Hint(L("Le jeu remplace par ces lumières les vraies lumières des objets quand on les voit de loin, la nuit. Échap pour désélectionner ; ")
+            + L("masquez le calque Lumières LOD pour sélectionner les objets."), wrap: true);
     }
 
     private TimecycleModifier? _zoneEditStart;

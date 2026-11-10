@@ -30,6 +30,24 @@ public sealed class YmapReader : IMapDataReader
     internal const int MapEntities = 96;
     internal const int MapTimecycleModifiers = 224;
     internal const int MapCarGenerators = 240;
+    internal const int MapLodLights = 256;          // CLODLight, 136 bytes, embedded.
+    internal const int MapDistantLights = 392;      // CDistantLODLight, 48 bytes, embedded.
+
+    // CLODLight fields: arrays (pointer, count, capacity), one item per light.
+    internal const int LodDirection = 8;            // Vector3 (12 bytes).
+    internal const int LodFalloff = 24;             // float.
+    internal const int LodFalloffExponent = 40;     // float.
+    internal const int LodTimeAndStateFlags = 56;   // uint.
+    internal const int LodHash = 72;                // uint.
+    internal const int LodConeInner = 88;           // byte.
+    internal const int LodConeOuter = 104;          // byte.
+    internal const int LodCorona = 120;             // byte.
+
+    // CDistantLODLight fields.
+    internal const int DistantPosition = 8;         // Array of Vector3 (12 bytes).
+    internal const int DistantRgbi = 24;            // Array of uint.
+    internal const int DistantStreetLights = 40;    // ushort.
+    internal const int DistantCategory = 42;        // ushort.
 
     // CEntityDef fields.
     internal const int EntityArchetype = 8;
@@ -99,7 +117,46 @@ public sealed class YmapReader : IMapDataReader
             Entities = entities,
             CarGenerators = ReadCarGenerators(meta, map),
             TimecycleModifiers = ReadTimecycleModifiers(meta, map),
+            DistantLights = ReadDistantLights(meta, map),
+            DistantStreetLights = d.UInt16(map + MapDistantLights + DistantStreetLights),
+            DistantCategory = d.UInt16(map + MapDistantLights + DistantCategory),
+            LodLights = ReadLodLights(meta, map),
         };
+    }
+
+    private static DistantLodLight[] ReadDistantLights(MetaResource meta, int map)
+    {
+        var (positions, count) = meta.ReadArray(map + MapDistantLights + DistantPosition, 12);
+        var (colors, colorCount) = meta.ReadArray(map + MapDistantLights + DistantRgbi, 4);
+        count = Math.Min(count, colorCount);
+        var lights = new DistantLodLight[count];
+        for (int i = 0; i < count; i++)
+            lights[i] = new DistantLodLight(meta.Vector3(positions + i * 12), meta.Data.UInt32(colors + i * 4));
+        return lights;
+    }
+
+    private static LodLight[] ReadLodLights(MetaResource meta, int map)
+    {
+        int field = map + MapLodLights;
+        var (direction, count) = meta.ReadArray(field + LodDirection, 12);
+        if (count == 0)
+            return [];
+        // All arrays hold one item per light (checked on the game's 737 lodlights files); the shortest one wins.
+        var falloff = meta.ReadArray(field + LodFalloff, 4);
+        var exponent = meta.ReadArray(field + LodFalloffExponent, 4);
+        var flags = meta.ReadArray(field + LodTimeAndStateFlags, 4);
+        var hash = meta.ReadArray(field + LodHash, 4);
+        var inner = meta.ReadArray(field + LodConeInner, 1);
+        var outer = meta.ReadArray(field + LodConeOuter, 1);
+        var corona = meta.ReadArray(field + LodCorona, 1);
+        foreach (int other in (int[])[falloff.Count, exponent.Count, flags.Count, hash.Count, inner.Count, outer.Count, corona.Count])
+            count = Math.Min(count, other);
+        var d = meta.Data;
+        var lights = new LodLight[count];
+        for (int i = 0; i < count; i++)
+            lights[i] = new LodLight(meta.Vector3(direction + i * 12), meta.Float(falloff.Offset + i * 4), meta.Float(exponent.Offset + i * 4),
+                d.UInt32(flags.Offset + i * 4), d.UInt32(hash.Offset + i * 4), d.Byte(inner.Offset + i), d.Byte(outer.Offset + i), d.Byte(corona.Offset + i));
+        return lights;
     }
 
     private static List<TimecycleModifier> ReadTimecycleModifiers(MetaResource meta, int map)

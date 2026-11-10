@@ -28,14 +28,14 @@ internal sealed class MainUi
     private bool _resetLayout;
     private readonly OnlineWindow _onlineWindow;
 
-    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, ModelLayer modelLayer, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer)
+    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, ModelLayer modelLayer, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer, LodLightLayer lodLightLayer)
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
-        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer);
+        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);

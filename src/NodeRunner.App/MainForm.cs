@@ -47,6 +47,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly OcclusionLayer _occlusionLayer = new();
     private readonly CarGeneratorLayer _carGeneratorLayer = new();
     private readonly TimecycleLayer _timecycleLayer = new();
+    private readonly LodLightLayer _lodLightLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
     private WindowAlpha? _windowAlpha;
@@ -58,7 +59,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer, _timecycleLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer, _timecycleLayer, _lodLightLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -325,6 +326,7 @@ internal sealed unsafe partial class MainForm : Form
         _occlusionLayer.Dispose();
         _carGeneratorLayer.Dispose();
         _timecycleLayer.Dispose();
+        _lodLightLayer.Dispose();
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
@@ -613,6 +615,10 @@ internal sealed unsafe partial class MainForm : Form
         _timecycleLayer.Update(_state.World, lines, camera.Position, timecycleEnabled);
         if (timecycleEnabled)
             _timecycleLayer.Draw(lines, viewProjection, camera.Position);
+        bool lodLightsEnabled = _state.IsLayerVisible(LodLightLayer.LayerName);
+        _lodLightLayer.Update(_state.World, lines, camera.Position, lodLightsEnabled);
+        if (lodLightsEnabled)
+            _lodLightLayer.Draw(lines, viewProjection, camera.Position);
 
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));
@@ -633,6 +639,8 @@ internal sealed unsafe partial class MainForm : Form
             _carGeneratorLayer.DrawSelected(lines, _state.World, selectedSpot, viewProjection, camera.Position);
         if (_state.SelectedTimecycle?.Zone is { } selectedZone)
             TimecycleLayer.DrawSelected(lines, selectedZone, viewProjection, camera.Position);
+        if (_state.SelectedLodLight is { } selectedLight)
+            LodLightLayer.DrawSelected(lines, selectedLight, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
@@ -873,6 +881,14 @@ internal sealed unsafe partial class MainForm : Form
         {
             _state.Select(null);
             _state.SelectedPathNode = node;
+            return;
+        }
+        // Lights next, while their layer is shown: small points, picked within a few pixels.
+        if (!control && _state.IsLayerVisible(LodLightLayer.LayerName)
+            && _lodLightLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height)) is { } light)
+        {
+            _state.Select(null);
+            _state.SelectedLodLight = light;
             return;
         }
         // Occluders next, while their layer is shown: they sit inside the buildings that would be picked instead.
