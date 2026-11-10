@@ -89,11 +89,26 @@ internal static class Widgets
             bool hovered = ImGui.IsItemHovered();
             if (i == selected)
                 drawList.AddRectFilled(segmentMin, segmentMin + segmentSize, Col(UiTheme.Rgb(0x3A3C44)), UiTheme.FrameRounding);
-            var textSize = ImGui.CalcTextSize(labels[i]);
+            // Too narrow: drop the trailing "(count)", then clip; the full label goes into the tooltip.
+            string label = labels[i];
+            float room = segmentSize.X - 8f;
+            if (ImGui.CalcTextSize(label).X > room && label.LastIndexOf(" (", StringComparison.Ordinal) is > 0 and var cut)
+                label = label[..cut];
+            bool shortened = label != labels[i];
+            var textSize = ImGui.CalcTextSize(label);
             var color = i == selected || hovered ? UiTheme.Text : UiTheme.TextMuted;
-            drawList.AddText(Snap(segmentMin + (segmentSize - textSize) * 0.5f), Col(color), labels[i]);
-            if (tooltips?[i] is { } tooltip && hovered && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
-                ImGui.SetTooltip(tooltip);
+            bool clip = textSize.X > room;
+            if (clip)
+                drawList.PushClipRect(segmentMin + new Vector2(4f, 0f), segmentMin + segmentSize - new Vector2(4f, 0f), true);
+            var textPos = clip ? new Vector2(segmentMin.X + 4f, segmentMin.Y + (segmentSize.Y - textSize.Y) * 0.5f) : segmentMin + (segmentSize - textSize) * 0.5f;
+            drawList.AddText(Snap(textPos), Col(color), label);
+            if (clip)
+                drawList.PopClipRect();
+            string? tip = tooltips?[i];
+            if (shortened || clip)
+                tip = tip is null ? labels[i] : $"{labels[i]}\n{tip}";
+            if (tip is not null && hovered && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                ImGui.SetTooltip(tip);
         }
         ImGui.SetCursorScreenPos(min);
         ImGui.Dummy(new Vector2(total, height));
