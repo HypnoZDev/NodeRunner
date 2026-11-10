@@ -1356,6 +1356,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         string copied = state.FormatPosition(light.Position, null);
         if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
             ImGui.SetClipboardText(copied);
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Retire la lumière et ses détails de leurs deux fichiers. Annulable avec Ctrl+Z.")))
+        {
+            state.DeleteSelectedLodLight();
+            return;
+        }
 
         var details = selection.Details;
         if (Widgets.Section(L("Lumière"), "lodlight_light") && Widgets.BeginProperties("##lodlight_light"))

@@ -149,6 +149,61 @@ public class LodLightTests
         Assert.Equal(1000 + MapExtentsCalculator.LightReach, MapExtentsCalculator.Compute(lod, _ => null, distant.DistantLights).StreamingMax.X);
     }
 
+    [Fact]
+    public void Deleted_and_added_lights_are_written_as_new_arrays()
+    {
+        var content = BuildLights();
+        var map = new YmapReader().Read(content);
+        // The street light (the first one) deleted, a light added after the other.
+        var delete = LodLightDeleteEdit.Apply(map, map, 0, "test");
+        var add = LodLightAddEdit.Apply(map, map, new DistantLodLight(new Vector3(9, 9, 9), 0xAAFF9D66),
+            new LodLight(-Vector3.UnitZ, 10f, 64f, 0x08F0003F, 0x99, 14, 85, 7), "test");
+
+        var read = new YmapReader().Read(new YmapWriter().Write(content, map, MapExtents.Of(map)).Content);
+        Assert.Equal([map.DistantLights[1], map.DistantLights[2]], read.DistantLights);
+        Assert.Equal([map.LodLights[1], map.LodLights[2]], read.LodLights);
+        Assert.Equal(0, read.DistantStreetLights);
+        Assert.Equal(1, read.DistantCategory);
+
+        // Undone: back as it was.
+        add.Undo();
+        delete.Undo();
+        var again = new YmapReader().Read(new YmapWriter().Write(content, map, MapExtents.Of(map)).Content);
+        Assert.Equal(new YmapReader().Read(content).DistantLights, again.DistantLights);
+        Assert.Equal(new YmapReader().Read(content).LodLights, again.LodLights);
+        Assert.Equal(1, again.DistantStreetLights);
+
+        // All deleted: empty arrays.
+        LodLightDeleteEdit.Apply(map, map, 0, "test");
+        LodLightDeleteEdit.Apply(map, map, 1, "test");
+        var empty = new YmapReader().Read(new YmapWriter().Write(content, map, MapExtents.Of(map)).Content);
+        Assert.Empty(empty.DistantLights);
+        Assert.Empty(empty.LodLights);
+    }
+
+    [Fact]
+    public void A_light_file_of_the_project_is_built_from_a_game_light_file()
+    {
+        var template = BuildLights();
+        var distant = new MapData { NameHash = 0xABCD, Entities = [], IsCustom = true };
+        var lod = new MapData { NameHash = 0xBCDE, ParentHash = 0xABCD, Entities = [], IsCustom = true };
+        LodLightAddEdit.Apply(distant, lod, new DistantLodLight(new Vector3(100, 200, 30), 0xAAFF9D66),
+            new LodLight(-Vector3.UnitZ, 10f, 64f, 0x08F0003F, 0x99, 14, 85, 7), "test");
+
+        var extents = MapExtentsCalculator.Compute(distant, _ => null);
+        Assert.Equal(new Vector3(100, 200, 30) - new Vector3(MapExtentsCalculator.LightReach), extents.StreamingMin);
+        var read = new YmapReader().Read(new YmapWriter().BuildLights(template, distant, "proj_distlodlights", extents).Content);
+        Assert.Equal(0xABCDu, read.NameHash);
+        Assert.Equal(distant.DistantLights, read.DistantLights);
+        Assert.Equal(0, read.DistantStreetLights);
+        Assert.Equal(new Vector3(100, 200, 30), read.EntitiesExtentsMin);
+
+        var lodRead = new YmapReader().Read(new YmapWriter().BuildLights(template, lod, "proj_lodlights",
+            MapExtentsCalculator.Compute(lod, _ => null, distant.KeptDistantLights)).Content);
+        Assert.Equal(0xABCDu, lodRead.ParentHash);
+        Assert.Equal(lod.LodLights, lodRead.LodLights);
+    }
+
     [Theory]
     [InlineData(20, 6, 0xF0003Fu)]
     [InlineData(6, 20, 0x0FFFC0u)]

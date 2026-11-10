@@ -7,7 +7,8 @@ public sealed class MapData
 {
     public required uint NameHash { get; init; }
 
-    public uint ParentHash { get; init; }
+    // Settable for a light file made by the user (its lodlights file is the child of its distlodlights file).
+    public uint ParentHash { get; set; }
 
     public uint Flags { get; init; }
     public uint ContentFlags { get; init; }
@@ -80,6 +81,55 @@ public sealed class MapData
         lights[index] = details;
         _lodLights = lights;
         Interlocked.Increment(ref _lodLightRevision);
+    }
+
+    // Adds a light (or its details) at the end and returns its number. A distant light and its details have the same
+    // number in their two files.
+    public int AddDistantLight(DistantLodLight light)
+    {
+        _distantLights = [.. _distantLights, light];
+        Interlocked.Increment(ref _lodLightRevision);
+        return _distantLights.Length - 1;
+    }
+
+    public int AddLodLight(LodLight details)
+    {
+        _lodLights = [.. _lodLights, details];
+        Interlocked.Increment(ref _lodLightRevision);
+        return _lodLights.Length - 1;
+    }
+
+    // Lights left out of the file when saved (kept in the lists: the numbers of the others do not change).
+    public bool IsLightDeleted(int index) => (uint)index < (uint)_deletedLights.Length && _deletedLights[index];
+
+    public void SetLightDeleted(int index, bool deleted)
+    {
+        var flags = new bool[Math.Max(_deletedLights.Length, index + 1)];
+        _deletedLights.CopyTo(flags, 0);
+        flags[index] = deleted;
+        _deletedLights = flags;
+        Interlocked.Increment(ref _lodLightRevision);
+    }
+
+    private bool[] _deletedLights = [];
+
+    public bool HasDeletedLights => Array.IndexOf(_deletedLights, true) >= 0;
+
+    public IReadOnlyList<DistantLodLight> KeptDistantLights => HasDeletedLights ? _distantLights.Where((_, i) => !IsLightDeleted(i)).ToArray() : _distantLights;
+
+    public IReadOnlyList<LodLight> KeptLodLights => HasDeletedLights ? _lodLights.Where((_, i) => !IsLightDeleted(i)).ToArray() : _lodLights;
+
+    // The street lights left (the first ones of the list).
+    public int KeptStreetLights
+    {
+        get
+        {
+            int count = 0;
+            for (int i = 0; i < Math.Min(DistantStreetLights, _distantLights.Length); i++)
+                if (!IsLightDeleted(i))
+                    count++;
+            return count;
+        }
     }
 
     // Of a distlodlights file: how many of its first lights are street lights, and its size category (0 small,

@@ -10,8 +10,9 @@ public static class MapExtentsCalculator
     public static MapExtents Compute(MapData map, Func<uint, Archetype?> archetypes, IReadOnlyList<DistantLodLight>? parentLights = null)
     {
         // A map read from the project's files keeps its own boxes, which may cover more than its objects (lights...).
+        var lights = map.DistantLights.Count > 0 ? map.KeptDistantLights : map.LodLights.Count > 0 ? parentLights : null;
         if (map.IsCustom && (map.SavedContent is null || map.KeptEntities.Any(e => e.IsInterior)))
-            return ComputeExact(map, archetypes);
+            return ComputeExact(map, archetypes, lights);
         var extents = MapExtents.Of(map);
         foreach (var entity in map.KeptEntities.Where(e => e.Revision > 0 || e.SourceIndex < 0))
         {
@@ -21,7 +22,7 @@ public static class MapExtentsCalculator
         }
         // The game's streaming boxes hold every parking spot of their map (measured: 47 884 spots, none outside).
         IncludeSpots(ref extents, map);
-        IncludeLights(ref extents, map.DistantLights.Count > 0 ? map.DistantLights : map.LodLights.Count > 0 ? parentLights : null);
+        IncludeLights(ref extents, lights);
         return extents;
     }
 
@@ -47,7 +48,7 @@ public static class MapExtentsCalculator
 
     // Boxes computed from the objects only (a map made by the user has no values of Rockstar to keep): exactly around
     // them, as "Calculate extents" of the map tools.
-    private static MapExtents ComputeExact(MapData map, Func<uint, Archetype?> archetypes)
+    private static MapExtents ComputeExact(MapData map, Func<uint, Archetype?> archetypes, IReadOnlyList<DistantLodLight>? lights)
     {
         var empty = new MapExtents(new Vector3(float.MaxValue), new Vector3(float.MinValue), new Vector3(float.MaxValue), new Vector3(float.MinValue));
         var extents = empty;
@@ -76,6 +77,7 @@ public static class MapExtentsCalculator
                 EntitiesMin = map.KeptCarGenerators.Select(s => s.Position).Aggregate(Vector3.Min),
                 EntitiesMax = map.KeptCarGenerators.Select(s => s.Position).Aggregate(Vector3.Max),
             };
+        IncludeLights(ref extents, lights);
         return extents == empty ? default : extents;
     }
 

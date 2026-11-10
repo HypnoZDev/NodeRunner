@@ -498,58 +498,99 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)count);
     }
 
-    // Distant lights and their details, written in place in their arrays (one item per light, never added or removed).
+    // Distant lights and their details (one item per light kept), in their arrays: in place when their number did not
+    // change, otherwise in new arrays (the file's block reused when the array is alone in it, as in the game files).
     private static void WriteLights(MetaDocument document, byte[] mapData, MapData map)
     {
-        if (map.DistantLights.Count > 0)
+        int distantField = YmapReader.MapDistantLights;
+        var lights = map.KeptDistantLights;
+        if (lights.Count > 0 || ArrayCount(mapData, distantField + YmapReader.DistantPosition) > 0)
         {
-            int field = YmapReader.MapDistantLights;
-            var lights = map.DistantLights;
-            var (positions, p) = LightItems(document, mapData, field + YmapReader.DistantPosition, 12, lights.Count);
-            var (colors, c) = LightItems(document, mapData, field + YmapReader.DistantRgbi, 4, lights.Count);
-            for (int i = 0; i < lights.Count; i++)
-            {
-                WriteVector3(positions, p + i * 12, lights[i].Position);
-                BinaryPrimitives.WriteUInt32LittleEndian(colors.AsSpan(c + i * 4), lights[i].Rgbi);
-            }
+            LightArray(document, mapData, distantField + YmapReader.DistantPosition, 12, lights.Count, (d, o, i) => WriteVector3(d, o, lights[i].Position));
+            LightArray(document, mapData, distantField + YmapReader.DistantRgbi, 4, lights.Count, (d, o, i) => BinaryPrimitives.WriteUInt32LittleEndian(d.AsSpan(o), lights[i].Rgbi));
+            BinaryPrimitives.WriteUInt16LittleEndian(mapData.AsSpan(distantField + YmapReader.DistantStreetLights), (ushort)map.KeptStreetLights);
+            BinaryPrimitives.WriteUInt16LittleEndian(mapData.AsSpan(distantField + YmapReader.DistantCategory), (ushort)map.DistantCategory);
         }
-        if (map.LodLights.Count > 0)
+        int field = YmapReader.MapLodLights;
+        var details = map.KeptLodLights;
+        if (details.Count > 0 || ArrayCount(mapData, field + YmapReader.LodDirection) > 0)
         {
-            int field = YmapReader.MapLodLights;
-            var details = map.LodLights;
             int n = details.Count;
-            var (direction, o0) = LightItems(document, mapData, field + YmapReader.LodDirection, 12, n);
-            var (falloff, o1) = LightItems(document, mapData, field + YmapReader.LodFalloff, 4, n);
-            var (exponent, o2) = LightItems(document, mapData, field + YmapReader.LodFalloffExponent, 4, n);
-            var (flags, o3) = LightItems(document, mapData, field + YmapReader.LodTimeAndStateFlags, 4, n);
-            var (hash, o4) = LightItems(document, mapData, field + YmapReader.LodHash, 4, n);
-            var (inner, o5) = LightItems(document, mapData, field + YmapReader.LodConeInner, 1, n);
-            var (outer, o6) = LightItems(document, mapData, field + YmapReader.LodConeOuter, 1, n);
-            var (corona, o7) = LightItems(document, mapData, field + YmapReader.LodCorona, 1, n);
-            for (int i = 0; i < n; i++)
-            {
-                var d = details[i];
-                WriteVector3(direction, o0 + i * 12, d.Direction);
-                WriteFloat(falloff, o1 + i * 4, d.Falloff);
-                WriteFloat(exponent, o2 + i * 4, d.FalloffExponent);
-                BinaryPrimitives.WriteUInt32LittleEndian(flags.AsSpan(o3 + i * 4), d.TimeAndStateFlags);
-                BinaryPrimitives.WriteUInt32LittleEndian(hash.AsSpan(o4 + i * 4), d.Hash);
-                inner[o5 + i] = d.ConeInnerAngle;
-                outer[o6 + i] = d.ConeOuterAngleOrCapExt;
-                corona[o7 + i] = d.CoronaIntensity;
-            }
+            LightArray(document, mapData, field + YmapReader.LodDirection, 12, n, (d, o, i) => WriteVector3(d, o, details[i].Direction));
+            LightArray(document, mapData, field + YmapReader.LodFalloff, 4, n, (d, o, i) => WriteFloat(d, o, details[i].Falloff));
+            LightArray(document, mapData, field + YmapReader.LodFalloffExponent, 4, n, (d, o, i) => WriteFloat(d, o, details[i].FalloffExponent));
+            LightArray(document, mapData, field + YmapReader.LodTimeAndStateFlags, 4, n, (d, o, i) => BinaryPrimitives.WriteUInt32LittleEndian(d.AsSpan(o), details[i].TimeAndStateFlags));
+            LightArray(document, mapData, field + YmapReader.LodHash, 4, n, (d, o, i) => BinaryPrimitives.WriteUInt32LittleEndian(d.AsSpan(o), details[i].Hash));
+            LightArray(document, mapData, field + YmapReader.LodConeInner, 1, n, (d, o, i) => d[o] = details[i].ConeInnerAngle);
+            LightArray(document, mapData, field + YmapReader.LodConeOuter, 1, n, (d, o, i) => d[o] = details[i].ConeOuterAngleOrCapExt);
+            LightArray(document, mapData, field + YmapReader.LodCorona, 1, n, (d, o, i) => d[o] = details[i].CoronaIntensity);
         }
     }
 
-    // Where an array of the lights is (pointer, count, capacity at field), holding at least count items of size bytes.
-    private static (byte[] Data, int Offset) LightItems(MetaDocument document, byte[] mapData, int field, int size, int count)
+    private static int ArrayCount(byte[] mapData, int field) => BinaryPrimitives.ReadUInt16LittleEndian(mapData.AsSpan(field + 8));
+
+    // One array of the lights (pointer, count, capacity at field), set to count items of size bytes, each written by
+    // write(data, offset, item number). A new array takes the type of the file's block.
+    private static void LightArray(MetaDocument document, byte[] mapData, int field, int size, int count, Action<byte[], int, int> write)
     {
         var span = mapData.AsSpan(field);
+        int fileCount = BinaryPrimitives.ReadUInt16LittleEndian(span[8..]);
         var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(span));
-        if (BinaryPrimitives.ReadUInt16LittleEndian(span[8..]) < count || block < 0 || block >= document.Blocks.Count
-            || offset + count * size > document.Blocks[block].Data.Length)
+        bool found = fileCount > 0 && block >= 0 && block < document.Blocks.Count && offset + fileCount * size <= document.Blocks[block].Data.Length;
+        if (fileCount > 0 && !found)
             throw new InvalidDataException("Les lumières ne sont pas celles du fichier.");
-        return (document.Blocks[block].Data, offset);
+        if (found && count == fileCount)
+        {
+            var data = document.Blocks[block].Data;
+            for (int i = 0; i < count; i++)
+                write(data, offset + i * size, i);
+            return;
+        }
+        if (count == 0)
+        {
+            SetArray(mapData, field, -1, 0);
+            return;
+        }
+        if (!found)
+            throw new InvalidDataException("Le fichier n'a pas de tableau de lumières à reprendre.");
+        var items = new byte[count * size];
+        for (int i = 0; i < count; i++)
+            write(items, i * size, i);
+        if (offset == 0 && document.Blocks[block].Data.Length == fileCount * size)
+            document.Blocks[block].Data = items;
+        else
+        {
+            document.Blocks.Add(new MetaDocument.Block(document.Blocks[block].Structure, items));
+            block = document.Blocks.Count - 1;
+        }
+        SetArray(mapData, field, block, count);
+    }
+
+    // A light file made by the user (its lights only), built from template, a game file of the same kind
+    // (distlodlights or lodlights: their descriptions, flags and arrays are reused).
+    public MapFileContent BuildLights(ReadOnlySpan<byte> template, MapData map, string name, MapExtents extents)
+    {
+        var document = MetaDocument.Read(template);
+        int root = document.RootBlock;
+        if (root < 0 || root >= document.Blocks.Count || document.Blocks[root].Structure != YmapReader.MapDataStructure)
+            throw new InvalidDataException("Le modèle n'est pas un fichier de carte (.ymap).");
+        var mapData = document.Blocks[root].Data;
+        if (map.KeptEntities.Any())
+            throw new InvalidDataException("Un fichier de lumières ne contient pas d'objets.");
+        SetArray(mapData, YmapReader.MapEntities, -1, 0);
+        if (map.DistantLights.Count > 0 && ArrayCount(mapData, YmapReader.MapDistantLights + YmapReader.DistantPosition) == 0
+            || map.LodLights.Count > 0 && ArrayCount(mapData, YmapReader.MapLodLights + YmapReader.LodDirection) == 0)
+            throw new InvalidDataException("Le modèle n'est pas un fichier de lumières du même genre.");
+        document.Name = name;
+        BinaryPrimitives.WriteUInt32LittleEndian(mapData.AsSpan(8), map.NameHash);
+        BinaryPrimitives.WriteUInt32LittleEndian(mapData.AsSpan(12), map.ParentHash);
+        WriteLights(document, mapData, map);
+        WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
+        WriteVector3(mapData, YmapReader.MapStreamingMax, extents.StreamingMax);
+        WriteVector3(mapData, YmapReader.MapEntitiesMin, extents.EntitiesMin);
+        WriteVector3(mapData, YmapReader.MapEntitiesMax, extents.EntitiesMax);
+        var (content, pageFlags) = document.Write();
+        return new MapFileContent(content, pageFlags);
     }
 
     private static void WriteTimecycle(byte[] data, int o, TimecycleModifier zone)

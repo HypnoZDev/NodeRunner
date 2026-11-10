@@ -32,7 +32,7 @@ internal static class MapFileSaver
                     throw new InvalidDataException(L("fichier d'origine inconnu"));
                 // A lodlights file: its lights are where those of its parent distlodlights file are.
                 var parentLights = map.LodLights.Count > 0
-                    ? library.Maps.FirstOrDefault(m => m.DistantLights.Count > 0 && m.NameHash == map.ParentHash)?.DistantLights
+                    ? library.Maps.FirstOrDefault(m => m.DistantLights.Count > 0 && m.NameHash == map.ParentHash)?.KeptDistantLights
                     : null;
                 var extents = MapExtentsCalculator.Compute(map, library.GetArchetype, parentLights);
                 MapFileContent written;
@@ -45,7 +45,14 @@ internal static class MapFileSaver
                 if (map.IsCustom && map.TimecycleModifiers.Any(z => !z.IsDeleted))
                     borrowed.Add(Description(content, library, m => m.TimecycleModifiers.Count > 0, YmapWriter.TimecycleDescription, ref _timecycle,
                         L("aucun YMAP du jeu avec des zones de timecycle, utilisable comme modèle")));
-                if (map.IsCustom && map.SavedContent is { } saved && !map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior))
+                if (map.IsCustom && map.SavedContent is null && (map.DistantLights.Count > 0 || map.LodLights.Count > 0))
+                {
+                    // The project's own light files: built from a game light file of the same kind.
+                    var template = LightTemplate(content, library, distant: map.DistantLights.Count > 0);
+                    header = template.Header;
+                    written = writer.BuildLights(template.Content, map, Path.GetFileNameWithoutExtension(name), extents);
+                }
+                else if (map.IsCustom && map.SavedContent is { } saved && !map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior))
                 {
                     // A map read from the project's files (imported or saved earlier): starts from it, so that what
                     // the editor does not handle (parking spots, lights, extensions...) is kept.
@@ -108,6 +115,27 @@ internal static class MapFileSaver
             return (bytes, header);
         }
         throw new InvalidDataException(L("aucun YMAP du jeu utilisable comme modèle"));
+    }
+
+    private static (MapLibrary Library, bool Distant, byte[] Content, ResourceHeader Header)? _lightTemplate;
+
+    // A game distlodlights file (distant) or lodlights file, model of the project's light files.
+    private static (byte[] Content, ResourceHeader Header) LightTemplate(GameContent content, MapLibrary library, bool distant)
+    {
+        if (_lightTemplate is { } cached && cached.Library == library && cached.Distant == distant)
+            return (cached.Content, cached.Header);
+        foreach (var map in library.Maps)
+        {
+            if (map.IsCustom || map.IsScripted || map.FilePath is null || map.Entities.Count > 0 || (distant ? map.DistantLights.Count : map.LodLights.Count) == 0
+                || (distant ? map.LodLights.Count : map.DistantLights.Count) > 0)
+                continue;
+            if (content.ReadFile(map.FilePath) is not { } bytes || content.GetResourceHeader(map.FilePath) is not { } found)
+                continue;
+            var header = found with { GraphicsFlags = found.GraphicsFlags & 0xF0000000 };
+            _lightTemplate = (library, distant, bytes, header);
+            return (bytes, header);
+        }
+        throw new InvalidDataException(L("aucun fichier de lumières LOD du jeu utilisable comme modèle"));
     }
 
     private static (MapLibrary Library, Data.Native.Resources.MetaDocument.StructureInfo Info)? _interiorInstance;
@@ -176,7 +204,8 @@ internal static class MapFileSaver
         if (written.TimecycleModifiers.Count != zones.Count
             || written.TimecycleModifiers.Where((z, i) => z.BoundsMin != zones[i].BoundsMin || z.BoundsMax != zones[i].BoundsMax || z.NameHash != zones[i].NameHash).Any())
             throw new InvalidDataException(L("vérification échouée (zones de timecycle)"));
-        if (!written.DistantLights.SequenceEqual(map.DistantLights) || !written.LodLights.SequenceEqual(map.LodLights))
+        if (!written.DistantLights.SequenceEqual(map.KeptDistantLights) || !written.LodLights.SequenceEqual(map.KeptLodLights)
+            || written.DistantLights.Count > 0 && written.DistantStreetLights != map.KeptStreetLights)
             throw new InvalidDataException(L("vérification échouée (lumières LOD)"));
     }
 }

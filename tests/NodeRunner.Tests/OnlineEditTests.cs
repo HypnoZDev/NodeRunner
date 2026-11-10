@@ -98,10 +98,16 @@ public class OnlineEditTests
             text.Append(CultureInfo.InvariantCulture, $"zone {zone.NameHash:X} {V(zone.BoundsMin)} {V(zone.BoundsMax)} {F(zone.Percentage)} {F(zone.Range)} {zone.StartHour}-{zone.EndHour} del={zone.IsDeleted}\n");
         foreach (var spot in w.Library.Maps.SelectMany(m => m.CarGenerators))
             text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery} {spot.SourceIndex} del={spot.IsDeleted}\n");
-        foreach (var light in w.Library.Maps.SelectMany(m => m.DistantLights))
-            text.Append(CultureInfo.InvariantCulture, $"light {V(light.Position)} {light.Rgbi:X}\n");
-        foreach (var d in w.Library.Maps.SelectMany(m => m.LodLights))
-            text.Append(CultureInfo.InvariantCulture, $"details {V(d.Direction)} {F(d.Falloff)} {F(d.FalloffExponent)} {d.TimeAndStateFlags:X} {d.Hash:X} {d.ConeInnerAngle} {d.ConeOuterAngleOrCapExt} {d.CoronaIntensity}\n");
+        foreach (var m in w.Library.Maps)
+        {
+            for (int i = 0; i < m.DistantLights.Count; i++)
+                text.Append(CultureInfo.InvariantCulture, $"light {m.FilePath} {V(m.DistantLights[i].Position)} {m.DistantLights[i].Rgbi:X} del={m.IsLightDeleted(i)}\n");
+            for (int i = 0; i < m.LodLights.Count; i++)
+            {
+                var d = m.LodLights[i];
+                text.Append(CultureInfo.InvariantCulture, $"details {m.FilePath} {V(d.Direction)} {F(d.Falloff)} {F(d.FalloffExponent)} {d.TimeAndStateFlags:X} {d.Hash:X} {d.ConeInnerAngle} {d.ConeOuterAngleOrCapExt} {d.CoronaIntensity} del={m.IsLightDeleted(i)} parent={m.ParentHash:X}\n");
+            }
+        }
         var archetype = w.Library.GetArchetype(InteriorHash)!;
         foreach (var room in archetype.InteriorRooms)
             text.Append(CultureInfo.InvariantCulture, $"room {room.Name} {V(room.BoundsMin)} {V(room.BoundsMax)} {room.Flags}\n");
@@ -240,6 +246,14 @@ public class OnlineEditTests
             lightBefore.Details!.Value.WithType(LodLightType.Capsule).WithHourMask(LodLight.HourRange(19, 7)) with { Falloff = 9.5f, CoronaIntensity = 99 });
         lightAfter.ApplyTo(a.Map, a.Map, 1);
         Share(new LodLightEdit(a.Map, a.Map, 1, lightBefore, lightAfter, "Modifier la lumière"));
+
+        // A light added to the project's light files (made on the other computer by the edit), the map file's first deleted.
+        var projectDistant = a.Library.CreateCustomMap("proj_distlodlights.ymap");
+        var projectLod = a.Library.CreateCustomMap("proj_lodlights.ymap");
+        projectLod.ParentHash = projectDistant.NameHash;
+        Share(LodLightAddEdit.Apply(projectDistant, projectLod, new DistantLodLight(new(6, 6, 9), 0xAAFF9D66),
+            new LodLight(new(0, 0, -1), 10f, 64f, 0x08F0003F, 0x1234, 14, 85, 7), "Ajouter une lumière"));
+        Share(LodLightDeleteEdit.Apply(a.Map, a.Map, 0, "Supprimer la lumière"));
 
         // Undone and redone the same way on both computers.
         while (a.History.CanUndo)

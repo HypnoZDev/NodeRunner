@@ -39,3 +39,78 @@ public sealed class LodLightEdit(MapData distant, MapData? lod, int index, LodLi
     public void Undo() => before.ApplyTo(distant, lod, index);
     public void Redo() => after.ApplyTo(distant, lod, index);
 }
+
+// A distant light added with its details (to the project's light files, distant and lod). Undoing marks it deleted in
+// both: the lights after it keep their number.
+public sealed class LodLightAddEdit : ILodLightEdit
+{
+    private LodLightAddEdit(MapData distant, MapData lod, int index, string description)
+    {
+        Distant = distant;
+        Lod = lod;
+        Index = index;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public MapData Distant { get; }
+    public MapData? Lod { get; }
+    public int Index { get; }
+    public LodLightValues Values => LodLightValues.Of(Distant, Lod, Index);
+
+    public static LodLightAddEdit Apply(MapData distant, MapData lod, DistantLodLight light, LodLight details, string description)
+    {
+        if (distant.DistantLights.Count != lod.LodLights.Count)
+            throw new InvalidDataException("The two light files do not have the same number of lights.");
+        int index = distant.AddDistantLight(light);
+        lod.AddLodLight(details);
+        return new LodLightAddEdit(distant, lod, index, description);
+    }
+
+    public void Undo() => SetDeleted(true);
+    public void Redo() => SetDeleted(false);
+
+    private void SetDeleted(bool deleted)
+    {
+        Distant.SetLightDeleted(Index, deleted);
+        Lod!.SetLightDeleted(Index, deleted);
+    }
+}
+
+// A distant light deleted, with its details: left out of both files when saved.
+public sealed class LodLightDeleteEdit : ILodLightEdit
+{
+    private LodLightDeleteEdit(MapData distant, MapData? lod, int index, string description)
+    {
+        Distant = distant;
+        Lod = lod;
+        Index = index;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public MapData Distant { get; }
+    public MapData? Lod { get; }
+    public int Index { get; }
+
+    public static LodLightDeleteEdit Apply(MapData distant, MapData? lod, int index, string description)
+    {
+        if (index < 0 || index >= distant.DistantLights.Count || distant.IsLightDeleted(index))
+            throw new InvalidDataException("Distant light not found here.");
+        var edit = new LodLightDeleteEdit(distant, lod, index, description);
+        edit.Redo();
+        return edit;
+    }
+
+    public void Undo() => SetDeleted(false);
+    public void Redo() => SetDeleted(true);
+
+    private void SetDeleted(bool deleted)
+    {
+        Distant.SetLightDeleted(Index, deleted);
+        if (Lod is { } lod && Index < lod.LodLights.Count)
+            lod.SetLightDeleted(Index, deleted);
+    }
+}

@@ -707,5 +707,16 @@ public static partial class English
         ("portée", "reach"),
         ("type", "type"),
         ("vérification échouée (lumières LOD)", "check failed (LOD lights)"),
+        ("Ajoute une lumière vue de loin la nuit (LOD light) devant la caméra, dans les fichiers de lumières du projet. Réglez ensuite sa couleur, ses heures et sa portée dans Propriétés.",
+            "Adds a light seen from far away at night (LOD light) in front of the camera, in the project's light files. Then set its colour, hours and reach in Properties."),
+        ("Ajouter une lumière LOD", "Add a LOD light"),
+        ("Impossible d'ajouter la lumière : {0}", "Cannot add the light: {0}"),
+        ("Lumière LOD ajoutée dans {0} : réglez sa couleur et ses heures dans Propriétés.", "LOD light added to {0}: set its colour and hours in Properties."),
+        ("Lumière LOD {0} supprimée de {1}. Ctrl+Z pour annuler.", "LOD light {0} deleted from {1}. Ctrl+Z to undo."),
+        ("Ouvre ou crée d'abord un projet : les lumières ajoutées vont dans les fichiers de lumières du projet.", "Open or create a project first: added lights go into the project's light files."),
+        ("Suppr. Retire la lumière et ses détails de leurs deux fichiers. Annulable avec Ctrl+Z.", "Del. Removes the light and its details from both their files. Undo with Ctrl+Z."),
+        ("Supprimer la lumière LOD {0}", "Delete LOD light {0}"),
+        ("aucun fichier de lumières LOD du jeu utilisable comme modèle", "no game LOD light file usable as a model"),
+        ("{0}  Lumière LOD", "{0}  LOD light"),
     ];
 }

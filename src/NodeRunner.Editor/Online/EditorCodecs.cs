@@ -694,6 +694,65 @@ internal sealed class LodLightCodec : EditCodec<LodLightEdit>
     }
 }
 
+internal sealed class LodLightAddCodec : EditCodec<LodLightAddEdit>
+{
+    public override string Tag => "lod-light-add";
+
+    protected override void Write(LodLightAddEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Distant);
+        w.WriteMap(edit.Lod!);
+        w.Write(edit.Index);
+        var (light, details) = (edit.Values.Light, edit.Values.Details!.Value);
+        w.Write(light.Position);
+        w.Write(light.Rgbi);
+        w.Write(details.Direction);
+        w.Write(details.Falloff);
+        w.Write(details.FalloffExponent);
+        w.Write(details.TimeAndStateFlags);
+        w.Write(details.Hash);
+        w.Write(details.ConeInnerAngle);
+        w.Write(details.ConeOuterAngleOrCapExt);
+        w.Write(details.CoronaIntensity);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var distant = r.ReadMap();
+        var lod = r.ReadMap();
+        // A light file made on the other computer: its details file is the child of its distant one.
+        if (lod.IsCustom && lod != distant)
+            lod.ParentHash = distant.NameHash;
+        // Lights are only added at the end: the same number on every computer.
+        if (r.ReadInt() != distant.DistantLights.Count)
+            throw new InvalidDataException("Distant lights differ here.");
+        var light = new DistantLodLight(r.ReadVector3(), r.ReadUInt());
+        var details = new LodLight(r.ReadVector3(), r.ReadFloat(), r.ReadFloat(), r.ReadUInt(), r.ReadUInt(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+        return LodLightAddEdit.Apply(distant, lod, light, details, description);
+    }
+}
+
+internal sealed class LodLightDeleteCodec : EditCodec<LodLightDeleteEdit>
+{
+    public override string Tag => "lod-light-delete";
+
+    protected override void Write(LodLightDeleteEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Distant);
+        w.Write(edit.Lod is not null);
+        if (edit.Lod is { } lod)
+            w.WriteMap(lod);
+        w.Write(edit.Index);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var distant = r.ReadMap();
+        var lod = r.ReadBool() ? r.ReadMap() : null;
+        return LodLightDeleteEdit.Apply(distant, lod, r.ReadInt(), description);
+    }
+}
+
 internal sealed class CarGeneratorAddCodec : EditCodec<CarGeneratorAddEdit>
 {
     public override string Tag => "car-generator-add";

@@ -85,6 +85,8 @@ public sealed class EditCodecs
         .Add(new TimecycleAddCodec())
         .Add(new TimecycleDeleteCodec())
         .Add(new LodLightCodec())
+        .Add(new LodLightAddCodec())
+        .Add(new LodLightDeleteCodec())
         .Add(new ArchetypeCodec())
         .Add(new DoorReplaceCodec());
 

@@ -7,7 +7,7 @@ namespace NodeRunner.App.World;
 // A light of a distlodlights file (Distant), with its details in the lodlights file that is its child (Lod), if any.
 internal sealed record LodLightSelection(MapData Distant, int Index, MapData? Lod)
 {
-    public DistantLodLight? Light => Index >= 0 && Index < Distant.DistantLights.Count ? Distant.DistantLights[Index] : null;
+    public DistantLodLight? Light => Index >= 0 && Index < Distant.DistantLights.Count && !Distant.IsLightDeleted(Index) ? Distant.DistantLights[Index] : null;
 
     public LodLight? Details => Lod is { } lod && Index < lod.LodLights.Count ? lod.LodLights[Index] : null;
 }
@@ -173,6 +173,8 @@ internal sealed class LodLightLayer : IDisposable
             children.TryGetValue(distant, out var lod);
             for (int i = 0; i < list.Count; i++)
             {
+                if (distant.IsLightDeleted(i))
+                    continue;
                 var light = list[i];
                 var p = light.Position;
                 if (Vector2.DistanceSquared(new Vector2(p.X, p.Y), center) > Radius * Radius)

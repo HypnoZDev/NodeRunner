@@ -840,6 +840,64 @@ internal sealed class AppState
         Notify(L($"Zone de timecycle {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
+    // --- LOD lights ---
+
+    // A new distant light 10 m in front of the camera, 5 m above the ground there, in the project's own light files
+    // (<resource>_distlodlights.ymap and <resource>_lodlights.ymap, created if needed); selected, with the "move" tool.
+    // Its values are the most common ones of the game's lights (measured on 359 600 lights): an orange street lamp
+    // pointing down, on from 20:00 to 6:00.
+    public void AddLodLight()
+    {
+        Notice = null;
+        if (World.Maps is not { } library)
+            return;
+        if (Project is not { } project)
+        {
+            Notify(L("Ouvre ou crée d'abord un projet : les lumières ajoutées vont dans les fichiers de lumières du projet."), warning: true);
+            return;
+        }
+        string resource = project.ResourceName;
+        var distant = library.FindCustomMap($"{resource}_distlodlights.ymap") ?? library.CreateCustomMap($"{resource}_distlodlights.ymap");
+        var lod = library.FindCustomMap($"{resource}_lodlights.ymap") ?? library.CreateCustomMap($"{resource}_lodlights.ymap");
+        lod.ParentHash = distant.NameHash;
+
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(forward) : System.Numerics.Vector3.UnitY;
+        var point = Camera.Position + forward * 10f;
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 5f;
+        point = point with { Z = ground + 5f };
+        var light = new DistantLodLight(point, DistantLodLight.Pack(0xFF, 0x9D, 0x66, 170));
+        // The game gives each light its own hash: one made from the place is enough to tell them apart.
+        uint hash = Data.Hashing.Joaat.Hash(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{resource}_light_{point.X:0.00}_{point.Y:0.00}_{point.Z:0.00}"));
+        var details = new LodLight(-System.Numerics.Vector3.UnitZ, 10f, 64f, 0x08F0003F, hash, 14, 85, 7);
+        LodLightAddEdit edit;
+        try
+        {
+            edit = LodLightAddEdit.Apply(distant, lod, light, details, L("Ajouter une lumière LOD"));
+        }
+        catch (InvalidDataException ex)
+        {
+            Notify(L($"Impossible d'ajouter la lumière : {ex.Message}"), warning: true);
+            return;
+        }
+        History.Add(edit);
+        SetLayerVisible(LodLightLayer.LayerName, true);
+        Select(null);
+        SelectedLodLight = new LodLightSelection(distant, edit.Index, lod);
+        if (Tool == TransformTool.Select)
+            Tool = TransformTool.Move;
+        Notify(L($"Lumière LOD ajoutée dans {distant.FilePath} : réglez sa couleur et ses heures dans Propriétés."));
+    }
+
+    public void DeleteSelectedLodLight()
+    {
+        if (SelectedLodLight is not { } selected)
+            return;
+        History.Add(LodLightDeleteEdit.Apply(selected.Distant, selected.Lod, selected.Index, L($"Supprimer la lumière LOD {selected.Index}")));
+        SelectedLodLight = null;
+        Notify(L($"Lumière LOD {selected.Index} supprimée de {Path.GetFileName(selected.Distant.FilePath ?? "")}. Ctrl+Z pour annuler."));
+    }
+
     // --- Occluders ---
 
     public string OccluderFileName => $"{Project?.ResourceName ?? FiveMResource.DefaultName}_occl.ymap";
