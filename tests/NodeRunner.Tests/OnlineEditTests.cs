@@ -224,6 +224,10 @@ public class OnlineEditTests
         Share(CarGeneratorAddEdit.Apply(projectMap, new CarGenerator { Position = new(9, 8, 7), Orientation = new(0, 5), Width = 3f, Flags = 0xE60, CarModel = 0x55 }, "Ajouter une place"));
         Share(CarGeneratorDeleteEdit.Apply(a.Map, 0, "Supprimer la place"));
 
+        // A timecycle zone added to the project's map, the map file's one deleted.
+        Share(TimecycleAddEdit.Apply(projectMap, new TimecycleModifier { NameHash = 0x77, BoundsMin = new(1, 1, 1), BoundsMax = new(3, 3, 3), Percentage = 80, Range = 2, EndHour = 23 }, "Ajouter une zone"));
+        Share(TimecycleDeleteEdit.Apply(a.Map, 0, "Supprimer la zone"));
+
         // Undone and redone the same way on both computers.
         while (a.History.CanUndo)
         {

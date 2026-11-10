@@ -162,7 +162,7 @@ public class CarGeneratorTests
         Assert.Throws<InvalidDataException>(() => new YmapWriter().Write(plain, bare, extents));
         var description = YmapWriter.CarGeneratorDescription(file);
         Assert.NotNull(description);
-        var added = new YmapReader().Read(new YmapWriter().Write(plain, bare, extents, description).Content);
+        var added = new YmapReader().Read(new YmapWriter().Write(plain, bare, extents, [description!]).Content);
         Assert.Single(added.Entities);
         Assert.Equal(spot with { SourceIndex = 0 }, Assert.Single(added.CarGenerators));
     }
@@ -180,7 +180,7 @@ public class CarGeneratorTests
 
         Assert.Throws<InvalidDataException>(() => new YmapWriter().Build(template, map, "proj_props", extents));
         var description = YmapWriter.CarGeneratorDescription(BuildYmap((Vector3.Zero, Vector2.UnitX, 1f, 0)));
-        var written = new YmapReader().Read(new YmapWriter().Build(template, map, "proj_props", extents, carGenerator: description).Content);
+        var written = new YmapReader().Read(new YmapWriter().Build(template, map, "proj_props", extents, borrowed: [description!]).Content);
 
         Assert.Empty(written.Entities);
         Assert.Equal(spot with { SourceIndex = 0 }, Assert.Single(written.CarGenerators));

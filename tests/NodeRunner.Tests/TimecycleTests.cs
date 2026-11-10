@@ -106,6 +106,63 @@ public class TimecycleTests
     }
 
     [Fact]
+    public void Timecycle_zones_are_deleted_and_added()
+    {
+        var file = BuildYmap((0x9CFCA62E, new Vector3(-10, 0, 1), new Vector3(10, 20, 5), 50f, 5f, 0, 23),
+            (0x431ED452, new Vector3(100, 100, 0), new Vector3(110, 105, 3), 100f, 1f, 20, 6));
+        var map = new YmapReader().Read(file);
+        var original = map.TimecycleModifiers.ToList();
+        var zone = new Data.Maps.TimecycleModifier { NameHash = 0x55, BoundsMin = new Vector3(0, 0, 0), BoundsMax = new Vector3(4, 4, 4), Percentage = 100, Range = 5, EndHour = 23 };
+        var deleted = Editor.TimecycleDeleteEdit.Apply(map, 0, "test");
+        Editor.TimecycleAddEdit.Apply(map, zone, "test");
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content);
+        Assert.Equal([original[1] with { SourceIndex = 0 }, zone with { SourceIndex = 1 }], written.TimecycleModifiers);
+
+        // All deleted, then undone.
+        var last = Editor.TimecycleDeleteEdit.Apply(map, 1, "test");
+        var added = Editor.TimecycleDeleteEdit.Apply(map, 2, "test");
+        Assert.Empty(new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content).TimecycleModifiers);
+        added.Undo();
+        last.Undo();
+        deleted.Undo();
+        Assert.Equal(original.Append(zone with { SourceIndex = 2 }),
+            new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content).TimecycleModifiers);
+    }
+
+    [Fact]
+    public void A_project_map_with_a_timecycle_zone_and_a_parking_spot_is_built()
+    {
+        var template = DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd));
+        var library = Data.Maps.MapLibrary.Create((new YmapReader().Read(template), "template.ymap"));
+        var map = library.CreateCustomMap("proj_props.ymap");
+        var zone = new Data.Maps.TimecycleModifier { NameHash = 0x55, BoundsMin = new Vector3(-30, 40, 0), BoundsMax = new Vector3(-20, 50, 6), Percentage = 100, Range = 5, EndHour = 23 };
+        var spot = new Data.Maps.CarGenerator { Position = new Vector3(0, 0, 1), Orientation = new Vector2(4, 0), Width = 2.5f, Flags = 0xE60 };
+        Editor.TimecycleAddEdit.Apply(map, zone, "test");
+        Editor.CarGeneratorAddEdit.Apply(map, spot, "test");
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+        var borrowed = new[]
+        {
+            YmapWriter.TimecycleDescription(BuildYmap((1, Vector3.Zero, Vector3.One, 1f, 1f, 0, 23)))!,
+            YmapWriter.CarGeneratorDescription(CarGeneratorTests.BuildYmap((Vector3.Zero, Vector2.UnitX, 1f, 0)))!,
+        };
+
+        Assert.Throws<InvalidDataException>(() => new YmapWriter().Build(template, map, "proj_props", extents, borrowed: borrowed[1..]));
+        var content = new YmapWriter().Build(template, map, "proj_props", extents, borrowed: borrowed).Content;
+        var written = new YmapReader().Read(content);
+        Assert.Equal(zone with { SourceIndex = 0 }, Assert.Single(written.TimecycleModifiers));
+        Assert.Equal(spot with { SourceIndex = 0 }, Assert.Single(written.CarGenerators));
+        Assert.True(written.StreamingExtentsMin.X <= -30 && written.StreamingExtentsMax.Y >= 50);
+
+        // A new zone gets the game's value in the 4th float of its corners.
+        var document = MetaDocument.Read(content);
+        var block = document.Blocks.First(b => b.Structure == TimecycleStructure);
+        Assert.Equal(0x7F800001u, BinaryPrimitives.ReadUInt32LittleEndian(block.Data.AsSpan(28)));
+        Assert.Equal(0x7F800001u, BinaryPrimitives.ReadUInt32LittleEndian(block.Data.AsSpan(44)));
+    }
+
+    [Fact]
     public void A_map_file_without_timecycle_zones_reads_an_empty_list() =>
         Assert.Empty(new YmapReader().Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd))).TimecycleModifiers);
 }

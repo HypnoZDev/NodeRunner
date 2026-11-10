@@ -590,6 +590,61 @@ internal sealed class TimecycleCodec : EditCodec<TimecycleEdit>
     }
 }
 
+internal sealed class TimecycleAddCodec : EditCodec<TimecycleAddEdit>
+{
+    public override string Tag => "timecycle-add";
+
+    protected override void Write(TimecycleAddEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+        var z = edit.Zone;
+        w.Write(z.NameHash);
+        w.Write(z.BoundsMin);
+        w.Write(z.BoundsMax);
+        w.Write(z.Percentage);
+        w.Write(z.Range);
+        w.Write(z.StartHour);
+        w.Write(z.EndHour);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        // Zones are only added at the end: the same number on every computer.
+        if (r.ReadInt() != map.TimecycleModifiers.Count)
+            throw new InvalidDataException("Timecycle zones differ here.");
+        var zone = new TimecycleModifier
+        {
+            NameHash = r.ReadUInt(),
+            BoundsMin = r.ReadVector3(),
+            BoundsMax = r.ReadVector3(),
+            Percentage = r.ReadFloat(),
+            Range = r.ReadFloat(),
+            StartHour = r.ReadUInt(),
+            EndHour = r.ReadUInt(),
+        };
+        return TimecycleAddEdit.Apply(map, zone, description);
+    }
+}
+
+internal sealed class TimecycleDeleteCodec : EditCodec<TimecycleDeleteEdit>
+{
+    public override string Tag => "timecycle-delete";
+
+    protected override void Write(TimecycleDeleteEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        return TimecycleDeleteEdit.Apply(map, r.ReadInt(), description);
+    }
+}
+
 internal sealed class CarGeneratorAddCodec : EditCodec<CarGeneratorAddEdit>
 {
     public override string Tag => "car-generator-add";

@@ -779,6 +779,47 @@ internal sealed class AppState
         Notify(L($"Place de véhicule {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
+    // A new timecycle zone (10 x 10 x 6 m, no modifier yet) 15 m in front of the camera, standing on the ground there,
+    // in the project's own map; selected, with the "move" tool.
+    public void AddTimecycleZone()
+    {
+        Notice = null;
+        if (World.Maps is not { } library || ProjectMap(library) is not { } map)
+            return;
+        var forward = Camera.Forward with { Z = 0 };
+        forward = forward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(forward) : System.Numerics.Vector3.UnitY;
+        var point = Camera.Position + forward * 15f;
+        float ground = GroundHeightAt(point) ?? Camera.Position.Z - 10f;
+        var half = new System.Numerics.Vector3(5f, 5f, 0f);
+        var zone = new TimecycleModifier
+        {
+            NameHash = 0,
+            BoundsMin = point with { Z = ground } - half,
+            BoundsMax = point with { Z = ground + 6f } + half,
+            Percentage = 100f,
+            Range = 1f,     // The most common values in the game's zones (measured: 100 %, 1 m).
+            StartHour = 0,
+            EndHour = 23,
+        };
+        var edit = TimecycleAddEdit.Apply(map, zone, L("Ajouter une zone de timecycle"));
+        History.Add(edit);
+        SetLayerVisible(TimecycleLayer.LayerName, true);
+        Select(null);
+        SelectedTimecycle = new TimecycleSelection(map, edit.Index);
+        if (Tool == TransformTool.Select)
+            Tool = TransformTool.Move;
+        Notify(L($"Zone de timecycle ajoutée dans {Path.GetFileName(map.FilePath ?? "")} : choisissez son modificateur dans Propriétés."));
+    }
+
+    public void DeleteSelectedTimecycleZone()
+    {
+        if (SelectedTimecycle is not { } selected)
+            return;
+        History.Add(TimecycleDeleteEdit.Apply(selected.Map, selected.Index, L($"Supprimer la zone de timecycle {selected.Index}")));
+        SelectedTimecycle = null;
+        Notify(L($"Zone de timecycle {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+    }
+
     // --- Occluders ---
 
     public string OccluderFileName => $"{Project?.ResourceName ?? FiveMResource.DefaultName}_occl.ymap";

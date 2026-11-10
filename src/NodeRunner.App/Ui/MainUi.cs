@@ -301,6 +301,8 @@ internal sealed class MainUi
                 _state.DeleteSelectedOccluder();
             else if (_state.SelectedCarGenerator is not null)
                 _state.DeleteSelectedCarGenerator();
+            else if (_state.SelectedTimecycle is not null)
+                _state.DeleteSelectedTimecycleZone();
             else if (_state.SelectedRoom is not null)
                 _state.DeleteSelectedRoom();
             else if (_state.SelectedPortal is not null)
@@ -472,6 +474,10 @@ internal sealed class MainUi
                 _state.AddCarGenerator();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute une place (car generator) au sol devant la caméra, dans le YMAP du projet : le jeu peut y garer un véhicule. À régler ensuite dans Propriétés ou avec les poignées."));
+            if (ImGui.MenuItem(L($"{Icons.Sunset}  Zone de timecycle"), null, false, _state.World.Maps is not null))
+                _state.AddTimecycleZone();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Ajoute une zone d'ambiance (timecycle modifier) devant la caméra, dans le YMAP du projet : le jeu y change la lumière, les couleurs ou le brouillard. Choisissez ensuite son modificateur dans Propriétés."));
             if (ImGui.BeginMenu(L($"{Icons.ScanEye}  Occlusion")))
             {
                 DrawOcclusionMenuItems();

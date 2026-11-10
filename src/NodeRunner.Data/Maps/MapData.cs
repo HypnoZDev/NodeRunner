@@ -72,6 +72,14 @@ public sealed class MapData
         Interlocked.Increment(ref _timecycleRevision);
     }
 
+    // Adds a zone at the end of the list and returns its number.
+    public int AddTimecycleModifier(TimecycleModifier zone)
+    {
+        _timecycleModifiers = [.. _timecycleModifiers, zone];
+        Interlocked.Increment(ref _timecycleRevision);
+        return _timecycleModifiers.Count - 1;
+    }
+
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }
 

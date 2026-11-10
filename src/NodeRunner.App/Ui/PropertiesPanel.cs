@@ -1338,6 +1338,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         string copied = state.FormatPosition(zone.Center, null);
         if (Widgets.Button(L($"{Icons.Copy}  Copier le centre"), copied))
             ImGui.SetClipboardText(copied);
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Annulable avec Ctrl+Z.")))
+        {
+            state.DeleteSelectedTimecycleZone();
+            return;
+        }
 
         static string V(Vector3 v) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{v.X:0.00}, {v.Y:0.00}, {v.Z:0.00}");
         var map = selection.Map;
