@@ -61,8 +61,23 @@ public static class MapExtentsCalculator
     // streaming boxes already hold them, measured on 47 884 spots).
     public const float AddedSpotReach = 150f;
 
+    // Beyond this, a zone covers the whole world (some of the game's reach 1e30 m): left out of the boxes.
+    private const float WorldLimit = 20000f;
+
     private static void IncludeSpots(ref MapExtents extents, MapData map)
     {
+        // The game's streaming boxes hold their timecycle zones (measured: 13 008 of 13 066, the others mostly world-sized).
+        foreach (var zone in map.TimecycleModifiers.Where(z => !z.IsDeleted))
+        {
+            static float Largest(Vector3 v) => MathF.Max(MathF.Max(MathF.Abs(v.X), MathF.Abs(v.Y)), MathF.Abs(v.Z));
+            if (!(Largest(zone.BoundsMin) < WorldLimit && Largest(zone.BoundsMax) < WorldLimit))
+                continue;
+            extents = extents with
+            {
+                StreamingMin = Vector3.Min(extents.StreamingMin, zone.BoundsMin),
+                StreamingMax = Vector3.Max(extents.StreamingMax, zone.BoundsMax),
+            };
+        }
         foreach (var spot in map.KeptCarGenerators)
         {
             var reach = new Vector3(spot.SourceIndex < 0 ? AddedSpotReach : 0f);

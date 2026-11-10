@@ -54,6 +54,7 @@ public class OnlineEditTests
                 new MapEntity { ArchetypeHash = InteriorHash, Position = new(0, 500, 10), IsInterior = true },
             ],
             CarGenerators = [new CarGenerator { Position = new(40, 0, 0), Orientation = new(0, 5), Width = 2.5f, SourceIndex = 0 }],
+            TimecycleModifiers = [new TimecycleModifier { NameHash = 0x9CFCA62E, BoundsMin = new(-5, -5, 0), BoundsMax = new(5, 5, 4), Percentage = 100, Range = 2, EndHour = 23, SourceIndex = 0 }],
         };
         var library = MapLibrary.Create([interior], (map, "test.ymap"));
         var paths = new PathNetwork();
@@ -91,6 +92,8 @@ public class OnlineEditTests
                 }
             }
         }
+        foreach (var zone in w.Library.Maps.SelectMany(m => m.TimecycleModifiers))
+            text.Append(CultureInfo.InvariantCulture, $"zone {zone.NameHash:X} {V(zone.BoundsMin)} {V(zone.BoundsMax)} {F(zone.Percentage)} {F(zone.Range)} {zone.StartHour}-{zone.EndHour} del={zone.IsDeleted}\n");
         foreach (var spot in w.Library.Maps.SelectMany(m => m.CarGenerators))
             text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery} {spot.SourceIndex} del={spot.IsDeleted}\n");
         var archetype = w.Library.GetArchetype(InteriorHash)!;
@@ -209,6 +212,12 @@ public class OnlineEditTests
         var spotAfter = spotBefore with { Position = new(41, 2, 0.5f), Orientation = new(-4, 0), Width = 3f, CarModel = 0xB779A091, Flags = 0x1, Color1 = 5, Color4 = 7, PopGroup = 0x99, Livery = 2 };
         a.Map.SetCarGenerator(0, spotAfter);
         Share(new CarGeneratorEdit(a.Map, 0, spotBefore, spotAfter, "Modifier la place"));
+
+        // A timecycle zone moved and changed.
+        var zoneBefore = a.Map.TimecycleModifiers[0];
+        var zoneAfter = zoneBefore with { NameHash = 0x431ED452, BoundsMin = new(1, 2, 3), BoundsMax = new(9, 8, 7), Percentage = 30, Range = 4, StartHour = 6, EndHour = 20 };
+        a.Map.SetTimecycleModifier(0, zoneAfter);
+        Share(new TimecycleEdit(a.Map, 0, zoneBefore, zoneAfter, "Modifier la zone"));
 
         // A parking spot added to the project's map, the map file's one deleted.
         var projectMap = a.Library.FindCustomMap("proj_props.ymap") ?? a.Library.CreateCustomMap("proj_props.ymap");

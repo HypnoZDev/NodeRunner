@@ -81,6 +81,7 @@ public sealed class EditCodecs
         .Add(new CarGeneratorCodec())
         .Add(new CarGeneratorAddCodec())
         .Add(new CarGeneratorDeleteCodec())
+        .Add(new TimecycleCodec())
         .Add(new ArchetypeCodec())
         .Add(new DoorReplaceCodec());
 

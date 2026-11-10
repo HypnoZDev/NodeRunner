@@ -1319,6 +1319,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             + L("masquez le calque Véhicules garés pour sélectionner les objets."), wrap: true);
     }
 
+    private TimecycleModifier? _zoneEditStart;
+    private const float MinZoneSide = 0.5f;
+
     private void DrawTimecycle(TimecycleSelection selection, TimecycleModifier zone, HashNames names)
     {
         ImGui.PushFont(UiTheme.SemiboldFont);
@@ -1337,17 +1340,116 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             ImGui.SetClipboardText(copied);
 
         static string V(Vector3 v) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{v.X:0.00}, {v.Y:0.00}, {v.Z:0.00}");
+        var map = selection.Map;
+        int index = selection.Index;
+        TimecycleModifier Current() => map.TimecycleModifiers[index];
+        void Live(TimecycleModifier after) => map.SetTimecycleModifier(index, after);
+        void Commit(TimecycleModifier after, string description)
+        {
+            var before = Current();
+            if (after == before)
+                return;
+            Live(after);
+            state.History.Add(new TimecycleEdit(map, index, before, after, description));
+        }
+        // Live change while a field is dragged; one undo step when it is released.
+        void Track(TimecycleModifier before, string description)
+        {
+            if (ImGui.IsItemActivated())
+                _zoneEditStart = before;
+            if (ImGui.IsItemDeactivatedAfterEdit() && _zoneEditStart is { } start)
+            {
+                if (Current() != start)
+                    state.History.Add(new TimecycleEdit(map, index, start, Current(), description));
+                _zoneEditStart = null;
+            }
+        }
+        string Change(string what) => L($"Modifier la zone de timecycle {index} ({what})");
+        Vector4[] axes = [UiTheme.AxisX, UiTheme.AxisY, UiTheme.AxisZ];
+
         if (Widgets.Section(L("Zone"), "timecycle_zone") && Widgets.BeginProperties("##timecycle_zone"))
         {
-            Widgets.PropertyText(L("Modificateur"), TimecycleText(zone.NameHash, names),
-                L("Réglage de lumière, de couleurs ou de brouillard appliqué dans la zone (timecycle_mods_*.xml du jeu)."));
-            Widgets.PropertyText(L("Coin min"), V(zone.BoundsMin), L("Coin bas, sud-ouest de la boîte, en mètres."));
-            Widgets.PropertyText(L("Coin max"), V(zone.BoundsMax), L("Coin haut, nord-est de la boîte, en mètres."));
-            Widgets.PropertyText(L("Taille"), L($"{size.X:0.0} x {size.Y:0.0} x {size.Z:0.0} m"));
-            Widgets.PropertyText(L("Intensité"), $"{zone.Percentage:0.#} %", L("Force du réglage dans la boîte, de 0 à 100 %."));
-            Widgets.PropertyText(L("Fondu"), $"{zone.Range:0.#} m",
-                L("Distance autour de la boîte sur laquelle le réglage apparaît peu à peu (cadre jaune pâle dans la vue 3D)."));
-            Widgets.PropertyText(L("Heures"), L($"de {zone.StartHour} h à {zone.EndHour} h"), L("Heures du jour où la zone s'applique."));
+            Widgets.Property(L("Modificateur"), L("Réglage de lumière, de couleurs ou de brouillard appliqué dans la zone (timecycle_mods_*.xml du jeu). ")
+                + L("Tapez son nom (ex. NoAmbientmult) ou son hash (0x...)."));
+            if (CommitText("##timecycle_name", TimecycleText(zone.NameHash, names), L("aucun"), out string modifier)
+                && ParseTimecycle(modifier, names) is { } modifierHash)
+                Commit(Current() with { NameHash = modifierHash }, Change(L("modificateur")));
+
+            Widgets.Property(L("Centre"), L("Centre de la boîte, en mètres. Aussi avec les poignées (touche 2)."));
+            float width = Widgets.SplitWidth(3);
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                var current = Current();
+                var center = current.Center;
+                float value = center[i];
+                if (Widgets.AxisField($"##timecycle_center{i}", ref value, axes[i], width, 0.05f, "%.2f"))
+                {
+                    var delta = Vector3.Zero;
+                    delta[i] = value - center[i];
+                    Live(current with { BoundsMin = current.BoundsMin + delta, BoundsMax = current.BoundsMax + delta });
+                }
+                Track(current, Change(L("position")));
+            }
+
+            Widgets.Property(L("Taille"), L("Taille de la boîte en X, Y, Z (mètres), autour du centre. Aussi avec les poignées (touche 4)."));
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                var current = Current();
+                var sides = current.Size;
+                float value = sides[i];
+                if (Widgets.AxisField($"##timecycle_size{i}", ref value, axes[i], width, 0.05f, "%.2f", MinZoneSide, 100000f))
+                {
+                    var center = current.Center;
+                    sides[i] = MathF.Max(MinZoneSide, value);
+                    Live(current with { BoundsMin = center - sides / 2, BoundsMax = center + sides / 2 });
+                }
+                Track(current, Change(L("taille")));
+            }
+
+            Widgets.Property(L("Intensité"), L("Force du réglage dans la boîte, de 0 à 100 %."));
+            {
+                var current = Current();
+                float value = current.Percentage;
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                if (ImGui.DragFloat("##timecycle_percentage", ref value, 0.5f, 0f, 100f, "%.0f %%"))
+                    Live(current with { Percentage = Math.Clamp(value, 0f, 100f) });
+                Track(current, Change(L("intensité")));
+            }
+
+            Widgets.Property(L("Fondu"), L("Distance autour de la boîte sur laquelle le réglage apparaît peu à peu (cadre jaune pâle dans la vue 3D)."));
+            {
+                var current = Current();
+                float value = current.Range;
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                if (ImGui.DragFloat("##timecycle_range", ref value, 0.1f, 0f, 1000f, "%.1f m"))
+                    Live(current with { Range = Math.Clamp(value, 0f, 1000f) });
+                Track(current, Change(L("fondu")));
+            }
+
+            Widgets.Property(L("Heures"), L("Heures du jour où la zone s'applique : de la première à la seconde (0 à 23)."));
+            {
+                float half = Widgets.SplitWidth(2);
+                for (int i = 0; i < 2; i++)
+                {
+                    if (i > 0) ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+                    var current = Current();
+                    int value = (int)(i == 0 ? current.StartHour : current.EndHour);
+                    ImGui.SetNextItemWidth(half);
+                    if (ImGui.DragInt($"##timecycle_hour{i}", ref value, 0.1f, 0, 23, i == 0 ? L("de %d h") : L("à %d h")))
+                    {
+                        uint hour = (uint)Math.Clamp(value, 0, 23);
+                        Live(i == 0 ? current with { StartHour = hour } : current with { EndHour = hour });
+                    }
+                    Track(current, Change(L("heures")));
+                }
+            }
+            if (!Simple)
+            {
+                Widgets.PropertyText(L("Coin min"), V(zone.BoundsMin), L("Coin bas, sud-ouest de la boîte, en mètres."));
+                Widgets.PropertyText(L("Coin max"), V(zone.BoundsMax), L("Coin haut, nord-est de la boîte, en mètres."));
+            }
             Widgets.EndProperties();
         }
         if (!Simple && Widgets.Section(L("Fichier"), "timecycle_file") && Widgets.BeginProperties("##timecycle_file"))
@@ -1356,7 +1458,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.TimecycleModifiers.Count(z => !z.IsDeleted)} zone(s)"));
             Widgets.EndProperties();
         }
-        Widgets.Hint(L("Le jeu change l'ambiance de l'image quand la caméra est dans cette zone. Échap pour désélectionner ; ")
+        Widgets.Hint(L("Le jeu change l'ambiance de l'image quand la caméra est dans cette zone. Enregistré dans son YMAP au Ctrl+S. Échap pour désélectionner ; ")
             + L("masquez le calque Zones de timecycle pour sélectionner les objets."), wrap: true);
     }
 

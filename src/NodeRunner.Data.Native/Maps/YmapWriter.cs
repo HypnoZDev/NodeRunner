@@ -42,6 +42,7 @@ public sealed class YmapWriter : IMapDataWriter
             WriteEntity(document, items[i], kept[i]);
         WriteEntityPointers(document, mapData, items);
         WriteCarGenerators(document, mapData, map.CarGenerators, carGenerator);
+        WriteTimecycleModifiers(document, mapData, map.TimecycleModifiers);
 
         WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
         WriteVector3(mapData, YmapReader.MapStreamingMax, extents.StreamingMax);
@@ -433,6 +434,35 @@ public sealed class YmapWriter : IMapDataWriter
     }
 
     private delegate ReadOnlySpan<byte> OriginalItem(int sourceIndex);
+
+    // The timecycle zones, written in place (same number, same order as in the file).
+    private static void WriteTimecycleModifiers(MetaDocument document, byte[] mapData, IReadOnlyList<TimecycleModifier> zones)
+    {
+        var field = mapData.AsSpan(YmapReader.MapTimecycleModifiers);
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(field[8..]);
+        if (zones.Count != count || zones.Where((z, i) => z.SourceIndex != i || z.IsDeleted).Any())
+            throw new InvalidDataException("L'ajout ou la suppression de zones de timecycle n'est pas encore pris en charge.");
+        if (count == 0)
+            return;
+        var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(field));
+        if (block < 0 || block >= document.Blocks.Count || document.Blocks[block].Structure != YmapReader.TimecycleStructure
+            || offset + count * YmapReader.TimecycleSize > document.Blocks[block].Data.Length)
+            throw new InvalidDataException("Zones de timecycle (CTimeCycleModifier) introuvables dans le fichier.");
+        var data = document.Blocks[block].Data;
+        for (int i = 0; i < count; i++)
+        {
+            var zone = zones[i];
+            int o = offset + i * YmapReader.TimecycleSize;
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.TimecycleName), zone.NameHash);
+            // Only X, Y, Z: the 4th float of each corner is kept as it is.
+            WriteVector3(data, o + YmapReader.TimecycleMin, zone.BoundsMin);
+            WriteVector3(data, o + YmapReader.TimecycleMax, zone.BoundsMax);
+            WriteFloat(data, o + YmapReader.TimecyclePercentage, zone.Percentage);
+            WriteFloat(data, o + YmapReader.TimecycleRange, zone.Range);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.TimecycleStartHour), zone.StartHour);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.TimecycleEndHour), zone.EndHour);
+        }
+    }
 
     // The items of a new array of spots: a spot of the file starts from its bytes (original(SourceIndex)), a new one
     // from zeros (no field before the position, nothing after the livery).

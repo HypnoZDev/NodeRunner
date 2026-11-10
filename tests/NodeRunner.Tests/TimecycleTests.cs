@@ -72,6 +72,40 @@ public class TimecycleTests
     }
 
     [Fact]
+    public void A_changed_timecycle_zone_is_written_back_and_held_by_the_streaming_box()
+    {
+        var file = BuildYmap((0x9CFCA62E, new Vector3(-10, 0, 1), new Vector3(10, 20, 5), 50f, 5f, 0, 23),
+            (0x431ED452, new Vector3(100, 100, 0), new Vector3(110, 105, 3), 100f, 1f, 20, 6));
+        var map = new YmapReader().Read(file);
+        var changed = map.TimecycleModifiers[1] with
+        {
+            NameHash = 0x12345678, BoundsMin = new Vector3(500, 600, -5), BoundsMax = new Vector3(520, 640, 10),
+            Percentage = 30f, Range = 12f, StartHour = 6, EndHour = 21,
+        };
+        var edit = new Editor.TimecycleEdit(map, 1, map.TimecycleModifiers[1], changed, "test");
+        edit.Redo();
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content);
+
+        Assert.Equal(map.TimecycleModifiers[0], written.TimecycleModifiers[0]);
+        Assert.Equal(changed, written.TimecycleModifiers[1]);
+        Assert.True(written.StreamingExtentsMax.X >= 520 && written.StreamingExtentsMax.Y >= 640 && written.StreamingExtentsMin.Z <= -5);
+
+        edit.Undo();
+        Assert.Equal(new YmapReader().Read(file).TimecycleModifiers,
+            new YmapReader().Read(new YmapWriter().Write(file, map, extents).Content).TimecycleModifiers);
+    }
+
+    [Fact]
+    public void A_world_sized_timecycle_zone_does_not_grow_the_streaming_box()
+    {
+        var file = BuildYmap((0x9CFCA62E, new Vector3(-1e30f), new Vector3(1e30f), 100f, 0f, 0, 23));
+        var map = new YmapReader().Read(file);
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+        Assert.True(extents.StreamingMax.X < 1e6f);
+    }
+
+    [Fact]
     public void A_map_file_without_timecycle_zones_reads_an_empty_list() =>
         Assert.Empty(new YmapReader().Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd))).TimecycleModifiers);
 }

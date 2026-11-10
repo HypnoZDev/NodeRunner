@@ -550,6 +550,46 @@ internal sealed class CarGeneratorCodec : EditCodec<CarGeneratorEdit>
     }
 }
 
+internal sealed class TimecycleCodec : EditCodec<TimecycleEdit>
+{
+    public override string Tag => "timecycle";
+
+    protected override void Write(TimecycleEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Map);
+        w.Write(edit.Index);
+        var z = edit.After;
+        w.Write(z.NameHash);
+        w.Write(z.BoundsMin);
+        w.Write(z.BoundsMax);
+        w.Write(z.Percentage);
+        w.Write(z.Range);
+        w.Write(z.StartHour);
+        w.Write(z.EndHour);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var map = r.ReadMap();
+        int index = r.ReadInt();
+        if (index < 0 || index >= map.TimecycleModifiers.Count)
+            throw new InvalidDataException("Timecycle zone not found here.");
+        var before = map.TimecycleModifiers[index];
+        var after = before with
+        {
+            NameHash = r.ReadUInt(),
+            BoundsMin = r.ReadVector3(),
+            BoundsMax = r.ReadVector3(),
+            Percentage = r.ReadFloat(),
+            Range = r.ReadFloat(),
+            StartHour = r.ReadUInt(),
+            EndHour = r.ReadUInt(),
+        };
+        map.SetTimecycleModifier(index, after);
+        return new TimecycleEdit(map, index, before, after, description);
+    }
+}
+
 internal sealed class CarGeneratorAddCodec : EditCodec<CarGeneratorAddEdit>
 {
     public override string Tag => "car-generator-add";

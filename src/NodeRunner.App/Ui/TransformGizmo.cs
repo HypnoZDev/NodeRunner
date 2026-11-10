@@ -24,6 +24,7 @@ internal sealed class TransformGizmo(AppState state)
     private const float MinBoxSide = 0.25f;     // Metres: the precision of a box occluder in the game's files.
     private float BoxSizeStep => MoveStep;
     private const float MinSpotSide = 0.5f;
+    private const float MinZoneSide = 0.5f;
 
     private enum Kind { None, Axis, Plane, Ring, ScaleAxis, ScaleUniform }
 
@@ -39,6 +40,8 @@ internal sealed class TransformGizmo(AppState state)
         public OccluderBox? BoxStart;
         public CarGeneratorSelection? Spot;
         public CarGenerator? SpotStart;
+        public TimecycleSelection? Zone;
+        public TimecycleModifier? ZoneStart;
         public required TransformTool Tool;
         public required Handle Handle;
         public required Placement[] Starts;
@@ -85,12 +88,14 @@ internal sealed class TransformGizmo(AppState state)
         var node = entities.Count == 0 && state.World.PathNetwork is not null ? state.SelectedPathNode : null;
         var occluder = entities.Count == 0 && node is null && state.SelectedOccluder is { Box: not null } selected ? selected : null;
         var spot = entities.Count == 0 && node is null && occluder is null && state.SelectedCarGenerator is { } selectedSpot ? selectedSpot : null;
+        var zone = entities.Count == 0 && node is null && occluder is null && spot is null && state.SelectedTimecycle is { } selectedZone ? selectedZone : null;
         var tool = state.Tool;
-        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Spot != spot || current.Tool != tool))
-            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder && current.Spot == spot);
+        if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Spot != spot
+                                     || current.Zone != zone || current.Tool != tool))
+            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder && current.Spot == spot && current.Zone == zone);
 
         _spotMode = spot is not null;
-        _boxMode = occluder is not null || _spotMode;
+        _boxMode = occluder is not null || _spotMode || zone is not null;
         if (tool == TransformTool.Collision)
             return;
         if (node is not null)
@@ -101,6 +106,12 @@ internal sealed class TransformGizmo(AppState state)
         else if (occluder?.Box is { } box)
         {
             if (tool == TransformTool.Select || !SetUpFrame(box.Center, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, box.Angle), tool))
+                return;
+        }
+        else if (zone?.Zone is { } shownZone)
+        {
+            // Boxes along the world axes in the game's files: moved and resized, never turned.
+            if (tool is TransformTool.Select or TransformTool.Rotate || !SetUpFrame(shownZone.Center, Quaternion.Identity, tool))
                 return;
         }
         else if (spot?.Spot is { } parked)
@@ -132,7 +143,7 @@ internal sealed class TransformGizmo(AppState state)
         {
             _hovered = FindHovered(tool, mouse);
             if (_hovered.Kind != Kind.None && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-                BeginDrag(entities, node, occluder, spot, tool, _hovered, mouse);
+                BeginDrag(entities, node, occluder, spot, zone, tool, _hovered, mouse);
         }
 
         if (_drag is not null || _hovered.Kind != Kind.None)
@@ -307,11 +318,14 @@ internal sealed class TransformGizmo(AppState state)
 
     // --- Dragging ---
 
-    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, CarGeneratorSelection? spot, TransformTool tool, Handle handle, Vector2 mouse)
+    private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, CarGeneratorSelection? spot,
+        TimecycleSelection? zone, TransformTool tool, Handle handle, Vector2 mouse)
     {
         var drag = new Drag
         {
-            Entities = node is null && occluder is null && spot is null ? [.. entities] : [],
+            Entities = node is null && occluder is null && spot is null && zone is null ? [.. entities] : [],
+            Zone = zone,
+            ZoneStart = zone?.Zone,
             Node = node,
             NodeStart = node?.Position ?? default,
             Occluder = occluder,
@@ -440,6 +454,21 @@ internal sealed class TransformGizmo(AppState state)
                 float factor = drag.Handle.Kind == Kind.ScaleUniform
                     ? 1f + (moved.X - moved.Y) / (2f * LengthPixels) // Right or up: bigger.
                     : 1f + Vector2.Dot(moved, drag.ScreenDirection) / drag.ScreenLength;
+                if (drag.Zone is { } resizedZone && drag.ZoneStart is { } zoneStart)
+                {
+                    var size = zoneStart.Size;
+                    if (drag.Handle.Kind == Kind.ScaleUniform)
+                        size *= MathF.Max(0.01f, factor);
+                    else
+                        size[a] *= MathF.Max(0.01f, factor);
+                    if (snap)
+                        size = new Vector3(GizmoMath.Snap(size.X, BoxSizeStep), GizmoMath.Snap(size.Y, BoxSizeStep), GizmoMath.Snap(size.Z, BoxSizeStep));
+                    size = Vector3.Max(size, new Vector3(MinZoneSide));
+                    var middle = zoneStart.Center;
+                    resizedZone.Map.SetTimecycleModifier(resizedZone.Index, zoneStart with { BoundsMin = middle - size / 2, BoundsMax = middle + size / 2 });
+                    drag.Feedback = L($"Taille  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m");
+                    break;
+                }
                 if (drag.Spot is { } resizedSpot && drag.SpotStart is { } spotSize)
                 {
                     float length = spotSize.Length, spotWidth = spotSize.Width;
@@ -495,7 +524,7 @@ internal sealed class TransformGizmo(AppState state)
     }
 
     private bool FollowsGround(Drag drag) =>
-        drag.Occluder is null && drag.Spot is null && state.Settings.FollowGround
+        drag.Occluder is null && drag.Spot is null && drag.Zone is null && state.Settings.FollowGround
         && (drag.Handle.Kind == Kind.Axis && drag.Handle.Axis < 2 || drag.Handle.Kind == Kind.Plane && drag.Handle.Axis == 2);
 
     // Moves the dragged objects by delta; following the ground, the height of each is then taken from the collision
@@ -510,6 +539,8 @@ internal sealed class TransformGizmo(AppState state)
             OccluderMaps.SetBox(occluder.File, boxStart with { Center = boxStart.Center + delta });
         if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
             spot.Map.SetCarGenerator(spot.Index, spotStart with { Position = spotStart.Position + delta });
+        if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
+            zone.Map.SetTimecycleModifier(zone.Index, zoneStart with { BoundsMin = zoneStart.BoundsMin + delta, BoundsMax = zoneStart.BoundsMax + delta });
         if (drag.Node is { } node && state.World.PathNetwork is { } network)
         {
             var target = drag.NodeStart + delta;
@@ -547,6 +578,8 @@ internal sealed class TransformGizmo(AppState state)
             OccluderMaps.SetBox(occluder.File, boxStart);
         if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
             spot.Map.SetCarGenerator(spot.Index, spotStart);
+        if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
+            zone.Map.SetTimecycleModifier(zone.Index, zoneStart);
         if (drag.Node is { } node)
             state.World.PathNetwork?.MoveNode(node, drag.NodeStart);
         for (int i = 0; i < drag.Entities.Length; i++)
@@ -560,6 +593,20 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is not { } drag)
             return;
         _drag = null;
+        if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
+        {
+            if (!commit)
+            {
+                zone.Map.SetTimecycleModifier(zone.Index, zoneStart);
+                return;
+            }
+            if (zone.Zone is { } zoneEnd && zoneEnd != zoneStart)
+            {
+                string zoneVerb = drag.Tool == TransformTool.Scale ? L("Redimensionner") : L("Déplacer");
+                state.History.Add(new TimecycleEdit(zone.Map, zone.Index, zoneStart, zoneEnd, L($"{zoneVerb} la zone de timecycle {zone.Index}")));
+            }
+            return;
+        }
         if (drag.Spot is { } spot && drag.SpotStart is { } spotStart)
         {
             if (!commit)

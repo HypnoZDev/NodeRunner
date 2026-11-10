@@ -692,6 +692,12 @@ internal sealed class AppState
             Select(null);
             SelectedOccluder = new OccluderSelection(boxEdit.File, OcclusionLayerPart.Boxes, boxEdit.Index);
         }
+        else if (edit is ITimecycleEdit zoneEdit)
+        {
+            Select(null);
+            var zone = new TimecycleSelection(zoneEdit.Map, zoneEdit.Index);
+            SelectedTimecycle = zone.Zone is null ? null : zone;
+        }
         else if (edit is ICarGeneratorEdit spotEdit)
         {
             // A spot deleted again (an addition undone, a deletion redone) leaves nothing selected.
@@ -1217,6 +1223,7 @@ internal sealed class AppState
                 // The project's maps placing an interior whose portals changed: the instance stores its number of exits.
                 .Concat(history.All.OfType<IInteriorEdit>().Select(e => e.Interior.Map).Where(m => m is { IsCustom: true }))
                 .Concat(history.All.OfType<ICarGeneratorEdit>().Select(e => e.Map))
+                .Concat(history.All.OfType<ITimecycleEdit>().Select(e => e.Map))
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()
