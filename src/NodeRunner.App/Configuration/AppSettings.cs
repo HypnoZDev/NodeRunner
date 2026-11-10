@@ -60,6 +60,9 @@ public sealed class AppSettings
     // The map collision (.ybn) under an object moved by hand moves with it.
     public bool CollisionFollowsObjects { get; set; } = true;
 
+    // Properties panel shows only placement and the common actions.
+    public bool SimpleProperties { get; set; }
+
     // Rescue copy of the unsaved changes every N minutes (data/secours); 0 = never.
     public float BackupMinutes { get; set; } = 2f;
 

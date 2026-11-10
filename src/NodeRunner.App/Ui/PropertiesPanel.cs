@@ -60,6 +60,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             return;
         }
 
+        DrawModeSwitch();
         if (state.Selection is { } entity && state.World.Maps is { } library)
         {
             var names = state.World.Names ?? new HashNames();
@@ -72,22 +73,24 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             DrawHeader(entity, names);
             if (Widgets.Section(L("Transformation"), "transform"))
                 DrawPlacement(entity, library, names);
-            if (Widgets.Section(L("Fichiers"), "files"))
+            if (!Simple && Widgets.Section(L("Fichiers"), "files"))
                 DrawFiles(entity, library, names);
-            if (Doors.IsDoor(names.TryGet(entity.ArchetypeHash)) && library.GetArchetype(entity.ArchetypeHash) is { } doorType
+            if (!Simple && Doors.IsDoor(names.TryGet(entity.ArchetypeHash)) && library.GetArchetype(entity.ArchetypeHash) is { } doorType
                 && Widgets.Section(L("Porte"), "door"))
                 DrawDoor(entity, doorType, names);
-            if (Widgets.Section(L("Niveau de détail"), "lod"))
+            if (!Simple && Widgets.Section(L("Niveau de détail"), "lod"))
                 DrawLevelOfDetail(entity, names);
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
                 && Widgets.Section(L($"Entity sets ({interior.EntitySets.Count})"), "entity_sets"))
                 DrawEntitySets(interior, library, names);
-            if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } roomsOf
+            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } roomsOf
                 && library.GetArchetype(roomsOf.ArchetypeHash) is { } interiorType
                 && Widgets.Section(L($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})"), "rooms", defaultOpen: false))
                 DrawRoomList(roomsOf, interiorType);
-            if (Widgets.Section(L("Réglages"), "flags", defaultOpen: false))
+            if (!Simple && Widgets.Section(L("Réglages"), "flags", defaultOpen: false))
                 DrawFlags(entity, library);
+            if (Simple)
+                Widgets.Hint(L("Mode Simple : fichiers, LOD, réglages et salles sont dans le mode Avancé."), wrap: true);
         }
         else if (state.SelectedPathNode is { } node && state.World.PathNetwork is { } network)
             DrawPathNode(node, network);
@@ -108,6 +111,17 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.Hint(L("Clic gauche sur un objet de la vue 3D, ou dans la liste Scène, pour voir et modifier ses propriétés."), wrap: true);
         }
         ImGui.End();
+    }
+
+    private bool Simple => state.Settings.SimpleProperties;
+
+    private void DrawModeSwitch()
+    {
+        int mode = Simple ? 0 : 1;
+        if (Widgets.Segmented("##properties_mode", [L("Simple"), L("Avancé")], ref mode,
+                [L("Seulement l'essentiel : position, rotation, échelle et actions courantes."), L("Toutes les propriétés : fichiers, LOD, réglages, salles...")]))
+            state.Settings.SimpleProperties = mode == 0;
+        ImGui.Dummy(new Vector2(0, 2));
     }
 
     private void DrawHeader(MapEntity entity, HashNames names)
@@ -143,11 +157,25 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         ImGui.SameLine();
         if (Widgets.IconButton(Icons.Ellipsis, "more_copies", L("Autres copies, désélectionner")))
             ImGui.OpenPopup("more_copies_menu");
+        int deletable = state.DeletableSelection.Count;
+        bool deleteButton = Simple && deletable > 0;
         if (entity.CanEdit)
         {
+            float groundWidth = deleteButton
+                ? (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2f
+                : ImGui.GetContentRegionAvail().X;
             if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Monter ou descendre l'objet jusqu'à la collision en dessous (touche Fin)"),
-                ImGui.GetContentRegionAvail().X))
+                groundWidth))
                 state.PutSelectionOnGround();
+            if (deleteButton)
+                ImGui.SameLine();
+        }
+        if (deleteButton && Widgets.Button(L($"{Icons.Trash}  Supprimer"),
+                deletable > 1 ? L($"Supprimer les {deletable} objets sélectionnés (Suppr)") : L("Supprimer l'objet (Suppr)"),
+                ImGui.GetContentRegionAvail().X))
+            state.RequestDelete();
+        if (entity.CanEdit)
+        {
             if (entity.Interior is null && !entity.IsInterior)
             {
                 bool follow = state.Settings.CollisionFollowsObjects;
@@ -422,7 +450,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.PropertyText(L("Rotation"), $"X {r.X:0.0}°   Y {r.Y:0.0}°   Z {r.Z:0.0}°");
             Widgets.PropertyText(L("Échelle"), L($"{entity.Scale.X:0.###} (horiz.)   {entity.Scale.Z:0.###} (vert.)"));
         }
-        Widgets.PropertyText(L("Distance d'affichage"), $"{library.DrawDistance(entity):0} m");
+        if (!Simple)
+            Widgets.PropertyText(L("Distance d'affichage"), $"{library.DrawDistance(entity):0} m");
         Widgets.EndProperties();
 
         if (entity.Interior is not null)
@@ -1259,8 +1288,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 Track(current, Change(L("livrée")));
             }
 
-            Widgets.Property(L("Drapeaux"), L("Réglages de la place (heures d'apparition, priorité...), en hexadécimal. Le sens de chaque bit n'est pas encore connu."));
-            if (CommitText("##cargen_flags", $"0x{spot.Flags:X}", "0x0", out string flagsText))
+            if (!Simple)
+                Widgets.Property(L("Drapeaux"), L("Réglages de la place (heures d'apparition, priorité...), en hexadécimal. Le sens de chaque bit n'est pas encore connu."));
+            if (!Simple && CommitText("##cargen_flags", $"0x{spot.Flags:X}", "0x0", out string flagsText))
             {
                 string hex = flagsText.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? flagsText[2..] : flagsText;
                 if (uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint flags))
@@ -1271,7 +1301,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section(L("Fichier"), "cargen_file") && Widgets.BeginProperties("##cargen_file"))
+        if (!Simple && Widgets.Section(L("Fichier"), "cargen_file") &&Widgets.BeginProperties("##cargen_file"))
         {
             Widgets.PropertyText(L("YMAP"), file, selection.Map.FilePath);
             Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.CarGenerators.Count} place(s)"));
@@ -1516,7 +1546,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section(L("Réglages de la salle"), "room_flags"))
+        if (!Simple && Widgets.Section(L("Réglages de la salle"), "room_flags"))
         {
             foreach (var (flag, text, tooltip) in RoomFlags)
             {
@@ -1758,7 +1788,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.EndProperties();
         }
 
-        if (Widgets.Section(L("Réglages du portail"), "portal_flags"))
+        if (!Simple && Widgets.Section(L("Réglages du portail"), "portal_flags"))
         {
             foreach (var (flag, text, tooltip) in PortalFlags)
             {
@@ -1812,8 +1842,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (node.NoGps) flags.Add(L("ignoré par le GPS"));
             if (node.IsSwitchedOff) flags.Add(L("sans trafic par défaut"));
             Widgets.PropertyText(L("Particularités"), flags.Count == 0 ? L("aucune") : string.Join(", ", flags));
-            Widgets.PropertyText(L("Octets bruts"), $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
-                L("Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd"));
+            if (!Simple)
+                Widgets.PropertyText(L("Octets bruts"), $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
+                    L("Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd"));
             Widgets.EndProperties();
         }
 

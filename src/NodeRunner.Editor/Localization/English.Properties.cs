@@ -572,5 +572,16 @@ public static partial class English
             "to paste in a doortuning file. Useful for a door of a mapping, which the game does not know."),
         ("Choisir un réglage à copier...", "Choose a tuning to copy..."),
         ("Réglage {0} copié pour {1}.", "Tuning {0} copied for {1}."),
+
+        // Simple / Advanced switch
+        ("Simple", "Simple"),
+        ("Avancé", "Advanced"),
+        ("Seulement l'essentiel : position, rotation, échelle et actions courantes.",
+            "Only the essentials: position, rotation, scale and common actions."),
+        ("Toutes les propriétés : fichiers, LOD, réglages, salles...", "All properties: files, LOD, settings, rooms..."),
+        ("Mode Simple : fichiers, LOD, réglages et salles sont dans le mode Avancé.",
+            "Simple mode: files, LOD, settings and rooms are in Advanced mode."),
+        ("Supprimer les {0} objets sélectionnés (Suppr)", "Delete the {0} selected objects (Del)"),
+        ("Supprimer l'objet (Suppr)", "Delete the object (Del)"),
     ];
 }
