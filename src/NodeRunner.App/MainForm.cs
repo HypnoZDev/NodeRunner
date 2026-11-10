@@ -475,6 +475,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Thumbnails.Render(_modelRenderer!, imguiRenderer, graphics, _state.World);
         var scene = SceneViewport();
         PickClickedObject(scene);
+        PickContextObject(scene);
         PickCollision(scene);
         PlaceRequestedObject(scene);
         graphics.BeginFrame(BackgroundColor);
@@ -764,6 +765,19 @@ internal sealed unsafe partial class MainForm : Form
                     _pickRequest = (e.Location, (ModifierKeys & Keys.Control) != 0);
             }
         };
+        // Right click without moving the mouse (a drag turns the camera): context menu of the 3D view.
+        _surface.MouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right)
+                _rightDown = !ImGui.GetIO().WantCaptureMouse && !_ui.IsSearchOpen ? (e.Location, Environment.TickCount64) : null;
+        };
+        _surface.MouseUp += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right && _rightDown is var (at, time) && !IsDrag(at, e.Location) && Environment.TickCount64 - time < 500)
+                _contextRequest = e.Location;
+            if (e.Button == MouseButtons.Right)
+                _rightDown = null;
+        };
         _surface.MouseMove += (_, e) =>
         {
             if (_collisionDragStart is not null)
@@ -924,6 +938,27 @@ internal sealed unsafe partial class MainForm : Form
         if (hit is { } chosen)
             _clickCycle.Add(chosen.Entity);
         _state.Select(hit?.Entity);
+    }
+
+    private (Point, long)? _rightDown;
+    private Point? _contextRequest;
+
+    // Right click: the object under the mouse joins the selection unless it is already in it, then the menu opens.
+    private void PickContextObject(Rectangle scene)
+    {
+        if (_contextRequest is not { } click || _modelRenderer is null || _pickBuffer is null)
+            return;
+        _contextRequest = null;
+        if (!scene.Contains(click))
+            return;
+        if (_state.Tool != TransformTool.Collision && _state.IsLayerVisible(ModelLayer.LayerName))
+        {
+            var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+            if (_modelLayer.PickHit(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y, null) is { } hit
+                && !_state.SelectedEntities.Contains(hit.Entity))
+                _state.Select(hit.Entity);
+        }
+        _ui.OpenViewportMenu();
     }
 
     // Objects picked one after the other by clicking again at the same place (front first).

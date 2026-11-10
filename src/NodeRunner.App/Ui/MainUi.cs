@@ -171,6 +171,64 @@ internal sealed class MainUi
 
     public bool IsSearchOpen => _searchPalette.IsOpen;
 
+    private bool _openViewportMenu;
+
+    public void OpenViewportMenu() => _openViewportMenu = true;
+
+    // Right click in the 3D view: the usual actions on the selection, or paste / place when nothing is selected.
+    private void DrawViewportMenu()
+    {
+        if (_openViewportMenu)
+        {
+            ImGui.OpenPopup("##viewport_menu");
+            _openViewportMenu = false;
+        }
+        if (!ImGui.BeginPopup("##viewport_menu"))
+            return;
+        var entity = _state.Selection;
+        int selected = _state.SelectedEntities.Count;
+        if (entity is not null)
+        {
+            string name = _state.World.Names?.Describe(entity.ArchetypeHash) ?? L("Objet");
+            ImGui.TextDisabled(selected > 1 ? L($"{name} (+{selected - 1})") : name);
+            ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.Crosshair}  Aller à l'objet")))
+                _state.FocusOn(entity);
+            string position = _state.FormatPosition(entity.Position);
+            if (ImGui.MenuItem(L($"{Icons.Copy}  Copier la position"), position))
+                ImGui.SetClipboardText(position);
+            if (ImGui.MenuItem(L($"{Icons.Copy}  Copier la position avec le cap")))
+                ImGui.SetClipboardText(_state.FormatPosition(entity.Position, FiveMFormat.Heading(entity)));
+            if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
+                OpenInViewer(entity.ArchetypeHash);
+            ImGui.Separator();
+            if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"), "Ctrl+C"))
+                _state.CopySelection();
+        }
+        int copied = _state.Copied.Count;
+        if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), "Ctrl+V", false, copied > 0))
+            _state.PasteRequest = true;
+        if (entity is not null)
+        {
+            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Fin"), false, _state.EditableSelection.Count > 0))
+                _state.PutSelectionOnGround();
+            int group = _state.DeletableSelection.Count;
+            if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer l'objet sélectionné..."),
+                    L("Suppr"), false, group > 0))
+                _state.RequestDelete();
+            ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.X}  Désélectionner"), L("Échap")))
+                _state.Select(null);
+        }
+        else
+        {
+            ImGui.Separator();
+            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
+                _searchPalette.Open();
+        }
+        ImGui.EndPopup();
+    }
+
     public bool IsGizmoHovered => _gizmo.IsHovered || _roomGizmo.IsHovered || _collisionGizmo.IsHovered;
 
     public bool IsGizmoDragging => _gizmo.IsDragging || _roomGizmo.IsDragging || _collisionGizmo.IsDragging;
@@ -219,6 +277,7 @@ internal sealed class MainUi
         _errorWindow.Draw();
         _protectedWindow.Draw();
         _shortcutsWindow.Draw();
+        DrawViewportMenu();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
         _searchPalette.Draw(); // Last: above the panels.
     }

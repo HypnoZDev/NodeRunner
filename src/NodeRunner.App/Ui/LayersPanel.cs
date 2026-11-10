@@ -14,8 +14,53 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
     private IReadOnlySet<string> _defaultHiddenScriptedMaps = new HashSet<string>();
     private string _scriptedMapSearch = "";
 
+    private static IEnumerable<string> PathLayers => PathNodeLayer.Categories.Select(PathNodeLayer.LayerName);
+    private static IEnumerable<string> ScenarioLayers => ScenarioLayer.Categories.Select(ScenarioLayer.LayerName);
+    private static IEnumerable<string> NavMeshLayers => NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer);
+    private static IEnumerable<string> CollisionLayers => CollisionLayer.Surfaces.Select(CollisionLayer.LayerName);
+    private static IEnumerable<string> EntityLayers => EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName);
+    private static IEnumerable<string> RoomLayers => RoomLayer.Parts.Select(RoomLayer.LayerName);
+    private static IEnumerable<string> OcclusionLayers => OcclusionLayer.Parts.Select(OcclusionLayer.LayerName);
+    private static readonly string[] MapLayers = [ModelLayer.LayerName, WaterLayer.LayerName];
+
+    private static IEnumerable<string> AllLayers => MapLayers.Concat(PathLayers).Concat(ScenarioLayers).Concat(NavMeshLayers)
+        .Concat(CollisionLayers).Concat(EntityLayers).Concat(RoomLayers).Concat(OcclusionLayers).Append(CarGeneratorLayer.LayerName);
+
+    // Ready-made sets of layers: the map plus what one kind of work needs, everything else hidden.
+    private static readonly (string Name, string Tooltip, Func<IEnumerable<string>> Layers)[] Presets =
+    [
+        ("Carte seule", "Bâtiments, terrain et eau, sans aucune aide visuelle.", () => MapLayers),
+        ("Mapping", "Carte + collisions : pour placer et poser des objets.", () => MapLayers.Concat(CollisionLayers)),
+        ("Routes et IA", "Carte + pathnodes, navmesh et points de scénario.", () => MapLayers.Concat(PathLayers).Concat(NavMeshLayers).Concat(ScenarioLayers)),
+        ("Intérieurs (MLO)", "Carte + salles et portails des intérieurs.", () => MapLayers.Concat(RoomLayers)),
+        ("Occlusion", "Carte + occluders du jeu et du projet.", () => MapLayers.Concat(OcclusionLayers)),
+        ("Véhicules garés", "Carte + places des car generators.", () => MapLayers.Append(CarGeneratorLayer.LayerName)),
+    ];
+
+    private void DrawPresets()
+    {
+        if (Widgets.Button(L($"{Icons.Layers}  Préréglages"), L("Afficher d'un coup les calques utiles pour un travail."), ImGui.GetContentRegionAvail().X))
+            ImGui.OpenPopup("##layer_presets");
+        if (!ImGui.BeginPopup("##layer_presets"))
+            return;
+        foreach (var (name, tooltip, layers) in Presets)
+        {
+            if (ImGui.MenuItem(L(name)))
+            {
+                var shown = layers().ToHashSet();
+                foreach (var layer in AllLayers)
+                    state.SetLayerVisible(layer, shown.Contains(layer));
+            }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L(tooltip));
+        }
+        ImGui.EndPopup();
+    }
+
     public void DrawContent()
     {
+        DrawPresets();
+        ImGui.Dummy(new Vector2(0, 2));
         if (LayerSection(L("Modèles 3D"), "models", [ModelLayer.LayerName]))
         {
             LayerRow(ModelLayer.LayerName, new Vector4(0.75f, 0.74f, 0.71f, 1f), L("Carte en 3D"));
