@@ -63,6 +63,10 @@ public sealed class AppSettings
     // Properties panel shows only placement and the common actions.
     public bool SimpleProperties { get; set; }
 
+    // Welcome screen: shown once, then only if asked.
+    public bool WelcomeSeen { get; set; }
+    public bool WelcomeAtStartup { get; set; }
+
     // Rescue copy of the unsaved changes every N minutes (data/secours); 0 = never.
     public float BackupMinutes { get; set; } = 2f;
 

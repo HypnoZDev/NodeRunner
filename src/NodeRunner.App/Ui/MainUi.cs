@@ -44,6 +44,7 @@ internal sealed class MainUi
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);
         _shortcutsWindow = new ShortcutsWindow(state);
+        _welcomeWindow = new WelcomeWindow(state, this, _shortcutsWindow.Toggle);
         _toolbar = new Toolbar(state, DrawToolbarProjectMenu,() => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)
         {
             ToggleLibrary = ToggleLibrary,
@@ -121,6 +122,7 @@ internal sealed class MainUi
     private readonly InteriorWindow _interiorWindow;
     private readonly ErrorWindow _errorWindow;
     private readonly ShortcutsWindow _shortcutsWindow;
+    private readonly WelcomeWindow _welcomeWindow;
     private readonly ProtectedMappingWindow _protectedWindow = new();
 
     public bool BrowseGameFolderRequested { get; set; }
@@ -276,6 +278,7 @@ internal sealed class MainUi
         _onlineWindow.Draw();
         _errorWindow.Draw();
         _protectedWindow.Draw();
+        _welcomeWindow.Draw();
         _shortcutsWindow.Draw();
         DrawViewportMenu();
         if (_showImGuiDemo) ImGui.ShowDemoWindow(ref _showImGuiDemo);
@@ -523,6 +526,8 @@ internal sealed class MainUi
 
         if (Menu(L("Aide")))
         {
+            if (ImGui.MenuItem(L("Écran d'accueil")))
+                _welcomeWindow.Open();
             if (ImGui.MenuItem(L("Raccourcis clavier"), "F1"))
                 _shortcutsWindow.Toggle();
             if (ImGui.MenuItem(L($"{Icons.TriangleAlert}  Erreurs et rapport...")))
