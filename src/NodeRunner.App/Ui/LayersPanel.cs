@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
 // (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, CarGeneratorLayer carGeneratorLayer)
+internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer)
 {
     private const int MaxScriptedMapsListed = 300;
 
@@ -24,7 +24,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
     private static readonly string[] MapLayers = [ModelLayer.LayerName, WaterLayer.LayerName];
 
     private static IEnumerable<string> AllLayers => MapLayers.Concat(PathLayers).Concat(ScenarioLayers).Concat(NavMeshLayers)
-        .Concat(CollisionLayers).Concat(EntityLayers).Concat(RoomLayers).Concat(OcclusionLayers).Append(CarGeneratorLayer.LayerName);
+        .Concat(CollisionLayers).Concat(EntityLayers).Concat(RoomLayers).Concat(OcclusionLayers).Append(CarGeneratorLayer.LayerName).Append(TimecycleLayer.LayerName);
 
     // Ready-made sets of layers: the map plus what one kind of work needs, everything else hidden.
     private static readonly (string Name, string Tooltip, Func<IEnumerable<string>> Layers)[] Presets =
@@ -35,6 +35,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         ("Intérieurs (MLO)", "Carte + salles et portails des intérieurs.", () => MapLayers.Concat(RoomLayers)),
         ("Occlusion", "Carte + occluders du jeu et du projet.", () => MapLayers.Concat(OcclusionLayers)),
         ("Véhicules garés", "Carte + places des car generators.", () => MapLayers.Append(CarGeneratorLayer.LayerName)),
+        ("Ambiance (timecycle)", "Carte + zones de timecycle (lumière, couleurs, brouillard).", () => MapLayers.Append(TimecycleLayer.LayerName)),
     ];
 
     private void DrawPresets()
@@ -121,6 +122,12 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         {
             LayerRow(CarGeneratorLayer.LayerName, CarGeneratorLayer.Color, L("Places de véhicules"), Widgets.Count(carGeneratorLayer.Count));
             Widgets.Hint(L($"Places à moins de {CarGeneratorLayer.Radius:0} m où le jeu peut garer un véhicule ; la flèche montre l'avant. Cliquez sur une place pour voir ses détails."), wrap: true);
+        }
+
+        if (LayerSection(L("Zones de timecycle"), "timecycle", [TimecycleLayer.LayerName], defaultOpen: false))
+        {
+            LayerRow(TimecycleLayer.LayerName, TimecycleLayer.Color, L("Zones de timecycle"), Widgets.Count(timecycleLayer.Count));
+            Widgets.Hint(L($"Zones à moins de {TimecycleLayer.Radius:0} m où le jeu change la lumière, les couleurs ou le brouillard (timecycle modifiers). Cliquez sur une zone pour voir ses détails."), wrap: true);
         }
 
         if (LayerSection(L("Occlusion"), "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))

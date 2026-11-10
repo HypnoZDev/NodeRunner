@@ -359,6 +359,15 @@ internal sealed class WorldLoader : IDisposable
             }
             foreach (var name in modelSets.AllNames)
                 names.Add(name);
+            try
+            {
+                foreach (var name in TimecycleNames.Read(files))
+                    names.Add(name);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException)
+            {
+                Diagnostics.ErrorLog.Add(L("Zones de timecycle"), ex);
+            }
             var userNames = ReadUserNames(names);
 
             progress.Report(L("Index des collisions..."));

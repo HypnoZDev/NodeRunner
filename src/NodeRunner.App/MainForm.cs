@@ -46,6 +46,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly RoomLayer _roomLayer = new();
     private readonly OcclusionLayer _occlusionLayer = new();
     private readonly CarGeneratorLayer _carGeneratorLayer = new();
+    private readonly TimecycleLayer _timecycleLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
     private WindowAlpha? _windowAlpha;
@@ -57,7 +58,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer, _timecycleLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -323,6 +324,7 @@ internal sealed unsafe partial class MainForm : Form
         _roomLayer.Dispose();
         _occlusionLayer.Dispose();
         _carGeneratorLayer.Dispose();
+        _timecycleLayer.Dispose();
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
@@ -607,6 +609,10 @@ internal sealed unsafe partial class MainForm : Form
         _carGeneratorLayer.Update(_state.World, lines, camera.Position, carGeneratorsEnabled);
         if (carGeneratorsEnabled)
             _carGeneratorLayer.Draw(lines, viewProjection, camera.Position);
+        bool timecycleEnabled = _state.IsLayerVisible(TimecycleLayer.LayerName);
+        _timecycleLayer.Update(_state.World, lines, camera.Position, timecycleEnabled);
+        if (timecycleEnabled)
+            _timecycleLayer.Draw(lines, viewProjection, camera.Position);
 
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));
@@ -625,6 +631,8 @@ internal sealed unsafe partial class MainForm : Form
             _occlusionLayer.DrawSelected(lines, selectedOccluder, viewProjection, camera.Position);
         if (_state.SelectedCarGenerator?.Spot is { } selectedSpot)
             _carGeneratorLayer.DrawSelected(lines, _state.World, selectedSpot, viewProjection, camera.Position);
+        if (_state.SelectedTimecycle?.Zone is { } selectedZone)
+            TimecycleLayer.DrawSelected(lines, selectedZone, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
@@ -898,6 +906,14 @@ internal sealed unsafe partial class MainForm : Form
                 _state.SelectRoom(new RoomSelection(room.Interior, room.Index));
                 return;
             }
+        }
+        // Timecycle zones, while their layer is shown: after the rooms, which they often hold.
+        if (!control && _state.IsLayerVisible(TimecycleLayer.LayerName)
+            && _timecycleLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height)) is { } zone)
+        {
+            _state.Select(null);
+            _state.SelectedTimecycle = zone;
+            return;
         }
         if (!_state.IsLayerVisible(ModelLayer.LayerName))
             return;

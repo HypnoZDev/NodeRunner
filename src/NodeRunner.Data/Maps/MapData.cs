@@ -55,6 +55,23 @@ public sealed class MapData
 
     public IEnumerable<CarGenerator> KeptCarGenerators => CarGenerators.Where(s => !s.IsDeleted);
 
+    // Zones where the game changes the look of the picture.
+    public IReadOnlyList<TimecycleModifier> TimecycleModifiers { get => _timecycleModifiers; init => _timecycleModifiers = value.ToList(); }
+    private List<TimecycleModifier> _timecycleModifiers = [];
+
+    // Raised by any change of a timecycle zone, in any map (the 3D layer is built again).
+    public static int TimecycleRevision => _timecycleRevision;
+    private static int _timecycleRevision;
+
+    // A new list, not changed in place (see AddEntity).
+    public void SetTimecycleModifier(int index, TimecycleModifier zone)
+    {
+        var list = _timecycleModifiers.ToList();
+        list[index] = zone;
+        _timecycleModifiers = list;
+        Interlocked.Increment(ref _timecycleRevision);
+    }
+
     // Path of the file in the game archives, once loaded by MapLibrary; for a IsCustom map, its file name only.
     public string? FilePath { get; internal set; }
 

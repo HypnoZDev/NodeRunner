@@ -136,6 +136,20 @@ internal sealed class AppState
     }
 
     private CarGeneratorSelection? _selectedCarGenerator;
+
+    // A timecycle zone selected in the 3D view (an object selection clears it). Forgotten when the map is loaded again.
+    public TimecycleSelection? SelectedTimecycle
+    {
+        get => _selectedTimecycleLibrary == World.Maps && _selectedTimecycle is { Zone: not null } z ? z : null;
+        set
+        {
+            _selectedTimecycle = value;
+            _selectedTimecycleLibrary = World.Maps;
+        }
+    }
+
+    private TimecycleSelection? _selectedTimecycle;
+    private MapLibrary? _selectedTimecycleLibrary;
     private MapLibrary? _selectedCarGeneratorLibrary;
 
     public void Select(MapEntity? entity)
@@ -144,6 +158,7 @@ internal sealed class AppState
         SelectedPathNode = null;
         SelectedOccluder = null;
         SelectedCarGenerator = null;
+        SelectedTimecycle = null;
         SelectedRoom = null;
         SelectedPortal = null;
         if (entity is not null)
@@ -1732,7 +1747,8 @@ internal sealed class AppState
 
     private static bool IsHiddenByDefault(string layer) =>
         layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
-        || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName;
+        || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName
+        || layer == TimecycleLayer.LayerName;
 
     public void SetLayerVisible(string layer, bool visible)
     {

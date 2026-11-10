@@ -98,6 +98,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             DrawOccluder(occluder);
         else if (state.SelectedCarGenerator is { Spot: { } spot } carGenerator)
             DrawCarGenerator(carGenerator, spot, state.World.Names ?? new HashNames());
+        else if (state.SelectedTimecycle is { Zone: { } zone } timecycle)
+            DrawTimecycle(timecycle, zone, state.World.Names ?? new HashNames());
         else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
                  && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
             DrawRoom(room, roomInterior, roomLibrary);
@@ -1315,6 +1317,47 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         Widgets.Hint(L("Le jeu peut garer un véhicule à cette place quand le joueur passe à proximité. Échap pour désélectionner ; ")
             + L("masquez le calque Véhicules garés pour sélectionner les objets."), wrap: true);
+    }
+
+    private void DrawTimecycle(TimecycleSelection selection, TimecycleModifier zone, HashNames names)
+    {
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L($"{Icons.Sunset}  Zone de timecycle {selection.Index}"));
+        ImGui.PopFont();
+        string file = Path.GetFileName(selection.Map.FilePath ?? "");
+        Widgets.Hint($"{Icons.File}  {file}");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort) && selection.Map.FilePath is { } path)
+            ImGui.SetTooltip(path);
+        var size = zone.Size;
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à la zone")))
+            state.FocusOn(zone.Center, MathF.Max(MathF.Max(size.X, size.Y), MathF.Max(size.Z, 4f)));
+        ImGui.SameLine();
+        string copied = state.FormatPosition(zone.Center, null);
+        if (Widgets.Button(L($"{Icons.Copy}  Copier le centre"), copied))
+            ImGui.SetClipboardText(copied);
+
+        static string V(Vector3 v) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{v.X:0.00}, {v.Y:0.00}, {v.Z:0.00}");
+        if (Widgets.Section(L("Zone"), "timecycle_zone") && Widgets.BeginProperties("##timecycle_zone"))
+        {
+            Widgets.PropertyText(L("Modificateur"), TimecycleText(zone.NameHash, names),
+                L("Réglage de lumière, de couleurs ou de brouillard appliqué dans la zone (timecycle_mods_*.xml du jeu)."));
+            Widgets.PropertyText(L("Coin min"), V(zone.BoundsMin), L("Coin bas, sud-ouest de la boîte, en mètres."));
+            Widgets.PropertyText(L("Coin max"), V(zone.BoundsMax), L("Coin haut, nord-est de la boîte, en mètres."));
+            Widgets.PropertyText(L("Taille"), L($"{size.X:0.0} x {size.Y:0.0} x {size.Z:0.0} m"));
+            Widgets.PropertyText(L("Intensité"), $"{zone.Percentage:0.#} %", L("Force du réglage dans la boîte, de 0 à 100 %."));
+            Widgets.PropertyText(L("Fondu"), $"{zone.Range:0.#} m",
+                L("Distance autour de la boîte sur laquelle le réglage apparaît peu à peu (cadre jaune pâle dans la vue 3D)."));
+            Widgets.PropertyText(L("Heures"), L($"de {zone.StartHour} h à {zone.EndHour} h"), L("Heures du jour où la zone s'applique."));
+            Widgets.EndProperties();
+        }
+        if (!Simple && Widgets.Section(L("Fichier"), "timecycle_file") && Widgets.BeginProperties("##timecycle_file"))
+        {
+            Widgets.PropertyText(L("YMAP"), file, selection.Map.FilePath);
+            Widgets.PropertyText(L("Dans ce YMAP"), L($"{selection.Map.TimecycleModifiers.Count(z => !z.IsDeleted)} zone(s)"));
+            Widgets.EndProperties();
+        }
+        Widgets.Hint(L("Le jeu change l'ambiance de l'image quand la caméra est dans cette zone. Échap pour désélectionner ; ")
+            + L("masquez le calque Zones de timecycle pour sélectionner les objets."), wrap: true);
     }
 
     // Room flags (CMloRoomDef), as named by the community tools.

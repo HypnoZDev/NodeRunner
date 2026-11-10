@@ -12,6 +12,7 @@ public sealed class YmapReader : IMapDataReader
     internal const uint EntityStructure = 3461354627;
     internal const uint InteriorInstanceStructure = 164374718;
     internal const uint CarGeneratorStructure = 0x6EE83BDF;
+    internal const uint TimecycleStructure = 0x674F9350;
 
     private const int MapDataSize = 512;
     internal const int EntitySize = 128;
@@ -27,6 +28,7 @@ public sealed class YmapReader : IMapDataReader
     internal const int MapEntitiesMin = 64;
     internal const int MapEntitiesMax = 80;
     internal const int MapEntities = 96;
+    internal const int MapTimecycleModifiers = 224;
     internal const int MapCarGenerators = 240;
 
     // CEntityDef fields.
@@ -54,6 +56,16 @@ public sealed class YmapReader : IMapDataReader
     internal const int CarColor1 = 52;
     internal const int CarPopGroup = 68;
     internal const int CarLivery = 72;
+
+    // CTimeCycleModifier fields (the first 8 bytes are unused, the 4th float of each corner is not a coordinate).
+    internal const int TimecycleSize = 64;
+    internal const int TimecycleName = 8;
+    internal const int TimecycleMin = 16;
+    internal const int TimecycleMax = 32;
+    internal const int TimecyclePercentage = 48;
+    internal const int TimecycleRange = 52;
+    internal const int TimecycleStartHour = 56;
+    internal const int TimecycleEndHour = 60;
 
     public MapData Read(ReadOnlySpan<byte> data)
     {
@@ -86,7 +98,34 @@ public sealed class YmapReader : IMapDataReader
             EntitiesExtentsMax = meta.Vector3(map + MapEntitiesMax),
             Entities = entities,
             CarGenerators = ReadCarGenerators(meta, map),
+            TimecycleModifiers = ReadTimecycleModifiers(meta, map),
         };
+    }
+
+    private static List<TimecycleModifier> ReadTimecycleModifiers(MetaResource meta, int map)
+    {
+        var (offset, count) = meta.ReadArray(map + MapTimecycleModifiers, TimecycleSize);
+        var result = new List<TimecycleModifier>(count);
+        if (count == 0)
+            return result;
+        meta.RequireStructure(TimecycleStructure, TimecycleSize, "CTimeCycleModifier");
+        var d = meta.Data;
+        for (int i = 0; i < count; i++)
+        {
+            int o = offset + i * TimecycleSize;
+            result.Add(new TimecycleModifier
+            {
+                NameHash = d.UInt32(o + TimecycleName),
+                BoundsMin = meta.Vector3(o + TimecycleMin),
+                BoundsMax = meta.Vector3(o + TimecycleMax),
+                Percentage = meta.Float(o + TimecyclePercentage),
+                Range = meta.Float(o + TimecycleRange),
+                StartHour = d.UInt32(o + TimecycleStartHour),
+                EndHour = d.UInt32(o + TimecycleEndHour),
+                SourceIndex = i,
+            });
+        }
+        return result;
     }
 
     private static List<CarGenerator> ReadCarGenerators(MetaResource meta, int map)
