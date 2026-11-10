@@ -55,6 +55,8 @@ public class OnlineEditTests
             ],
             CarGenerators = [new CarGenerator { Position = new(40, 0, 0), Orientation = new(0, 5), Width = 2.5f, SourceIndex = 0 }],
             TimecycleModifiers = [new TimecycleModifier { NameHash = 0x9CFCA62E, BoundsMin = new(-5, -5, 0), BoundsMax = new(5, 5, 4), Percentage = 100, Range = 2, EndHour = 23, SourceIndex = 0 }],
+            DistantLights = [new DistantLodLight(new(1, 1, 1), 0xFF102030), new DistantLodLight(new(2, 2, 2), 0x80FFAA00)],
+            LodLights = [new LodLight(new(0, 0, -1), 5f, 8f, 0x08F0003F, 0x11, 1, 2, 3), new LodLight(new(1, 0, 0), 6f, 4f, 0x04FFFFFF, 0x22, 4, 5, 6)],
         };
         var library = MapLibrary.Create([interior], (map, "test.ymap"));
         var paths = new PathNetwork();
@@ -96,6 +98,10 @@ public class OnlineEditTests
             text.Append(CultureInfo.InvariantCulture, $"zone {zone.NameHash:X} {V(zone.BoundsMin)} {V(zone.BoundsMax)} {F(zone.Percentage)} {F(zone.Range)} {zone.StartHour}-{zone.EndHour} del={zone.IsDeleted}\n");
         foreach (var spot in w.Library.Maps.SelectMany(m => m.CarGenerators))
             text.Append(CultureInfo.InvariantCulture, $"spot {V(spot.Position)} {F(spot.Orientation.X)},{F(spot.Orientation.Y)} {F(spot.Width)} {spot.CarModel:X} {spot.Flags:X} {spot.Color1} {spot.Color4} {spot.PopGroup:X} {spot.Livery} {spot.SourceIndex} del={spot.IsDeleted}\n");
+        foreach (var light in w.Library.Maps.SelectMany(m => m.DistantLights))
+            text.Append(CultureInfo.InvariantCulture, $"light {V(light.Position)} {light.Rgbi:X}\n");
+        foreach (var d in w.Library.Maps.SelectMany(m => m.LodLights))
+            text.Append(CultureInfo.InvariantCulture, $"details {V(d.Direction)} {F(d.Falloff)} {F(d.FalloffExponent)} {d.TimeAndStateFlags:X} {d.Hash:X} {d.ConeInnerAngle} {d.ConeOuterAngleOrCapExt} {d.CoronaIntensity}\n");
         var archetype = w.Library.GetArchetype(InteriorHash)!;
         foreach (var room in archetype.InteriorRooms)
             text.Append(CultureInfo.InvariantCulture, $"room {room.Name} {V(room.BoundsMin)} {V(room.BoundsMax)} {room.Flags}\n");
@@ -227,6 +233,13 @@ public class OnlineEditTests
         // A timecycle zone added to the project's map, the map file's one deleted.
         Share(TimecycleAddEdit.Apply(projectMap, new TimecycleModifier { NameHash = 0x77, BoundsMin = new(1, 1, 1), BoundsMax = new(3, 3, 3), Percentage = 80, Range = 2, EndHour = 23 }, "Ajouter une zone"));
         Share(TimecycleDeleteEdit.Apply(a.Map, 0, "Supprimer la zone"));
+
+        // A distant light moved, recoloured, its details changed.
+        var lightBefore = LodLightValues.Of(a.Map, a.Map, 1);
+        var lightAfter = new LodLightValues(new DistantLodLight(new(3, 4, 5), DistantLodLight.Pack(10, 20, 30, 40)),
+            lightBefore.Details!.Value.WithType(LodLightType.Capsule).WithHourMask(LodLight.HourRange(19, 7)) with { Falloff = 9.5f, CoronaIntensity = 99 });
+        lightAfter.ApplyTo(a.Map, a.Map, 1);
+        Share(new LodLightEdit(a.Map, a.Map, 1, lightBefore, lightAfter, "Modifier la lumière"));
 
         // Undone and redone the same way on both computers.
         while (a.History.CanUndo)

@@ -31,6 +31,7 @@ internal sealed class LodLightLayer : IDisposable
     private MapLibrary? _library;
     private Task<BuildResult>? _building;
     private Vector2 _builtCenter = new(float.NaN);
+    private int _builtRevision = -1;
     private List<(LodLightSelection Selection, Vector3 Position)> _lights = [];
     private Index? _index;
 
@@ -67,11 +68,14 @@ internal sealed class LodLightLayer : IDisposable
             return;
 
         var center = new Vector2(cameraPosition.X, cameraPosition.Y);
-        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance)
+        bool changed = _builtRevision != MapData.LodLightRevision;
+        if (float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance || changed)
         {
             var library = _library;
-            var index = _index;
+            // A light moved: the boxes of the files are computed again.
+            var index = changed && _builtRevision >= 0 ? null : _index;
             _builtCenter = center;
+            _builtRevision = MapData.LodLightRevision;
             _building = Task.Run(() => Build(library, index, center));
         }
     }

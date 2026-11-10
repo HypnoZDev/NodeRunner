@@ -30,7 +30,11 @@ internal static class MapFileSaver
             {
                 if (map.FilePath is null)
                     throw new InvalidDataException(L("fichier d'origine inconnu"));
-                var extents = MapExtentsCalculator.Compute(map, library.GetArchetype);
+                // A lodlights file: its lights are where those of its parent distlodlights file are.
+                var parentLights = map.LodLights.Count > 0
+                    ? library.Maps.FirstOrDefault(m => m.DistantLights.Count > 0 && m.NameHash == map.ParentHash)?.DistantLights
+                    : null;
+                var extents = MapExtentsCalculator.Compute(map, library.GetArchetype, parentLights);
                 MapFileContent written;
                 ResourceHeader header;
                 // A project's map getting its first parking spots or timecycle zones: their description is taken from a game map.
@@ -172,5 +176,7 @@ internal static class MapFileSaver
         if (written.TimecycleModifiers.Count != zones.Count
             || written.TimecycleModifiers.Where((z, i) => z.BoundsMin != zones[i].BoundsMin || z.BoundsMax != zones[i].BoundsMax || z.NameHash != zones[i].NameHash).Any())
             throw new InvalidDataException(L("vérification échouée (zones de timecycle)"));
+        if (!written.DistantLights.SequenceEqual(map.DistantLights) || !written.LodLights.SequenceEqual(map.LodLights))
+            throw new InvalidDataException(L("vérification échouée (lumières LOD)"));
     }
 }

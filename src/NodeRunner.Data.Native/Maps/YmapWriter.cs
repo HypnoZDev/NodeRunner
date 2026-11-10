@@ -43,6 +43,7 @@ public sealed class YmapWriter : IMapDataWriter
         WriteEntityPointers(document, mapData, items);
         WriteArray(document, mapData, SpotArray, map.CarGenerators, s => s.SourceIndex, s => s.IsDeleted, WriteCarGenerator, borrowed);
         WriteArray(document, mapData, ZoneArray, map.TimecycleModifiers, z => z.SourceIndex, z => z.IsDeleted, WriteTimecycle, borrowed);
+        WriteLights(document, mapData, map);
 
         WriteVector3(mapData, YmapReader.MapStreamingMin, extents.StreamingMin);
         WriteVector3(mapData, YmapReader.MapStreamingMax, extents.StreamingMax);
@@ -495,6 +496,60 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt64LittleEndian(field, count == 0 ? 0 : MetaDocument.Pointer(block, 0));
         BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)count);
         BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)count);
+    }
+
+    // Distant lights and their details, written in place in their arrays (one item per light, never added or removed).
+    private static void WriteLights(MetaDocument document, byte[] mapData, MapData map)
+    {
+        if (map.DistantLights.Count > 0)
+        {
+            int field = YmapReader.MapDistantLights;
+            var lights = map.DistantLights;
+            var (positions, p) = LightItems(document, mapData, field + YmapReader.DistantPosition, 12, lights.Count);
+            var (colors, c) = LightItems(document, mapData, field + YmapReader.DistantRgbi, 4, lights.Count);
+            for (int i = 0; i < lights.Count; i++)
+            {
+                WriteVector3(positions, p + i * 12, lights[i].Position);
+                BinaryPrimitives.WriteUInt32LittleEndian(colors.AsSpan(c + i * 4), lights[i].Rgbi);
+            }
+        }
+        if (map.LodLights.Count > 0)
+        {
+            int field = YmapReader.MapLodLights;
+            var details = map.LodLights;
+            int n = details.Count;
+            var (direction, o0) = LightItems(document, mapData, field + YmapReader.LodDirection, 12, n);
+            var (falloff, o1) = LightItems(document, mapData, field + YmapReader.LodFalloff, 4, n);
+            var (exponent, o2) = LightItems(document, mapData, field + YmapReader.LodFalloffExponent, 4, n);
+            var (flags, o3) = LightItems(document, mapData, field + YmapReader.LodTimeAndStateFlags, 4, n);
+            var (hash, o4) = LightItems(document, mapData, field + YmapReader.LodHash, 4, n);
+            var (inner, o5) = LightItems(document, mapData, field + YmapReader.LodConeInner, 1, n);
+            var (outer, o6) = LightItems(document, mapData, field + YmapReader.LodConeOuter, 1, n);
+            var (corona, o7) = LightItems(document, mapData, field + YmapReader.LodCorona, 1, n);
+            for (int i = 0; i < n; i++)
+            {
+                var d = details[i];
+                WriteVector3(direction, o0 + i * 12, d.Direction);
+                WriteFloat(falloff, o1 + i * 4, d.Falloff);
+                WriteFloat(exponent, o2 + i * 4, d.FalloffExponent);
+                BinaryPrimitives.WriteUInt32LittleEndian(flags.AsSpan(o3 + i * 4), d.TimeAndStateFlags);
+                BinaryPrimitives.WriteUInt32LittleEndian(hash.AsSpan(o4 + i * 4), d.Hash);
+                inner[o5 + i] = d.ConeInnerAngle;
+                outer[o6 + i] = d.ConeOuterAngleOrCapExt;
+                corona[o7 + i] = d.CoronaIntensity;
+            }
+        }
+    }
+
+    // Where an array of the lights is (pointer, count, capacity at field), holding at least count items of size bytes.
+    private static (byte[] Data, int Offset) LightItems(MetaDocument document, byte[] mapData, int field, int size, int count)
+    {
+        var span = mapData.AsSpan(field);
+        var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(span));
+        if (BinaryPrimitives.ReadUInt16LittleEndian(span[8..]) < count || block < 0 || block >= document.Blocks.Count
+            || offset + count * size > document.Blocks[block].Data.Length)
+            throw new InvalidDataException("Les lumières ne sont pas celles du fichier.");
+        return (document.Blocks[block].Data, offset);
     }
 
     private static void WriteTimecycle(byte[] data, int o, TimecycleModifier zone)

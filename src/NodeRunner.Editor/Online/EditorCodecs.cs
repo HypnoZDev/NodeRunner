@@ -645,6 +645,55 @@ internal sealed class TimecycleDeleteCodec : EditCodec<TimecycleDeleteEdit>
     }
 }
 
+internal sealed class LodLightCodec : EditCodec<LodLightEdit>
+{
+    public override string Tag => "lod-light";
+
+    protected override void Write(LodLightEdit edit, EditWriter w)
+    {
+        w.WriteMap(edit.Distant);
+        w.Write(edit.Index);
+        w.Write(edit.After.Light.Position);
+        w.Write(edit.After.Light.Rgbi);
+        bool details = edit.Lod is not null && edit.After.Details is not null;
+        w.Write(details);
+        if (!details)
+            return;
+        w.WriteMap(edit.Lod!);
+        var d = edit.After.Details!.Value;
+        w.Write(d.Direction);
+        w.Write(d.Falloff);
+        w.Write(d.FalloffExponent);
+        w.Write(d.TimeAndStateFlags);
+        w.Write(d.Hash);
+        w.Write(d.ConeInnerAngle);
+        w.Write(d.ConeOuterAngleOrCapExt);
+        w.Write(d.CoronaIntensity);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var distant = r.ReadMap();
+        int index = r.ReadInt();
+        if (index < 0 || index >= distant.DistantLights.Count)
+            throw new InvalidDataException("Distant light not found here.");
+        var light = new DistantLodLight(r.ReadVector3(), r.ReadUInt());
+        MapData? lod = null;
+        LodLight? details = null;
+        if (r.ReadBool())
+        {
+            lod = r.ReadMap();
+            if (index >= lod.LodLights.Count)
+                throw new InvalidDataException("Light details not found here.");
+            details = new LodLight(r.ReadVector3(), r.ReadFloat(), r.ReadFloat(), r.ReadUInt(), r.ReadUInt(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+        }
+        var before = LodLightValues.Of(distant, lod, index);
+        var after = new LodLightValues(light, details ?? before.Details);
+        after.ApplyTo(distant, lod, index);
+        return new LodLightEdit(distant, lod, index, before, after, description);
+    }
+}
+
 internal sealed class CarGeneratorAddCodec : EditCodec<CarGeneratorAddEdit>
 {
     public override string Tag => "car-generator-add";

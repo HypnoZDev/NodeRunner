@@ -56,8 +56,31 @@ public sealed class MapData
     public IEnumerable<CarGenerator> KeptCarGenerators => CarGenerators.Where(s => !s.IsDeleted);
 
     // Lights seen from far away (a distlodlights file), and their details (a lodlights file, child of that one).
-    public IReadOnlyList<DistantLodLight> DistantLights { get; init; } = [];
-    public IReadOnlyList<LodLight> LodLights { get; init; } = [];
+    public IReadOnlyList<DistantLodLight> DistantLights { get => _distantLights; init => _distantLights = value as DistantLodLight[] ?? value.ToArray(); }
+    private DistantLodLight[] _distantLights = [];
+    public IReadOnlyList<LodLight> LodLights { get => _lodLights; init => _lodLights = value as LodLight[] ?? value.ToArray(); }
+    private LodLight[] _lodLights = [];
+
+    // Raised by any change of a light, in any map (the 3D layer is built again).
+    public static int LodLightRevision => _lodLightRevision;
+    private static int _lodLightRevision;
+
+    // New arrays, not changed in place (see AddEntity).
+    public void SetDistantLight(int index, DistantLodLight light)
+    {
+        var lights = (DistantLodLight[])_distantLights.Clone();
+        lights[index] = light;
+        _distantLights = lights;
+        Interlocked.Increment(ref _lodLightRevision);
+    }
+
+    public void SetLodLight(int index, LodLight details)
+    {
+        var lights = (LodLight[])_lodLights.Clone();
+        lights[index] = details;
+        _lodLights = lights;
+        Interlocked.Increment(ref _lodLightRevision);
+    }
 
     // Of a distlodlights file: how many of its first lights are street lights, and its size category (0 small,
     // 1 medium, 2 large, as in the file names).

@@ -42,6 +42,8 @@ internal sealed class TransformGizmo(AppState state)
         public CarGenerator? SpotStart;
         public TimecycleSelection? Zone;
         public TimecycleModifier? ZoneStart;
+        public LodLightSelection? Light;
+        public LodLightValues? LightStart;
         public required TransformTool Tool;
         public required Handle Handle;
         public required Placement[] Starts;
@@ -89,10 +91,12 @@ internal sealed class TransformGizmo(AppState state)
         var occluder = entities.Count == 0 && node is null && state.SelectedOccluder is { Box: not null } selected ? selected : null;
         var spot = entities.Count == 0 && node is null && occluder is null && state.SelectedCarGenerator is { } selectedSpot ? selectedSpot : null;
         var zone = entities.Count == 0 && node is null && occluder is null && spot is null && state.SelectedTimecycle is { } selectedZone ? selectedZone : null;
+        var light = entities.Count == 0 && node is null && occluder is null && spot is null && zone is null && state.SelectedLodLight is { } selectedLight ? selectedLight : null;
         var tool = state.Tool;
         if (_drag is { } current && (!current.Entities.SequenceEqual(entities) || current.Node != node || current.Occluder != occluder || current.Spot != spot
-                                     || current.Zone != zone || current.Tool != tool))
-            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder && current.Spot == spot && current.Zone == zone);
+                                     || current.Zone != zone || current.Light != light || current.Tool != tool))
+            EndDrag(commit: current.Entities.SequenceEqual(entities) && current.Node == node && current.Occluder == occluder && current.Spot == spot
+                            && current.Zone == zone && current.Light == light);
 
         _spotMode = spot is not null;
         _boxMode = occluder is not null || _spotMode || zone is not null;
@@ -106,6 +110,12 @@ internal sealed class TransformGizmo(AppState state)
         else if (occluder?.Box is { } box)
         {
             if (tool == TransformTool.Select || !SetUpFrame(box.Center, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, box.Angle), tool))
+                return;
+        }
+        else if (light?.Light is { } shownLight)
+        {
+            // A point: moved only.
+            if (tool != TransformTool.Move || !SetUpFrame(shownLight.Position, null, tool))
                 return;
         }
         else if (zone?.Zone is { } shownZone)
@@ -143,7 +153,7 @@ internal sealed class TransformGizmo(AppState state)
         {
             _hovered = FindHovered(tool, mouse);
             if (_hovered.Kind != Kind.None && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-                BeginDrag(entities, node, occluder, spot, zone, tool, _hovered, mouse);
+                BeginDrag(entities, node, occluder, spot, zone, light, tool, _hovered, mouse);
         }
 
         if (_drag is not null || _hovered.Kind != Kind.None)
@@ -319,13 +329,15 @@ internal sealed class TransformGizmo(AppState state)
     // --- Dragging ---
 
     private void BeginDrag(IReadOnlyList<MapEntity> entities, PathNode? node, OccluderSelection? occluder, CarGeneratorSelection? spot,
-        TimecycleSelection? zone, TransformTool tool, Handle handle, Vector2 mouse)
+        TimecycleSelection? zone, LodLightSelection? light, TransformTool tool, Handle handle, Vector2 mouse)
     {
         var drag = new Drag
         {
-            Entities = node is null && occluder is null && spot is null && zone is null ? [.. entities] : [],
+            Entities = node is null && occluder is null && spot is null && zone is null && light is null ? [.. entities] : [],
             Zone = zone,
             ZoneStart = zone?.Zone,
+            Light = light,
+            LightStart = light is { Light: not null } l ? LodLightValues.Of(l.Distant, l.Lod, l.Index) : null,
             Node = node,
             NodeStart = node?.Position ?? default,
             Occluder = occluder,
@@ -524,7 +536,7 @@ internal sealed class TransformGizmo(AppState state)
     }
 
     private bool FollowsGround(Drag drag) =>
-        drag.Occluder is null && drag.Spot is null && drag.Zone is null && state.Settings.FollowGround
+        drag.Occluder is null && drag.Spot is null && drag.Zone is null && drag.Light is null && state.Settings.FollowGround
         && (drag.Handle.Kind == Kind.Axis && drag.Handle.Axis < 2 || drag.Handle.Kind == Kind.Plane && drag.Handle.Axis == 2);
 
     // Moves the dragged objects by delta; following the ground, the height of each is then taken from the collision
@@ -541,6 +553,8 @@ internal sealed class TransformGizmo(AppState state)
             spot.Map.SetCarGenerator(spot.Index, spotStart with { Position = spotStart.Position + delta });
         if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
             zone.Map.SetTimecycleModifier(zone.Index, zoneStart with { BoundsMin = zoneStart.BoundsMin + delta, BoundsMax = zoneStart.BoundsMax + delta });
+        if (drag.Light is { } light && drag.LightStart is { } lightStart)
+            light.Distant.SetDistantLight(light.Index, lightStart.Light with { Position = lightStart.Light.Position + delta });
         if (drag.Node is { } node && state.World.PathNetwork is { } network)
         {
             var target = drag.NodeStart + delta;
@@ -580,6 +594,8 @@ internal sealed class TransformGizmo(AppState state)
             spot.Map.SetCarGenerator(spot.Index, spotStart);
         if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
             zone.Map.SetTimecycleModifier(zone.Index, zoneStart);
+        if (drag.Light is { } light && drag.LightStart is { } lightStart)
+            lightStart.ApplyTo(light.Distant, light.Lod, light.Index);
         if (drag.Node is { } node)
             state.World.PathNetwork?.MoveNode(node, drag.NodeStart);
         for (int i = 0; i < drag.Entities.Length; i++)
@@ -593,6 +609,18 @@ internal sealed class TransformGizmo(AppState state)
         if (_drag is not { } drag)
             return;
         _drag = null;
+        if (drag.Light is { } light && drag.LightStart is { } lightStart)
+        {
+            if (!commit)
+            {
+                lightStart.ApplyTo(light.Distant, light.Lod, light.Index);
+                return;
+            }
+            var lightEnd = LodLightValues.Of(light.Distant, light.Lod, light.Index);
+            if (lightEnd != lightStart)
+                state.History.Add(new LodLightEdit(light.Distant, light.Lod, light.Index, lightStart, lightEnd, L($"Déplacer la lumière LOD {light.Index}")));
+            return;
+        }
         if (drag.Zone is { } zone && drag.ZoneStart is { } zoneStart)
         {
             if (!commit)

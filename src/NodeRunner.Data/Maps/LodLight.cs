@@ -9,6 +9,9 @@ public readonly record struct DistantLodLight(Vector3 Position, uint Rgbi)
     public byte Green => (byte)(Rgbi >> 8);
     public byte Blue => (byte)Rgbi;
     public byte Intensity => (byte)(Rgbi >> 24);
+
+    public static uint Pack(byte red, byte green, byte blue, byte intensity) =>
+        (uint)intensity << 24 | (uint)red << 16 | (uint)green << 8 | blue;
 }
 
 public enum LodLightType
@@ -37,4 +40,21 @@ public readonly record struct LodLight(
     public uint HourMask => TimeAndStateFlags & 0xFFFFFF;
 
     public bool IsOnAt(int hour) => (HourMask >> hour & 1) != 0;
+
+    public LodLight WithType(LodLightType type) => this with { TimeAndStateFlags = (TimeAndStateFlags & ~(7u << 26)) | ((uint)type & 7) << 26 };
+
+    public LodLight WithHourMask(uint mask) => this with { TimeAndStateFlags = (TimeAndStateFlags & ~0xFFFFFFu) | (mask & 0xFFFFFF) };
+
+    // The hours from start to end (end excluded, across midnight if end < start); the whole day when they are equal.
+    public static uint HourRange(int start, int end)
+    {
+        start = (start % 24 + 24) % 24;
+        end = (end % 24 + 24) % 24;
+        if (start == end)
+            return 0xFFFFFF;
+        uint mask = 0;
+        for (int h = start; h != end; h = (h + 1) % 24)
+            mask |= 1u << h;
+        return mask;
+    }
 }

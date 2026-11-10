@@ -713,6 +713,11 @@ internal sealed class AppState
             var zone = new TimecycleSelection(zoneEdit.Map, zoneEdit.Index);
             SelectedTimecycle = zone.Zone is null ? null : zone;
         }
+        else if (edit is ILodLightEdit lightEdit)
+        {
+            Select(null);
+            SelectedLodLight = new LodLightSelection(lightEdit.Distant, lightEdit.Index, lightEdit.Lod);
+        }
         else if (edit is ICarGeneratorEdit spotEdit)
         {
             // A spot deleted again (an addition undone, a deletion redone) leaves nothing selected.
@@ -1280,6 +1285,8 @@ internal sealed class AppState
                 .Concat(history.All.OfType<IInteriorEdit>().Select(e => e.Interior.Map).Where(m => m is { IsCustom: true }))
                 .Concat(history.All.OfType<ICarGeneratorEdit>().Select(e => e.Map))
                 .Concat(history.All.OfType<ITimecycleEdit>().Select(e => e.Map))
+                // Both files of a light: a moved light also changes the boxes of its lodlights file.
+                .Concat(history.All.OfType<ILodLightEdit>().SelectMany(e => e.Lod is { } lod ? [e.Distant, lod] : new[] { e.Distant }))
                 .OfType<MapData>()
                 .Concat(_savedMaps)
                 .Distinct()

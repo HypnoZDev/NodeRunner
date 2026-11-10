@@ -3,6 +3,7 @@ using System.Numerics;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Resources;
+using NodeRunner.Editor;
 
 namespace NodeRunner.Tests;
 
@@ -45,8 +46,8 @@ public class LodLightTests
 
     private static byte[] Vectors(params Vector3[] values) => Floats(values.SelectMany(v => new[] { v.X, v.Y, v.Z }).ToArray());
 
-    [Fact]
-    public void Distant_lights_and_their_details_are_read()
+    // A map file with two distant lights and their details (both in the same file, which the format allows).
+    private static byte[] BuildLights()
     {
         var document = MetaDocument.Read(DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, LodLevel.OrphanHd)));
         document.Structures.Add(DeletionTests.Structure(Vector3Block, 12));
@@ -68,7 +69,13 @@ public class LodLightTests
         SetArray(map, 256 + 104, AddBlock(document, ByteBlock, [30, 40]), 2);
         SetArray(map, 256 + 120, AddBlock(document, ByteBlock, [50, 60]), 2);
 
-        var read = new YmapReader().Read(document.Write().Content);
+        return document.Write().Content;
+    }
+
+    [Fact]
+    public void Distant_lights_and_their_details_are_read()
+    {
+        var read = new YmapReader().Read(BuildLights());
 
         Assert.Equal(2, read.DistantLights.Count);
         var light = read.DistantLights[0];
@@ -88,6 +95,65 @@ public class LodLightTests
         Assert.Equal(LodLightType.Point, read.LodLights[1].Type);
         Assert.Equal(0xFFFFFFu, read.LodLights[1].HourMask);
     }
+
+    [Fact]
+    public void Edited_lights_are_written_in_place()
+    {
+        var content = BuildLights();
+        var map = new YmapReader().Read(content);
+        var before = LodLightValues.Of(map, map, 0);
+        var after = new LodLightValues(new DistantLodLight(new Vector3(7, 8, 9), DistantLodLight.Pack(1, 2, 3, 4)),
+            before.Details!.Value.WithType(LodLightType.Point).WithHourMask(LodLight.HourRange(18, 8)) with
+            {
+                Direction = new Vector3(0, 1, 0), Falloff = 20f, FalloffExponent = 16f, ConeInnerAngle = 11, ConeOuterAngleOrCapExt = 22, CoronaIntensity = 33,
+            });
+        var edit = new LodLightEdit(map, map, 0, before, after, "test");
+        edit.Redo();
+
+        var written = new YmapWriter().Write(content, map, MapExtents.Of(map)).Content;
+        var read = new YmapReader().Read(written);
+
+        Assert.Equal(map.DistantLights, read.DistantLights);
+        Assert.Equal(map.LodLights, read.LodLights);
+        Assert.Equal(after.Light, read.DistantLights[0]);
+        Assert.Equal(after.Details, read.LodLights[0]);
+        Assert.Equal(new YmapReader().Read(content).LodLights[1], read.LodLights[1]);
+        Assert.True(read.LodLights[0].IsOnAt(18) && read.LodLights[0].IsOnAt(7) && !read.LodLights[0].IsOnAt(8));
+        Assert.Equal(1, read.DistantStreetLights);
+
+        edit.Undo();
+        Assert.Equal(before, LodLightValues.Of(map, map, 0));
+    }
+
+    [Fact]
+    public void A_moved_light_stays_in_the_boxes_of_both_its_files()
+    {
+        var distant = new MapData
+        {
+            NameHash = 1,
+            Entities = [],
+            StreamingExtentsMin = new Vector3(-450),
+            StreamingExtentsMax = new Vector3(450),
+            DistantLights = [new DistantLodLight(Vector3.Zero, 0)],
+        };
+        var lod = new MapData { NameHash = 2, ParentHash = 1, Entities = [], StreamingExtentsMin = new Vector3(-450), StreamingExtentsMax = new Vector3(450),
+            LodLights = [new LodLight(Vector3.UnitZ, 1, 1, 0, 0, 0, 0, 0)] };
+
+        // Unchanged: the game's boxes are kept.
+        Assert.Equal(new Vector3(450), MapExtentsCalculator.Compute(distant, _ => null).StreamingMax);
+
+        distant.SetDistantLight(0, new DistantLodLight(new Vector3(1000, 0, 0), 0));
+        var extents = MapExtentsCalculator.Compute(distant, _ => null);
+        Assert.Equal(1000 + MapExtentsCalculator.LightReach, extents.StreamingMax.X);
+        Assert.Equal(1000, extents.EntitiesMax.X);
+        Assert.Equal(1000 + MapExtentsCalculator.LightReach, MapExtentsCalculator.Compute(lod, _ => null, distant.DistantLights).StreamingMax.X);
+    }
+
+    [Theory]
+    [InlineData(20, 6, 0xF0003Fu)]
+    [InlineData(6, 20, 0x0FFFC0u)]
+    [InlineData(5, 5, 0xFFFFFFu)]
+    public void Hour_ranges_go_across_midnight(int start, int end, uint mask) => Assert.Equal(mask, LodLight.HourRange(start, end));
 
     [Fact]
     public void A_map_without_lights_reads_empty_lists()
