@@ -156,6 +156,31 @@ internal sealed class WorldLoader : IDisposable
     private GameContent? _audioOcclusionContent;
     private Task<AudioOcclusionCatalog>? _audioOcclusion;
 
+    // Audio settings of the interiors and rooms (.dat151.rel): read in the background the first time they are asked for.
+    public AudioGameData? AudioGameData
+    {
+        get
+        {
+            if (Content is not { } content)
+                return null;
+            if (_audioGameDataContent != content)
+            {
+                _audioGameDataContent = content;
+                _audioGameData = Task.Run(() =>
+                {
+                    var data = Data.Audio.AudioGameData.Load(content, new GameDataReader());
+                    foreach (var error in data.Errors)
+                        Diagnostics.ErrorLog.Add(L("Données audio"), error);
+                    return data;
+                });
+            }
+            return _audioGameData is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        }
+    }
+
+    private GameContent? _audioGameDataContent;
+    private Task<AudioGameData>? _audioGameData;
+
     public RpfFileSystem? Files => _files;
 
     public MapSelection Selection { get; private set; }

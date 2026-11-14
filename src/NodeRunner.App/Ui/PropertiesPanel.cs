@@ -92,6 +92,10 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
                 && library.GetArchetype(soundOf.ArchetypeHash) is { } soundType
                 && Widgets.Section(L("Occlusion audio"), "audio_occlusion", defaultOpen: false))
                 DrawAudioOcclusion(soundOf, soundType, names);
+            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } settingsOf
+                && library.GetArchetype(settingsOf.ArchetypeHash) is { } settingsType
+                && Widgets.Section(L("Réglages audio"), "interior_audio", defaultOpen: false))
+                DrawInteriorAudio(settingsOf, settingsType, names);
             if (!Simple && Widgets.Section(L("Réglages"), "flags", defaultOpen: false))
                 DrawFlags(entity, library);
             if (Simple)
@@ -1909,6 +1913,85 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
     }
 
+    private string AudioName(uint hash, AudioGameData data, HashNames names) =>
+        hash == 0 ? L("aucun") : data.Name(hash) ?? names.Describe(hash);
+
+    private void DrawInteriorAudio(MapEntity interior, Archetype archetype, HashNames names)
+    {
+        Widgets.Hint(L("Réglages du jeu pour le son dans l'intérieur et dans chaque salle (écho, son de fond, pluie...), ")
+            + L("lus dans les fichiers .dat151.rel. Cliquez une salle pour voir les siens."), wrap: true);
+        if (state.World.AudioGameData is not { } data)
+        {
+            Widgets.Hint(L("Lecture des données audio..."));
+            return;
+        }
+        if (data.Interior(interior.ArchetypeHash) is not { } settings)
+        {
+            WarningText(L("Cet intérieur n'a pas de réglages audio : le jeu le traite comme l'extérieur (pas d'écho de pièce, pluie audible)."));
+            return;
+        }
+        if (Widgets.BeginProperties("##interior_audio"))
+        {
+            FileRow(L("Défini dans"), settings.File);
+            Widgets.PropertyText(L("Bruit de foule"), AudioName(settings.WallaSoundSet, data, names), L("Sons de foule (walla) joués dans l'intérieur."));
+            Widgets.PropertyText(L("Réflexions"), AudioName(settings.Reflections, data, names));
+            Widgets.PropertyText(L("Drapeaux"), $"0x{settings.Flags:X8}");
+            Widgets.PropertyText(L("Salles audio"), $"{settings.Rooms.Count}");
+            Widgets.EndProperties();
+        }
+        for (int r = 1; r < archetype.InteriorRooms.Count; r++)
+        {
+            var room = archetype.InteriorRooms[r];
+            int index = r;
+            if (Widgets.Link($"{(room.Name.Length > 0 ? room.Name : $"{r}")}##audio_room{r}", L("Sélectionner cette salle")))
+            {
+                state.SelectRoom(new RoomSelection(interior, index));
+                state.SetLayerVisible(RoomLayer.LayerName(RoomLayerPart.Rooms), true);
+            }
+            ImGui.SameLine();
+            if (data.RoomOf(interior.ArchetypeHash, room.Name) is { } audio)
+                ImGui.TextColored(UiTheme.TextMuted, L($"écho {audio.ReverbSmall:0.##} / {audio.ReverbMedium:0.##} / {audio.ReverbLarge:0.##}"));
+            else
+                ImGui.TextColored(UiTheme.Warning, L("sans réglage audio"));
+        }
+    }
+
+    private void DrawRoomAudio(MapEntity interior, InteriorRoom room, HashNames names)
+    {
+        if (state.World.AudioGameData is not { } data)
+        {
+            Widgets.Hint(L("Lecture des données audio..."));
+            return;
+        }
+        if (data.RoomOf(interior.ArchetypeHash, room.Name) is not { } audio)
+        {
+            WarningText(data.Interior(interior.ArchetypeHash) is null
+                ? L("L'intérieur n'a pas de réglages audio.")
+                : L("Aucun réglage audio ne porte le nom de cette salle : le jeu lui donne des réglages par défaut."));
+            return;
+        }
+        if (!Widgets.BeginProperties("##room_audio"))
+            return;
+        FileRow(L("Défini dans"), audio.File);
+        Widgets.PropertyText(L("Nom audio"), AudioName(audio.NameHash, data, names));
+        Widgets.PropertyText(L("Écho petit / moyen / grand"), $"{audio.ReverbSmall:0.##} / {audio.ReverbMedium:0.##} / {audio.ReverbLarge:0.##}",
+            L("Réverbération de la pièce, de 0 à 1 : petite pièce, pièce moyenne, grand volume."));
+        Widgets.PropertyText(L("Son de fond"), AudioName(audio.RoomTone, data, names), L("Bruit de fond de la salle (ventilation, bourdonnement...)."));
+        Widgets.PropertyText(L("Zone d'ambiance"), AudioName(audio.AmbientZone, data, names));
+        Widgets.PropertyText(L("Sons de l'extérieur"), $"{audio.ExteriorAudibility:0.##}", L("Part des sons de l'extérieur entendus dans la salle, de 0 à 1."));
+        Widgets.PropertyText(L("Portails non marqués"), $"{audio.NonMarkedPortalOcclusion:0.##}",
+            L("Étouffement du son par les portails sans réglage, de 0 (aucun) à 1 (bloqué)."));
+        Widgets.PropertyText(L("Distance d'occlusion"), $"{audio.DistanceFromPortalForOcclusion:0.##} m / {audio.DistanceFromPortalFadeDistance:0.##} m",
+            L("Distance au portail à partir de laquelle le son est étouffé, puis longueur du fondu."));
+        Widgets.PropertyText(L("Amortissement"), $"{audio.RoomOcclusionDamping:0.##}");
+        Widgets.PropertyText(L("Pluie"), audio.RainType switch { 0 => L("normale"), _ => $"{audio.RainType}" }, L("Type de bruit de pluie dans la salle."));
+        Widgets.PropertyText(L("Type d'intérieur"), $"{audio.InteriorType}");
+        Widgets.PropertyText(L("Acoustique des armes"), AudioName(audio.WeaponMetrics, data, names));
+        Widgets.PropertyText(L("Bruit de foule"), AudioName(audio.WallaSoundSet, data, names));
+        Widgets.PropertyText(L("Drapeaux"), $"0x{audio.Flags:X8}");
+        Widgets.EndProperties();
+    }
+
     private static void WarningText(string text)
     {
         ImGui.PushTextWrapPos(0);
@@ -2146,6 +2229,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if (other != 0)
                 Widgets.Hint(L($"Autres drapeaux : 0x{other:X}"));
         }
+        if (!Simple && index > 0 && Widgets.Section(L("Audio de la salle"), "room_audio", defaultOpen: false))
+            DrawRoomAudio(interior, room, names);
         if (Widgets.Section(L("Portails de la salle"), "room_portals"))
             DrawPortalList(interior, archetype, index);
         int roomPortals = archetype.InteriorPortals.Count(p => p.RoomFrom == index || p.RoomTo == index);
