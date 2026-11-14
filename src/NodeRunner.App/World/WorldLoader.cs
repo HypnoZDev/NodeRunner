@@ -1,4 +1,6 @@
+using NodeRunner.Data.Audio;
 using NodeRunner.Data.Collisions;
+using NodeRunner.Data.Native.Audio;
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Installation;
@@ -133,6 +135,26 @@ internal sealed class WorldLoader : IDisposable
 
     private GameContent? _doorTuningContent;
     private Task<DoorTunings>? _doorTunings;
+
+    // Audio occlusion files of the interiors: listed in the background the first time an interior is selected, each
+    // file read when asked for; null until listed.
+    public AudioOcclusionCatalog? AudioOcclusion
+    {
+        get
+        {
+            if (Content is not { } content)
+                return null;
+            if (_audioOcclusionContent != content)
+            {
+                _audioOcclusionContent = content;
+                _audioOcclusion = Task.Run(() => AudioOcclusionCatalog.Load(content, new AudioOcclusionReader()));
+            }
+            return _audioOcclusion is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        }
+    }
+
+    private GameContent? _audioOcclusionContent;
+    private Task<AudioOcclusionCatalog>? _audioOcclusion;
 
     public RpfFileSystem? Files => _files;
 

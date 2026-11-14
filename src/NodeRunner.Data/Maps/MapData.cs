@@ -211,8 +211,12 @@ public sealed class MapEntity
         Revision++;
     }
 
-    public required Vector3 Position { get => _position; init => _position = value; }
+    public required Vector3 Position { get => _position; init => _position = _filePosition = value; }
     private Vector3 _position;
+
+    // The position stored in the file the object was read from.
+    public Vector3 FilePosition => _filePosition;
+    private Vector3 _filePosition;
 
     // Rotation exactly as stored in the file; for an object inside an interior, already combined with the interior's
     // rotation.
