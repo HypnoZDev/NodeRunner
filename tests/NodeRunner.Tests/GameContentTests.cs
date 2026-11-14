@@ -205,6 +205,29 @@ public class GameContentTests
     }
 
     [Fact]
+    public void Parent_index_is_ignored_in_a_ymap_without_parent_map()
+    {
+        var files = new FakeGameFiles();
+        files.AddArchive(@"x64i.rpf\levels\a\meta.rpf", "copied.ymap", "variant.ymap");
+        // Copied from a game file with its parent index, in a ymap that names no parent: drawn, as in the game.
+        var copied = new MapEntity { ArchetypeHash = 1, Position = Vector3.Zero, LodLevel = LodLevel.Hd, LodDistance = 100f, ParentIndex = 172, Flags = 8 };
+        // Its parent ymap is not loaded (scripted or mission variant): not drawn.
+        var variant = new MapEntity { ArchetypeHash = 2, Position = Vector3.Zero, LodLevel = LodLevel.Hd, LodDistance = 100f, ParentIndex = 0, Flags = 8 };
+        var maps = new Dictionary<string, MapData>
+        {
+            ["copied"] = new() { NameHash = 10, Entities = [copied] },
+            ["variant"] = new() { NameHash = 11, ParentHash = 99, Entities = [variant] },
+        };
+        files.SetContent(@"x64i.rpf\levels\a\meta.rpf\copied.ymap", "copied");
+        files.SetContent(@"x64i.rpf\levels\a\meta.rpf\variant.ymap", "variant");
+        var content = GameContent.Load(files, new DlcManifestReader(), new MapSelection(MapVersion.SinglePlayer));
+
+        var library = MapLibrary.Load(content, new NoTypes(), new NamedMaps(maps));
+
+        Assert.Equal([copied], LodSelector.Select(library, new Vector3(0f, 10f, 0f), 1f));
+    }
+
+    [Fact]
     public void Interior_objects_are_placed_in_the_world_by_the_instance()
     {
         var (library, _, instance) = LoadTunnel();

@@ -31,8 +31,10 @@ public static class LodSelector
     {
         if (entity.IsDeleted)
             return; // Deleted in the editor (with its children).
-        if (entity.ParentIndex >= 0 && entity.Parent is null)
-            return; // Its parent ymap is loaded by scripts only (or is a mission variant): not part of the default map.
+        // Its parent ymap is loaded by scripts only (or is a mission variant): not part of the default map. A parent index
+        // in a ymap that names no parent map (objects copied from a game file by mapping tools) is ignored, as in the game.
+        if (entity.ParentIndex >= 0 && entity.Parent is null && entity.Map is { ParentHash: not 0 })
+            return;
 
         if (entity.IsInterior)
         {
