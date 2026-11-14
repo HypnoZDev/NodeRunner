@@ -18,19 +18,15 @@ internal static class LibraryFileSaver
         if (used.Count == 0)
             return copied;
 
-        var paths = new[] { ".ytyp", ".ydr", ".ydd", ".yft", ".ytd", ".ybn" }
-            .SelectMany(e => content.EnumerateFiles(e)).Where(Data.FileSystem.GameContent.IsLibraryFile);
-        var needed = PropLibrary.Dependencies(used, library.GetArchetype, library.GetArchetypeFile, a => models.Locate(a)?.Path, paths);
         var names = written.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in needed)
+        foreach (var (name, disk) in Needed(world, used))
         {
-            string name = Path.GetFileName(path);
-            if (names.Contains(name) || overlay.LibraryFileOf(path) is not { } file)
+            if (names.Contains(name))
                 continue;
             try
             {
                 Directory.CreateDirectory(stream);
-                File.Copy(file.Disk, Path.Combine(stream, name), overwrite: true);
+                File.Copy(disk, Path.Combine(stream, name), overwrite: true);
                 copied.Add(name);
                 names.Add(name);
             }
@@ -40,6 +36,45 @@ internal static class LibraryFileSaver
             }
         }
         return copied;
+    }
+
+    // The library's files these object types need (file name, file on disk).
+    public static List<(string Name, string Disk)> Needed(WorldLoader world, IReadOnlyCollection<uint> used)
+    {
+        var found = new List<(string, string)>();
+        if (used.Count == 0 || world.ProjectFiles is not { LibraryFileCount: > 0 } overlay || world.Maps is not { } library
+            || world.Models is not { } models || world.Content is not { } content)
+            return found;
+        var paths = new[] { ".ytyp", ".ydr", ".ydd", ".yft", ".ytd", ".ybn" }
+            .SelectMany(e => content.EnumerateFiles(e)).Where(Data.FileSystem.GameContent.IsLibraryFile);
+        foreach (var path in PropLibrary.Dependencies(used, library.GetArchetype, library.GetArchetypeFile, a => models.Locate(a)?.Path, paths))
+        {
+            if (overlay.LibraryFileOf(path) is { } file)
+                found.Add((Path.GetFileName(path), file.Disk));
+        }
+        return found;
+    }
+
+    // Library types placed on the loaded map (objects of the maps and of the interiors).
+    public static HashSet<uint> PlacedTypes(WorldLoader world)
+    {
+        var used = new HashSet<uint>();
+        if (world.Maps is not { } library)
+            return used;
+        foreach (var map in library.Maps)
+        {
+            foreach (var entity in map.Entities)
+            {
+                if (library.GetArchetypeFile(entity.ArchetypeHash) is { } file && Data.FileSystem.GameContent.IsLibraryFile(file))
+                    used.Add(entity.ArchetypeHash);
+                foreach (var inner in entity.InteriorEntities)
+                {
+                    if (library.GetArchetypeFile(inner.ArchetypeHash) is { } innerFile && Data.FileSystem.GameContent.IsLibraryFile(innerFile))
+                        used.Add(inner.ArchetypeHash);
+                }
+            }
+        }
+        return used;
     }
 
     // Object types placed by the exported maps and inside the exported interiors.

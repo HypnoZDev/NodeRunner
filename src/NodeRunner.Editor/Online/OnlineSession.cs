@@ -19,8 +19,7 @@ public interface IOnlineDocument
     // The map is loaded (after OpenSnapshot).
     bool IsReady { get; }
 
-    // Same text on two computers = same game files and same project, before any edit of the session. A part after
-    // OnlineSession.LibrarySeparator describes the prop library: a difference there is only a warning.
+    // Same text on two computers = same game files and same project, before any edit of the session.
     string Fingerprint { get; }
 
     // A change of another participant applied here (or one's own undo / redo, done by the host).
@@ -45,10 +44,9 @@ public sealed record JoinRequest(int Id, string Name, string Address);
 // too: they undo the session's last change, whoever made it.
 public sealed class OnlineSession : IDisposable
 {
-    public const int ProtocolVersion = 3;
+    public const int ProtocolVersion = 4;
     public const int DefaultPort = 47800;
     public const int MaxParticipants = 5;
-    public const char LibrarySeparator = '|';
 
     // A guest whose link dropped tries again this long (the relay keeps the room a minute for a host that dropped).
     public static readonly TimeSpan ReconnectFor = TimeSpan.FromSeconds(90);
@@ -471,7 +469,7 @@ public sealed class OnlineSession : IDisposable
             connection.Accepted = true;
             _doc.History.ClearRedo();
             _redoLog.Clear();
-            SendWelcome(connection);
+            SendWelcome(connection, withProject: false);
             UpdateParticipants();
             connection.Send(MessageType.Presence, PresenceMessage());
             SendCameras(connection);
@@ -505,7 +503,7 @@ public sealed class OnlineSession : IDisposable
         // The changes undone before are dropped: a guest could not redo them.
         _doc.History.ClearRedo();
         _redoLog.Clear();
-        SendWelcome(connection);
+        SendWelcome(connection, withProject: true);
         UpdateParticipants();
         connection.Send(MessageType.Presence, PresenceMessage());
         SendCameras(connection);
@@ -528,7 +526,8 @@ public sealed class OnlineSession : IDisposable
             return _connections.Find(c => c.Id == id);
     }
 
-    private void SendWelcome(Connection connection)
+    // withProject: false for a guest that already has the project (back after a drop, or sent the session again).
+    private void SendWelcome(Connection connection, bool withProject)
     {
         var snapshot = _snapshot!;
         connection.Send(MessageType.Welcome, Payload.Build(w =>
@@ -537,7 +536,9 @@ public sealed class OnlineSession : IDisposable
             w.Write(connection.RejoinKey);
             w.Write(snapshot.ProjectName);
             w.Write(snapshot.Fingerprint);
-            w.WriteBytes(snapshot.ProjectZip);
+            w.Write(withProject);
+            if (withProject)
+                w.WriteBytes(snapshot.ProjectZip);
             w.Write(_log.Count);
             foreach (var (author, message) in _log)
             {
@@ -579,7 +580,7 @@ public sealed class OnlineSession : IDisposable
     private void Resync(Connection connection, string reason)
     {
         connection.Send(MessageType.Reject, Payload.Build(w => w.Write(reason)));
-        SendWelcome(connection);
+        SendWelcome(connection, withProject: false);
     }
 
     private void Drop(Connection connection, string? reason, bool quiet = false)
@@ -727,7 +728,8 @@ public sealed class OnlineSession : IDisposable
         }
         string project = r.ReadString();
         string fingerprint = r.ReadString();
-        var zip = r.ReadBytes();
+        var zip = r.ReadBoolean() ? r.ReadBytes()
+            : _snapshot?.ProjectZip ?? throw new InvalidDataException(L("Projet de l'hôte non reçu."));
         int count = r.ReadInt32();
         _welcomeLog = [.. Enumerable.Range(0, count).Select(_ => (r.ReadString(), r.ReadBytes()))];
         _snapshot = new SessionSnapshot(project, zip, fingerprint);
@@ -740,15 +742,11 @@ public sealed class OnlineSession : IDisposable
     private void FinishLoading()
     {
         _loading = false;
-        var (game, library) = SplitFingerprint(_doc.Fingerprint);
-        var (hostGame, hostLibrary) = SplitFingerprint(_snapshot!.Fingerprint);
-        if (game != hostGame)
+        if (_doc.Fingerprint != _snapshot!.Fingerprint)
         {
-            End(L($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({game} / {hostGame}) : même version de GTA V et mêmes mods nécessaires."));
+            End(L($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({_doc.Fingerprint} / {_snapshot.Fingerprint}) : même version de GTA V et mêmes mods nécessaires."));
             return;
         }
-        if (library != hostLibrary)
-            _doc.Notify(L($"Votre bibliothèque de props n'est pas celle de l'hôte ({library} / {hostLibrary} props) : ceux qui vous manquent s'afficheront en croix roses."), warning: true);
         try
         {
             foreach (var (_, message) in _welcomeLog)
@@ -829,9 +827,6 @@ public sealed class OnlineSession : IDisposable
             }
         });
     }
-
-    private static (string Game, string Library) SplitFingerprint(string fingerprint) =>
-        fingerprint.IndexOf(LibrarySeparator) is int at and >= 0 ? (fingerprint[..at], fingerprint[(at + 1)..]) : (fingerprint, "");
 
     // Guest: asks the host to undo (or redo) the session's last change; false if it cannot now.
     public bool RequestUndo(bool undo = true)

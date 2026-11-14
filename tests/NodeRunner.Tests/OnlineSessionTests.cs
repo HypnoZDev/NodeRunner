@@ -207,15 +207,6 @@ public class OnlineSessionTests
         Pump(() => other.IsOver, host, other);
         Assert.Contains("fichiers du jeu", other.EndReason);
 
-        // Another prop library only: let in, with a warning.
-        var propsDoc = new Doc { Fingerprint = "carte|3" };
-        using var props = OnlineSession.Join(propsDoc, "Tom", "1.0", $"127.0.0.1:{host.Port}");
-        Pump(() => host.JoinRequests.Count == 1, host, props);
-        host.Accept(host.JoinRequests[0]);
-        Pump(() => props.Status == "Connecté", host, props);
-        Assert.Contains(propsDoc.Notes, n => n.Contains("bibliothèque de props", StringComparison.Ordinal));
-        props.End("Au revoir.");
-        Pump(() => host.Participants.Count == 1, host);
 
         var refusedDoc = new Doc();
         using var refused = OnlineSession.Join(refusedDoc, "Zoé", "1.0", $"127.0.0.1:{host.Port}");

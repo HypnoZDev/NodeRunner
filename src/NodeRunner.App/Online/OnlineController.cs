@@ -61,10 +61,8 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     public bool IsReady => state.World is { Maps: { } maps, IsBusy: false } && maps != _waitingFor;
 
-    // The game and the project, then the prop library (which may differ: OnlineSession only warns).
-    public string Fingerprint => state.World.Maps is { } maps
-        ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount - maps.LibraryArchetypeCount}{OnlineSession.LibrarySeparator}{maps.LibraryArchetypeCount}"
-        : "";
+    // The game's own files (the project and the library props it uses are sent with it).
+    public string Fingerprint => state.World.Maps is { } maps ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount - maps.LooseArchetypeCount}" : "";
 
     public void OpenSnapshot(SessionSnapshot snapshot)
     {
@@ -155,9 +153,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         var project = state.Project!;
         try
         {
-            using var zip = new MemoryStream();
-            ZipFile.CreateFromDirectory(project.Folder, zip, CompressionLevel.Fastest, includeBaseDirectory: false);
-            var snapshot = new SessionSnapshot(project.Name, zip.ToArray(), Fingerprint);
+            var snapshot = new SessionSnapshot(project.Name, PackProject(project), Fingerprint);
             if (_local)
             {
                 Session = OnlineSession.Host(this, Name, Version, snapshot);
@@ -172,6 +168,32 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         {
             LastError = L($"Impossible d'ouvrir la session : {ex.Message}");
         }
+    }
+
+    // The project's files for the guests, without those locked by FiveM (never shared), with the library props its maps
+    // use (in "stream", where the guest's copy loads them; a file of the project wins over one of the library).
+    private byte[] PackProject(MapProject project)
+    {
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string file in Directory.EnumerateFiles(project.Folder, "*", SearchOption.AllDirectories))
+            {
+                if (Data.FileSystem.ProtectedFile.IsProtected(file))
+                    continue;
+                string entry = Path.GetRelativePath(project.Folder, file).Replace('\\', '/');
+                zip.CreateEntryFromFile(file, entry, CompressionLevel.Fastest);
+                names.Add(entry);
+            }
+            foreach (var (name, disk) in LibraryFileSaver.Needed(state.World, LibraryFileSaver.PlacedTypes(state.World)))
+            {
+                string entry = $"{FiveMResource.StreamFolderName}/{name}";
+                if (names.Add(entry))
+                    zip.CreateEntryFromFile(disk, entry, CompressionLevel.Fastest);
+            }
+        }
+        return buffer.ToArray();
     }
 
     public void Join(string address)
