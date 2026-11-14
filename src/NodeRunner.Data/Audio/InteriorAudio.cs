@@ -27,6 +27,7 @@ public sealed class AudioGameData
     private readonly Dictionary<uint, InteriorAudioSettings> _interiors;
     private readonly Dictionary<uint, RoomAudioSettings> _rooms;
     private readonly Dictionary<uint, string> _names;
+    private readonly Dictionary<(uint Interior, uint RoomName), RoomAudioSettings> _byRoomName = new();
 
     private AudioGameData(Dictionary<uint, InteriorAudioSettings> interiors, Dictionary<uint, RoomAudioSettings> rooms,
         Dictionary<uint, string> names, IReadOnlyList<string> errors)
@@ -35,6 +36,10 @@ public sealed class AudioGameData
         _rooms = rooms;
         _names = names;
         Errors = errors;
+        foreach (var interior in interiors.Values)
+            foreach (uint item in interior.Rooms)
+                if (rooms.TryGetValue(item, out var room))
+                    _byRoomName.TryAdd((interior.NameHash, room.RoomName), room);
     }
 
     public IReadOnlyList<string> Errors { get; }
@@ -46,13 +51,8 @@ public sealed class AudioGameData
     public RoomAudioSettings? Room(uint itemHash) => _rooms.GetValueOrDefault(itemHash);
 
     // The audio settings of the room of this interior named so (rooms are matched by name, as the game does).
-    public RoomAudioSettings? RoomOf(uint archetypeHash, string roomName)
-    {
-        if (Interior(archetypeHash) is not { } interior)
-            return null;
-        uint name = Joaat.Hash(roomName);
-        return interior.Rooms.Select(Room).FirstOrDefault(r => r?.RoomName == name);
-    }
+    public RoomAudioSettings? RoomOf(uint archetypeHash, string roomName) =>
+        _byRoomName.GetValueOrDefault((archetypeHash, Joaat.Hash(roomName)));
 
     // Name of an audio item, from the .nametable files the DLC packs ship beside their game data.
     public string? Name(uint hash) => _names.GetValueOrDefault(hash);
@@ -63,10 +63,8 @@ public sealed class AudioGameData
         var rooms = new Dictionary<uint, RoomAudioSettings>();
         var names = new Dictionary<uint, string>();
         var errors = new List<string>();
-        foreach (var path in content.EnumerateAllVersions(".rel"))
+        foreach (var path in content.EnumerateAllVersions(".dat151.rel"))
         {
-            if (!path.EndsWith(".dat151.rel", StringComparison.OrdinalIgnoreCase))
-                continue;
             try
             {
                 if (content.ReadFile(path) is not { } data)

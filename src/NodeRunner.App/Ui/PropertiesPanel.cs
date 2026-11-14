@@ -84,18 +84,16 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             if ((entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } interior
                 && Widgets.Section(L($"Entity sets ({interior.EntitySets.Count})"), "entity_sets"))
                 DrawEntitySets(interior, library, names);
-            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } roomsOf
-                && library.GetArchetype(roomsOf.ArchetypeHash) is { } interiorType
-                && Widgets.Section(L($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})"), "rooms", defaultOpen: false))
-                DrawRoomList(roomsOf, interiorType);
-            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } soundOf
-                && library.GetArchetype(soundOf.ArchetypeHash) is { } soundType
-                && Widgets.Section(L("Occlusion audio"), "audio_occlusion", defaultOpen: false))
-                DrawAudioOcclusion(soundOf, soundType, names);
-            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } settingsOf
-                && library.GetArchetype(settingsOf.ArchetypeHash) is { } settingsType
-                && Widgets.Section(L("Réglages audio"), "interior_audio", defaultOpen: false))
-                DrawInteriorAudio(settingsOf, settingsType, names);
+            if (!Simple && (entity.IsInterior ? entity : entity.Interior) is { IsInterior: true } placed
+                && library.GetArchetype(placed.ArchetypeHash) is { } interiorType)
+            {
+                if (Widgets.Section(L($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})"), "rooms", defaultOpen: false))
+                    DrawRoomList(placed, interiorType);
+                if (Widgets.Section(L("Occlusion audio"), "audio_occlusion", defaultOpen: false))
+                    DrawAudioOcclusion(placed, interiorType, library, names);
+                if (Widgets.Section(L("Réglages audio"), "interior_audio", defaultOpen: false))
+                    DrawInteriorAudio(placed, interiorType, names);
+            }
             if (!Simple && Widgets.Section(L("Réglages"), "flags", defaultOpen: false))
                 DrawFlags(entity, library);
             if (Simple)
@@ -1823,8 +1821,70 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
     private InteriorRoom? _roomEditStart;
     private readonly Dictionary<string, string> _textBuffers = new();
 
-    // The rooms of an interior, each one can be selected (and edited) in turn.
-    private void DrawAudioOcclusion(MapEntity interior, Archetype archetype, HashNames names)
+    // What the audio occlusion section shows for a placed interior: built once, then kept until the interior, its
+    // position, its rooms or the language change.
+    private sealed record AudioOcclusionView(AudioOcclusionCatalog Catalog, MapEntity Interior, uint Hash, uint FileHash,
+        int RoomVersion, Editor.Localization.Language Language, string? Path, string? Error, bool Found, bool OriginalLost, int Links, int Outside,
+        int Doors, int Glass, int Paths, IReadOnlyList<(string Text, bool Ok)> Lines, bool Mismatch);
+
+    private AudioOcclusionView? _audioOcclusion;
+
+    private AudioOcclusionView AudioOcclusionOf(AudioOcclusionCatalog catalog, MapEntity interior, Archetype archetype,
+        MapLibrary library, HashNames names)
+    {
+        uint hash = AudioOcclusionHash.Of(interior.ArchetypeHash, interior.Position);
+        uint fileHash = AudioOcclusionHash.Of(interior.FileArchetypeHash, interior.FilePosition);
+        if (_audioOcclusion is { } kept && kept.Catalog == catalog && kept.Interior == interior && kept.Hash == hash
+            && kept.FileHash == fileHash && kept.RoomVersion == library.RoomVersion && kept.Language == Editor.Localization.Loc.Current)
+            return kept;
+
+        var (occlusion, error) = catalog.Get(hash);
+        var rooms = archetype.InteriorRooms;
+        string RoomName(int r) => r == 0 ? L("extérieur") : r < rooms.Count && rooms[r].Name.Length > 0 ? rooms[r].Name : $"{r}";
+        var lines = new List<(string Text, bool Ok)>();
+        int links = 0, outside = 0, doors = 0, glass = 0;
+        foreach (var link in occlusion?.Links ?? [])
+        {
+            doors += link.Entities.Count(e => e.IsDoor);
+            glass += link.Entities.Count(e => e.IsGlass);
+            if (link.DestInteriorProxyHash != link.InteriorProxyHash)
+                outside++;
+            if (link.InteriorProxyHash != hash)
+                continue;
+            links++;
+
+            // PortalIndex counts the portals touching the room, in the archetype's order.
+            InteriorPortal? portal = null;
+            if (link.RoomIndex < rooms.Count)
+            {
+                int rank = 0;
+                foreach (var p in archetype.InteriorPortals)
+                    if ((p.RoomFrom == link.RoomIndex || p.RoomTo == link.RoomIndex) && rank++ == link.PortalIndex)
+                    {
+                        portal = p;
+                        break;
+                    }
+            }
+            bool ok = portal is not null;
+            string destination = L("un autre intérieur");
+            if (link.DestInteriorProxyHash == hash)
+            {
+                destination = RoomName(link.DestRoomIndex);
+                ok = portal is not null && (portal.RoomFrom == link.RoomIndex ? portal.RoomTo : portal.RoomFrom) == link.DestRoomIndex;
+            }
+            var text = new System.Text.StringBuilder($"{RoomName(link.RoomIndex)} → {destination}");
+            foreach (var e in link.Entities)
+                text.Append($" · {(e.IsDoor ? L("porte") : e.IsGlass ? L("vitre") : L("objet"))} {names.Describe(e.ModelHash)} ({e.MaxOcclusion * 100:0} %)");
+            if (!ok)
+                text.Append("  ?");
+            lines.Add((text.ToString(), ok));
+        }
+        return _audioOcclusion = new AudioOcclusionView(catalog, interior, hash, fileHash, library.RoomVersion, Editor.Localization.Loc.Current,
+            catalog.PathOf(hash), error, occlusion is not null, occlusion is null && fileHash != hash && catalog.PathOf(fileHash) is not null,
+            links, outside, doors, glass, occlusion?.Paths.Count ?? 0, lines, lines.Any(l => !l.Ok));
+    }
+
+    private void DrawAudioOcclusion(MapEntity interior, Archetype archetype, MapLibrary library, HashNames names)
     {
         Widgets.Hint(L("Fichier qui dit au jeu comment le son passe d'une salle à l'autre (portails, portes, vitres). ")
             + L("Sans lui, les sons traversent les murs de l'intérieur."), wrap: true);
@@ -1833,82 +1893,43 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             Widgets.Hint(L("Lecture des fichiers d'occlusion audio..."));
             return;
         }
-        uint hash = AudioOcclusionHash.Of(interior.ArchetypeHash, interior.Position);
-        uint fileHash = AudioOcclusionHash.Of(interior.FileArchetypeHash, interior.FilePosition);
-        var (occlusion, error) = catalog.Get(hash);
-        var own = occlusion?.Links.Where(l => l.InteriorProxyHash == hash).ToList() ?? [];
+        var view = AudioOcclusionOf(catalog, interior, archetype, library, names);
         if (Widgets.BeginProperties("##audio_occlusion"))
         {
-            Widgets.PropertyText(L("Fichier attendu"), $"{hash}.ymt",
+            Widgets.PropertyText(L("Fichier attendu"), $"{view.Hash}.ymt",
                 L("Nom calculé par le jeu à partir du type de l'intérieur et de sa position : il change si l'intérieur est déplacé."));
-            if (catalog.PathOf(hash) is { } path)
-                FileRow(L("Trouvé dans"), path);
+            if (view.Path is not null)
+                FileRow(L("Trouvé dans"), view.Path);
             else
                 Widgets.PropertyText(L("Trouvé dans"), L("aucun fichier"), null, UiTheme.Warning);
-            if (error is not null)
-                Widgets.PropertyText(L("Erreur"), error, error, UiTheme.Error);
-            if (occlusion is not null)
+            if (view.Error is not null)
+                Widgets.PropertyText(L("Erreur"), view.Error, view.Error, UiTheme.Error);
+            if (view.Found)
             {
-                Widgets.PropertyText(L("Passages du son"), $"{own.Count}",
+                Widgets.PropertyText(L("Passages du son"), $"{view.Links}",
                     L("Un passage par portail et par sens : de quelle salle vers quelle salle le son peut aller."));
-                int outside = occlusion.Links.Count(l => l.DestInteriorProxyHash != l.InteriorProxyHash);
-                if (outside > 0)
-                    Widgets.PropertyText(L("Vers d'autres intérieurs"), $"{outside}");
-                var entities = occlusion.Links.SelectMany(l => l.Entities).ToList();
-                Widgets.PropertyText(L("Portes / vitres"), $"{entities.Count(e => e.IsDoor)} / {entities.Count(e => e.IsGlass)}",
+                if (view.Outside > 0)
+                    Widgets.PropertyText(L("Vers d'autres intérieurs"), $"{view.Outside}");
+                Widgets.PropertyText(L("Portes / vitres"), $"{view.Doors} / {view.Glass}",
                     L("Objets des portails qui étouffent le son quand ils sont fermés."));
-                Widgets.PropertyText(L("Chemins précalculés"), $"{occlusion.Paths.Count}");
+                Widgets.PropertyText(L("Chemins précalculés"), $"{view.Paths}");
             }
             Widgets.EndProperties();
         }
 
-        if (occlusion is null && fileHash != hash && catalog.PathOf(fileHash) is not null)
-            WarningText(L($"Intérieur déplacé : son occlusion audio d'origine ({fileHash}.ymt) ne s'applique plus, les sons traversent ses murs. ")
+        if (view.OriginalLost)
+            WarningText(L($"Intérieur déplacé : son occlusion audio d'origine ({view.FileHash}.ymt) ne s'applique plus, les sons traversent ses murs. ")
                 + L("Elle devra être refaite à la nouvelle position."));
-        else if (occlusion is null && error is null)
+        else if (!view.Found && view.Error is null)
             Widgets.Hint(L("Cet intérieur n'a pas d'occlusion audio à cet endroit : les sons traversent ses murs."), wrap: true);
-        if (occlusion is null)
-            return;
-
-        var rooms = archetype.InteriorRooms;
-        string RoomName(int r) => r == 0 ? L("extérieur") : r < rooms.Count && rooms[r].Name.Length > 0 ? rooms[r].Name : $"{r}";
-        bool mismatch = false;
-        var lines = new List<(string Text, bool Ok)>();
-        foreach (var link in own)
-        {
-            var touching = link.RoomIndex < rooms.Count
-                ? archetype.InteriorPortals.Where(p => p.RoomFrom == link.RoomIndex || p.RoomTo == link.RoomIndex).ToList()
-                : [];
-            bool ok = link.PortalIndex < touching.Count;
-            string destination;
-            if (link.DestInteriorProxyHash != hash)
-                destination = L("un autre intérieur");
-            else
-            {
-                destination = RoomName(link.DestRoomIndex);
-                ok &= link.DestRoomIndex < rooms.Count;
-                if (ok)
-                {
-                    var portal = touching[link.PortalIndex];
-                    ok = (portal.RoomFrom == link.RoomIndex ? portal.RoomTo : portal.RoomFrom) == link.DestRoomIndex;
-                }
-            }
-            mismatch |= !ok;
-            string text = $"{RoomName(link.RoomIndex)} → {destination}";
-            foreach (var e in link.Entities)
-                text += $" · {(e.IsDoor ? L("porte") : e.IsGlass ? L("vitre") : L("objet"))} {names.Describe(e.ModelHash)} ({e.MaxOcclusion * 100:0} %)";
-            lines.Add((ok ? text : $"{text}  ?", ok));
-        }
-        if (mismatch)
+        if (view.Mismatch)
             WarningText(L("Le fichier ne correspond plus aux salles et portails de l'intérieur (modifiés depuis ?) : marqués « ? » ci-dessous."));
-        if (lines.Count > 0 && ImGui.TreeNode(L($"Détail des passages ({lines.Count})###audio_links")))
+        if (view.Lines.Count > 0 && ImGui.TreeNode(L($"Détail des passages ({view.Lines.Count})###audio_links")))
         {
-            foreach (var (text, ok) in lines)
-            {
-                ImGui.PushTextWrapPos(0);
+            ImGui.PushTextWrapPos(0);
+            foreach (var (text, ok) in view.Lines)
                 ImGui.TextColored(ok ? UiTheme.TextMuted : UiTheme.Warning, text);
-                ImGui.PopTextWrapPos();
-            }
+            ImGui.PopTextWrapPos();
             ImGui.TreePop();
         }
     }
@@ -1999,6 +2020,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         ImGui.PopTextWrapPos();
     }
 
+    // The rooms of an interior, each one can be selected (and edited) in turn.
     private void DrawRoomList(MapEntity interior, Archetype archetype)
     {
         Widgets.Hint(L("Boîtes qui découpent l'intérieur : le jeu ne dessine une salle que si elle est visible par un portail. ")

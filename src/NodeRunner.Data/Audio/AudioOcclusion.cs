@@ -52,7 +52,9 @@ public sealed class AudioOcclusionCatalog
     public static AudioOcclusionCatalog Load(GameContent content, IAudioOcclusionReader reader)
     {
         var paths = new Dictionary<uint, string>();
-        foreach (var path in content.EnumerateFiles(".ymt"))
+        // Some packs do not declare their occlusion archive: files of undeclared archives are taken too (the name
+        // depends on where the interior is placed, so a file can only match its own interior).
+        foreach (var path in content.EnumerateFiles(".ymt", withInactiveFallback: true))
             if (uint.TryParse(Path.GetFileNameWithoutExtension(path), out uint hash))
                 paths[hash] = path;
         return new AudioOcclusionCatalog(content, reader, paths);
@@ -63,22 +65,22 @@ public sealed class AudioOcclusionCatalog
     // The file's content, or the reason it could not be read; (null, null) when there is no such file.
     public (AudioOcclusion? Occlusion, string? Error) Get(uint proxyHash)
     {
+        if (!_paths.TryGetValue(proxyHash, out var path))
+            return (null, null);
         lock (_read)
         {
             if (_read.TryGetValue(proxyHash, out var done))
                 return done;
         }
-        (AudioOcclusion?, string?) result = (null, null);
-        if (_paths.TryGetValue(proxyHash, out var path))
+        (AudioOcclusion?, string?) result;
+        try
         {
-            try
-            {
-                result = _content.ReadFile(path) is { } data ? (_reader.Read(data), null) : (null, null);
-            }
-            catch (Exception ex) when (ex is InvalidDataException or IOException or FormatException)
-            {
-                result = (null, ex.Message);
-            }
+            result = _content.ReadFile(path) is { } data ? (_reader.Read(data), null) : (null, null);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or FormatException or ArgumentException
+            or IndexOutOfRangeException or OverflowException)
+        {
+            result = (null, ex.Message);
         }
         lock (_read)
             _read[proxyHash] = result;
