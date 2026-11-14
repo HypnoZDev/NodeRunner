@@ -61,7 +61,10 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     public bool IsReady => state.World is { Maps: { } maps, IsBusy: false } && maps != _waitingFor;
 
-    public string Fingerprint => state.World.Maps is { } maps ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount}" : "";
+    // The game and the project, then the prop library (which may differ: OnlineSession only warns).
+    public string Fingerprint => state.World.Maps is { } maps
+        ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount - maps.LibraryArchetypeCount}{OnlineSession.LibrarySeparator}{maps.LibraryArchetypeCount}"
+        : "";
 
     public void OpenSnapshot(SessionSnapshot snapshot)
     {

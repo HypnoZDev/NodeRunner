@@ -19,7 +19,8 @@ public interface IOnlineDocument
     // The map is loaded (after OpenSnapshot).
     bool IsReady { get; }
 
-    // Same text on two computers = same game files and same project, before any edit of the session.
+    // Same text on two computers = same game files and same project, before any edit of the session. A part after
+    // OnlineSession.LibrarySeparator describes the prop library: a difference there is only a warning.
     string Fingerprint { get; }
 
     // A change of another participant applied here (or one's own undo / redo, done by the host).
@@ -47,6 +48,7 @@ public sealed class OnlineSession : IDisposable
     public const int ProtocolVersion = 3;
     public const int DefaultPort = 47800;
     public const int MaxParticipants = 5;
+    public const char LibrarySeparator = '|';
 
     // A guest whose link dropped tries again this long (the relay keeps the room a minute for a host that dropped).
     public static readonly TimeSpan ReconnectFor = TimeSpan.FromSeconds(90);
@@ -738,11 +740,15 @@ public sealed class OnlineSession : IDisposable
     private void FinishLoading()
     {
         _loading = false;
-        if (_doc.Fingerprint != _snapshot!.Fingerprint)
+        var (game, library) = SplitFingerprint(_doc.Fingerprint);
+        var (hostGame, hostLibrary) = SplitFingerprint(_snapshot!.Fingerprint);
+        if (game != hostGame)
         {
-            End(L($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({_doc.Fingerprint} / {_snapshot.Fingerprint}) : même version de GTA V et mêmes mods nécessaires."));
+            End(L($"Vos fichiers du jeu ne sont pas les mêmes que ceux de l'hôte ({game} / {hostGame}) : même version de GTA V et mêmes mods nécessaires."));
             return;
         }
+        if (library != hostLibrary)
+            _doc.Notify(L($"Votre bibliothèque de props n'est pas celle de l'hôte ({library} / {hostLibrary} props) : ceux qui vous manquent s'afficheront en croix roses."), warning: true);
         try
         {
             foreach (var (_, message) in _welcomeLog)
@@ -823,6 +829,9 @@ public sealed class OnlineSession : IDisposable
             }
         });
     }
+
+    private static (string Game, string Library) SplitFingerprint(string fingerprint) =>
+        fingerprint.IndexOf(LibrarySeparator) is int at and >= 0 ? (fingerprint[..at], fingerprint[(at + 1)..]) : (fingerprint, "");
 
     // Guest: asks the host to undo (or redo) the session's last change; false if it cannot now.
     public bool RequestUndo(bool undo = true)

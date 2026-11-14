@@ -310,6 +310,8 @@ public static partial class English
         ("{0} a rejoint la session.", "{0} joined the session."),
         ("{0} (vous)", "{0} (you)"),
         ("Aller à sa vue", "Go to their view"),
+        ("Votre bibliothèque de props n'est pas celle de l'hôte ({0} / {1} props) : ceux qui vous manquent s'afficheront en croix roses.",
+            "Your prop library differs from the host's ({0} / {1} props): the ones you are missing will show as pink crosses."),
         ("La caméra de {0} n'est pas encore connue.", "{0}'s camera is not known yet."),
         ("{0} a sélectionné cet objet en même temps que vous : il lui revient.", "{0} selected this object at the same time as you: it goes to them."),
         ("{0} objet(s) laissé(s) de côté : sélectionnés par un autre participant.", "{0} object(s) left out: selected by another participant."),

@@ -19,6 +19,9 @@ public sealed class MapLibrary
     public IReadOnlyList<MapData> Maps => _maps;
     public int ArchetypeCount => _archetypes.Count;
 
+    // Types read from the prop library (FileSystem.GameContent.LibraryRoot), not from the game or the project.
+    public int LibraryArchetypeCount => _archetypeFiles.Values.Count(FileSystem.GameContent.IsLibraryFile);
+
     public HashSet<uint> GetArchetypeHashes() => _archetypes.Keys.ToHashSet();
 
     public HashSet<uint> GetInteriorArchetypeHashes() =>
