@@ -23,6 +23,7 @@ public class OnlineSessionTests
         public string Fingerprint { get; set; } = "carte";
         public List<string> Notes { get; } = [];
         public int Opened { get; private set; }
+        public SessionSnapshot? Received { get; private set; }
 
         // The project's files are the starting map: a fresh one.
         public void OpenSnapshot(SessionSnapshot snapshot)
@@ -30,6 +31,7 @@ public class OnlineSessionTests
             History.Clear();
             _world = OnlineEditTests.Build(History);
             Opened++;
+            Received = snapshot;
         }
 
         public void Applied(IEdit edit, string author, SessionAction action) => Notes.Add($"{author}: {action} {edit.Description}");
@@ -165,6 +167,42 @@ public class OnlineSessionTests
 
         lea.End("Au revoir.");
         Pump(() => !marc.Presence.ContainsKey("Léa") && !marc.Cameras.ContainsKey("Léa") && marc.Presence.ContainsKey("Ben"), host, marc, zoe);
+    }
+
+    [Fact]
+    public void Files_added_during_the_session_reach_the_guests_with_the_changes_so_far()
+    {
+        byte[] Zip(params string[] entries)
+        {
+            using var buffer = new MemoryStream();
+            using (var zip = new System.IO.Compression.ZipArchive(buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (var entry in entries)
+                    zip.CreateEntry(entry);
+            }
+            return buffer.ToArray();
+        }
+        string prop = Path.GetTempFileName();
+        File.WriteAllBytes(prop, [1, 2, 3, 4]);
+        try
+        {
+            var hostDoc = new Doc();
+            using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start with { ProjectZip = Zip("projet.json") }, port: 47960);
+            var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
+            hostDoc.Move(2, new Vector3(4, 4, 4), "Hôte");
+            Pump(() => marc.ChangeCount == 1, host, marc);
+
+            host.AddToProject([("stream/prop.ydr", prop)], "nouveaux props");
+            Pump(() => marcDoc.Opened == 2 && marc.Status == "Connecté", host, marc);
+            using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(marcDoc.Received!.ProjectZip));
+            Assert.NotNull(zip.GetEntry("stream/prop.ydr"));
+            Assert.NotNull(zip.GetEntry("projet.json"));
+            Assert.Equal(new Vector3(4, 4, 4), marcDoc.World.Map.Entities[2].Position);
+        }
+        finally
+        {
+            File.Delete(prop);
+        }
     }
 
     [Fact]

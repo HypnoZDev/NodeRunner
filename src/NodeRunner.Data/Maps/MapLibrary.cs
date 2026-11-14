@@ -22,6 +22,10 @@ public sealed class MapLibrary
     // Types read from loose files (the project's or the prop library's), not from the game's archives.
     public int LooseArchetypeCount => _archetypeFiles.Values.Count(FileSystem.GameContent.IsLooseFile);
 
+    // Types read from the prop library (FileSystem.GameContent.LibraryRoot).
+    public HashSet<uint> LibraryArchetypes() =>
+        [.. _archetypeFiles.Where(p => FileSystem.GameContent.IsLibraryFile(p.Value)).Select(p => p.Key)];
+
     public HashSet<uint> GetArchetypeHashes() => _archetypes.Keys.ToHashSet();
 
     public HashSet<uint> GetInteriorArchetypeHashes() =>

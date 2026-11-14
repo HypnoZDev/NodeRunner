@@ -153,6 +153,8 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         var project = state.Project!;
         try
         {
+            _shippedTypes = LibraryFileSaver.PlacedTypes(state.World);
+            _typesCheckedAt = -1;
             var snapshot = new SessionSnapshot(project.Name, PackProject(project), Fingerprint);
             if (_local)
             {
@@ -194,6 +196,38 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             }
         }
         return buffer.ToArray();
+    }
+
+    // --- Library props placed during the session ---
+
+    private HashSet<uint> _shippedTypes = [];
+    private int _typesCheckedAt = -1;
+    private DateTime _typesCheckedTime;
+
+    // Guest: a type of its own prop library cannot be placed (the host could neither show it nor export it). The props
+    // the host sent come with the project, not from the library.
+    public string? BlocksType(uint archetypeHash) =>
+        IsGuest && state.World.Maps?.GetArchetypeFile(archetypeHash) is { } file && Data.FileSystem.GameContent.IsLibraryFile(file)
+            ? L("Session Online : ce prop vient de votre bibliothèque, l'hôte ne l'a pas. Seul l'hôte peut placer les props de sa bibliothèque.")
+            : null;
+
+    // Host: library props placed since the project was sent are added to it; the guests load the map again with them.
+    private void ShipNewLibraryTypes()
+    {
+        if (Session is not { Role: SessionRole.Host, IsOver: false } session || session.ChangeCount == _typesCheckedAt
+            || DateTime.UtcNow - _typesCheckedTime < TimeSpan.FromSeconds(1.5) || state.World is not { Maps: not null, IsBusy: false })
+            return;
+        _typesCheckedAt = session.ChangeCount;
+        _typesCheckedTime = DateTime.UtcNow;
+        var placed = LibraryFileSaver.PlacedTypes(state.World);
+        placed.ExceptWith(_shippedTypes);
+        if (placed.Count == 0)
+            return;
+        _shippedTypes.UnionWith(placed);
+        var files = LibraryFileSaver.Needed(state.World, placed)
+            .Select(f => ($"{FiveMResource.StreamFolderName}/{f.Name}", f.Disk)).ToList();
+        if (files.Count > 0)
+            session.AddToProject(files, L("nouveaux props de la bibliothèque de l'hôte"));
     }
 
     public void Join(string address)
@@ -263,6 +297,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             state.Notify(L($"Session ouverte : donnez le code {newCode} à vos collègues."));
         UpdatePresence();
         UpdateCameras();
+        ShipNewLibraryTypes();
     }
 
     // --- Cameras of the others ---

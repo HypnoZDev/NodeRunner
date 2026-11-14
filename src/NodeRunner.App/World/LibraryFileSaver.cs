@@ -59,17 +59,17 @@ internal static class LibraryFileSaver
     public static HashSet<uint> PlacedTypes(WorldLoader world)
     {
         var used = new HashSet<uint>();
-        if (world.Maps is not { } library)
+        if (world.Maps is not { } library || library.LibraryArchetypes() is not { Count: > 0 } types)
             return used;
         foreach (var map in library.Maps)
         {
             foreach (var entity in map.Entities)
             {
-                if (library.GetArchetypeFile(entity.ArchetypeHash) is { } file && Data.FileSystem.GameContent.IsLibraryFile(file))
+                if (types.Contains(entity.ArchetypeHash))
                     used.Add(entity.ArchetypeHash);
                 foreach (var inner in entity.InteriorEntities)
                 {
-                    if (library.GetArchetypeFile(inner.ArchetypeHash) is { } innerFile && Data.FileSystem.GameContent.IsLibraryFile(innerFile))
+                    if (types.Contains(inner.ArchetypeHash))
                         used.Add(inner.ArchetypeHash);
                 }
             }

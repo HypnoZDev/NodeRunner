@@ -764,6 +764,36 @@ public sealed class OnlineSession : IDisposable
         Status = L("Connecté");
     }
 
+    // Host: adds files to the project the guests start from (entry = path in the project folder; a file already there
+    // is kept). Every guest gets it again and loads the map anew, the session's changes replayed.
+    public void AddToProject(IReadOnlyList<(string Entry, string Disk)> files, string reason)
+    {
+        if (Role != SessionRole.Host || IsOver || _snapshot is null)
+            return;
+        using var buffer = new MemoryStream();
+        buffer.Write(_snapshot.ProjectZip);
+        try
+        {
+            using var zip = new System.IO.Compression.ZipArchive(buffer, System.IO.Compression.ZipArchiveMode.Update, leaveOpen: true);
+            foreach (var (entry, disk) in files)
+            {
+                if (zip.GetEntry(entry) is null)
+                    System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(zip, disk, entry, System.IO.Compression.CompressionLevel.Fastest);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _doc.Notify(L($"Fichiers non envoyés aux invités : {ex.Message}"), warning: true);
+            return;
+        }
+        _snapshot = _snapshot with { ProjectZip = buffer.ToArray() };
+        foreach (var guest in Guests())
+        {
+            guest.Send(MessageType.Reject, Payload.Build(w => w.Write(reason)));
+            SendWelcome(guest, withProject: true);
+        }
+    }
+
     // Shares what this computer has selected (SelectionCodec).
     public void ShareSelection(byte[] selection)
     {

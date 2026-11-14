@@ -313,6 +313,11 @@ internal sealed class AppState
     public void Place(uint archetypeHash, System.Numerics.Vector3 ground)
     {
         Notice = null;
+        if (Online.BlocksType(archetypeHash) is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
         if (World.Maps is not { } library || ProjectMap(library) is not { } map)
             return;
         var archetype = library.GetArchetype(archetypeHash);
@@ -382,6 +387,11 @@ internal sealed class AppState
     // Gives the selected objects another type (model), same place; objects of interiors are left out.
     public void SetSelectionArchetype(uint archetypeHash)
     {
+        if (Online.BlocksType(archetypeHash) is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
         if (World.Maps is not { } library || library.GetArchetype(archetypeHash) is not { } archetype
             || archetype.Kind == Data.Maps.ArchetypeKind.Interior)
             return;
