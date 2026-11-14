@@ -78,6 +78,7 @@ public sealed class OnlineSession : IDisposable
     private bool _applying;
     private int _nextId;
     private Dictionary<string, byte[]> _presence = [];
+    private Dictionary<string, byte[]> _cameras = [];
 
     private OnlineSession(IOnlineDocument doc, SessionRole role, string name, string appVersion)
     {
@@ -120,6 +121,9 @@ public sealed class OnlineSession : IDisposable
     // every change.
     public IReadOnlyDictionary<string, byte[]> Presence => _presence;
     public int PresenceVersion { get; private set; }
+
+    // Where each other participant's camera is (bytes chosen by the application), updated as it moves.
+    public IReadOnlyDictionary<string, byte[]> Cameras => _cameras;
 
     // --- Starting ---
 
@@ -428,6 +432,13 @@ public sealed class OnlineSession : IDisposable
             case MessageType.Presence:
                 SetPresence(connection.Name, data);
                 break;
+            case MessageType.Camera:
+                if (data.Length is > 0 and <= 256)
+                {
+                    _cameras[connection.Name] = data;
+                    Broadcast(MessageType.Camera, CameraMessage(connection.Name, data), except: connection);
+                }
+                break;
             case MessageType.Bye:
                 _rejoinKeys.Remove(connection.RejoinKey);
                 Drop(connection, null);
@@ -461,6 +472,7 @@ public sealed class OnlineSession : IDisposable
             SendWelcome(connection);
             UpdateParticipants();
             connection.Send(MessageType.Presence, PresenceMessage());
+            SendCameras(connection);
             _doc.Notify(L($"{back} s'est reconnecté."));
             return;
         }
@@ -494,6 +506,7 @@ public sealed class OnlineSession : IDisposable
         SendWelcome(connection);
         UpdateParticipants();
         connection.Send(MessageType.Presence, PresenceMessage());
+        SendCameras(connection);
         _doc.Notify(L($"{request.Name} a rejoint la session."));
     }
 
@@ -580,6 +593,8 @@ public sealed class OnlineSession : IDisposable
             connection.Accepted = false;
             UpdateParticipants();
             SetPresence(connection.Name, []);
+            if (_cameras.Remove(connection.Name))
+                Broadcast(MessageType.Camera, CameraMessage(connection.Name, []));
             if (!quiet)
                 _doc.Notify(ViaRelay && _rejoinKeys.ContainsKey(connection.RejoinKey)
                     ? L($"{connection.Name} a perdu la connexion (il peut revenir).")
@@ -678,6 +693,14 @@ public sealed class OnlineSession : IDisposable
                 _presence = presence;
                 PresenceVersion++;
                 break;
+            case MessageType.Camera:
+                string whose = r.ReadString();
+                var camera = r.ReadBytes();
+                if (camera.Length == 0)
+                    _cameras.Remove(whose);
+                else
+                    _cameras[whose] = camera;
+                break;
         }
     }
 
@@ -746,6 +769,33 @@ public sealed class OnlineSession : IDisposable
             SetPresence(Name, selection);
         else if (!IsLoading)
             _host?.Send(MessageType.Presence, selection);
+    }
+
+    // Shares where this computer's camera is (sent again only when it moved: the caller decides).
+    public void ShareCamera(byte[] camera)
+    {
+        if (IsOver || camera.Length is 0 or > 256)
+            return;
+        if (Role == SessionRole.Host)
+            Broadcast(MessageType.Camera, CameraMessage(Name, camera));
+        else if (!IsLoading)
+            _host?.Send(MessageType.Camera, camera);
+    }
+
+    private static byte[] CameraMessage(string name, byte[] camera) => Payload.Build(w =>
+    {
+        w.Write(name);
+        w.WriteBytes(camera);
+    });
+
+    // Host: a new guest gets where everyone already is (the host's own camera comes with its next move).
+    private void SendCameras(Connection connection)
+    {
+        foreach (var (name, camera) in _cameras)
+        {
+            if (name != connection.Name)
+                connection.Send(MessageType.Camera, CameraMessage(name, camera));
+        }
     }
 
     // Host: one participant's selection changed; everyone gets the whole list.
@@ -883,6 +933,7 @@ public sealed class OnlineSession : IDisposable
         EndReason = reason;
         Status = reason;
         _presence = [];
+        _cameras = [];
         PresenceVersion++;
         _doc.History.Added -= OnAdded;
         _doc.History.Undone -= OnUndone;

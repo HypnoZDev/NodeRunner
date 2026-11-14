@@ -309,6 +309,8 @@ public static partial class English
         ("{0} veut rejoindre la session.", "{0} wants to join the session."),
         ("{0} a rejoint la session.", "{0} joined the session."),
         ("{0} (vous)", "{0} (you)"),
+        ("Aller à sa vue", "Go to their view"),
+        ("La caméra de {0} n'est pas encore connue.", "{0}'s camera is not known yet."),
         ("{0} a sélectionné cet objet en même temps que vous : il lui revient.", "{0} selected this object at the same time as you: it goes to them."),
         ("{0} objet(s) laissé(s) de côté : sélectionnés par un autre participant.", "{0} object(s) left out: selected by another participant."),
         ("Objet sélectionné par {0} : verrouillé tant que cette personne le garde sélectionné.", "Object selected by {0}: locked while they keep it selected."),

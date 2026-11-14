@@ -237,6 +237,79 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         if (Session is { Role: SessionRole.Host, IsOver: false, Code: { } newCode } && code is null)
             state.Notify(L($"Session ouverte : donnez le code {newCode} à vos collègues."));
         UpdatePresence();
+        UpdateCameras();
+    }
+
+    // --- Cameras of the others ---
+
+    public sealed record PeerCamera(string Name, Vector4 Color, Vector3 Position, float Yaw, float Pitch);
+
+    private static readonly TimeSpan CameraInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan CameraRefresh = TimeSpan.FromSeconds(10);
+    private DateTime _cameraSent;
+    private (Vector3 Position, float Yaw, float Pitch) _cameraShared;
+    private object? _cameraParticipants;
+    private List<PeerCamera> _peerCameras = [];
+
+    public IReadOnlyList<PeerCamera> PeerCameras => _peerCameras;
+
+    private void UpdateCameras()
+    {
+        if (Session is not { IsOver: false, IsLoading: false } session)
+        {
+            _peerCameras = [];
+            _cameraParticipants = null;
+            return;
+        }
+        var camera = state.Camera;
+        var now = DateTime.UtcNow;
+        bool moved = Vector3.DistanceSquared(camera.Position, _cameraShared.Position) > 0.01f
+            || MathF.Abs(camera.Yaw - _cameraShared.Yaw) > 0.01f || MathF.Abs(camera.Pitch - _cameraShared.Pitch) > 0.01f;
+        // Sent again when someone arrives (they would not know where we are) and now and then.
+        bool due = moved && now - _cameraSent >= CameraInterval
+            || _cameraParticipants != session.Participants || now - _cameraSent >= CameraRefresh;
+        if (due)
+        {
+            _cameraSent = now;
+            _cameraShared = (camera.Position, camera.Yaw, camera.Pitch);
+            _cameraParticipants = session.Participants;
+            var data = new byte[20];
+            BitConverter.TryWriteBytes(data.AsSpan(0), camera.Position.X);
+            BitConverter.TryWriteBytes(data.AsSpan(4), camera.Position.Y);
+            BitConverter.TryWriteBytes(data.AsSpan(8), camera.Position.Z);
+            BitConverter.TryWriteBytes(data.AsSpan(12), camera.Yaw);
+            BitConverter.TryWriteBytes(data.AsSpan(16), camera.Pitch);
+            session.ShareCamera(data);
+        }
+
+        var participants = session.Participants;
+        var cameras = new List<PeerCamera>();
+        foreach (var (name, data) in session.Cameras)
+        {
+            int index = IndexOf(participants, name);
+            if (name == session.Name || index < 0 || data.Length < 20)
+                continue;
+            var position = new Vector3(BitConverter.ToSingle(data, 0), BitConverter.ToSingle(data, 4), BitConverter.ToSingle(data, 8));
+            float yaw = BitConverter.ToSingle(data, 12), pitch = BitConverter.ToSingle(data, 16);
+            if (!float.IsFinite(position.X + position.Y + position.Z + yaw + pitch))
+                continue;
+            cameras.Add(new PeerCamera(name, ColorOf(index), position, yaw, pitch));
+        }
+        _peerCameras = cameras;
+    }
+
+    // Puts this computer's camera where the participant's is.
+    public void GoToCamera(string name)
+    {
+        if (_peerCameras.Find(c => c.Name == name) is not { } peer)
+        {
+            state.Notify(L($"La caméra de {name} n'est pas encore connue."), warning: true);
+            return;
+        }
+        state.Camera.Yaw = peer.Yaw;
+        state.Camera.Pitch = peer.Pitch;
+        // A little behind: their camera stays in sight.
+        state.Camera.Position = peer.Position - state.Camera.Forward * 4f;
     }
 
     // --- Presence: what the others have selected ---

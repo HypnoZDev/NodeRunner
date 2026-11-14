@@ -147,8 +147,18 @@ public class OnlineSessionTests
         host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [hostDoc.World.Map.Entities[1]]));
         lea.ShareSelection(SelectionCodec.Encode(leaDoc.World.Library, [leaDoc.World.Map.Entities[3]]));
         Pump(() => marc.Presence.ContainsKey("Léa"), all);
+
+        // Cameras: Léa's reaches Marc through the host, the host's reaches both; a newcomer gets those already known.
+        lea.ShareCamera([1, 2, 3]);
+        host.ShareCamera([9]);
+        Pump(() => marc.Cameras.ContainsKey("Léa") && marc.Cameras.ContainsKey("Ben") && lea.Cameras.ContainsKey("Ben"), all);
+        Assert.Equal([1, 2, 3], marc.Cameras["Léa"]);
+        Assert.False(lea.Cameras.ContainsKey("Léa"));
+        var (zoe, _) = Guest(host, hostDoc, "Zoé");
+        Pump(() => zoe.Cameras.ContainsKey("Léa"), host, marc, lea, zoe);
+
         lea.End("Au revoir.");
-        Pump(() => !marc.Presence.ContainsKey("Léa") && marc.Presence.ContainsKey("Ben"), host, marc);
+        Pump(() => !marc.Presence.ContainsKey("Léa") && !marc.Cameras.ContainsKey("Léa") && marc.Presence.ContainsKey("Ben"), host, marc, zoe);
     }
 
     [Fact]

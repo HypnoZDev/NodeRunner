@@ -180,6 +180,12 @@ internal sealed class OnlineWindow(AppState state)
                 ImGui.GetWindowDrawList().AddCircleFilled(dot, 4.5f, Widgets.Col(who == session.Name ? new Vector4(1f, 0.75f, 0.1f, 1f) : OnlineController.ColorOf(i)));
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 16f);
                 ImGui.TextUnformatted(who == session.Name ? L($"{who} (vous)") : who);
+                if (who != session.Name)
+                {
+                    ImGui.SameLine();
+                    if (Widgets.Button(L($"Aller à sa vue##view{i}")))
+                        online.GoToCamera(who);
+                }
                 if (i == 0)
                 {
                     ImGui.SameLine();

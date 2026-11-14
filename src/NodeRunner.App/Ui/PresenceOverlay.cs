@@ -15,7 +15,8 @@ internal sealed class PresenceOverlay(AppState state)
     public void Draw()
     {
         var peers = state.Online.Peers;
-        if (peers.Count == 0 || state.World.Maps is not { } library)
+        var cameras = state.Online.PeerCameras;
+        if (peers.Count == 0 && cameras.Count == 0 || state.World.Maps is not { } library)
             return;
         var (position, size) = DockLayout.SceneArea;
         _origin = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
@@ -24,6 +25,8 @@ internal sealed class PresenceOverlay(AppState state)
 
         var draw = ImGui.GetBackgroundDrawList();
         draw.PushClipRect(_origin, _origin + _size, true);
+        foreach (var camera in cameras)
+            DrawCamera(draw, camera);
         var screen = new Vector2[8];
         var visible = new bool[8];
         foreach (var peer in peers)
@@ -66,6 +69,43 @@ internal sealed class PresenceOverlay(AppState state)
                 DrawName(draw, peer.Entities.Count > 1 ? $"{peer.Name} · {peer.Entities.Count}" : peer.Name, at, color);
         }
         draw.PopClipRect();
+    }
+
+    // A small pyramid pointing where the participant looks, with its name and distance.
+    private void DrawCamera(ImDrawListPtr draw, Online.OnlineController.PeerCamera camera)
+    {
+        uint color = Widgets.Col(camera.Color);
+        float cosPitch = MathF.Cos(camera.Pitch);
+        var forward = new Vector3(cosPitch * MathF.Cos(camera.Yaw), cosPitch * MathF.Sin(camera.Yaw), MathF.Sin(camera.Pitch));
+        var right = new Vector3(MathF.Sin(camera.Yaw), -MathF.Cos(camera.Yaw), 0f);
+        var up = Vector3.Cross(right, forward);
+        float distance = Vector3.Distance(state.Camera.Position, camera.Position);
+        // Grows with distance so it stays visible from afar.
+        float scale = Math.Clamp(distance * 0.03f, 1f, 40f);
+        var apex = camera.Position;
+        var center = apex + forward * 1.6f * scale;
+        Span<Vector3> corners =
+        [
+            center + (right * 0.8f + up * 0.5f) * scale, center + (-right * 0.8f + up * 0.5f) * scale,
+            center + (-right * 0.8f - up * 0.5f) * scale, center + (right * 0.8f - up * 0.5f) * scale,
+        ];
+        if (!TryProject(apex, out var a))
+            return;
+        Span<Vector2> screen = stackalloc Vector2[4];
+        bool all = true;
+        for (int i = 0; i < 4; i++)
+            all &= TryProject(corners[i], out screen[i]);
+        if (all)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                draw.AddLine(a, screen[i], color, 2f);
+                draw.AddLine(screen[i], screen[(i + 1) % 4], color, 2f);
+            }
+        }
+        draw.AddCircleFilled(a, 4f, color);
+        string text = distance < 1000f ? $"{camera.Name} · {distance:0} m" : $"{camera.Name} · {distance / 1000f:0.0} km";
+        DrawName(draw, text, a - new Vector2(0, 6f), color);
     }
 
     private void DrawName(ImDrawListPtr draw, string text, Vector2 at, uint color)
