@@ -55,6 +55,7 @@ internal sealed class MainUi
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);
+        _presence = new PresenceOverlay(state);
         _roomGizmo = new RoomGizmo(state);
         _collisionGizmo = new CollisionGizmo(state, collisionLayer);
         _deleteWindow = new DeleteWindow(state);
@@ -115,6 +116,7 @@ internal sealed class MainUi
     private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
+    private readonly PresenceOverlay _presence;
     private readonly RoomGizmo _roomGizmo;
     private readonly CollisionGizmo _collisionGizmo;
     private readonly DeleteWindow _deleteWindow;
@@ -245,6 +247,7 @@ internal sealed class MainUi
         _statusBar.Draw();
         DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title, LibraryPanel.Title);
         _resetLayout = false;
+        _presence.Draw();
         _gizmo.Update(blocked: _searchPalette.IsOpen);
         _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
         _roomGizmo.Update(blocked: _searchPalette.IsOpen);

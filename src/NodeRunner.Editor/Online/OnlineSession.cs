@@ -44,7 +44,7 @@ public sealed record JoinRequest(int Id, string Name, string Address);
 // too: they undo the session's last change, whoever made it.
 public sealed class OnlineSession : IDisposable
 {
-    public const int ProtocolVersion = 2;
+    public const int ProtocolVersion = 3;
     public const int DefaultPort = 47800;
     public const int MaxParticipants = 5;
 
@@ -77,6 +77,7 @@ public sealed class OnlineSession : IDisposable
     private bool _diverged;
     private bool _applying;
     private int _nextId;
+    private Dictionary<string, byte[]> _presence = [];
 
     private OnlineSession(IOnlineDocument doc, SessionRole role, string name, string appVersion)
     {
@@ -114,6 +115,11 @@ public sealed class OnlineSession : IDisposable
 
     // Number of changes of the session (all participants), undo and redo included.
     public int ChangeCount => _opCount;
+
+    // What each participant has selected (SelectionCodec), this computer's own included; PresenceVersion grows with
+    // every change.
+    public IReadOnlyDictionary<string, byte[]> Presence => _presence;
+    public int PresenceVersion { get; private set; }
 
     // --- Starting ---
 
@@ -419,6 +425,9 @@ public sealed class OnlineSession : IDisposable
                 Broadcast(undo ? MessageType.Undo : MessageType.Redo, Payload.Build(w => w.Write(connection.Name)));
                 _doc.Applied(edit, connection.Name, undo ? SessionAction.Undo : SessionAction.Redo);
                 break;
+            case MessageType.Presence:
+                SetPresence(connection.Name, data);
+                break;
             case MessageType.Bye:
                 _rejoinKeys.Remove(connection.RejoinKey);
                 Drop(connection, null);
@@ -451,6 +460,7 @@ public sealed class OnlineSession : IDisposable
             _redoLog.Clear();
             SendWelcome(connection);
             UpdateParticipants();
+            connection.Send(MessageType.Presence, PresenceMessage());
             _doc.Notify(L($"{back} s'est reconnecté."));
             return;
         }
@@ -483,6 +493,7 @@ public sealed class OnlineSession : IDisposable
         _redoLog.Clear();
         SendWelcome(connection);
         UpdateParticipants();
+        connection.Send(MessageType.Presence, PresenceMessage());
         _doc.Notify(L($"{request.Name} a rejoint la session."));
     }
 
@@ -568,6 +579,7 @@ public sealed class OnlineSession : IDisposable
         {
             connection.Accepted = false;
             UpdateParticipants();
+            SetPresence(connection.Name, []);
             if (!quiet)
                 _doc.Notify(ViaRelay && _rejoinKeys.ContainsKey(connection.RejoinKey)
                     ? L($"{connection.Name} a perdu la connexion (il peut revenir).")
@@ -658,6 +670,14 @@ public sealed class OnlineSession : IDisposable
                 int count = r.ReadInt32();
                 Participants = [.. Enumerable.Range(0, count).Select(_ => r.ReadString())];
                 break;
+            case MessageType.Presence:
+                int people = r.ReadInt32();
+                var presence = new Dictionary<string, byte[]>();
+                for (int i = 0; i < people; i++)
+                    presence[r.ReadString()] = r.ReadBytes();
+                _presence = presence;
+                PresenceVersion++;
+                break;
         }
     }
 
@@ -715,6 +735,43 @@ public sealed class OnlineSession : IDisposable
         _diverged = false;
         _library = _doc.Context?.Library;
         Status = L("Connecté");
+    }
+
+    // Shares what this computer has selected (SelectionCodec; empty = nothing).
+    public void ShareSelection(byte[] selection)
+    {
+        if (IsOver)
+            return;
+        if (Role == SessionRole.Host)
+            SetPresence(Name, selection);
+        else if (!IsLoading)
+            _host?.Send(MessageType.Presence, selection);
+    }
+
+    // Host: one participant's selection changed; everyone gets the whole list.
+    private void SetPresence(string name, byte[] selection)
+    {
+        bool changed = selection.Length > 4 ? !_presence.TryGetValue(name, out var old) || !old.AsSpan().SequenceEqual(selection) : _presence.Remove(name);
+        if (!changed)
+            return;
+        if (selection.Length > 4)
+            _presence[name] = selection;
+        PresenceVersion++;
+        Broadcast(MessageType.Presence, PresenceMessage());
+    }
+
+    private byte[] PresenceMessage()
+    {
+        var presence = _presence;
+        return Payload.Build(w =>
+        {
+            w.Write(presence.Count);
+            foreach (var (name, selection) in presence)
+            {
+                w.Write(name);
+                w.WriteBytes(selection);
+            }
+        });
     }
 
     // Guest: asks the host to undo (or redo) the session's last change; false if it cannot now.
@@ -825,6 +882,8 @@ public sealed class OnlineSession : IDisposable
             return;
         EndReason = reason;
         Status = reason;
+        _presence = [];
+        PresenceVersion++;
         _doc.History.Added -= OnAdded;
         _doc.History.Undone -= OnUndone;
         _doc.History.Redone -= OnRedone;

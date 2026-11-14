@@ -120,6 +120,38 @@ public class OnlineSessionTests
     }
 
     [Fact]
+    public void Everyone_sees_what_the_others_have_selected()
+    {
+        var hostDoc = new Doc();
+        using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start, port: 47930);
+        var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
+        var (lea, leaDoc) = Guest(host, hostDoc, "Léa");
+        var all = new[] { host, marc, lea };
+
+        List<MapEntity> SeenBy(OnlineSession session, Doc doc, string who) =>
+            session.Presence.TryGetValue(who, out var data) ? SelectionCodec.Decode(data, doc.Context!) : [];
+
+        // Marc selects two objects: the host and Léa find the same ones on their map.
+        marc.ShareSelection(SelectionCodec.Encode(marcDoc.World.Library, [marcDoc.World.Map.Entities[2], marcDoc.World.Map.Entities[0]]));
+        Pump(() => SeenBy(lea, leaDoc, "Marc").Count == 2 && SeenBy(host, hostDoc, "Marc").Count == 2, all);
+        Assert.Same(leaDoc.World.Map.Entities[0], SeenBy(lea, leaDoc, "Marc")[1]);
+
+        // The host's own selection reaches the guests too.
+        host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [hostDoc.World.Map.Entities[1]]));
+        Pump(() => SeenBy(marc, marcDoc, "Ben").Count == 1, all);
+        Assert.Same(marcDoc.World.Map.Entities[1], SeenBy(marc, marcDoc, "Ben")[0]);
+
+        // Nothing selected, or gone: removed from the list.
+        marc.ShareSelection(SelectionCodec.Encode(marcDoc.World.Library, []));
+        Pump(() => !lea.Presence.ContainsKey("Marc"), all);
+        host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [hostDoc.World.Map.Entities[1]]));
+        lea.ShareSelection(SelectionCodec.Encode(leaDoc.World.Library, [leaDoc.World.Map.Entities[3]]));
+        Pump(() => marc.Presence.ContainsKey("Léa"), all);
+        lea.End("Au revoir.");
+        Pump(() => !marc.Presence.ContainsKey("Léa") && marc.Presence.ContainsKey("Ben"), host, marc);
+    }
+
+    [Fact]
     public void A_change_that_crosses_another_is_refused_and_the_guest_resynced()
     {
         var hostDoc = new Doc();

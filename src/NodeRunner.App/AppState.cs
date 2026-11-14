@@ -168,6 +168,8 @@ internal sealed class AppState
 
     public void Select(MapEntity? entity)
     {
+        if (entity is not null && IsLocked(entity))
+            return;
         _selection.Clear();
         SelectedPathNode = null;
         SelectedOccluder = null;
@@ -184,7 +186,26 @@ internal sealed class AppState
     public void SelectAll(IReadOnlyList<MapEntity> entities)
     {
         Select(null);
-        _selection.AddRange(entities.Distinct());
+        var free = entities.Distinct().Where(e => Online?.LockedBy(e) is null).ToList();
+        if (free.Count < entities.Distinct().Count())
+            Notify(L($"{entities.Distinct().Count() - free.Count} objet(s) laissé(s) de côté : sélectionnés par un autre participant."), warning: true);
+        _selection.AddRange(free);
+    }
+
+    // Online: an object another participant has selected cannot be selected here.
+    private bool IsLocked(MapEntity entity)
+    {
+        if (Online?.LockedBy(entity) is not { } who)
+            return false;
+        Notify(L($"Objet sélectionné par {who} : verrouillé tant que cette personne le garde sélectionné."), warning: true);
+        return true;
+    }
+
+    // Takes these objects out of the selection.
+    public void Deselect(IReadOnlyCollection<MapEntity> entities)
+    {
+        if (_selectionLibrary == World.Maps)
+            _selection.RemoveAll(e => entities.Contains(e));
     }
 
     // The selected objects that can be moved, the main one last.
@@ -197,7 +218,7 @@ internal sealed class AppState
     {
         if (_selectionLibrary != World.Maps)
             Select(null);
-        if (!_selection.Remove(entity))
+        if (!_selection.Remove(entity) && !IsLocked(entity))
             _selection.Add(entity);
     }
 

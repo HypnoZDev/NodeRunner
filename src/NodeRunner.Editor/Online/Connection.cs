@@ -19,6 +19,7 @@ internal enum MessageType : byte
     Bye = 10,
     UndoRequest = 11,
     RedoRequest = 12,
+    Presence = 13,
 }
 
 // One link to another computer: frames of [length][type][data], read and written on background tasks. Messages read

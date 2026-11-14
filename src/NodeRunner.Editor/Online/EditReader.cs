@@ -14,6 +14,9 @@ public sealed class EditReader : IDisposable
 
     public required EditContext Context { get; init; }
 
+    // Only finds objects: a map made by the user that is not here yet is an error, not created.
+    public bool FindOnly { get; init; }
+
     private MapLibrary Library => Context.Library;
 
     public bool AtEnd => _reader.BaseStream.Position == _reader.BaseStream.Length;
@@ -50,7 +53,8 @@ public sealed class EditReader : IDisposable
         if (_reader.ReadBoolean())
         {
             string fileName = _reader.ReadString();
-            return Library.FindCustomMap(fileName) ?? Library.CreateCustomMap(fileName);
+            return Library.FindCustomMap(fileName)
+                ?? (FindOnly ? throw new InvalidDataException($"Map {fileName} not here.") : Library.CreateCustomMap(fileName));
         }
         uint nameHash = _reader.ReadUInt32();
         int ordinal = _reader.ReadInt32();

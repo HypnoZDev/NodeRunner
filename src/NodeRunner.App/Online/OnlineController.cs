@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Numerics;
+using NodeRunner.Data.Maps;
 using NodeRunner.App.World;
 using NodeRunner.Editor;
 using NodeRunner.Editor.Online;
@@ -234,5 +236,96 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         Session?.Update();
         if (Session is { Role: SessionRole.Host, IsOver: false, Code: { } newCode } && code is null)
             state.Notify(L($"Session ouverte : donnez le code {newCode} à vos collègues."));
+        UpdatePresence();
+    }
+
+    // --- Presence: what the others have selected ---
+
+    // Another participant's selection, in its color (the same on every computer: its place in the participant list).
+    public sealed record Peer(string Name, Vector4 Color, IReadOnlyList<MapEntity> Entities);
+
+    private static readonly Vector4[] PeerColors =
+    [
+        new(0.20f, 0.85f, 0.75f, 1f),
+        new(1.00f, 0.40f, 0.65f, 1f),
+        new(0.55f, 0.90f, 0.25f, 1f),
+        new(0.72f, 0.52f, 1.00f, 1f),
+        new(0.35f, 0.78f, 1.00f, 1f),
+    ];
+
+    public static Vector4 ColorOf(int participant) => PeerColors[participant % PeerColors.Length];
+
+    private List<MapEntity> _shared = [];
+    private OnlineSession? _sharedWith;
+    private List<Peer> _peers = [];
+    private readonly Dictionary<MapEntity, string> _locks = new(ReferenceEqualityComparer.Instance);
+    private (OnlineSession?, int, int, object?, MapLibrary?) _peersFrom;
+
+    public IReadOnlyList<Peer> Peers => _peers;
+
+    // The participant who has this object selected (null: free, or selected here).
+    public string? LockedBy(MapEntity entity) => _locks.Count > 0 && _locks.TryGetValue(entity, out var name) ? name : null;
+
+    private void UpdatePresence()
+    {
+        if (Session is not { IsOver: false, IsLoading: false } session || state.World is not { Maps: { } library, IsBusy: false }
+            || Context is not { } context)
+        {
+            if (_peers.Count > 0 || _locks.Count > 0)
+            {
+                _peers = [];
+                _locks.Clear();
+            }
+            _sharedWith = null;
+            return;
+        }
+
+        var selected = state.SelectedEntities;
+        if (_sharedWith != session || !selected.SequenceEqual(_shared, ReferenceEqualityComparer.Instance))
+        {
+            _shared = [.. selected];
+            _sharedWith = session;
+            session.ShareSelection(SelectionCodec.Encode(library, _shared));
+        }
+
+        var from = (session, session.PresenceVersion, session.ChangeCount, (object)session.Participants, library);
+        if (from == _peersFrom)
+            return;
+        _peersFrom = from;
+        _peers = [];
+        _locks.Clear();
+        var participants = session.Participants;
+        foreach (var (name, data) in session.Presence)
+        {
+            int index = IndexOf(participants, name);
+            if (name == session.Name || index < 0)
+                continue;
+            var entities = SelectionCodec.Decode(data, context);
+            if (entities.Count == 0)
+                continue;
+            _peers.Add(new Peer(name, ColorOf(index), entities));
+            foreach (var entity in entities)
+                _locks.TryAdd(entity, name);
+        }
+        _peers.Sort((a, b) => IndexOf(participants, a.Name).CompareTo(IndexOf(participants, b.Name)));
+
+        // Both took the same object at the same moment: the one higher in the list keeps it.
+        int me = IndexOf(participants, session.Name);
+        var lost = selected.Where(e => LockedBy(e) is { } other && IndexOf(participants, other) < me).ToList();
+        if (lost.Count > 0)
+        {
+            state.Deselect(lost);
+            state.Notify(L($"{LockedBy(lost[0])} a sélectionné cet objet en même temps que vous : il lui revient."), warning: true);
+        }
+    }
+
+    private static int IndexOf(IReadOnlyList<string> names, string name)
+    {
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (names[i] == name)
+                return i;
+        }
+        return -1;
     }
 }

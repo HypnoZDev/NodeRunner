@@ -175,7 +175,11 @@ internal sealed class OnlineWindow(AppState state)
             for (int i = 0; i < session.Participants.Count; i++)
             {
                 string who = session.Participants[i];
-                ImGui.TextUnformatted(who == session.Name ? $"{who} (vous)" : who);
+                // Its color: how its selection shows in the 3D view.
+                var dot = ImGui.GetCursorScreenPos() + new Vector2(5f, ImGui.GetTextLineHeight() / 2);
+                ImGui.GetWindowDrawList().AddCircleFilled(dot, 4.5f, Widgets.Col(who == session.Name ? new Vector4(1f, 0.75f, 0.1f, 1f) : OnlineController.ColorOf(i)));
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 16f);
+                ImGui.TextUnformatted(who == session.Name ? L($"{who} (vous)") : who);
                 if (i == 0)
                 {
                     ImGui.SameLine();
