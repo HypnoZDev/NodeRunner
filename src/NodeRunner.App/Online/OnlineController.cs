@@ -318,7 +318,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     // --- Presence: what the others have selected ---
 
     // Another participant's selection, in its color (the same on every computer: its place in the participant list).
-    public sealed record Peer(string Name, Vector4 Color, IReadOnlyList<MapEntity> Entities);
+    public sealed record Peer(string Name, Vector4 Color, IReadOnlyList<MapEntity> Entities, (Vector3 Center, float Radius, string What)? Item);
 
     private static readonly Vector4[] PeerColors =
     [
@@ -332,6 +332,8 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     public static Vector4 ColorOf(int participant) => PeerColors[participant % PeerColors.Length];
 
     private List<MapEntity> _shared = [];
+    private byte[]? _sharedItem;
+    private readonly Dictionary<string, string> _itemLocks = [];
     private OnlineSession? _sharedWith;
     private List<Peer> _peers = [];
     private readonly Dictionary<MapEntity, string> _locks = new(ReferenceEqualityComparer.Instance);
@@ -342,26 +344,34 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     // The participant who has this object selected (null: free, or selected here).
     public string? LockedBy(MapEntity entity) => _locks.Count > 0 && _locks.TryGetValue(entity, out var name) ? name : null;
 
+    // The same for another element (SelectedItem), given as a function so nothing is written outside a session.
+    public string? LockedBy(Func<byte[]?> item) =>
+        _itemLocks.Count > 0 && item() is { Length: > 0 } bytes && _itemLocks.TryGetValue(Convert.ToHexString(bytes), out var name) ? name : null;
+
     private void UpdatePresence()
     {
         if (Session is not { IsOver: false, IsLoading: false } session || state.World is not { Maps: { } library, IsBusy: false }
             || Context is not { } context)
         {
-            if (_peers.Count > 0 || _locks.Count > 0)
+            if (_peers.Count > 0 || _locks.Count > 0 || _itemLocks.Count > 0)
             {
                 _peers = [];
                 _locks.Clear();
+                _itemLocks.Clear();
             }
             _sharedWith = null;
             return;
         }
 
         var selected = state.SelectedEntities;
-        if (_sharedWith != session || !selected.SequenceEqual(_shared, ReferenceEqualityComparer.Instance))
+        var item = SelectedItem.Of(state);
+        if (_sharedWith != session || !selected.SequenceEqual(_shared, ReferenceEqualityComparer.Instance)
+            || !(item ?? []).AsSpan().SequenceEqual(_sharedItem ?? []))
         {
             _shared = [.. selected];
+            _sharedItem = item;
             _sharedWith = session;
-            session.ShareSelection(SelectionCodec.Encode(library, _shared));
+            session.ShareSelection(SelectionCodec.Encode(library, _shared, item));
         }
 
         var from = (session, session.PresenceVersion, session.ChangeCount, (object)session.Participants, library);
@@ -370,6 +380,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         _peersFrom = from;
         _peers = [];
         _locks.Clear();
+        _itemLocks.Clear();
         var participants = session.Participants;
         foreach (var (name, data) in session.Presence)
         {
@@ -377,9 +388,13 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             if (name == session.Name || index < 0)
                 continue;
             var entities = SelectionCodec.Decode(data, context);
-            if (entities.Count == 0)
+            var theirs = SelectionCodec.DecodeItem(data);
+            var located = theirs is null ? null : SelectedItem.Locate(theirs, state);
+            if (theirs is not null)
+                _itemLocks.TryAdd(Convert.ToHexString(theirs), name);
+            if (entities.Count == 0 && located is null)
                 continue;
-            _peers.Add(new Peer(name, ColorOf(index), entities));
+            _peers.Add(new Peer(name, ColorOf(index), entities, located));
             foreach (var entity in entities)
                 _locks.TryAdd(entity, name);
         }
@@ -392,6 +407,11 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         {
             state.Deselect(lost);
             state.Notify(L($"{LockedBy(lost[0])} a sélectionné cet objet en même temps que vous : il lui revient."), warning: true);
+        }
+        if (item is not null && _itemLocks.TryGetValue(Convert.ToHexString(item), out var holder) && IndexOf(participants, holder) < me)
+        {
+            state.Select(null);
+            state.Notify(L($"{holder} a sélectionné cet élément en même temps que vous : il lui revient."), warning: true);
         }
     }
 

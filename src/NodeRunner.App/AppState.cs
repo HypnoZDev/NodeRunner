@@ -61,6 +61,8 @@ internal sealed class AppState
         get => _selectedNodeNetwork == World.PathNetwork ? _selectedNode : null;
         set
         {
+            if (value is not null && IsItemLocked(() => NodeRunner.App.Online.SelectedItem.Node(value)))
+                return;
             _selectedNode = value;
             _selectedNodeNetwork = World.PathNetwork;
         }
@@ -76,6 +78,8 @@ internal sealed class AppState
         get => _selectedOccluderLibrary == World.Maps && _selectedOccluder is { } o && !o.File.IsDeleted(o.Kind, o.Index) ? o : null;
         set
         {
+            if (value is not null && IsItemLocked(() => NodeRunner.App.Online.SelectedItem.Occluder(value)))
+                return;
             _selectedOccluder = value;
             _selectedOccluderLibrary = World.Maps;
         }
@@ -90,6 +94,8 @@ internal sealed class AppState
         get => _selectedRoomLibrary == World.Maps && _selectedRoom is { Interior.IsDeleted: false } room ? room : null;
         private set
         {
+            if (value is not null && IsItemLocked(() => World.Maps is { } library ? NodeRunner.App.Online.SelectedItem.Room(library, value) : null))
+                return;
             _selectedRoom = value;
             _selectedRoomLibrary = World.Maps;
         }
@@ -110,6 +116,8 @@ internal sealed class AppState
         get => _selectedPortalLibrary == World.Maps && _selectedPortal is { Interior.IsDeleted: false } portal ? portal : null;
         private set
         {
+            if (value is not null && IsItemLocked(() => World.Maps is { } library ? NodeRunner.App.Online.SelectedItem.Room(library, value, portal: true) : null))
+                return;
             _selectedPortal = value;
             _selectedPortalLibrary = World.Maps;
         }
@@ -130,6 +138,8 @@ internal sealed class AppState
         get => _selectedCarGeneratorLibrary == World.Maps && _selectedCarGenerator is { Spot: not null } s ? s : null;
         set
         {
+            if (value is not null && IsItemLocked(() => World.Maps is { } library ? NodeRunner.App.Online.SelectedItem.CarGenerator(library, value) : null))
+                return;
             _selectedCarGenerator = value;
             _selectedCarGeneratorLibrary = World.Maps;
         }
@@ -143,6 +153,8 @@ internal sealed class AppState
         get => _selectedTimecycleLibrary == World.Maps && _selectedTimecycle is { Zone: not null } z ? z : null;
         set
         {
+            if (value is not null && IsItemLocked(() => World.Maps is { } library ? NodeRunner.App.Online.SelectedItem.Timecycle(library, value) : null))
+                return;
             _selectedTimecycle = value;
             _selectedTimecycleLibrary = World.Maps;
         }
@@ -157,6 +169,8 @@ internal sealed class AppState
         get => _selectedLodLightLibrary == World.Maps && _selectedLodLight is { Light: not null } l ? l : null;
         set
         {
+            if (value is not null && IsItemLocked(() => World.Maps is { } library ? NodeRunner.App.Online.SelectedItem.Light(library, value) : null))
+                return;
             _selectedLodLight = value;
             _selectedLodLightLibrary = World.Maps;
         }
@@ -198,6 +212,14 @@ internal sealed class AppState
         if (Online?.LockedBy(entity) is not { } who)
             return false;
         Notify(L($"Objet sélectionné par {who} : verrouillé tant que cette personne le garde sélectionné."), warning: true);
+        return true;
+    }
+
+    private bool IsItemLocked(Func<byte[]?> item)
+    {
+        if (Online?.LockedBy(item) is not { } who)
+            return false;
+        Notify(L($"Élément sélectionné par {who} : verrouillé tant que cette personne le garde sélectionné."), warning: true);
         return true;
     }
 

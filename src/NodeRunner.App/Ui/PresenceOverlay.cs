@@ -65,6 +65,16 @@ internal sealed class PresenceOverlay(AppState state)
                 if (label is null && any && TryProject(Vector3.Transform((min + max) / 2, transform), out var center))
                     label = new Vector2(center.X, top.Y);
             }
+            if (peer.Item is { } item && TryProject(item.Center, out var middle))
+            {
+                // Its size on screen, from a point at its radius beside it.
+                float radius = TryProject(item.Center + state.Camera.Right * MathF.Max(item.Radius, 0.5f), out var side)
+                    ? Math.Clamp(Vector2.Distance(middle, side), 8f, 400f) : 8f;
+                draw.AddCircle(middle, radius, color, 48, 2.5f);
+                draw.AddCircleFilled(middle, 3f, color);
+                if (label is null)
+                    DrawName(draw, $"{peer.Name} · {item.What}", middle - new Vector2(0, radius), color);
+            }
             if (label is { } at)
                 DrawName(draw, peer.Entities.Count > 1 ? $"{peer.Name} · {peer.Entities.Count}" : peer.Name, at, color);
         }

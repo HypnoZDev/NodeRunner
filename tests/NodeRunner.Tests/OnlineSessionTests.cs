@@ -141,6 +141,12 @@ public class OnlineSessionTests
         Pump(() => SeenBy(marc, marcDoc, "Ben").Count == 1, all);
         Assert.Same(marcDoc.World.Map.Entities[1], SeenBy(marc, marcDoc, "Ben")[0]);
 
+        // Another element (a road node...) instead of objects: its bytes reach the others as they are.
+        host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [], [7, 1, 2]));
+        Pump(() => marc.Presence.TryGetValue("Ben", out var d) && SelectionCodec.DecodeItem(d) is [7, 1, 2], all);
+        Assert.Empty(SeenBy(marc, marcDoc, "Ben"));
+        Assert.Null(SelectionCodec.DecodeItem(marc.Presence["Marc"]));
+
         // Nothing selected, or gone: removed from the list.
         marc.ShareSelection(SelectionCodec.Encode(marcDoc.World.Library, []));
         Pump(() => !lea.Presence.ContainsKey("Marc"), all);

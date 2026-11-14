@@ -766,7 +766,7 @@ public sealed class OnlineSession : IDisposable
         Status = L("Connecté");
     }
 
-    // Shares what this computer has selected (SelectionCodec; empty = nothing).
+    // Shares what this computer has selected (SelectionCodec).
     public void ShareSelection(byte[] selection)
     {
         if (IsOver)
@@ -807,10 +807,10 @@ public sealed class OnlineSession : IDisposable
     // Host: one participant's selection changed; everyone gets the whole list.
     private void SetPresence(string name, byte[] selection)
     {
-        bool changed = selection.Length > 4 ? !_presence.TryGetValue(name, out var old) || !old.AsSpan().SequenceEqual(selection) : _presence.Remove(name);
+        bool changed = selection.Length > 0 ? !_presence.TryGetValue(name, out var old) || !old.AsSpan().SequenceEqual(selection) : _presence.Remove(name);
         if (!changed)
             return;
-        if (selection.Length > 4)
+        if (selection.Length > 0)
             _presence[name] = selection;
         PresenceVersion++;
         Broadcast(MessageType.Presence, PresenceMessage());
