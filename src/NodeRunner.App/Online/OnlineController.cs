@@ -304,12 +304,18 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
 
     public sealed record PeerCamera(string Name, Vector4 Color, Vector3 Position, float Yaw, float Pitch);
 
-    private static readonly TimeSpan CameraInterval = TimeSpan.FromMilliseconds(200);
-    private static readonly TimeSpan CameraRefresh = TimeSpan.FromSeconds(10);
+    // Few messages: every relay message wakes the session's room, and the relay's daily quota is shared by everyone.
+    // The others' cameras glide between two positions, so the low rate does not show.
+    private static readonly TimeSpan CameraInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan CameraRefresh = TimeSpan.FromSeconds(60);
+    private const float CameraGlide = 6f; // per second
+    private const float CameraJump = 300f; // farther than this: no glide
     private DateTime _cameraSent;
     private (Vector3 Position, float Yaw, float Pitch) _cameraShared;
     private object? _cameraParticipants;
     private List<PeerCamera> _peerCameras = [];
+    private readonly Dictionary<string, (Vector3 Position, float Yaw, float Pitch)> _cameraShown = [];
+    private readonly System.Diagnostics.Stopwatch _cameraClock = System.Diagnostics.Stopwatch.StartNew();
 
     public IReadOnlyList<PeerCamera> PeerCameras => _peerCameras;
 
@@ -318,6 +324,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         if (Session is not { IsOver: false, IsLoading: false } session)
         {
             _peerCameras = [];
+            _cameraShown.Clear();
             _cameraParticipants = null;
             return;
         }
@@ -342,6 +349,9 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             session.ShareCamera(data);
         }
 
+        float elapsed = (float)_cameraClock.Elapsed.TotalSeconds;
+        _cameraClock.Restart();
+        float glide = 1f - MathF.Exp(-CameraGlide * MathF.Min(elapsed, 1f));
         var participants = session.Participants;
         var cameras = new List<PeerCamera>();
         foreach (var (name, data) in session.Cameras)
@@ -353,10 +363,23 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             float yaw = BitConverter.ToSingle(data, 12), pitch = BitConverter.ToSingle(data, 16);
             if (!float.IsFinite(position.X + position.Y + position.Z + yaw + pitch))
                 continue;
+            if (_cameraShown.TryGetValue(name, out var shown) && Vector3.Distance(shown.Position, position) < CameraJump)
+            {
+                position = Vector3.Lerp(shown.Position, position, glide);
+                yaw = shown.Yaw + Angle(yaw - shown.Yaw) * glide;
+                pitch = shown.Pitch + (pitch - shown.Pitch) * glide;
+            }
+            _cameraShown[name] = (position, yaw, pitch);
             cameras.Add(new PeerCamera(name, ColorOf(index), position, yaw, pitch));
         }
+        if (_cameraShown.Count > cameras.Count)
+            foreach (var name in _cameraShown.Keys.Where(n => !cameras.Exists(c => c.Name == n)).ToList())
+                _cameraShown.Remove(name);
         _peerCameras = cameras;
     }
+
+    // The same angle between -pi and pi (the shortest way round).
+    private static float Angle(float radians) => MathF.IEEERemainder(radians, MathF.Tau);
 
     // Puts this computer's camera where the participant's is.
     public void GoToCamera(string name)

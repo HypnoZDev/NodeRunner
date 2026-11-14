@@ -81,6 +81,9 @@ internal sealed class TcpLink : Link
 }
 
 // The relay closed the link; Code is the relay's close code (see relay/src/index.js).
+internal sealed class RelayBusyException(Exception inner) : IOException(
+    L("NodeRunner Online est saturé pour aujourd'hui (limite gratuite du relais atteinte). Réessayez demain ; sur un même réseau, « Réseau local seulement » ne passe pas par le relais."), inner);
+
 internal sealed class RelayClosedException(int code, string message) : IOException(message)
 {
     public int Code { get; } = code;
@@ -124,6 +127,7 @@ internal static class Relay
         var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.Zero; // pings sent as messages (answered by the relay itself)
         socket.Options.SetRequestHeader("User-Agent", "NodeRunner");
+        socket.Options.CollectHttpResponseDetails = true;
         try
         {
             await socket.ConnectAsync(uri, cancel);
@@ -131,7 +135,11 @@ internal static class Relay
         }
         catch (Exception ex) when (ex is WebSocketException or HttpRequestException)
         {
+            var status = socket.HttpStatusCode;
             socket.Dispose();
+            // 429: the relay's free daily quota is used up (it comes back the next day); 503: the relay says it is full.
+            if (status is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.ServiceUnavailable)
+                throw new RelayBusyException(ex);
             throw new IOException(L($"relais injoignable ({ex.Message})"), ex);
         }
         catch

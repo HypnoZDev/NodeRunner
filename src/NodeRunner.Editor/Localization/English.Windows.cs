@@ -375,6 +375,8 @@ public static partial class English
         ("message trop gros pour le relais", "message too big for the relay"),
         ("relais", "relay"),
         ("relais injoignable ({0})", "relay unreachable ({0})"),
+        ("NodeRunner Online est saturé pour aujourd'hui (limite gratuite du relais atteinte). Réessayez demain ; sur un même réseau, « Réseau local seulement » ne passe pas par le relais.",
+            "NodeRunner Online is full for today (the relay's free limit has been reached). Try again tomorrow; on the same network, \"Local network only\" does not go through the relay."),
         ("session complète", "session full"),
         ("session terminée", "session ended"),
         ("{0} a perdu la connexion (il peut revenir).", "{0} lost the connection (they can come back)."),

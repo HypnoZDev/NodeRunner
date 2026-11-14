@@ -22,6 +22,16 @@ const TOO_BIG = 4009;
 
 export default {
   async fetch(request, env) {
+    try {
+      return await route(request, env);
+    } catch {
+      // A room that cannot run (daily quota used up): NodeRunner shows "full for today".
+      return new Response("Relay busy\n", { status: 503 });
+    }
+  },
+};
+
+async function route(request, env) {
     const url = new URL(request.url);
     if (request.headers.get("Upgrade") !== "websocket")
       return new Response("NodeRunner Online relay\n", { headers: { "content-type": "text/plain" } });
@@ -49,8 +59,7 @@ export default {
       return room(env, code).fetch(forward(request, code, {}, "/join"));
     }
     return new Response("Not found\n", { status: 404 });
-  },
-};
+}
 
 function room(env, code) {
   return env.ROOMS.get(env.ROOMS.idFromName(code));
