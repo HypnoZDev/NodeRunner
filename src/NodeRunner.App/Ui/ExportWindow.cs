@@ -26,6 +26,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     private bool _resultInstalled;
     private List<string>? _installed;
     private bool _modsOutdated;
+    private SoloPackInstaller.Support _support = SoloPackInstaller.Support.NoGame;
+    private double _supportCheckedAt;
 
     // Check before export, run in the background when the window opens and when the folder or the name changes.
     private Task<ExportChecker.Result>? _checking;
@@ -162,13 +164,16 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         if (maps.Count > 0)
             DrawCheck(maps.Count);
 
+        if (_solo && _support is SoloPackInstaller.Support.NoModsLoader or SoloPackInstaller.Support.NoAsiLoader)
+            DrawModsAssistant();
+
         ImGui.Dummy(new Vector2(0, 4));
         bool hasChanges = maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
         if (_solo)
         {
             FinishInstall();
             bool busy = _installing is not null;
-            ImGui.BeginDisabled(!hasChanges || !nameValid || busy || SoloPackInstaller.Check(state.Game) != SoloPackInstaller.Support.Ready);
+            ImGui.BeginDisabled(!hasChanges || !nameValid || busy || _support != SoloPackInstaller.Support.Ready);
             if (Widgets.PrimaryButton(L($"{Icons.ArrowDownToLine}  Installer dans le jeu"), 190f))
                 Install(maps, pathAreas);
             ImGui.EndDisabled();
@@ -208,7 +213,9 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     {
         _installed = null;
         _modsOutdated = false;
-        if (state.Game is not { } game || SoloPackInstaller.Check(game) is SoloPackInstaller.Support.Enhanced or SoloPackInstaller.Support.NoGame)
+        _support = SoloPackInstaller.Check(state.Game);
+        _supportCheckedAt = ImGui.GetTime();
+        if (state.Game is not { } game || _support is SoloPackInstaller.Support.Enhanced or SoloPackInstaller.Support.NoGame)
             return;
         try
         {
@@ -390,16 +397,87 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
 
         Widgets.Property(L("Jeu"), L("GTA V solo lit les packs du dossier mods grâce à OpenIV.asi"));
         ImGui.AlignTextToFramePadding();
-        var (text, color) = SoloPackInstaller.Check(state.Game) switch
+        var (text, color) = _support switch
         {
-            SoloPackInstaller.Support.Ready => (L("dossier mods prêt (OpenIV.asi trouvé)"), UiTheme.TextMuted),
-            SoloPackInstaller.Support.NoModsLoader => (L("OpenIV.asi absent : installe-le avec OpenIV (Outils > ASI Manager), le jeu ne lit pas le dossier mods sans lui"), UiTheme.Warning),
+            SoloPackInstaller.Support.Ready => (L("dossier mods prêt (OpenIV.asi et chargeur ASI trouvés)"), UiTheme.TextMuted),
+            SoloPackInstaller.Support.NoModsLoader or SoloPackInstaller.Support.NoAsiLoader =>
+                (L("le jeu ne lit pas encore le dossier mods : suis les étapes ci-dessous"), UiTheme.Warning),
             SoloPackInstaller.Support.Enhanced => (L("GTA V Enhanced : installation pas encore possible, enregistre le dlc.rpf"), UiTheme.Warning),
             _ => (L("dossier du jeu inconnu"), UiTheme.Warning),
         };
         ImGui.TextColored(color, Widgets.Fit(text, ImGui.GetContentRegionAvail().X));
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(text);
+    }
+
+    // Guides the user through OpenIV's ASI Manager: NodeRunner does not install these files itself (they hook into the
+    // game, OpenIV keeps them working after each game update).
+    private void DrawModsAssistant()
+    {
+        if (state.Game is not { } game)
+            return;
+        // Checked again every 2 seconds: what is installed in OpenIV shows up here by itself.
+        if (ImGui.GetTime() - _supportCheckedAt > 2.0)
+        {
+            var before = _support;
+            _support = SoloPackInstaller.Check(game);
+            _supportCheckedAt = ImGui.GetTime();
+            if (_support != before)
+                RefreshInstalled();
+            if (_support == SoloPackInstaller.Support.Ready)
+            {
+                _result = (L("Le jeu est prêt pour les mods : tu peux installer le pack."), true, null);
+                _resultInstalled = false;
+                return;
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0, 4));
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L($"{Icons.Settings}  Préparer le jeu pour les mods"));
+        ImGui.PopFont();
+        Widgets.Hint(L("GTA V solo ne lit le dossier mods qu'avec deux petits fichiers, installés une fois pour toutes avec OpenIV ")
+            + L("(gratuit). NodeRunner ne les installe pas lui-même : OpenIV les tient à jour après chaque mise à jour du jeu."), wrap: true);
+
+        string? loader = SoloPackInstaller.AsiLoader(game);
+        DrawRequirement(loader is not null, loader is not null ? L($"Chargeur ASI ({loader})") : L("Chargeur ASI (dinput8.dll)"));
+        DrawRequirement(SoloPackInstaller.HasModsLoader(game), SoloPackInstaller.ModsLoader);
+
+        ImGui.Dummy(new Vector2(0, 2));
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted(L("1. Télécharge et installe OpenIV."));
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Globe}  Ouvrir openiv.com"), L("Ouvre le site officiel d'OpenIV dans le navigateur")))
+            OpenInBrowser(SoloPackInstaller.OpenIvUrl);
+        ImGui.TextWrapped(L("2. Lance OpenIV, choisis « GTA V » pour « Windows », puis indique le dossier du jeu :"));
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextColored(UiTheme.AccentText, Widgets.Fit(game.FolderPath, ImGui.GetContentRegionAvail().X - 100 * UiTheme.Scale));
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Copy}  Copier##gamefolder"), L("Copier le chemin du dossier du jeu")))
+            ImGui.SetClipboardText(game.FolderPath);
+        ImGui.TextWrapped(L("3. Dans OpenIV : menu « Outils » > « ASI Manager ». Installe « ASI Loader », puis « OpenIV.asi »."));
+        ImGui.TextWrapped(L("4. Reviens ici : les deux lignes ci-dessus passent au vert toutes seules."));
+        if (Widgets.Button(L($"{Icons.RefreshCw}  Vérifier à nouveau")))
+            RefreshInstalled();
+    }
+
+    private static void DrawRequirement(bool present, string label)
+    {
+        ImGui.TextColored(present ? UiTheme.Success : UiTheme.Warning,
+            present ? L($"{Icons.Check}  {label} : trouvé") : L($"{Icons.X}  {label} : absent"));
+    }
+
+    private static void OpenInBrowser(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // No browser: the address goes to the clipboard.
+            ImGui.SetClipboardText(url);
+        }
     }
 
     private static void DrawMapList(IReadOnlyList<MapData> maps)

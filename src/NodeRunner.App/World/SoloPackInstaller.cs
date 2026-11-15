@@ -11,10 +11,15 @@ namespace NodeRunner.App.World;
 // The game's own files are never written.
 internal static class SoloPackInstaller
 {
-    public enum Support { Ready, NoModsLoader, Enhanced, NoGame }
+    public enum Support { Ready, NoModsLoader, NoAsiLoader, Enhanced, NoGame }
 
-    // The mods folder is read by OpenIV.asi (loaded by an ASI loader).
+    // The mods folder is read by OpenIV.asi, itself loaded by an ASI loader (a DLL the game loads by its name).
     public const string ModsLoader = "OpenIV.asi";
+
+    public const string OpenIvUrl = "https://openiv.com";
+
+    // Names an ASI loader takes in the game folder (OpenIV's ASI Manager installs dinput8.dll); the game ships none.
+    private static readonly string[] AsiLoaderNames = ["dinput8.dll", "version.dll", "winmm.dll", "dsound.dll", "xinput1_3.dll"];
 
     private const long SpareSpace = 256L * 1024 * 1024;
 
@@ -24,8 +29,16 @@ internal static class SoloPackInstaller
             return Support.NoGame;
         if (game.Edition == GameEdition.Enhanced)
             return Support.Enhanced;
-        return File.Exists(Path.Combine(game.FolderPath, ModsLoader)) ? Support.Ready : Support.NoModsLoader;
+        if (!HasModsLoader(game))
+            return Support.NoModsLoader;
+        return AsiLoader(game) is null ? Support.NoAsiLoader : Support.Ready;
     }
+
+    public static bool HasModsLoader(GameInstallation game) => File.Exists(Path.Combine(game.FolderPath, ModsLoader));
+
+    // File name of the ASI loader found, or null.
+    public static string? AsiLoader(GameInstallation game) =>
+        AsiLoaderNames.FirstOrDefault(name => File.Exists(Path.Combine(game.FolderPath, name)));
 
     public static string ModsUpdate(GameInstallation game) => Path.Combine(game.FolderPath, "mods", "update", "update.rpf");
 
