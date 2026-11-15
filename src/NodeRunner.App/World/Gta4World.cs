@@ -1,4 +1,5 @@
 using NodeRunner.Data.Native.Gta4;
+using NodeRunner.Data.Water;
 
 namespace NodeRunner.App.World;
 
@@ -12,6 +13,7 @@ internal sealed class Gta4World : IDisposable
     private volatile Gta4MapBoxes? _boxes;
     private volatile Gta4Scene? _scene;
     private volatile Gta4Vehicles? _vehicles;
+    private volatile WaterMap? _water;
 
     public Gta4FileSystem Files { get; } = new();
 
@@ -34,6 +36,9 @@ internal sealed class Gta4World : IDisposable
 
     // Palette, planned colours and definitions of the vehicles, set once the map is read.
     public Gta4Vehicles? Vehicles => _vehicles;
+
+    // Sea, rivers and pools of Liberty City (the same for every episode), set once the archives are open.
+    public WaterMap? Water => _water;
 
     public Gta4ModelReader ModelReader { get; }
 
@@ -63,6 +68,7 @@ internal sealed class Gta4World : IDisposable
         _boxes = null;
         _scene = null;
         _vehicles = null;
+        _water = null;
         Folder = folder;
         Episode = episode;
         Task.Run(() =>
@@ -74,6 +80,10 @@ internal sealed class Gta4World : IDisposable
                 InstalledEpisodes = Enum.GetValues<Gta4Episode>().Where(e => Gta4Map.IsInstalled(Files, e)).ToList();
                 if (!InstalledEpisodes.Contains(episode))
                     Episode = Gta4Episode.Base;
+                var water = Gta4Water.Load(Files);
+                foreach (string error in water.Errors)
+                    Diagnostics.ErrorLog.Add(L("Eau de GTA IV"), error);
+                _water = water;
                 ReadMap(clock);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

@@ -689,7 +689,7 @@ internal sealed unsafe partial class MainForm : Form
     // depth tells how much water is crossed).
     private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting)
     {
-        var water = _state.World.Water;
+        var water = _state.IsGta4 ? _state.Gta4.Water : _state.World.Water;
         if (!ReferenceEquals(water, _waterShown))
         {
             _waterShown = water;

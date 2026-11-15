@@ -53,7 +53,7 @@ public sealed class WaterMap
     public List<WaterQuad> Quads { get; } = [];
 
     // Rectangle covered by the main map's water file (min X, min Y, max X, max Y); the open ocean is outside.
-    public Vector4 OceanBounds { get; private set; }
+    public Vector4 OceanBounds { get; set; }
 
     public List<string> Errors { get; } = [];
 

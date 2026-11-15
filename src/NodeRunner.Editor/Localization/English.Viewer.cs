@@ -281,6 +281,7 @@ public static partial class English
         ("Voir le modèle seul dans la visionneuse (Ctrl+Entrée)", "See the model alone in the viewer (Ctrl+Enter)"),
         ("Véhicule (ex. infernus)", "Vehicle (e.g. infernus)"),
         ("Véhicules de GTA IV", "GTA IV vehicles"),
+        ("Eau de GTA IV", "GTA IV water"),
         ("oui, type {0}", "yes, type {0}"),
     ];
 }
