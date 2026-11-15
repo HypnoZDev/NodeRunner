@@ -1304,6 +1304,22 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
 
             Widgets.PropertyText(point.Category == NodeRunner.Data.Scenarios.ScenarioCategory.Vehicle ? L("Véhicules") : L("Modèles"),
                 Name(point.ModelSetHash, L("tous")), L("Groupe de modèles (model set) qui peut apparaître ici."));
+            {
+                var preview = state.ScenarioPreview;
+                string source = preview.Source switch
+                {
+                    NodeRunner.Data.Scenarios.ScenarioModelSource.Point => L("groupe du point"),
+                    NodeRunner.Data.Scenarios.ScenarioModelSource.Type => L("groupe du type de scénario"),
+                    _ => L("exemple (le jeu choisit dans la population de la zone)"),
+                };
+                string shown = !state.IsLayerVisible(ScenarioLayer.LayerName(point.Category)) ? L("calque masqué")
+                    : preview.ModelName is not { } shownName ? L("aucun")
+                    : preview.Error is { } previewError ? L($"{shownName} (illisible : {previewError})")
+                    : preview.IsLoading ? L($"{shownName} (chargement...)")
+                    : $"{shownName} · {source}";
+                Widgets.PropertyText(L("Aperçu"), shown,
+                    L("Modèle du jeu affiché immobile sur le point dans la vue 3D, pour juger la place et le sens. Le jeu peut en choisir un autre."));
+            }
             if (point.Region is { } owner && owner.GroupOf(point.Index) is var cluster and >= 0)
                 Widgets.PropertyText(L("Ensemble"), L($"groupe {cluster} ({owner.ClusterSizes[cluster]} points)"),
                     L("Les points d'un ensemble (cluster) apparaissent tous en même temps (ex. un groupe de PNJ qui discutent)."));

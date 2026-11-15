@@ -134,4 +134,8 @@ public interface IModelReader
     // Reads the models of a .ydr or .yft file (one model, keyed by the file name hash) or of a .ydd drawable
     // dictionary (every model, keyed by name hash).
     IReadOnlyDictionary<uint, ModelData> ReadModels(string path);
+
+    // Same, with the skeleton of another file for the parts attached to a bone (a ped's .ydd takes the skeleton of its
+    // .yft).
+    IReadOnlyDictionary<uint, ModelData> ReadModels(string path, string? skeletonPath) => ReadModels(path);
 }

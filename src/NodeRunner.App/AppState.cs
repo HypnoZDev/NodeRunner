@@ -1601,6 +1601,8 @@ internal sealed class AppState
     // The car drawn on the selected parking spot.
     public CarGeneratorPreview SpotPreview { get; } = new();
 
+    public ScenarioPreview ScenarioPreview { get; } = new();
+
     // Map files of a FiveM export: those to save, plus the saved versions taken back when the map was loaded
     // (modified in an earlier session).
     // Those of the other open projects are left out: each project is exported on its own.

@@ -2,6 +2,7 @@ using System.Numerics;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
+using NodeRunner.Data.Scenarios;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -10,9 +11,6 @@ namespace NodeRunner.App.World;
 // an ordinary car.
 internal sealed class CarGeneratorPreview : IDisposable
 {
-    // Ordinary cars for a spot without model or group.
-    private static readonly string[] DefaultModels = ["asea", "premier", "tailgater", "primo", "stanier", "fugitive", "ingot", "washington"];
-
     private readonly PreviewModel _model = new();
 
     public string? ModelName => _model.Item?.Name;
@@ -59,7 +57,7 @@ internal sealed class CarGeneratorPreview : IDisposable
             return Item(world.Names?.TryGet(spot.CarModel) ?? $"0x{spot.CarModel:X8}", spot.CarModel);
         }
         // A different model of the list for each spot, always the same one for a given spot.
-        var group = world.ModelSets.ModelsOf(spot.PopGroup).Where(m => models.FragmentPath(Joaat.Hash(m)) is not null).ToList();
+        var group = world.VehicleSets.ModelsOf(spot.PopGroup).Where(m => models.FragmentPath(Joaat.Hash(m)) is not null).ToList();
         if (group.Count > 0)
         {
             Source = L("au hasard dans le groupe");
@@ -67,7 +65,7 @@ internal sealed class CarGeneratorPreview : IDisposable
             return Item(name, Joaat.Hash(name));
         }
         Source = L("exemple (le jeu choisit un véhicule de la zone)");
-        string fallback = DefaultModels[selection.Index % DefaultModels.Length];
+        string fallback = ScenarioModels.ExampleVehicles[selection.Index % ScenarioModels.ExampleVehicles.Length];
         return Item(fallback, Joaat.Hash(fallback));
     }
 

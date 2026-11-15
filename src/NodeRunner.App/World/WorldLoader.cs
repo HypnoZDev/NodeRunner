@@ -73,7 +73,9 @@ internal sealed class WorldLoader : IDisposable
     public HashNames? Names { get; private set; }
 
     // Vehicle model sets (popGroup of the parking spots).
-    public VehicleModelSets ModelSets { get; private set; } = VehicleModelSets.Empty;
+    public ModelSets VehicleSets { get; private set; } = ModelSets.Empty;
+
+    public ModelSets PedSets { get; private set; } = ModelSets.Empty;
 
     // Text file of names written by the user (one per line), added to those found in the game files; read with the
     // map.
@@ -461,16 +463,25 @@ internal sealed class WorldLoader : IDisposable
             progress.Report(L("Index des textures..."));
             var textures = TextureCatalog.Create(content, new GtxdReader());
             var names = HashNames.FromFileNames(content, maps.GetArchetypeHashes());
-            var modelSets = VehicleModelSets.Empty;
+            var modelSets = ModelSets.Empty;
+            var pedSets = ModelSets.Empty;
             try
             {
-                modelSets = VehicleModelSets.Load(files);
+                modelSets = ModelSets.LoadVehicles(files);
             }
             catch (InvalidDataException ex)
             {
                 Diagnostics.ErrorLog.Add(L("Véhicules garés"), ex);
             }
-            foreach (var name in modelSets.AllNames)
+            try
+            {
+                pedSets = ModelSets.LoadPeds(files);
+            }
+            catch (InvalidDataException ex)
+            {
+                Diagnostics.ErrorLog.Add(L("Scénarios"), ex);
+            }
+            foreach (var name in modelSets.AllNames.Concat(pedSets.AllNames))
                 names.Add(name);
             try
             {
@@ -515,7 +526,8 @@ internal sealed class WorldLoader : IDisposable
                 Textures = textures;
                 TextureReader = new YtdReader(source);
                 Names = names;
-                ModelSets = modelSets;
+                VehicleSets = modelSets;
+                PedSets = pedSets;
                 UserNames = userNames;
                 LoadDuration = clock.Elapsed;
                 IsBusy = false;

@@ -21,14 +21,17 @@ public sealed class DrawableReader : IModelReader
         _files = files;
     }
 
-    public IReadOnlyDictionary<uint, ModelData> ReadModels(string path)
+    public IReadOnlyDictionary<uint, ModelData> ReadModels(string path) => ReadModels(path, null);
+
+    public IReadOnlyDictionary<uint, ModelData> ReadModels(string path, string? skeletonPath)
     {
         if (_files.ReadFile(path) is not { } data)
             return new Dictionary<uint, ModelData>();
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
         try
         {
-            return Read(data, header, Path.GetFileNameWithoutExtension(path), Path.GetExtension(path));
+            var pose = skeletonPath is null ? null : ReadPose(skeletonPath);
+            return Read(data, header, Path.GetFileNameWithoutExtension(path), Path.GetExtension(path), pose);
         }
         catch (Exception ex) when (ex is not InvalidDataException)
         {
@@ -36,12 +39,28 @@ public sealed class DrawableReader : IModelReader
         }
     }
 
-    public static Dictionary<uint, ModelData> Read(ReadOnlySpan<byte> data, ResourceHeader header, string name, string extension)
+    // Default pose of the bones of a .yft or .ydr, null without a skeleton.
+    private Matrix4x4[]? ReadPose(string path)
     {
-        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags))
+        if (_files.ReadFile(path) is not { } data || _files.GetResourceHeader(path) is not { } header)
+            return null;
+        var res = Open(data, header);
+        if (!path.EndsWith(".yft", StringComparison.OrdinalIgnoreCase))
+            return SkeletonPose(res, 0);
+        return SkeletonPose(res, Block(res, res.UInt64(FragDrawablePointer), DrawableLength)) ?? FragmentPose(res);
+    }
+
+    private static ResourceData Open(ReadOnlySpan<byte> data, ResourceHeader header) =>
+        new(data, ResourcePages.Size(header.SystemFlags))
         {
             Enhanced = header.Version is EnhancedDrawableVersion or EnhancedFragmentVersion,
         };
+
+    // pose: the bones the parts of a dictionary are attached to when its drawables have no skeleton of their own.
+    public static Dictionary<uint, ModelData> Read(ReadOnlySpan<byte> data, ResourceHeader header, string name, string extension,
+        Matrix4x4[]? pose = null)
+    {
+        var res = Open(data, header);
         uint fileHash = Joaat.Hash(name);
         var models = new Dictionary<uint, ModelData>();
         switch (extension.ToLowerInvariant())
@@ -68,7 +87,7 @@ public sealed class DrawableReader : IModelReader
                     byHash[res.UInt32(hashes + i * 4)] = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
                 foreach (var (hash, offset) in byHash)
                 {
-                    if (Convert(res, hash, offset, SkeletonPose(res, offset)) is { } model)
+                    if (Convert(res, hash, offset, SkeletonPose(res, offset) ?? pose) is { } model)
                         models[hash] = model;
                 }
                 break;

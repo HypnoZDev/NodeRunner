@@ -34,6 +34,13 @@ public sealed class ScenarioSet
 
     public string? TypeName(uint hash) => _typeNames.GetValueOrDefault(hash);
 
+    // Model sets a scenario type spawns when its point names none (scenarios.meta: Models, VehicleModelSet), 0 if any.
+    private Dictionary<uint, (uint Peds, uint Vehicles)> _typeModelSets = new();
+
+    public uint TypePedModelSet(uint typeHash) => _typeModelSets.GetValueOrDefault(typeHash).Peds;
+
+    public uint TypeVehicleModelSet(uint typeHash) => _typeModelSets.GetValueOrDefault(typeHash).Vehicles;
+
     public void SetValues(ScenarioPoint point, ScenarioValues values)
     {
         point.Values = values;
@@ -108,7 +115,7 @@ public sealed class ScenarioSet
     // name) put in their place. Unreadable files are reported in errors.
     public ScenarioSet WithSavedRegions(IGameFileSystem files, IScenarioRegionReader reader, IReadOnlyDictionary<string, byte[]> saved, List<string> errors)
     {
-        var set = new ScenarioSet { _typeNames = _typeNames };
+        var set = new ScenarioSet { _typeNames = _typeNames, _typeModelSets = _typeModelSets };
         set.Errors.AddRange(Errors);
         foreach (var region in Regions)
         {
@@ -160,7 +167,7 @@ public sealed class ScenarioSet
     public static ScenarioSet Load(IGameFileSystem files, IScenarioRegionReader reader, IProgress<string>? progress = null)
     {
         var set = new ScenarioSet();
-        set._typeNames = LoadTypeNames(files, set.Errors);
+        set._typeNames = LoadTypeNames(files, set.Errors, set._typeModelSets);
 
         var chosen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files.EnumerateFiles(".ymt"))
@@ -197,7 +204,8 @@ public sealed class ScenarioSet
         return set;
     }
 
-    private static Dictionary<uint, string> LoadTypeNames(IGameFileSystem files, List<string> errors)
+    private static Dictionary<uint, string> LoadTypeNames(IGameFileSystem files, List<string> errors,
+        Dictionary<uint, (uint Peds, uint Vehicles)> typeModelSets)
     {
         var names = new Dictionary<uint, string>();
         foreach (var path in ScenarioInfoFiles)
@@ -209,14 +217,37 @@ public sealed class ScenarioSet
             try
             {
                 using var xml = XmlReader.Create(new MemoryStream(data), new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore });
-                while (xml.Read())
+                // Last name read at each depth: the type a Models or VehicleModelSet beside it belongs to.
+                var lastName = new Dictionary<int, uint>();
+                xml.Read();
+                while (!xml.EOF)
                 {
-                    if (xml.NodeType == XmlNodeType.Element && xml.Name == "Name")
+                    if (xml.NodeType != XmlNodeType.Element)
                     {
+                        xml.Read();
+                        continue;
+                    }
+                    if (xml.Name == "Name")
+                    {
+                        int depth = xml.Depth;
+                        // Already on the next node.
                         var name = xml.ReadElementContentAsString().Trim();
                         if (name.Length > 0)
+                        {
                             names.TryAdd(Joaat.Hash(name), name);
+                            lastName[depth] = Joaat.Hash(name);
+                        }
+                        continue;
                     }
+                    if (xml.Name is "Models" or "VehicleModelSet" && xml.GetAttribute("ref") is { } set
+                             && !set.Equals("NULL", StringComparison.OrdinalIgnoreCase) && lastName.TryGetValue(xml.Depth, out uint type))
+                    {
+                        var known = typeModelSets.GetValueOrDefault(type);
+                        typeModelSets[type] = xml.Name == "Models"
+                            ? (known.Peds == 0 ? Joaat.Hash(set) : known.Peds, known.Vehicles)
+                            : (known.Peds, known.Vehicles == 0 ? Joaat.Hash(set) : known.Vehicles);
+                    }
+                    xml.Read();
                 }
             }
             catch (XmlException ex)

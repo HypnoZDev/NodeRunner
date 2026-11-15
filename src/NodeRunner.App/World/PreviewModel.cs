@@ -68,16 +68,19 @@ internal sealed class PreviewModel : IDisposable
             return new Loaded(item, null, [], [L("aucune carte chargée")]);
         try
         {
-            var model = reader.ReadModels(item.Location.Path).GetValueOrDefault(item.Location.ModelHash);
+            var model = item.Ped is { } ped
+                ? ReadPed(reader, ped, item.Location.ModelHash)
+                : reader.ReadModels(item.Location.Path).GetValueOrDefault(item.Location.ModelHash);
             if (model is null)
                 return new Loaded(item, null, [], [L("modèle introuvable dans le fichier")]);
             ResolvedTexture?[][] textures = [];
             if (catalog is not null && textureReader is not null)
             {
-                // Vehicles also take textures from the dictionary shared by all vehicles (lights, badges, interior...).
-                var fallback = item.Kind == ViewerKind.Vehicle
+                // Vehicles also take textures from the dictionary shared by all vehicles (lights, badges, interior...);
+                // peds stored one part per file have a texture dictionary per texture.
+                IReadOnlyList<string> fallback = item.Kind == ViewerKind.Vehicle
                     ? SharedVehicleTextures.Select(n => catalog.Locate(Joaat.Hash(n))).OfType<string>().ToArray()
-                    : [];
+                    : item.Ped?.Textures ?? [];
                 textures = new TextureResolver(catalog, textureReader).Resolve(item.Location, model, errors, fallback);
             }
             return new Loaded(item, model, textures, errors);
@@ -86,6 +89,23 @@ internal sealed class PreviewModel : IDisposable
         {
             return new Loaded(item, null, [], [ex.Message]);
         }
+    }
+
+    private static ModelData? ReadPed(IModelReader reader, PedFiles ped, uint pedHash)
+    {
+        var parts = ped.Dictionary is { } dictionary ? reader.ReadModels(dictionary, ped.Skeleton) : new Dictionary<uint, ModelData>();
+        // One file per part, named after it: only the parts chosen are read.
+        var files = ped.Parts.ToDictionary(p => Joaat.Hash(Path.GetFileNameWithoutExtension(p)));
+        var read = new Dictionary<uint, ModelData?>();
+        ModelData? Get(uint hash)
+        {
+            if (parts.TryGetValue(hash, out var part))
+                return part;
+            if (!read.TryGetValue(hash, out part))
+                read[hash] = part = files.TryGetValue(hash, out var file) ? reader.ReadModels(file, ped.Skeleton).GetValueOrDefault(hash) : null;
+            return part;
+        }
+        return PedModels.Compose(h => parts.ContainsKey(h) || files.ContainsKey(h), Get, pedHash, ped.Variant);
     }
 
     // Takes the model once read; true when a new model was just put on the graphics card.

@@ -333,6 +333,7 @@ internal sealed unsafe partial class MainForm : Form
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
         _state.SpotPreview.Dispose();
+        _state.ScenarioPreview.Dispose();
         _modelRenderer?.Dispose();
         _modelRenderer = null;
         _skyRenderer?.Dispose();
@@ -596,6 +597,12 @@ internal sealed unsafe partial class MainForm : Form
         _state.SpotPreview.Update(_state.World, _modelRenderer, previewSpot);
         if (previewSpot?.Spot is { } shownSpot)
             _state.SpotPreview.Draw(_modelRenderer, shownSpot, _carGeneratorLayer.GroundOf(_state.World, shownSpot), viewProjection);
+
+        // The ped, animal or vehicle of the selected scenario point.
+        var previewPoint = _state.SelectedScenario is { } point && _state.IsLayerVisible(ScenarioLayer.LayerName(point.Category)) ? point : null;
+        _state.ScenarioPreview.Update(_state.World, _modelRenderer, previewPoint);
+        if (previewPoint is not null)
+            _state.ScenarioPreview.Draw(_modelRenderer, previewPoint, viewProjection);
 
         bool navMeshEnabled = NavMeshLayer.Surfaces.Any(s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)));
         _navMeshLayer.Update(_state.World, lines, camera.Position, _state.Settings.NavMeshRadius, navMeshEnabled);

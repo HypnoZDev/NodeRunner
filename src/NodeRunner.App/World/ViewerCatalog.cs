@@ -4,7 +4,7 @@ using NodeRunner.Data.Models;
 
 namespace NodeRunner.App.World;
 
-internal enum ViewerKind { Vehicle, Object }
+internal enum ViewerKind { Vehicle, Object, Ped }
 
 // A model the viewer can open: its name (spawn name for a vehicle, archetype for an object) and where it is.
 internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Location)
@@ -12,10 +12,17 @@ internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Lo
     // Pack of the prop library the object type comes from, null for the game's.
     public string? Pack { get; init; }
 
+    // A ped: the files of its parts and how it is dressed.
+    public PedFiles? Ped { get; init; }
+
     public uint ArchetypeHash => Name.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                                  && uint.TryParse(Name.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint hash)
         ? hash : Joaat.Hash(Name);
 }
+
+// Files of a ped: its parts (a drawable dictionary, or one file per part), the .yft holding its skeleton, the
+// textures of the parts stored one per file, and a number choosing its clothes (null: the first ones).
+internal sealed record PedFiles(string? Dictionary, string? Skeleton, IReadOnlyList<string> Parts, IReadOnlyList<string> Textures, int? Variant);
 
 // Everything the model viewer lists: the vehicles of the game (DLC included), the object types of the map and those of
 // the prop library.
