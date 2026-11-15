@@ -66,6 +66,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
   dragging a prop into the 3D view.
 - Import a mapping (folder, .zip, .oiv) and files exported as XML by **Sollumz** or CodeWalker (`.ydr.xml`, `.ytd.xml`,
   `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`): converted automatically.
+- **Watched Sollumz folder**: every new export from Blender lands in the project and the map reloads by itself.
 
 **Together (Online, beta)**
 - Up to 5 people on the same project with an `NRS-XXXX` code: everyone sees the others' changes, selection and camera
