@@ -4,11 +4,12 @@ using NodeRunner.Data.Hashing;
 
 namespace NodeRunner.Data.Native.Gta4;
 
-// A model declared in a ".ide" file. The box and sphere are in model space; LodGroup names the group of the next
-// level of detail ("slod_2_mh1_grp"), null when there is none.
+// A model declared in a ".ide" file. The box and sphere are in model space; DrawableDictionary names the ".wdd" file
+// holding the model ("nj01_slod21_grp"), null when the model has its own ".wdr" or ".wft". TimeFlags: hours shown
+// (bit per hour) for the timed sections, 0 otherwise.
 public sealed record Gta4ModelDef(string Name, uint Hash, string TextureDictionary, string? AnimationDictionary,
-    float DrawDistance, uint Flags, Vector3 BoxMin, Vector3 BoxMax, Vector3 SphereCenter, float SphereRadius, string? LodGroup,
-    bool IsTimed);
+    float DrawDistance, uint Flags, Vector3 BoxMin, Vector3 BoxMax, Vector3 SphereCenter, float SphereRadius,
+    string? DrawableDictionary, bool IsTimed, uint TimeFlags = 0);
 
 // Model definitions of GTA IV (".ide" text files): "objs", "tobj" (objs + hours), "anim" (objs with an animation
 // dictionary after the texture dictionary), "tanm" (anim + hours) and the texture dictionary parents ("txdp").
@@ -76,10 +77,13 @@ public sealed class Gta4Definitions
         for (int i = 0; i < 10; i++)
             if (!TryFloat(p[5 + o + i], out v[i]))
                 return null;
-        string lod = p[15 + o];
+        string dictionary = p[15 + o];
+        uint hours = 0;
+        if (timed && (p.Length < 17 + o || !uint.TryParse(p[16 + o], NumberStyles.Integer, CultureInfo.InvariantCulture, out hours)))
+            return null;
         return new Gta4ModelDef(p[0], Joaat.Hash(p[0]), p[1], animated ? p[2] : null, drawDistance, flags,
             new Vector3(v[0], v[1], v[2]), new Vector3(v[3], v[4], v[5]), new Vector3(v[6], v[7], v[8]), v[9],
-            lod.Length == 0 || lod.Equals("null", StringComparison.OrdinalIgnoreCase) ? null : lod, timed);
+            dictionary.Length == 0 || dictionary.Equals("null", StringComparison.OrdinalIgnoreCase) ? null : dictionary, timed, hours);
     }
 
     private static string[] Split(string line) => line.Split(',', StringSplitOptions.TrimEntries);

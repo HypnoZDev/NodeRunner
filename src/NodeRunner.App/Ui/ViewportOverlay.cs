@@ -83,11 +83,11 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
             ImGui.PushTextWrapPos(Math.Min(440f, size.X - 4f * Margin));
             if (mapShown)
             {
-                bool boxesShown = EntityBoxLayer.Categories.Any(c => state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
+                bool modelsShown = state.IsLayerVisible(ModelLayer.LayerName);
                 ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  " + L($"Liberty City : {Widgets.Count(gta4.MapBoxes!.Count)} objets"));
-                ImGui.TextDisabled(boxesShown
-                    ? L("Objets affichés en boîtes. Les modèles 3D de GTA IV arrivent dans une prochaine version.")
-                    : L("Affiche « Boîtes des objets » dans le panneau Calques pour voir la carte."));
+                ImGui.TextDisabled(modelsShown
+                    ? L("Modèles 3D sans textures pour l'instant (gris) ; sélection des objets à venir.")
+                    : L("Affiche « Carte en 3D » dans le panneau Calques pour voir la carte."));
             }
             else
             {

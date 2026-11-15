@@ -136,6 +136,16 @@ public sealed class Gta4FileSystem : IDisposable
         return entry.IsResource ? ImgArchive.InflateResource(stored) : stored;
     }
 
+    // A resource decompressed, with the size of its system part (the graphics part follows it); null if the file is
+    // missing or is not a resource.
+    public (byte[] Data, int SystemSize)? ReadResource(string path)
+    {
+        if (!_files.TryGetValue(path, out var entry) || !entry.IsResource)
+            return null;
+        var (system, _) = ImgArchive.ResourceSizes(entry.ResourceFlags);
+        return (ImgArchive.InflateResource(ReadStored(entry)), system);
+    }
+
     // Bytes of a file exactly as the archive stores them (resource header and compression included).
     public byte[]? ReadStoredFile(string path) =>
         _files.TryGetValue(path, out var entry) ? ReadStored(entry) : null;

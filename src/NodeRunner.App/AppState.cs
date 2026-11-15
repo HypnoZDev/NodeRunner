@@ -2103,8 +2103,10 @@ internal sealed class AppState
     public bool IsLayerVisible(string layer) =>
         IsHiddenByDefault(layer) ? ShownLayers.Contains(layer) : !HiddenLayers.Contains(layer);
 
-    private static bool IsHiddenByDefault(string layer) =>
-        layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
+    // GTA IV: the 3D models are shown, the boxes of the objects only on demand.
+    private bool IsHiddenByDefault(string layer) =>
+        IsGta4 && layer.StartsWith("Entity.", StringComparison.Ordinal)
+        || layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
         || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName
         || layer == TimecycleLayer.LayerName || layer == LodLightLayer.LayerName;
 

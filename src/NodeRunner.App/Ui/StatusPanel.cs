@@ -189,7 +189,7 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
             return;
         Widgets.PropertyText(L("Carte graphique"), state.AdapterName);
         Widgets.PropertyText(L("Images par seconde"), $"{ImGui.GetIO().Framerate:0}");
-        if (state.World.Models is not null)
+        if (state.World.Models is not null || state.IsGta4 && state.Gta4.Scene is not null)
         {
             string loading = modelLayer.PendingModelCount > 0 ? L($" ({modelLayer.PendingModelCount} en cours)") : "";
             Widgets.PropertyText(L("Objets dessinés"), $"{Widgets.Count(modelLayer.DrawnObjectCount)} / {Widgets.Count(modelLayer.NearbyObjectCount)}{loading}");

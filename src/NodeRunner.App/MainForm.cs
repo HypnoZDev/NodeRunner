@@ -552,7 +552,16 @@ internal sealed unsafe partial class MainForm : Form
 
         bool modelsEnabled = _state.IsLayerVisible(ModelLayer.LayerName);
         int hour = (int)settings.TimeOfDay % 24;
-        _modelLayer.Update(_state.World, _modelRenderer, camera.Position, settings.ViewDistanceMultiplier, hour, modelsEnabled);
+        if (_state.IsGta4)
+        {
+            var gta4 = _state.Gta4;
+            _modelLayer.Update(gta4.Scene?.Library, gta4.Scene?.Models, gta4.ModelReader, () => null, _modelRenderer, camera.Position,
+                settings.ViewDistanceMultiplier, hour, modelsEnabled);
+        }
+        else
+        {
+            _modelLayer.Update(_state.World, _modelRenderer, camera.Position, settings.ViewDistanceMultiplier, hour, modelsEnabled);
+        }
 
         // Sun shadows: the objects seen from the sun first, into their own images.
         bool shadows = modelsEnabled && settings.Shadows;
@@ -898,6 +907,9 @@ internal sealed unsafe partial class MainForm : Form
         if (_pickRequest is not var (click, control) || _graphics is null || _modelRenderer is null || _pickBuffer is null)
             return;
         _pickRequest = null;
+        // GTA IV objects cannot be selected yet.
+        if (_state.IsGta4)
+            return;
         if (!scene.Contains(click))
             return;
 
@@ -1009,6 +1021,8 @@ internal sealed unsafe partial class MainForm : Form
         if (_contextRequest is not { } click || _modelRenderer is null || _pickBuffer is null)
             return;
         _contextRequest = null;
+        if (_state.IsGta4)
+            return;
         if (!scene.Contains(click))
             return;
         if (_state.Tool != TransformTool.Collision && _state.IsLayerVisible(ModelLayer.LayerName))

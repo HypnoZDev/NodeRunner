@@ -246,10 +246,11 @@ public class Gta4MapTests : IDisposable
         Assert.Equal(new Vector3(-29.5f, -35.25f, -90.1f), tower.BoxMin);
         Assert.Equal(new Vector3(29.5f, 35.25f, 90.1f), tower.BoxMax);
         Assert.Equal(101.15f, tower.SphereRadius);
-        Assert.Equal("LOD_Tower_MH1", tower.LodGroup);
+        Assert.Equal("LOD_Tower_MH1", tower.DrawableDictionary);
         Assert.False(tower.IsTimed);
         Assert.True(defs.Find(Joaat.Hash("Sign_NL_MH1"))!.IsTimed);
-        Assert.Null(defs.Find(Joaat.Hash("Sign_NL_MH1"))!.LodGroup);
+        Assert.Null(defs.Find(Joaat.Hash("Sign_NL_MH1"))!.DrawableDictionary);
+        Assert.Equal(33423487u, defs.Find(Joaat.Hash("Sign_NL_MH1"))!.TimeFlags);
         var flag = defs.Find(Joaat.Hash("Flag_MH1"))!;
         Assert.Equal("manhat01", flag.AnimationDictionary);
         Assert.Equal(60, flag.DrawDistance);

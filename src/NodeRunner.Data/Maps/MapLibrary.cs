@@ -548,6 +548,10 @@ public sealed class MapLibrary
         return library;
     }
 
+    // A map read from another game's files (GTA IV), linked into a level-of-detail tree like the game's maps.
+    public static MapLibrary FromMaps(IEnumerable<Archetype> archetypes, IEnumerable<(MapData Map, string Path)> maps) =>
+        Create(archetypes, maps.ToArray());
+
     internal static MapLibrary Create(IEnumerable<Archetype> archetypes, params (MapData Map, string Path)[] maps)
     {
         var library = new MapLibrary();

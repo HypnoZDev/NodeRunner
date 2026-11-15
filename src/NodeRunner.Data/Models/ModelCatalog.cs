@@ -1,4 +1,5 @@
 using NodeRunner.Data.FileSystem;
+using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 
 namespace NodeRunner.Data.Models;
@@ -25,6 +26,19 @@ public sealed class ModelCatalog
         _dictionaries = GameFileIndex.Build(content, ".ydd"),
         _fragments = GameFileIndex.Build(content, ".yft"),
     };
+
+    // Index made from lists of files (another game: GTA IV), each keyed by the hash of its name; later files win.
+    public static ModelCatalog FromFiles(IEnumerable<string> drawables, IEnumerable<string> dictionaries, IEnumerable<string> fragments)
+    {
+        static Dictionary<uint, string> Index(IEnumerable<string> paths)
+        {
+            var index = new Dictionary<uint, string>();
+            foreach (string path in paths)
+                index[Joaat.Hash(Path.GetFileNameWithoutExtension(path))] = path;
+            return index;
+        }
+        return new ModelCatalog { _drawables = Index(drawables), _dictionaries = Index(dictionaries), _fragments = Index(fragments) };
+    }
 
     // The fragment file (.yft) of a model, by the hash of its name (a vehicle: its spawn name).
     public string? FragmentPath(uint nameHash) => _fragments.GetValueOrDefault(nameHash);
