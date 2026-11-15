@@ -258,6 +258,70 @@ public class OnlineSessionTests
         Assert.StartsWith("Impossible de rejoindre", nobody.EndReason);
     }
 
+    // True once the host closed the link of a stranger (one that never said a valid hello).
+    private static bool ClosedByHost(System.Net.Sockets.TcpClient stranger, OnlineSession host, int withinMs = 5_000)
+    {
+        var read = stranger.GetStream().ReadAsync(new byte[16]).AsTask();
+        var clock = Stopwatch.StartNew();
+        while (!read.IsCompleted && clock.ElapsedMilliseconds < withinMs)
+        {
+            host.Update();
+            Thread.Sleep(2);
+        }
+        return read.IsCompleted && (read.IsFaulted || read.Result == 0);
+    }
+
+    [Fact]
+    public void A_stranger_announcing_a_huge_message_is_cut_off()
+    {
+        using var host = OnlineSession.Host(new Doc(), "Hugo", "1.0", Start, port: 47960);
+        using var stranger = new System.Net.Sockets.TcpClient("127.0.0.1", host.Port);
+        stranger.GetStream().Write(BitConverter.GetBytes(1 << 30));
+
+        Assert.True(ClosedByHost(stranger, host));
+        Assert.Empty(host.JoinRequests);
+    }
+
+    [Fact]
+    public void A_stranger_that_never_says_hello_is_cut_off()
+    {
+        using var host = OnlineSession.Host(new Doc(), "Hugo", "1.0", Start, port: 47970);
+        host.HelloWithin = TimeSpan.FromMilliseconds(200);
+        using var stranger = new System.Net.Sockets.TcpClient("127.0.0.1", host.Port);
+
+        Assert.True(ClosedByHost(stranger, host));
+    }
+
+    [Fact]
+    public void Too_many_waiting_links_are_turned_away()
+    {
+        using var host = OnlineSession.Host(new Doc(), "Hugo", "1.0", Start, port: 47980);
+        var waiting = Enumerable.Range(0, 8).Select(_ => new System.Net.Sockets.TcpClient("127.0.0.1", host.Port)).ToList();
+        try
+        {
+            using var extra = new System.Net.Sockets.TcpClient("127.0.0.1", host.Port);
+            Assert.True(ClosedByHost(extra, host));
+            Assert.False(ClosedByHost(waiting[0], host, withinMs: 200));
+        }
+        finally
+        {
+            waiting.ForEach(w => w.Dispose());
+        }
+    }
+
+    [Fact]
+    public void A_large_project_reaches_the_guest_whole()
+    {
+        var zip = new byte[5_000_000];
+        new Random(1).NextBytes(zip);
+        var hostDoc = new Doc();
+        using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start with { ProjectZip = zip }, port: 47990);
+        var (guest, guestDoc) = Guest(host, hostDoc, "Marc");
+        using var _ = guest;
+
+        Assert.Equal(zip, guestDoc.Received?.ProjectZip);
+    }
+
     [Fact]
     public void Addresses_are_read_with_or_without_port()
     {

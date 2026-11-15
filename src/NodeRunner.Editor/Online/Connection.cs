@@ -29,27 +29,47 @@ internal sealed class Connection : IDisposable
 {
     public const int MaxFrame = 1 << 30;
 
+    // Someone the host has not accepted yet only says hello: a short message.
+    public const int MaxFrameBeforeAccepted = 64 * 1024;
+
+    private const int ReadStep = 1 << 20;
+
     private readonly Link _link;
     private readonly Channel<byte[]> _outgoing = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Action<Connection, MessageType, byte[]> _received;
     private readonly Action<Connection, string> _closed;
+    private readonly bool _unknown;
+    private volatile bool _accepted;
+    private volatile bool _heard;
     private int _isClosed;
 
-    public Connection(Link link, int id, Action<Connection, MessageType, byte[]> received, Action<Connection, string> closed)
+    // helloWithin: the other side is not known yet (host's end): it must say hello within this time, with short
+    // messages until it is accepted. Null for the link to the host.
+    public Connection(Link link, int id, Action<Connection, MessageType, byte[]> received, Action<Connection, string> closed,
+        TimeSpan? helloWithin = null)
     {
         _link = link;
         Id = id;
         Address = link.Address;
         _received = received;
         _closed = closed;
+        _unknown = helloWithin is not null;
         _ = Task.Run(ReadLoop);
         _ = Task.Run(WriteLoop);
+        if (helloWithin is { } wait)
+        {
+            _ = Task.Delay(wait).ContinueWith(_ =>
+            {
+                if (!_heard)
+                    Close(L("connexion fermée"));
+            }, TaskScheduler.Default);
+        }
     }
 
     public int Id { get; }
     public string Address { get; }
     public string Name { get; set; } = "";
-    public bool Accepted { get; set; }
+    public bool Accepted { get => _accepted; set => _accepted = value; }
 
     // Given by the host when accepted: the guest comes back with it after a drop.
     public string RejoinKey { get; set; } = "";
@@ -81,10 +101,10 @@ internal sealed class Connection : IDisposable
             {
                 await _link.ReadExactlyAsync(header);
                 int length = BinaryPrimitives.ReadInt32LittleEndian(header);
-                if (length < 1 || length > MaxFrame)
+                if (length < 1 || length > (_unknown && !_accepted ? MaxFrameBeforeAccepted : MaxFrame))
                     throw new InvalidDataException(L("Message invalide."));
-                var body = new byte[length];
-                await _link.ReadExactlyAsync(body);
+                var body = await ReadBody(length);
+                _heard = true;
                 _received(this, (MessageType)body[0], body[1..]);
             }
         }
@@ -96,6 +116,21 @@ internal sealed class Connection : IDisposable
                 IsFinal = relay.IsFinal;
             }
             Close(ex is EndOfStreamException ? L("connexion fermée") : ex.Message);
+        }
+    }
+
+    // Memory is taken as the bytes arrive, not on the announced size alone.
+    private async Task<byte[]> ReadBody(int length)
+    {
+        var body = new byte[Math.Min(length, ReadStep)];
+        int read = 0;
+        while (true)
+        {
+            await _link.ReadExactlyAsync(body.AsMemory(read));
+            read = body.Length;
+            if (read == length)
+                return body;
+            Array.Resize(ref body, (int)Math.Min(length, Math.Max((long)read * 2, read + (long)ReadStep)));
         }
     }
 

@@ -48,6 +48,12 @@ public sealed class OnlineSession : IDisposable
     public const int DefaultPort = 47800;
     public const int MaxParticipants = 5;
 
+    // Links not accepted yet (saying hello, or waiting for the host's answer): others are turned away.
+    private const int MaxWaiting = 8;
+
+    // Time a new link has to say hello.
+    internal TimeSpan HelloWithin { get; set; } = TimeSpan.FromSeconds(10);
+
     // A guest whose link dropped tries again this long (the relay keeps the room a minute for a host that dropped).
     public static readonly TimeSpan ReconnectFor = TimeSpan.FromSeconds(90);
 
@@ -193,9 +199,15 @@ public sealed class OnlineSession : IDisposable
     // A guest arrived through the relay (background thread).
     private void Arrived(Link link)
     {
-        var connection = new Connection(link, Interlocked.Increment(ref _nextId), Received, Closed);
         lock (_connections)
-            _connections.Add(connection);
+        {
+            if (_connections.Count(c => !c.Accepted) >= MaxWaiting)
+            {
+                link.Dispose();
+                return;
+            }
+            _connections.Add(new Connection(link, Interlocked.Increment(ref _nextId), Received, Closed, HelloWithin));
+        }
     }
 
     // "NRS-AB12", "nrs ab12" or "AB12" = a session code (written NRS-AB12); anything else is an address.
@@ -320,9 +332,7 @@ public sealed class OnlineSession : IDisposable
             {
                 return;
             }
-            var connection = new Connection(new TcpLink(client), Interlocked.Increment(ref _nextId), Received, Closed);
-            lock (_connections)
-                _connections.Add(connection);
+            Arrived(new TcpLink(client));
         }
     }
 
