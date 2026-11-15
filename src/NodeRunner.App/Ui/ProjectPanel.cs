@@ -22,6 +22,11 @@ internal sealed unsafe class ProjectPanel(AppState state)
     private int _filter;
     private string _search = "";
     private ObjectChange? _selected;
+    private List<(ObjectChange Change, string Name, string MapName)> _rows = [];
+    private (object? Changes, int Filter, string Search, object? Names) _rowsKey;
+
+    // The stream folder's files by extension, listed again once a second at most.
+    private (string Folder, double Time, string? Error, List<(string Extension, int Count)> Groups) _streamFiles = ("", 0, null, []);
 
     public void Draw(ref bool open)
     {
@@ -148,12 +153,19 @@ internal sealed unsafe class ProjectPanel(AppState state)
         var names = state.World.Names;
         var camera = state.Camera.Position;
         string search = _search.Trim();
-        var rows = _changes
-            .Where(c => _filter == 0 || (int)c.Kind == _filter - 1)
-            .Select(c => (Change: c, Name: names?.Describe(c.Entity.ArchetypeHash) ?? $"0x{c.Entity.ArchetypeHash:X8}", MapName: MapName(c.Map)))
-            .Where(r => search.Length < 2 || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || r.MapName.Contains(search, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(r => r.Change.Kind).ThenBy(r => r.MapName).ThenBy(r => r.Name)
-            .ToList();
+        // Filtered and sorted again only when the changes, the filter, the search or the names change.
+        if (!ReferenceEquals(_changes, _rowsKey.Changes) || _filter != _rowsKey.Filter || search != _rowsKey.Search
+            || !ReferenceEquals(names, _rowsKey.Names))
+        {
+            _rowsKey = (_changes, _filter, search, names);
+            _rows = _changes
+                .Where(c => _filter == 0 || (int)c.Kind == _filter - 1)
+                .Select(c => (Change: c, Name: names?.Describe(c.Entity.ArchetypeHash) ?? $"0x{c.Entity.ArchetypeHash:X8}", MapName: MapName(c.Map)))
+                .Where(r => search.Length < 2 || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || r.MapName.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(r => r.Change.Kind).ThenBy(r => r.MapName).ThenBy(r => r.Name)
+                .ToList();
+        }
+        var rows = _rows;
 
         if (rows.Count == 0)
         {
@@ -226,26 +238,35 @@ internal sealed unsafe class ProjectPanel(AppState state)
 
     private static string MapName(MapData map) => map.FilePath is { } p ? Path.GetFileName(p) : $"0x{map.NameHash:X8}";
 
-    private static void DrawFiles(string stream, MapLibrary library)
+    private void DrawFiles(string stream, MapLibrary library)
     {
-        string[] files;
-        try
+        double now = ImGui.GetTime();
+        if (_streamFiles.Folder != stream || now - _streamFiles.Time > 1.0 || now < _streamFiles.Time)
         {
-            files = Directory.Exists(stream) ? Directory.GetFiles(stream) : [];
+            try
+            {
+                string[] files = Directory.Exists(stream) ? Directory.GetFiles(stream) : [];
+                _streamFiles = (stream, now, null, files.GroupBy(f => Path.GetExtension(f).ToLowerInvariant()).OrderBy(g => g.Key)
+                    .Select(g => (g.Key, g.Count())).ToList());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _streamFiles = (stream, now, ex.Message, []);
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        if (_streamFiles.Error is { } failure)
         {
-            Widgets.Hint(ex.Message, wrap: true);
+            Widgets.Hint(failure, wrap: true);
             return;
         }
-        if (files.Length == 0)
+        if (_streamFiles.Groups.Count == 0)
         {
             Widgets.Hint(L("Le dossier stream est vide (rien d'enregistré pour l'instant)."));
             return;
         }
-        foreach (var group in files.GroupBy(f => Path.GetExtension(f).ToLowerInvariant()).OrderBy(g => g.Key))
+        foreach (var group in _streamFiles.Groups)
         {
-            string what = group.Key switch
+            string what = group.Extension switch
             {
                 ".ymap" => L("YMAP (objets)"),
                 ".ybn" => "collisions",
@@ -254,7 +275,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
                 ".ymf" => "manifeste",
                 _ => "autres",
             };
-            ImGui.TextUnformatted($"{group.Count()} {group.Key} : {what}");
+            ImGui.TextUnformatted($"{group.Count} {group.Extension} : {what}");
         }
         if (library.SavedMapErrors.Count > 0)
         {
