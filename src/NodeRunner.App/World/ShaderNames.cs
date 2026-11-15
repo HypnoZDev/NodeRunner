@@ -15,6 +15,7 @@ internal static class ShaderNames
         "vehicle_tire_emissive", "vehicle_interior", "vehicle_interior2", "vehicle_vehglass", "vehicle_vehglass_inner",
         "vehicle_lightsemissive", "vehicle_lightsemissive_siren", "vehicle_lights", "vehicle_dash_emissive",
         "vehicle_dash_emissive_opaque", "vehicle_licenseplate", "vehicle_badges", "vehicle_decal", "vehicle_decal2",
+        "vehicle_rims1", "vehicle_rims2", "vehicle_chrome", "vehicle_disc", "vehicle_rubber",
         "vehicle_detail", "vehicle_detail2", "vehicle_shuts", "vehicle_track", "vehicle_track2", "vehicle_track_ammo",
         "vehicle_track_cutout", "vehicle_track_emissive", "vehicle_track_siren", "vehicle_blurredrotor",
         "vehicle_blurredrotor_emissive", "vehicle_cloth", "vehicle_cloth2", "vehicle_cutout", "vehicle_emissive_opaque",
@@ -50,7 +51,8 @@ internal static class ShaderNames
         "water_decal", "radar", "sky_system", "clouds_altitude", "distance_map", "blend_2lyr", "minimap", "weapon_normal_spec_tnt",
         "weapon_normal_spec_alpha", "weapon_normal_spec_cutout_palette", "weapon_normal_spec_detail_palette",
         "weapon_normal_spec_detail_tnt", "weapon_normal_spec_palette", "weapon_emissive_tnt", "weapon_emissivestrong_alpha",
-    }.DistinctBy(Joaat.Hash).ToDictionary(Joaat.Hash, n => n);
+    }.SelectMany(n => new[] { n, "gta_" + n }) // GTA IV names its shaders "gta_..."
+        .DistinctBy(Joaat.Hash).ToDictionary(Joaat.Hash, n => n);
 
     // Texture parameters, with what they hold.
     private static readonly Dictionary<uint, (string Name, string Role)> Samplers = new (string, string)[]

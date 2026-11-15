@@ -39,13 +39,15 @@ internal sealed class PreviewModel : IDisposable
     public Vector3 BoundsMin { get; private set; }
     public Vector3 BoundsMax { get; private set; }
 
-    public void Open(ViewerItem item, WorldLoader world)
+    public void Open(ViewerItem item, WorldLoader world) => Open(item, world.ModelReader, world.Textures, world.TextureReader);
+
+    // With the readers of another game (GTA IV).
+    public void Open(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
     {
         if (item == Item && Error is null)
             return;
         Item = item;
         Error = null;
-        var (reader, textures, textureReader) = (world.ModelReader, world.Textures, world.TextureReader);
         _loading = Task.Run(() => Read(item, reader, textures, textureReader));
     }
 
@@ -57,7 +59,9 @@ internal sealed class PreviewModel : IDisposable
         Release();
     }
 
-    private static Loaded Read(ViewerItem item, IModelReader? reader, Data.Textures.TextureCatalog? catalog, Data.Textures.ITextureReader? textureReader)
+    private static readonly string[] SharedVehicleTextures = ["vehshare", "vehshare_truck"];
+
+    private static Loaded Read(ViewerItem item, IModelReader? reader, TextureCatalog? catalog, ITextureReader? textureReader)
     {
         var errors = new List<string>();
         if (reader is null)
@@ -71,7 +75,9 @@ internal sealed class PreviewModel : IDisposable
             if (catalog is not null && textureReader is not null)
             {
                 // Vehicles also take textures from the dictionary shared by all vehicles (lights, badges, interior...).
-                var fallback = item.Kind == ViewerKind.Vehicle && catalog.Locate(Joaat.Hash("vehshare")) is { } shared ? [shared] : (string[])[];
+                var fallback = item.Kind == ViewerKind.Vehicle
+                    ? SharedVehicleTextures.Select(n => catalog.Locate(Joaat.Hash(n))).OfType<string>().ToArray()
+                    : [];
                 textures = new TextureResolver(catalog, textureReader).Resolve(item.Location, model, errors, fallback);
             }
             return new Loaded(item, model, textures, errors);

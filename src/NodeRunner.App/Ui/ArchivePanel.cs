@@ -223,7 +223,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         if (node.IsFile)
         {
             string extension = Path.GetExtension(node.Name).ToLowerInvariant();
-            if (extension is ".ydr" or ".yft" && ImGui.MenuItem(L($"{Icons.Box}  Voir dans la visionneuse")))
+            if (extension is ".ydr" or ".yft" or ".wdr" or ".wft" && ImGui.MenuItem(L($"{Icons.Box}  Voir dans la visionneuse")))
                 openInViewer(node.Path);
             if (extension == ".ymap" && ImGui.MenuItem(L($"{Icons.MapPinned}  Aller sur la carte")))
                 GoToMap(node);
@@ -247,7 +247,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
     {
         switch (Path.GetExtension(node.Name).ToLowerInvariant())
         {
-            case ".ydr" or ".yft":
+            case ".ydr" or ".yft" or ".wdr" or ".wft":
                 openInViewer(node.Path);
                 break;
             case ".ymap":

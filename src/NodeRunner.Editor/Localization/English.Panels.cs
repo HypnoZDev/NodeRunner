@@ -170,7 +170,6 @@ public static partial class English
         ("0x{0} · {1} · {2} objets", "0x{0} · {1} · {2} objects"),
         ("Objet, WPL, type, ou position : x, y, z", "Object, WPL, type, or position: x, y, z"),
         ("Exemples : ag_bigandbushy · manhat01 · 0xA9BC5D05 · -200, 500, 20", "Examples: ag_bigandbushy · manhat01 · 0xA9BC5D05 · -200, 500, 20"),
-        ("↑ ↓  choisir     Entrée  y aller     Échap  fermer", "↑ ↓  choose     Enter  go there     Esc  close"),
         ("Effacer", "Clear"),
 
         // 3D view toolbar

@@ -133,7 +133,8 @@ public static class Gta4Drawables
             Merge(textures, body.EmbeddedTextures);
         }
 
-        var bonePoses = BonePoses(res, main >= 0 ? res.Pointer(main + 0x0C) : -1);
+        int skeleton = main >= 0 ? res.Pointer(main + 0x0C) : -1;
+        var bonePoses = BonePoses(res, skeleton);
         int children = res.Pointer(FragmentChildren);
         int count = res.Data.Length > FragmentChildCountB ? Math.Max(res.Data[FragmentChildCountA], res.Data[FragmentChildCountB]) : 0;
         for (int i = 0; i < count && children >= 0; i++)
@@ -148,6 +149,7 @@ public static class Gta4Drawables
         }
         if (meshes.Count == 0)
             return null;
+        AddMissingWheels(BoneNames(res, skeleton, bonePoses.Length), bonePoses, meshes);
         var min = new Vector3(float.MaxValue);
         var max = new Vector3(float.MinValue);
         foreach (var mesh in meshes)
@@ -165,6 +167,84 @@ public static class Gta4Drawables
     {
         foreach (var (hash, texture) in textures)
             into.TryAdd(hash, texture);
+    }
+
+    private static string?[] BoneNames(Resource res, int skeleton, int count)
+    {
+        int bones = skeleton >= 0 ? res.Pointer(skeleton + SkeletonBones) : -1;
+        var names = new string?[count];
+        for (int b = 0; b < count && bones >= 0; b++)
+            names[b] = res.String(res.Pointer(bones + b * BoneSize));
+        return names;
+    }
+
+    // Vehicles often model a single wheel (on "wheel_lf", sometimes one per axle) that the game draws on every wheel
+    // bone: copied onto the bones without a wheel, turned half a turn on the other side.
+    private static void AddMissingWheels(string?[] names, Matrix4x4[] poses, List<ModelMesh> meshes)
+    {
+        var wheels = Enumerable.Range(0, names.Length)
+            .Where(b => names[b] is { } n && n.StartsWith("wheel_", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (wheels.Count < 2)
+            return;
+        var modelled = new Dictionary<int, List<ModelMesh>>();
+        foreach (int b in wheels)
+        {
+            var own = meshes.Where(m => IsAround(m, poses[b].Translation)).ToList();
+            if (own.Count > 0)
+                modelled[b] = own;
+        }
+        if (modelled.Count == 0)
+            return;
+        foreach (int b in wheels)
+        {
+            if (modelled.ContainsKey(b))
+                continue;
+            // The same wheel on the other side first (wheel_rf from wheel_lf), else the nearest modelled one.
+            string mirror = SwapSide(names[b]!);
+            int source = modelled.Keys.FirstOrDefault(s => string.Equals(names[s], mirror, StringComparison.OrdinalIgnoreCase), -1);
+            if (source < 0)
+                source = modelled.Keys.MinBy(s => Vector3.DistanceSquared(poses[s].Translation, poses[b].Translation));
+            float fromX = poses[source].Translation.X, toX = poses[b].Translation.X;
+            bool otherSide = MathF.Abs(fromX) > 0.05f && MathF.Abs(toX) > 0.05f && MathF.Sign(fromX) != MathF.Sign(toX);
+            if (!Matrix4x4.Invert(poses[source], out var inverse))
+                continue;
+            var transform = inverse * (otherSide ? Matrix4x4.CreateRotationZ(MathF.PI) : Matrix4x4.Identity) * poses[b];
+            meshes.AddRange(modelled[source].Select(m => Transformed(m, transform)));
+        }
+    }
+
+    // A wheel's meshes are centred on its bone, except across the vehicle (twin wheels reach inwards).
+    private static bool IsAround(ModelMesh mesh, Vector3 point)
+    {
+        if (mesh.Positions.Length == 0)
+            return false;
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        foreach (var p in mesh.Positions)
+        {
+            min = Vector3.Min(min, p);
+            max = Vector3.Max(max, p);
+        }
+        var size = max - min;
+        var center = (min + max) * 0.5f;
+        return MathF.Abs(center.Y - point.Y) < 0.15f && MathF.Abs(center.Z - point.Z) < 0.15f
+            && point.X > min.X - 0.1f && point.X < max.X + 0.1f && MathF.Max(size.X, MathF.Max(size.Y, size.Z)) < 2.5f;
+    }
+
+    // "wheel_lf" <-> "wheel_rf", "wheel_lm1" <-> "wheel_rm1".
+    private static string SwapSide(string name)
+    {
+        const int Side = 6;
+        if (name.Length <= Side)
+            return name;
+        char side = char.ToLowerInvariant(name[Side]);
+        return side switch
+        {
+            'l' => string.Concat(name.AsSpan(0, Side), "r", name.AsSpan(Side + 1)),
+            'r' => string.Concat(name.AsSpan(0, Side), "l", name.AsSpan(Side + 1)),
+            _ => name,
+        };
     }
 
     // Pose of each bone in the model: its matrix, relative to its parent, times the parent's pose.
@@ -212,6 +292,7 @@ public static class Gta4Drawables
         ShaderHash = mesh.ShaderHash,
         BlendMode = mesh.BlendMode,
         Emission = mesh.Emission,
+        DiffuseColor = mesh.DiffuseColor,
     };
 
     // A shader: its kind (name, "gta_normal_spec"), its preset ("gta_cutout", which tells how it is blended), its
@@ -354,6 +435,7 @@ public static class Gta4Drawables
             Indices = triangles,
             DiffuseTextureName = shader?.Diffuse,
             ShaderHash = name is null ? 0 : Joaat.Hash(name),
+            DiffuseColor = PaintSlotOf(name) is > 0 and var slot ? new Vector4(2f, slot, slot, 1f) : null,
             BlendMode = weights is not null ? MeshBlendMode.Opaque : BlendModeOf(preset),
             Emission = preset is not null && preset.Contains("emissive", StringComparison.Ordinal)
                 ? preset.Contains("night", StringComparison.Ordinal) ? MeshEmission.Night : MeshEmission.Always
@@ -367,6 +449,16 @@ public static class Gta4Drawables
             },
         };
     }
+
+    // Vehicle paint shaders ("gta_vehicle_paint1" to 3, "_enveff" too) take colour n of the vehicle: marked as GTA V's
+    // matDiffuseColor (2, n, n) does.
+    private const string PaintShader = "gta_vehicle_paint";
+
+    private static int PaintSlotOf(string? shader) =>
+        shader is not null && shader.Length > PaintShader.Length && shader.StartsWith(PaintShader, StringComparison.Ordinal)
+        && shader[PaintShader.Length] is >= '1' and <= '3'
+            ? shader[PaintShader.Length] - '0'
+            : 0;
 
     private static MeshBlendMode BlendModeOf(string? preset) => preset switch
     {

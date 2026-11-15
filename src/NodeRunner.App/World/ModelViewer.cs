@@ -2,6 +2,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using NodeRunner.Data.Models;
+using NodeRunner.Data.Textures;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -85,14 +87,14 @@ internal sealed class ModelViewer : IDisposable
     // Result of the last capture (path of the image, or the error), for a message.
     public (string Text, bool Error)? CaptureResult { get; set; }
 
-    public void Open(ViewerItem item, WorldLoader world)
+    public void Open(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
     {
         if (item != _model.Item)
         {
             HiddenMeshes.Clear();
             HighlightedMesh = -1;
         }
-        _model.Open(item, world);
+        _model.Open(item, reader, textures, textureReader);
     }
 
     public void ResetView()

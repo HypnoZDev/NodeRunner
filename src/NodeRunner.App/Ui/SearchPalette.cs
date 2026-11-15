@@ -123,7 +123,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             _open = false;
         else if ((ImGui.IsKeyPressed(ImGuiKey.Enter) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter)) && _flat.Count > 0)
         {
-            if (ImGui.GetIO().KeyCtrl && HasModel(_flat[_index]) && !state.IsGta4)
+            if (ImGui.GetIO().KeyCtrl && HasModel(_flat[_index]))
                 OpenInViewer(_flat[_index]);
             else
                 Activate(_flat[_index]);
@@ -139,7 +139,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             DrawEmpty();
         else
             DrawResults();
-        DrawFooter(state.IsGta4);
+        DrawFooter();
     }
 
     private void Move(int delta)
@@ -194,8 +194,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private void DrawRow(ImDrawListPtr drawList, Result result, int index, float height)
     {
         ImGui.PushID(index);
-        // GTA IV has no viewer: Enter or a click is enough.
-        bool choice = index == _index && HasModel(result) && !state.IsGta4;
+        bool choice = index == _index && HasModel(result);
         if (ImGui.Selectable("##row", index == _index, choice ? ImGuiSelectableFlags.AllowOverlap : ImGuiSelectableFlags.None, new Vector2(0, height)))
         {
             ImGui.PopID();
@@ -257,7 +256,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         }
         ImGui.EndDisabled();
         ImGui.SameLine(0, 6f);
-        if (!clicked && Widgets.Button(viewer, L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée), puis « Placer » pour l'ajouter à la carte")))
+        if (!clicked && Widgets.Button(viewer, state.IsGta4 ? L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée)")
+                : L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée), puis « Placer » pour l'ajouter à la carte")))
         {
             OpenInViewer(result);
             clicked = true;
@@ -277,15 +277,14 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         openInViewer(result.Kind == Kind.Object && result.Entity is { } entity ? entity.ArchetypeHash : result.Type);
     }
 
-    private static void DrawFooter(bool withoutViewer)
+    private static void DrawFooter()
     {
         ImGui.Dummy(new Vector2(0, 2));
         var p = ImGui.GetCursorScreenPos();
         ImGui.GetWindowDrawList().AddLine(new Vector2(ImGui.GetWindowPos().X, p.Y), new Vector2(ImGui.GetWindowPos().X + ImGui.GetWindowWidth(), p.Y), Widgets.Col(UiTheme.Divider));
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.PushFont(UiTheme.SmallFont);
-        ImGui.TextColored(UiTheme.TextFaint, withoutViewer ? L("↑ ↓  choisir     Entrée  y aller     Échap  fermer")
-            : L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
+        ImGui.TextColored(UiTheme.TextFaint, L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
         ImGui.PopFont();
     }
 
@@ -487,10 +486,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             case Kind.Type:
                 if (_objectsByType.TryGetValue(result.Type, out var entities) && entities.Count > 0)
                     GoTo(entities.MinBy(e => Distance(e.Position))!);
-                else if (state.IsGta4)
-                    state.Notify(L("Ce type n'est placé nulle part sur la carte"), warning: true);
                 else
-                    openInViewer(result.Type); // Placed nowhere: the viewer shows it (and can place it).
+                    openInViewer(result.Type); // Placed nowhere: the viewer shows it (and can place it, in GTA V).
                 break;
         }
     }

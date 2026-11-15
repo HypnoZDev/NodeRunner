@@ -88,6 +88,10 @@ public sealed class VehiclePaints
         Errors = errors;
     }
 
+    // A palette and its combinations read elsewhere (GTA IV's carcols.dat).
+    public static VehiclePaints Create(IReadOnlyList<VehicleColor> colors, IReadOnlyDictionary<uint, VehicleVariation> variations) =>
+        new(colors, new Dictionary<uint, VehicleVariation>(variations), []);
+
     public IReadOnlyList<VehicleColor> Colors { get; }
 
     public int VariationCount => _variations.Count;

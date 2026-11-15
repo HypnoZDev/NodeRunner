@@ -43,6 +43,10 @@ internal sealed partial class PropertiesPanel
             ImGui.SetClipboardText(position);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
             ImGui.SetClipboardText(withHeading);
+        if (archetype is not null && scene.Models.Locate(archetype) is not null
+            && Widgets.Button(L($"{Icons.Box}  Voir le modèle dans la visionneuse"), L("Le modèle seul, à faire tourner, avec ses pièces et ses textures (F2)"),
+                ImGui.GetContentRegionAvail().X))
+            showModel(entity.ArchetypeHash);
 
         if (Widgets.Section(L("Transformation"), "gta4_transform") && Widgets.BeginProperties("##gta4_transform"))
         {

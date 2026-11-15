@@ -11,6 +11,7 @@ internal sealed class Gta4World : IDisposable
     private volatile List<Gta4PathArea>? _paths;
     private volatile Gta4MapBoxes? _boxes;
     private volatile Gta4Scene? _scene;
+    private volatile Gta4Vehicles? _vehicles;
 
     public Gta4FileSystem Files { get; } = new();
 
@@ -30,6 +31,9 @@ internal sealed class Gta4World : IDisposable
 
     // The map as the 3D view draws it (objects, levels of detail, model files).
     public Gta4Scene? Scene => _scene;
+
+    // Palette, planned colours and definitions of the vehicles, set once the map is read.
+    public Gta4Vehicles? Vehicles => _vehicles;
 
     public Gta4ModelReader ModelReader { get; }
 
@@ -58,6 +62,7 @@ internal sealed class Gta4World : IDisposable
         _paths = null;
         _boxes = null;
         _scene = null;
+        _vehicles = null;
         Folder = folder;
         Episode = episode;
         Task.Run(() =>
@@ -92,6 +97,7 @@ internal sealed class Gta4World : IDisposable
         _paths = null;
         _boxes = null;
         _scene = null;
+        _vehicles = null;
         Episode = episode;
         Task.Run(() =>
         {
@@ -121,6 +127,10 @@ internal sealed class Gta4World : IDisposable
             Diagnostics.ErrorLog.Add(L("Carte de GTA IV"), error);
         _boxes = new Gta4MapBoxes(map);
         _scene = Gta4Scene.Build(map, Files, Episode);
+        var vehicles = Gta4Vehicles.Load(Files, Episode);
+        foreach (string error in vehicles.Errors)
+            Diagnostics.ErrorLog.Add(L("Véhicules de GTA IV"), error);
+        _vehicles = vehicles;
         _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
     }
 

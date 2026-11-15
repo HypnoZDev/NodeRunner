@@ -26,6 +26,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private ModelViewer Viewer => state.Viewer;
 
+    // The model viewer shows the game NodeRunner runs on: GTA V, or GTA IV (game or episode chosen).
+    private bool IsGta4 => state.IsGta4;
+    private MapLibrary? Library => IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps;
+    private HashNames? Names => IsGta4 ? state.Gta4.Scene?.Names : state.World.Names;
+    private ModelCatalog? Models => IsGta4 ? state.Gta4.Scene?.Models : state.World.Models;
+    private VehiclePaints? Paints => IsGta4 ? state.Gta4.Vehicles?.Paints : state.World.Vehicles?.Paints;
+
     private Task<ViewerCatalog>? _building;
     private ViewerCatalog? _catalog;
     private MapLibrary? _catalogLibrary;
@@ -52,10 +59,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     public void OpenArchetype(uint archetypeHash)
     {
-        var world = state.World;
-        if (world.Maps?.GetArchetype(archetypeHash) is not { } archetype || world.Models?.Locate(archetype) is not { } location)
+        if (Library?.GetArchetype(archetypeHash) is not { } archetype || Models?.Locate(archetype) is not { } location)
             return;
-        string name = world.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        string name = Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        if (IsGta4 && !name.StartsWith("0x", StringComparison.Ordinal))
+            name = name.ToLowerInvariant();
         Open(new ViewerItem(name, ViewerKind.Object, location));
         _filter = 1;
         _search = "";
@@ -66,7 +74,10 @@ internal sealed unsafe class ViewerPanel(AppState state)
     {
         string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
         var kind = ViewerCatalog.IsVehicleFile(path) ? ViewerKind.Vehicle : ViewerKind.Object;
-        Open(new ViewerItem(name, kind, new ModelLocation(path, Joaat.Hash(name))));
+        uint hash = Joaat.Hash(name);
+        // Textures: those of the object type of that name, a vehicle's dictionary of its name.
+        uint textures = Library?.GetArchetype(hash)?.TextureDictionaryHash ?? (kind == ViewerKind.Vehicle ? hash : 0);
+        Open(new ViewerItem(name, kind, new ModelLocation(path, hash, textures)));
         _filter = kind == ViewerKind.Vehicle ? 0 : 1;
         _search = "";
         _scrollToItem = true;
@@ -79,7 +90,10 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _selectedMesh = -1;
             _openTexture = null;
         }
-        Viewer.Open(item, state.World);
+        if (IsGta4)
+            Viewer.Open(item, state.Gta4.ModelReader, state.Gta4.Scene?.Textures, state.Gta4.TextureReader);
+        else
+            Viewer.Open(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
     }
 
     public void Draw(ref bool open)
@@ -120,12 +134,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private void UpdateCatalog()
     {
-        var world = state.World;
-        if (world.Maps != _catalogLibrary)
+        var library = Library;
+        if (library != _catalogLibrary)
         {
-            _catalogLibrary = world.Maps;
+            _catalogLibrary = library;
             _catalog = null;
-            _building = world.Maps is null ? null : Task.Run(() => ViewerCatalog.Build(world));
+            var world = state.World;
+            var scene = state.Gta4.Scene;
+            _building = library is null ? null
+                : IsGta4 && scene is not null ? Task.Run(() => ViewerCatalog.BuildGta4(scene))
+                : Task.Run(() => ViewerCatalog.Build(world));
         }
         if (_building is { IsCompleted: true } finished)
         {
@@ -136,10 +154,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     // ---- Paint ----
 
-    private VehicleData? Vehicles => state.World.Vehicles;
+    // GTA V's vehicle sheets (none in GTA IV).
+    private VehicleData? Vehicles => IsGta4 ? null : state.World.Vehicles;
 
     private VehicleVariation? Variation =>
-        Viewer.Item is { Kind: ViewerKind.Vehicle } item ? Vehicles?.Paints.VariationOf(item.Location.ModelHash) : null;
+        Viewer.Item is { Kind: ViewerKind.Vehicle } item ? Paints?.VariationOf(item.Location.ModelHash) : null;
+
+    // GTA IV gives its colours by number (carcols.dat: colours 1 to 4).
+    private string SlotName(VehiclePaintSlot slot) => IsGta4 ? L($"Couleur {(int)slot}") : ShaderNames.Slot(slot);
+
+    private int SlotCount => IsGta4 ? 4 : PaintSlots.Length;
 
     // A vehicle opened: its first planned combination, once the palette is read.
     private void UpdatePaint()
@@ -150,7 +174,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Viewer.PaintColors = null;
             return;
         }
-        if (Vehicles is not { } vehicles)
+        if (Paints is not { } paints)
         {
             Viewer.PaintColors = null;
             return;
@@ -159,12 +183,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             _paintFor = item;
             _paintSet = -1;
-            if (vehicles.Paints.VariationOf(item.Location.ModelHash) is { ColorSets.Count: > 0 })
+            if (paints.VariationOf(item.Location.ModelHash) is { ColorSets.Count: > 0 })
                 ApplySet(0);
             else
                 DefaultPaint.CopyTo(_paint, 0);
         }
-        Viewer.PaintColors = _paintOn ? VehiclePaintColors.From(vehicles.Paints, _paint) : null;
+        Viewer.PaintColors = _paintOn ? VehiclePaintColors.From(paints, _paint) : null;
     }
 
     private void ApplySet(int index)
@@ -186,14 +210,24 @@ internal sealed unsafe class ViewerPanel(AppState state)
         string[] labels = _catalog is { } c
             ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})", $"{Filters[2]} ({Widgets.Count(c.Library.Count)})"]
             : Filters;
-        Widgets.Segmented("viewer_filter", labels, ref _filter,
-            [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)"),
-             L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource.")]);
+        if (IsGta4)
+        {
+            // No prop library in GTA IV.
+            _filter = Math.Min(_filter, 1);
+            Widgets.Segmented("viewer_filter_gta4", labels[..2], ref _filter,
+                [L("Tous les véhicules du jeu ou de l'épisode choisi (vehicles.img)"), L("Tous les types d'objets de la carte (définitions .ide)")]);
+        }
+        else
+        {
+            Widgets.Segmented("viewer_filter", labels, ref _filter,
+                [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)"),
+                 L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource.")]);
+        }
         ImGui.SetNextItemWidth(-float.Epsilon);
         Widgets.SearchField("##viewer_search", _filter switch
         {
-            0 => L("Véhicule (ex. adder)"),
-            1 => L("Type (ex. prop_bench)"),
+            0 => IsGta4 ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
+            1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : L("Type (ex. prop_bench)"),
             _ => L("Prop ou pack"),
         }, ref _search);
         if (_filter == 2)
@@ -201,7 +235,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
         if (_catalog is null)
         {
-            Widgets.Hint(state.World.Maps is null ? L("En attente du chargement de la carte...") : L("Préparation de la liste..."));
+            Widgets.Hint(Library is null ? L("En attente du chargement de la carte...") : L("Préparation de la liste..."));
             return;
         }
 
@@ -382,6 +416,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private string? Subtitle(ViewerItem item)
     {
+        if (item.Kind == ViewerKind.Vehicle && IsGta4)
+        {
+            return state.Gta4.Vehicles?.Find(item.Location.ModelHash) is { } definition
+                ? string.Join(" · ", new[] { Gta4TypeName(definition.Type), definition.HandlingId }.Where(t => t.Length > 0))
+                : null;
+        }
         if (item.Kind == ViewerKind.Vehicle)
         {
             if (Vehicles?.Info.VehicleOf(item.Location.ModelHash) is not { Count: > 0 } sheet)
@@ -391,7 +431,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             return string.Join(" · ", new[] { $"{make} {game}".Trim(), ClassName(VehicleInfoCatalog.Value(sheet, "vehicleClass")),
                 TypeName(VehicleInfoCatalog.Value(sheet, "type")) }.Where(t => t.Length > 0));
         }
-        if (state.World.Maps?.GetArchetype(item.ArchetypeHash) is { } archetype)
+        if (Library?.GetArchetype(item.ArchetypeHash) is { } archetype)
             return L($"{KindName(archetype.Kind)} · distance d'affichage {archetype.LodDistance:0} m");
         return null;
     }
@@ -584,7 +624,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.SetTooltip(L($"Fichier : {item.Location.Path}")
                 + (Viewer.MissingTextureCount > 0 ? L($"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}") : ""));
 
-        bool canPlace = item.Kind == ViewerKind.Object && state.World.Maps is not null;
+        bool canPlace = item.Kind == ViewerKind.Object && !IsGta4 && state.World.Maps is not null;
         float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
         if (canPlace)
@@ -597,7 +637,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
                     : L($"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler."));
             ImGui.SameLine();
         }
-        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), item.Kind == ViewerKind.Vehicle ? L("Nom de spawn du véhicule (ex. pour un script FiveM)") : L("Nom du type d'objet")))
+        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), IsGta4 ? L("Nom du modèle")
+                : item.Kind == ViewerKind.Vehicle ? L("Nom de spawn du véhicule (ex. pour un script FiveM)") : L("Nom du type d'objet")))
             ImGui.SetClipboardText(item.Name);
     }
 
@@ -631,7 +672,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             Scroll("sheet", () =>
             {
-                if (item.Kind == ViewerKind.Vehicle)
+                if (item.Kind == ViewerKind.Vehicle && IsGta4)
+                    DrawGta4VehicleSheet(item);
+                else if (item.Kind == ViewerKind.Vehicle)
                     DrawVehicleSheet(item);
                 else
                     DrawArchetypeSheet(item);
@@ -657,12 +700,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private void DrawPaintTab()
     {
-        if (Vehicles is not { } vehicles)
+        if (Paints is not { } paints)
         {
-            Widgets.Hint(L("Lecture des couleurs du jeu (carcols, carvariations)..."));
+            Widgets.Hint(IsGta4 ? L("Lecture des couleurs du jeu (carcols.dat)...") : L("Lecture des couleurs du jeu (carcols, carvariations)..."));
             return;
         }
-        var paints = vehicles.Paints;
         if (paints.Colors.Count == 0)
         {
             Widgets.Hint(L("Palette des véhicules introuvable dans les fichiers du jeu."), wrap: true);
@@ -678,7 +720,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             if (variation is not { ColorSets.Count: > 0 })
             {
-                Widgets.Hint(L("Aucune combinaison dans carvariations pour ce modèle : couleurs par défaut."), wrap: true);
+                Widgets.Hint(IsGta4 ? L("Aucune combinaison dans carcols.dat pour ce modèle : couleurs par défaut.")
+                    : L("Aucune combinaison dans carvariations pour ce modèle : couleurs par défaut."), wrap: true);
             }
             else
             {
@@ -700,7 +743,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
         if (Widgets.Section(L("Couleurs"), "viewer_paint_slots"))
         {
-            for (int i = 0; i < PaintSlots.Length; i++)
+            for (int i = 0; i < SlotCount; i++)
                 SlotRow(i, paints, used.Contains(PaintSlots[i]));
             if (Widgets.Button(L($"{Icons.Undo}  Couleurs du jeu"), L("Revenir à la première combinaison prévue par le jeu")))
             {
@@ -711,7 +754,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             }
         }
 
-        if (Widgets.Section(L("Script FiveM (Lua)"), "viewer_paint_script"))
+        if (!IsGta4 && Widgets.Section(L("Script FiveM (Lua)"), "viewer_paint_script"))
         {
             string script = PaintScript();
             ImGui.PushFont(UiTheme.SmallFont);
@@ -721,7 +764,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 ImGui.SetClipboardText(script);
         }
 
-        if (variation is not null && Widgets.Section(L("Autres réglages de carvariations"), "viewer_paint_more", defaultOpen: false))
+        if (variation is not null && !IsGta4 && Widgets.Section(L("Autres réglages de carvariations"), "viewer_paint_more", defaultOpen: false))
         {
             if (Widgets.BeginProperties("viewer_variation"))
             {
@@ -757,7 +800,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         float strip = max.Y - size * 0.22f;
         drawList.AddRectFilled(min, new Vector2(middle, strip), Color(0));
         drawList.AddRectFilled(new Vector2(middle, min.Y), new Vector2(max.X, strip), Color(1));
-        drawList.AddRectFilled(new Vector2(min.X, strip), max, Color(3));
+        drawList.AddRectFilled(new Vector2(min.X, strip), max, Color(IsGta4 ? 2 : 3));
         bool selected = _paintSet == index;
         drawList.AddRect(min - new Vector2(1), max + new Vector2(1),
             Widgets.Col(selected ? UiTheme.Accent : hovered ? UiTheme.Text : UiTheme.Border), 2f, ImDrawFlags.None, selected ? 2f : 1f);
@@ -765,8 +808,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             ImGui.BeginTooltip();
             ImGui.TextUnformatted(L($"Combinaison {index + 1}"));
-            for (int i = 0; i < PaintSlots.Length && i < set.Indices.Count; i++)
-                ImGui.TextColored(UiTheme.TextMuted, $"{ShaderNames.Slot(PaintSlots[i])} : {ColorName(paints, set[i])}");
+            for (int i = 0; i < SlotCount && i < set.Indices.Count; i++)
+                ImGui.TextColored(UiTheme.TextMuted, $"{SlotName(PaintSlots[i])} : {ColorName(paints, set[i])}");
             ImGui.EndTooltip();
         }
         ImGui.PopID();
@@ -789,7 +832,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         ImGui.SameLine();
         ImGui.BeginGroup();
-        ImGui.TextColored(used ? UiTheme.Text : UiTheme.TextFaint, ShaderNames.Slot(PaintSlots[slot]));
+        ImGui.TextColored(used ? UiTheme.Text : UiTheme.TextFaint, SlotName(PaintSlots[slot]));
         ImGui.PushFont(UiTheme.SmallFont);
         ImGui.TextColored(UiTheme.TextMuted, color is null ? $"{_paint[slot]}" : $"{_paint[slot]} · {color.Name}" + (used ? "" : L(" (aucune pièce de ce modèle)")));
         ImGui.PopFont();
@@ -816,7 +859,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.SetNextWindowSize(new Vector2(420f, 0f));
         if (!ImGui.BeginPopup("##viewer_palette"))
             return;
-        ImGui.TextUnformatted(L($"{ShaderNames.Slot(PaintSlots[_pickingSlot])} : palette du jeu ({paints.Colors.Count} couleurs)"));
+        ImGui.TextUnformatted(L($"{SlotName(PaintSlots[_pickingSlot])} : palette du jeu ({paints.Colors.Count} couleurs)"));
         ImGui.SetNextItemWidth(-float.Epsilon);
         Widgets.SearchField("##palette_search", L("Nom ou numéro (ex. matte, 27)"), ref _paletteSearch);
         ImGui.SetNextItemWidth(-float.Epsilon);
@@ -932,7 +975,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 ImGui.TableNextColumn();
                 var slot = VehiclePaints.SlotOf(mesh.DiffuseColor);
                 ImGui.TextColored(slot is VehiclePaintSlot.None or VehiclePaintSlot.Unpainted ? UiTheme.TextFaint : UiTheme.Text,
-                    slot == VehiclePaintSlot.None ? "-" : ShaderNames.Slot(slot));
+                    slot == VehiclePaintSlot.None ? "-" : SlotName(slot));
                 ImGui.TableNextColumn();
                 ImGui.TextColored(UiTheme.TextMuted, Widgets.Count(mesh.Indices.Length / 3));
                 ImGui.PopID();
@@ -954,11 +997,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Widgets.PropertyText(L("Shader"), ShaderNames.Shader(mesh.ShaderHash));
             Widgets.PropertyText(L("Rendu"), ShaderNames.BlendMode(mesh.BlendMode));
             var slot = VehiclePaints.SlotOf(mesh.DiffuseColor);
-            if (mesh.DiffuseColor is { } d)
+            // In GTA IV the colour comes from the shader's name (gta_vehicle_paint1...), there is no matDiffuseColor.
+            if (mesh.DiffuseColor is { } d && !IsGta4)
                 Widgets.PropertyText(L("matDiffuseColor"), $"{d.X:0.###}, {d.Y:0.###}, {d.Z:0.###}",
                     slot is VehiclePaintSlot.None ? null : L($"2, n, n = prend la couleur n° n : {ShaderNames.Slot(slot)}"));
             if (slot != VehiclePaintSlot.None)
-                Widgets.PropertyText(L("Couleur"), ShaderNames.Slot(slot));
+                Widgets.PropertyText(L("Couleur"), SlotName(slot));
             Widgets.PropertyText(L("Sommets"), Widgets.Count(mesh.Positions.Length));
             Widgets.PropertyText(L("Triangles"), Widgets.Count(mesh.Indices.Length / 3));
             if (mesh.Emission != MeshEmission.None)
@@ -1204,6 +1248,74 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _ => value,
     };
 
+    // ---- GTA IV ----
+
+    private static string Gta4TypeName(string type) => type.ToLowerInvariant() switch
+    {
+        "car" => L("Voiture"),
+        "bike" => L("Moto"),
+        "heli" => L("Hélicoptère"),
+        "boat" => L("Bateau"),
+        "plane" => L("Avion"),
+        "train" => L("Train"),
+        _ => type,
+    };
+
+    // The vehicle's line of vehicles.ide.
+    private void DrawGta4VehicleSheet(ViewerItem item)
+    {
+        if (state.Gta4.Vehicles is not { } vehicles)
+        {
+            Widgets.Hint(L("Lecture des fiches du jeu (vehicles.ide)..."));
+            return;
+        }
+        if (vehicles.Find(item.Location.ModelHash) is not { } d)
+        {
+            Widgets.Hint(L("Ce modèle n'est pas dans le vehicles.ide du jeu ou de l'épisode."), wrap: true);
+            return;
+        }
+        if (Widgets.Section(L("Définition (vehicles.ide)"), "viewer_gta4_vehicle") && Widgets.BeginProperties("viewer_gta4_vehicle_props", 0.45f))
+        {
+            string Number(float value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+            Widgets.PropertyText(L("Modèle"), d.Model);
+            Widgets.PropertyText(L("Type"), $"{Gta4TypeName(d.Type)} ({d.Type})");
+            Widgets.PropertyText(L("Nom dans le jeu"), d.GameName, L("Clé du texte affiché dans le jeu"));
+            Widgets.PropertyText(L("Conduite (handling.dat)"), d.HandlingId);
+            Widgets.PropertyText(L("Dictionnaire de textures"), d.TextureDictionary);
+            Widgets.PropertyText(L("Animations"), d.Anims);
+            Widgets.PropertyText(L("Fréquence d'apparition"), d.Frequency.ToString(CultureInfo.InvariantCulture));
+            Widgets.PropertyText(L("Nombre maximum"), d.MaxNumber.ToString(CultureInfo.InvariantCulture));
+            Widgets.PropertyText(L("Taille des roues avant"), Number(d.WheelScaleFront));
+            Widgets.PropertyText(L("Taille des roues arrière"), Number(d.WheelScaleRear));
+            Widgets.PropertyText(L("Saleté de départ"), Number(d.DirtLevel), L("0 : de propre à sale, 0,5 : au moins à moitié sale..."));
+            Widgets.PropertyText(L("Standing"), d.Swankness.ToString(CultureInfo.InvariantCulture));
+            Widgets.PropertyText(L("Multiplicateur de distance (LOD)"), Number(d.LodMultiplier));
+            Widgets.PropertyText(L("Drapeaux"), d.Flags.Replace("+", " + ", StringComparison.Ordinal));
+            Widgets.PropertyText(L("Fichier"), Path.GetFileName(d.Source), d.Source);
+            Widgets.EndProperties();
+        }
+    }
+
+    private void DrawGta4FileSection(string path)
+    {
+        if (!Widgets.Section(L("Fichier"), "viewer_file") || !Widgets.BeginProperties("viewer_file_props", 0.4f))
+            return;
+        Widgets.PropertyText(L("Nom"), Path.GetFileName(path));
+        Widgets.PropertyText(L("Jeu"), Gta4GameOf(path), L("Jeu de base ou épisode qui apporte ce fichier"));
+        Widgets.PropertyText(L("Archive"), Widgets.Fit(Path.GetDirectoryName(path) ?? "", ImGui.GetContentRegionAvail().X), Path.GetDirectoryName(path));
+        if (state.Gta4.Files.GetInfo(path) is { } i)
+        {
+            Widgets.PropertyText(L("Taille"), L($"{FormatSize(i.Size)} ({FormatSize(i.StoredSize)} dans l'archive)"));
+            Widgets.PropertyText(L("Ressource"), i.IsResource ? L($"oui, type {i.ResourceType}") : L("non"));
+        }
+        Widgets.EndProperties();
+    }
+
+    private static string Gta4GameOf(string path) =>
+        path.StartsWith(@"TLAD\", StringComparison.OrdinalIgnoreCase) ? Gta4World.EpisodeName(Data.Native.Gta4.Gta4Episode.LostAndDamned)
+        : path.StartsWith(@"TBoGT\", StringComparison.OrdinalIgnoreCase) ? Gta4World.EpisodeName(Data.Native.Gta4.Gta4Episode.BalladOfGayTony)
+        : Gta4World.EpisodeName(Data.Native.Gta4.Gta4Episode.Base);
+
     // ---- Object type ----
 
     private static string KindName(ArchetypeKind kind) => kind switch
@@ -1215,14 +1327,15 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private void DrawArchetypeSheet(ViewerItem item)
     {
-        var world = state.World;
-        if (world.Maps?.GetArchetype(item.ArchetypeHash) is not { } a)
+        if (Library?.GetArchetype(item.ArchetypeHash) is not { } a)
         {
-            Widgets.Hint(L("Type introuvable dans les YTYP de la carte (modèle ouvert depuis l'explorateur d'archives)."), wrap: true);
+            Widgets.Hint(IsGta4 ? L("Type introuvable dans les .ide de la carte (modèle ouvert depuis l'explorateur d'archives).")
+                : L("Type introuvable dans les YTYP de la carte (modèle ouvert depuis l'explorateur d'archives)."), wrap: true);
             return;
         }
-        string Name(uint hash) => hash == 0 ? "-" : world.Names?.Describe(hash) ?? $"0x{hash:X8}";
-        if (Widgets.Section(L("Archétype (YTYP)"), "viewer_archetype") && Widgets.BeginProperties("viewer_archetype_props", 0.45f))
+        var names = Names;
+        string Name(uint hash) => hash == 0 ? "-" : names?.Describe(hash) ?? $"0x{hash:X8}";
+        if (Widgets.Section(IsGta4 ? L("Définition (.ide)") : L("Archétype (YTYP)"), "viewer_archetype") && Widgets.BeginProperties("viewer_archetype_props", 0.45f))
         {
             Widgets.PropertyText(L("Nom"), Name(a.NameHash), $"0x{a.NameHash:X8}");
             Widgets.PropertyText(L("Sorte"), KindName(a.Kind));
@@ -1256,9 +1369,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private void DrawFileTab(ViewerItem item)
     {
         string path = item.Location.Path;
-        var info = state.World.Files?.GetInfo(path);
-        if (Widgets.Section(L("Fichier"), "viewer_file") && Widgets.BeginProperties("viewer_file_props", 0.4f))
+        if (IsGta4)
         {
+            DrawGta4FileSection(path);
+        }
+        else if (Widgets.Section(L("Fichier"), "viewer_file") && Widgets.BeginProperties("viewer_file_props", 0.4f))
+        {
+            var info = state.World.Files?.GetInfo(path);
             Widgets.PropertyText(L("Nom"), Path.GetFileName(path));
             Widgets.PropertyText(L("Pack"), PackOf(path), L("Pack DLC qui apporte ce fichier (ou le jeu de base)"));
             Widgets.PropertyText(L("Archive"), Widgets.Fit(Path.GetDirectoryName(path) ?? "", ImGui.GetContentRegionAvail().X), Path.GetDirectoryName(path));

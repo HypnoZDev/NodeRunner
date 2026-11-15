@@ -26,8 +26,8 @@ internal sealed partial class ViewerCatalog
     public IReadOnlyList<ViewerItem> Library { get; init; } = [];
 
     // Vehicle archives: levels\gta5\vehicles.rpf, and in DLC packs levels\gta5\vehicles\<pack>vehicles.rpf
-    // (tuning parts are in "vehiclemods", not listed).
-    [GeneratedRegex(@"[\\/]vehicles(\.rpf)?[\\/]|[\\/][^\\/]*vehicles\.rpf[\\/]", RegexOptions.IgnoreCase)]
+    // (tuning parts are in "vehiclemods", not listed). GTA IV: models\cdimages\vehicles.img.
+    [GeneratedRegex(@"[\\/]vehicles(\.rpf|\.img)?[\\/]|[\\/][^\\/]*vehicles\.rpf[\\/]", RegexOptions.IgnoreCase)]
     private static partial Regex VehicleArchive();
 
     public static bool IsVehicleFile(string path) => VehicleArchive().IsMatch(path);
@@ -63,13 +63,41 @@ internal sealed partial class ViewerCatalog
 
         props = LibraryItems(world);
         vehicles.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
-        // Readable names first, the names only known by their hash ("0x...") at the end.
-        objects.Sort((a, b) =>
-        {
-            int byKind = a.Name.StartsWith("0x", StringComparison.Ordinal).CompareTo(b.Name.StartsWith("0x", StringComparison.Ordinal));
-            return byKind != 0 ? byKind : string.CompareOrdinal(a.Name, b.Name);
-        });
+        objects.Sort(ByName);
         return new ViewerCatalog { Vehicles = vehicles, Objects = objects, Library = props };
+    }
+
+    // Readable names first, the names only known by their hash ("0x...") at the end.
+    private static int ByName(ViewerItem a, ViewerItem b)
+    {
+        int byKind = a.Name.StartsWith("0x", StringComparison.Ordinal).CompareTo(b.Name.StartsWith("0x", StringComparison.Ordinal));
+        return byKind != 0 ? byKind : string.CompareOrdinal(a.Name, b.Name);
+    }
+
+    // GTA IV: the vehicles of the game or episode (".wft" of "vehicles.img"), and the object types of its map.
+    public static ViewerCatalog BuildGta4(Data.Native.Gta4.Gta4Scene scene)
+    {
+        var vehicles = new List<ViewerItem>();
+        foreach (var path in scene.Models.FragmentFiles)
+        {
+            if (!path.Contains(@"\vehicles.img\", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+            uint hash = Joaat.Hash(name);
+            vehicles.Add(new ViewerItem(name, ViewerKind.Vehicle, new ModelLocation(path, hash, hash)));
+        }
+        var objects = new List<ViewerItem>();
+        foreach (uint hash in scene.Library.GetArchetypeHashes())
+        {
+            if (scene.Library.GetArchetype(hash) is not { } archetype || scene.Models.Locate(archetype) is not { } location)
+                continue;
+            // The search is in lower case; some ".ide" names are not.
+            string name = scene.Names.Describe(hash);
+            objects.Add(new ViewerItem(name.StartsWith("0x", StringComparison.Ordinal) ? name : name.ToLowerInvariant(), ViewerKind.Object, location));
+        }
+        vehicles.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+        objects.Sort(ByName);
+        return new ViewerCatalog { Vehicles = vehicles, Objects = objects };
     }
 
     // The object types of the prop library, by pack then name.
