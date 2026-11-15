@@ -25,13 +25,13 @@ internal sealed class ModelLayer : IDisposable
     private const double UnusedModelLifetimeLowMemory = 2.0;
     private const int RecentFileCacheSize = 24;
 
-    private readonly Dictionary<ModelLocation, GpuModel?> _models = new();
-    private readonly Dictionary<ModelLocation, double> _lastUsed = new();
+    private readonly Dictionary<ModelLocation, ModelSlot> _slots = new();
+    private readonly List<ModelSlot> _toRelease = new();
+    private int _pendingCount;
+    private int _loadedCount;
     private readonly Dictionary<TextureKey, SharedTexture> _textures = new();
     // Keys of _textures, read by the reading threads (a texture already on the GPU is not read again).
     private readonly ConcurrentDictionary<TextureKey, byte> _texturesOnGpu = new();
-    private readonly Dictionary<ModelLocation, TextureKey[]> _modelTextures = new();
-    private readonly HashSet<ModelLocation> _pending = new();
     private readonly Channel<(ModelLocation Location, int Generation, Vector3 BoundsMin, Vector3 BoundsMax)> _requests =
         Channel.CreateUnbounded<(ModelLocation, int, Vector3, Vector3)>();
     private readonly ConcurrentQueue<LoadedModel> _results = new();
@@ -64,12 +64,33 @@ internal sealed class ModelLayer : IDisposable
             Task.Run(ReadModelsInBackground);
     }
 
+    // The state of a model file, shared by the objects using it: each keeps its slot, so drawing looks nothing up.
+    private sealed class ModelSlot(ModelLocation location)
+    {
+        public ModelLocation Location { get; } = location;
+
+        // Read and on the GPU; Model stays null if the file has none (remembered, so it is not asked for again).
+        public bool Loaded;
+        public GpuModel? Model;
+        public TextureKey[] Textures = [];
+
+        // Asked from the reading threads, not arrived yet.
+        public bool Pending;
+
+        // No longer in _slots: an object still holding it takes the current one.
+        public bool Released;
+        public double LastUsed;
+    }
+
     // An object to draw: where (computed for Revision of the entity), which model, its bounding sphere in the world
     // (for culling), and the lower-detail object to show while its model is not loaded yet.
     private sealed record VisibleEntity(
         MapEntity Entity, int Revision, Matrix4x4 Transform, ModelLocation Location, Vector3 SphereCenter, float SphereRadius)
     {
         public VisibleEntity? Fallback { get; init; }
+
+        // Set on the drawing thread (see SlotOf).
+        public ModelSlot? Slot { get; set; }
 
         public bool IsCurrent => Revision == Entity.Revision && (Fallback?.IsCurrent ?? true);
     }
@@ -105,9 +126,9 @@ internal sealed class ModelLayer : IDisposable
     public int NearbyObjectCount => _visible.Count;
     public int DrawnObjectCount { get; private set; }
     public long DrawnTriangleCount { get; private set; }
-    public int LoadedModelCount => _models.Count(m => m.Value is not null);
+    public int LoadedModelCount => _loadedCount;
     public int LoadedTextureCount => _textures.Count;
-    public int PendingModelCount => _pending.Count;
+    public int PendingModelCount => _pendingCount;
     public long GpuBytes => _gpuBytes;
 
     // Video memory the models may use (bytes, asked about once a second), null = no limit.
@@ -236,12 +257,26 @@ internal sealed class ModelLayer : IDisposable
         int loaded = 0;
         foreach (var entity in _visible)
         {
-            if (!_models.ContainsKey(entity.Location))
-                continue;
-            loaded++;
-            _lastUsed[entity.Location] = now;
+            var slot = SlotOf(entity, now);
+            slot.LastUsed = now;
+            if (slot.Loaded)
+                loaded++;
         }
         return (float)loaded / _visible.Count;
+    }
+
+    private ModelSlot SlotOf(VisibleEntity entity, double now)
+    {
+        if (entity.Slot is { Released: false } slot)
+            return slot;
+        return entity.Slot = SlotAt(entity.Location, now);
+    }
+
+    private ModelSlot SlotAt(ModelLocation location, double now)
+    {
+        if (!_slots.TryGetValue(location, out var slot))
+            _slots[location] = slot = new ModelSlot(location) { LastUsed = now };
+        return slot;
     }
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
@@ -264,16 +299,21 @@ internal sealed class ModelLayer : IDisposable
             var entity = _visible[i];
             if (entity.Entity.IsDeleted)
                 continue; // Deleted since the list was made (it is being made again).
-            if (!_models.TryGetValue(entity.Location, out var model))
+            var slot = SlotOf(entity, now);
+            slot.LastUsed = now;
+            if (!slot.Loaded)
             {
                 // Not loaded yet: show the lower-detail parent instead (once), to avoid holes.
-                if (entity.Fallback is not { } fallback || fallback.Entity.IsDeleted || !fallbacksDrawn.Add(fallback.Entity)
-                    || !_models.TryGetValue(fallback.Location, out model))
+                if (entity.Fallback is not { } fallback || fallback.Entity.IsDeleted || !fallbacksDrawn.Add(fallback.Entity))
+                    continue;
+                slot = SlotOf(fallback, now);
+                slot.LastUsed = now;
+                if (!slot.Loaded)
                     continue;
                 entity = fallback;
             }
 
-            _lastUsed[entity.Location] = now;
+            var model = slot.Model;
             if (model is null || !frustum.Intersects(entity.SphereCenter, entity.SphereRadius)
                 || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > maxDistance)
                 continue;
@@ -304,6 +344,7 @@ internal sealed class ModelLayer : IDisposable
     public void DrawShadows(ModelRenderer renderer, ShadowMaps shadows)
     {
         renderer.BeginShadow();
+        double now = _clock.Elapsed.TotalSeconds;
         var fallbacksDrawn = new HashSet<MapEntity>();
         for (int cascade = 0; cascade < ShadowMaps.CascadeCount; cascade++)
         {
@@ -319,14 +360,18 @@ internal sealed class ModelLayer : IDisposable
                 var entity = _visible[i];
                 if (entity.Entity.IsDeleted)
                     continue;
-                if (!_models.TryGetValue(entity.Location, out var model))
+                var slot = SlotOf(entity, now);
+                if (!slot.Loaded)
                 {
                     // Not loaded yet: the parent shown instead casts the shadow.
-                    if (entity.Fallback is not { } fallback || fallback.Entity.IsDeleted || !fallbacksDrawn.Add(fallback.Entity)
-                        || !_models.TryGetValue(fallback.Location, out model))
+                    if (entity.Fallback is not { } fallback || fallback.Entity.IsDeleted || !fallbacksDrawn.Add(fallback.Entity))
+                        continue;
+                    slot = SlotOf(fallback, now);
+                    if (!slot.Loaded)
                         continue;
                     entity = fallback;
                 }
+                var model = slot.Model;
                 if (model is null || entity.SphereRadius < minRadius || !frustum.Intersects(entity.SphereCenter, entity.SphereRadius))
                     continue;
                 renderer.DrawShadow(model, entity.Transform, lightViewProjection);
@@ -440,15 +485,17 @@ internal sealed class ModelLayer : IDisposable
         {
             foreach (var entity in _visible)
             {
-                if (_pending.Count >= MaxPendingReads)
+                if (_pendingCount >= MaxPendingReads)
                     return;
+                if (entity.Slot is { Released: false, Loaded: true })
+                    continue;
                 if (frustum.Intersects(entity.SphereCenter, entity.SphereRadius))
                     Request(entity);
             }
         }
         foreach (var entity in _visible)
         {
-            if (_pending.Count >= MaxPendingReads)
+            if (_pendingCount >= MaxPendingReads)
                 return;
             Request(entity);
         }
@@ -456,9 +503,12 @@ internal sealed class ModelLayer : IDisposable
 
     private void Request(VisibleEntity entity)
     {
-        var location = entity.Location;
-        if (_models.ContainsKey(location) || !_pending.Add(location))
+        var slot = SlotOf(entity, _clock.Elapsed.TotalSeconds);
+        if (slot.Loaded || slot.Pending)
             return;
+        slot.Pending = true;
+        _pendingCount++;
+        var location = slot.Location;
         var archetype = _library?.GetArchetype(entity.Entity.ArchetypeHash);
         _requests.Writer.TryWrite((location, _generation, archetype?.BoundsMin ?? Vector3.Zero, archetype?.BoundsMax ?? Vector3.Zero));
     }
@@ -473,7 +523,17 @@ internal sealed class ModelLayer : IDisposable
                 result.Dispose();
                 continue;
             }
-            _pending.Remove(result.Location);
+            var slot = SlotAt(result.Location, _clock.Elapsed.TotalSeconds);
+            if (slot.Pending)
+            {
+                slot.Pending = false;
+                _pendingCount--;
+            }
+            if (slot.Loaded)
+            {
+                result.Dispose();
+                continue; // Already there: one copy is kept.
+            }
             if (result.Textures.Any(mesh => mesh.Any(k => k is { } key && !result.Created.ContainsKey(key) && !_textures.ContainsKey(key))))
             {
                 result.Dispose();
@@ -501,6 +561,7 @@ internal sealed class ModelLayer : IDisposable
 
             // A null entry means "no model": remembered so it is not requested again.
             GpuModel? model = null;
+            slot.Textures = [];
             if (result.Model is not null)
             {
                 var textures = new GpuTexture?[result.Textures.Length][];
@@ -521,12 +582,14 @@ internal sealed class ModelLayer : IDisposable
                         }
                     }
                 }
-                _modelTextures[result.Location] = keys.ToArray();
+                slot.Textures = keys.ToArray();
                 model = renderer.Finish(result.Model, textures);
                 _gpuBytes += model.ByteSize;
+                _loadedCount++;
             }
-            _models[result.Location] = model;
-            _lastUsed[result.Location] = _clock.Elapsed.TotalSeconds;
+            slot.Model = model;
+            slot.Loaded = true;
+            slot.LastUsed = _clock.Elapsed.TotalSeconds;
         }
     }
 
@@ -537,40 +600,50 @@ internal sealed class ModelLayer : IDisposable
             return;
         _lastEviction = now;
 
-        var unused = _lastUsed
-            .Where(kv => !enabled || now - kv.Value > UnusedModelLifetime)
-            .Select(kv => kv.Key)
-            .ToList();
-        foreach (var location in unused)
-            ReleaseModel(location);
+        // Slots being read stay: their model is on its way.
+        _toRelease.Clear();
+        foreach (var slot in _slots.Values)
+        {
+            if (!slot.Pending && (!enabled || now - slot.LastUsed > UnusedModelLifetime))
+                _toRelease.Add(slot);
+        }
+        bool released = false;
+        foreach (var slot in _toRelease)
+            released |= Release(slot);
         if (MemoryBudget is not null)
             MemoryLimit = MemoryBudget();
         if (enabled && MemoryLimit is var budget && _gpuBytes > budget)
         {
             // Oldest first, never those of the list to draw (they would be read again at once).
-            foreach (var location in _lastUsed.Where(kv => now - kv.Value > UnusedModelLifetimeLowMemory)
-                         .OrderBy(kv => kv.Value).Select(kv => kv.Key).ToList())
+            foreach (var slot in _slots.Values.Where(s => s.Loaded && now - s.LastUsed > UnusedModelLifetimeLowMemory)
+                         .OrderBy(s => s.LastUsed).ToList())
             {
                 if (_gpuBytes <= budget)
                     break;
-                ReleaseModel(location);
-                unused.Add(location);
+                released |= Release(slot);
             }
         }
-        if (unused.Count > 0)
+        if (released)
             _drawn.Clear(); // May refer to released models: rebuilt at the next frame drawn.
     }
 
-    private void ReleaseModel(ModelLocation location)
+    // True if a model was on the GPU for it.
+    private bool Release(ModelSlot slot)
     {
-        if (_models.Remove(location, out var model) && model is not null)
+        _slots.Remove(slot.Location);
+        slot.Released = true;
+        if (!slot.Loaded)
+            return false;
+        slot.Loaded = false;
+        if (slot.Model is { } model)
         {
             _gpuBytes -= model.ByteSize;
             model.Dispose();
+            _loadedCount--;
         }
-        _lastUsed.Remove(location);
-        if (!_modelTextures.Remove(location, out var keys))
-            return;
+        slot.Model = null;
+        var keys = slot.Textures;
+        slot.Textures = [];
         foreach (var key in keys)
         {
             if (_textures.TryGetValue(key, out var shared) && --shared.Users <= 0)
@@ -581,6 +654,7 @@ internal sealed class ModelLayer : IDisposable
                 _textures.Remove(key);
             }
         }
+        return true;
     }
 
     private async Task ReadModelsInBackground()
@@ -654,19 +728,23 @@ internal sealed class ModelLayer : IDisposable
         _generation++;
         _recentFiles = new(RecentFileCacheSize);
         _drawn.Clear();
-        foreach (var model in _models.Values)
-            model?.Dispose();
+        foreach (var slot in _slots.Values)
+        {
+            slot.Released = true;
+            slot.Model?.Dispose();
+            slot.Model = null;
+            slot.Loaded = false;
+        }
         foreach (var shared in _textures.Values)
             shared.Texture?.Dispose();
-        _models.Clear();
+        _slots.Clear();
+        _pendingCount = 0;
+        _loadedCount = 0;
         _textures.Clear();
         _texturesOnGpu.Clear();
         _gpuBytes = 0;
         while (_results.TryDequeue(out var result))
             result.Dispose();
-        _modelTextures.Clear();
-        _lastUsed.Clear();
-        _pending.Clear();
         _visible = new List<VisibleEntity>();
         _builtCenter = new Vector2(float.NaN);
         Errors.Clear();
