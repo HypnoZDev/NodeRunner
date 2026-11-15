@@ -2,16 +2,17 @@ using NodeRunner.Data.Collisions;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
+using NodeRunner.Data.Paths;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
 // One line of the check before an export: a problem (or a remark), the objects or files concerned, and what to do.
 // Merge: the other versions of the same map file whose changes can be taken into ours. Occluders: the box of each
-// detail line, shown on click. Entities: the object of each detail line, selected on click.
+// detail line, shown on click. Entities / PathNodes: the object or road node of each detail line, selected on click.
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
     IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null,
-    IReadOnlyList<MapEntity>? Entities = null);
+    IReadOnlyList<MapEntity>? Entities = null, IReadOnlyList<PathNode>? PathNodes = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
@@ -27,7 +28,8 @@ internal static class ExportChecker
         string? ExportFolder,
         string ResourceName,
         List<(string Name, string StreamFolder)> OtherProjects,
-        bool RemoveGround = false);
+        bool RemoveGround = false,
+        IReadOnlyList<int>? PathAreas = null);
 
     public sealed record Result(List<ExportCheckItem> Items, string Summary, List<CollisionFileCut> CollisionCuts, List<OccluderFileCut> OcclusionCuts);
 
@@ -67,7 +69,7 @@ internal static class ExportChecker
             }
             others.Add((name, Path.Combine(folder, FiveMResource.StreamFolderName)));
         }
-        return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others);
+        return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others, PathAreas: state.PathAreasToSave);
     }
 
     public static Result Run(Input input, WorldLoader world)
@@ -255,6 +257,7 @@ internal static class ExportChecker
 
         CheckDoors(input, world, names, sceneryEntities.Select(s => s.Item1).ToList(), removedDoors, movedDoors, items);
         CheckOccluders(world, names, items);
+        CheckPathNodes(input, world, items);
 
         summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);
@@ -308,6 +311,36 @@ internal static class ExportChecker
                 L($"Leur type (archétype, dans le .ytyp) n'a pas le drapeau « Dynamic » (0x{DoorCheck.DynamicFlag:X}) : le jeu les garde figées. ")
                 + L($"Dans Sollumz, cochez « Dynamic » dans les drapeaux de l'archétype (les portes du jeu ont aussi 0x{DoorCheck.DoorFlag:X}), ")
                 + L("puis réexportez le .ytyp. Ignorez ce message si la porte doit rester fermée."));
+    }
+
+    // The road network files shipped with the export (areas changed by hand).
+    private static void CheckPathNodes(Input input, WorldLoader world, List<ExportCheckItem> items)
+    {
+        if (world.PathNetwork is not { } network || input.PathAreas is not { Count: > 0 } areas)
+            return;
+        var issues = PathNodeCheck.Run(network, areas);
+        static string Id(PathNodeId id) => $"{id.AreaId}:{id.NodeId}";
+        foreach (var group in issues.GroupBy(i => i.Kind))
+        {
+            var list = group.ToList();
+            int n = list.Count;
+            var (title, advice) = group.Key switch
+            {
+                PathNodeCheck.Kind.Isolated => (n == 1 ? L("1 nœud de route sans aucun lien") : L($"{n} nœuds de route sans aucun lien"),
+                    L("Aucune voiture n'y passera. Reliez-le (Propriétés > Relier à un autre nœud) ou supprimez-le.")),
+                PathNodeCheck.Kind.MissingTarget => (n == 1 ? L("1 lien vers un nœud qui n'existe pas") : L($"{n} liens vers des nœuds qui n'existent pas"),
+                    L("Le jeu peut planter en lisant ce .ynd. Supprimez ces liens (Propriétés > Liens, corbeille).")),
+                PathNodeCheck.Kind.OneWay => (n == 1 ? L("1 lien sans lien retour") : L($"{n} liens sans lien retour"),
+                    L("Le jeu attend chaque lien dans les deux nœuds. Supprimez le lien puis reliez à nouveau les deux nœuds.")),
+                PathNodeCheck.Kind.NoLane => (n == 1 ? L("1 lien de route sans aucune voie") : L($"{n} liens de route sans aucune voie"),
+                    L("0 voie aller et 0 retour : les voitures ne l'emprunteront pas. Réglez les voies dans Propriétés > Liens.")),
+                _ => (n == 1 ? L("1 lien entre une route et un chemin piéton") : L($"{n} liens entre une route et un chemin piéton"),
+                    L("Le jeu ne relie jamais une route à un chemin piéton : voitures ou piétons risquent de se perdre.")),
+            };
+            var lines = list.Select(i => i.Target is { } t ? L($"Nœud {Id(i.Node.Id)} -> {Id(t)}") : L($"Nœud {Id(i.Node.Id)}")).ToList();
+            items.Add(new ExportCheckItem(group.Key != PathNodeCheck.Kind.MixedKinds, title, Limit(lines), advice,
+                PathNodes: list.Take(MaxDetails).Select(i => i.Node).ToList()));
+        }
     }
 
     // The boxes made or changed by hand, against the buildings, interiors, roads and the other boxes around them.

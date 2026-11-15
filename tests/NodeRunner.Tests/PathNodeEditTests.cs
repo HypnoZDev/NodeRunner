@@ -233,6 +233,27 @@ public class PathNodeEditTests
     }
 
     [Fact]
+    public void Check_finds_isolated_nodes_broken_links_and_links_without_lanes()
+    {
+        var network = LinkedNetwork();
+        Assert.Empty(PathNodeCheck.Run(network, [1, 2]));
+
+        var first = network.GetNode(new(1, 0))!;
+        var other = network.GetNode(new(2, 0))!;
+        PathLinkDeleteEdit.Apply(network, first, network.GetNode(new(1, 1))!, "Supprimer");
+        PathLinkAddEdit.Apply(network, network.GetNode(new(1, 1))!, other, 0, 0, "Relier");
+        var area2 = network.GetArea(2)!;
+        area2.Links = [.. area2.Links, new PathLink(new PathNodeId(1, 9), 0, 0, 0x20, 5)];
+        other.LinkCount++;
+
+        var issues = PathNodeCheck.Run(network, [1, 2]).Select(i => (i.Kind, i.Node.Id, i.Target)).ToList();
+        Assert.Contains((PathNodeCheck.Kind.Isolated, first.Id, (PathNodeId?)null), issues);
+        Assert.Contains((PathNodeCheck.Kind.NoLane, new PathNodeId(1, 1), (PathNodeId?)other.Id), issues);
+        Assert.Contains((PathNodeCheck.Kind.MissingTarget, other.Id, (PathNodeId?)new PathNodeId(1, 9)), issues);
+        Assert.Equal(3, issues.Count);
+    }
+
+    [Fact]
     public void Link_lanes_are_set_both_ways_keeping_the_other_bits()
     {
         var network = LinkedNetwork();

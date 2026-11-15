@@ -551,6 +551,17 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
                         ImGui.SetTooltip(L("Sélectionner la boîte et y aller"));
                     continue;
                 }
+                if (item.PathNodes is { } nodes && d < nodes.Count)
+                {
+                    if (ImGui.Selectable(L($"{Icons.Crosshair}  {Widgets.Fit(detail, ImGui.GetContentRegionAvail().X - 30 * UiTheme.Scale)}##node{index}_{d}")))
+                    {
+                        state.SelectedPathNode = nodes[d];
+                        state.FocusOn(nodes[d].Position, 15f);
+                    }
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                        ImGui.SetTooltip(L("Sélectionner le nœud et y aller"));
+                    continue;
+                }
                 if (item.Entities is { } entities && d < entities.Count)
                 {
                     if (ImGui.Selectable(L($"{Icons.Crosshair}  {Widgets.Fit(detail, ImGui.GetContentRegionAvail().X - 30 * UiTheme.Scale)}##ent{index}_{d}")))
