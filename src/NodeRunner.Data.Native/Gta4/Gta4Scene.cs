@@ -170,9 +170,7 @@ public sealed class Gta4Scene
             }
         }
 
-        float LongestDrawDistance(int lod) => interior.Objects.Where(o => o.Lod == lod)
-            .Select(o => definitions.Find(o.ModelHash)?.DrawDistance ?? 0f).DefaultIfEmpty(0f).Max();
-        float[] switchDistances = [0f, LongestDrawDistance(0), LongestDrawDistance(1)];
+        float[] switchDistances = [0f, SwitchDistance(interior, 0, definitions), SwitchDistance(interior, 1, definitions)];
 
         var objects = interior.Objects.Select((o, i) => new MapEntity
         {
@@ -215,6 +213,21 @@ public sealed class Gta4Scene
         };
     }
 
+    // Distance at which the level above takes over from this level of an interior's objects: the longest draw
+    // distance of its big pieces (walls, floors), not of a small object seen from further away (a bin), which would
+    // leave a gap between the walls going and the simplified building coming.
+    private static float SwitchDistance(Gta4InteriorDef interior, int lod, Gta4Definitions definitions)
+    {
+        var models = interior.Objects.Where(o => o.Lod == lod).Select(o => definitions.Find(o.ModelHash)).OfType<Gta4ModelDef>().ToList();
+        if (models.Count == 0)
+            return 0f;
+        float biggest = models.Max(m => m.SphereRadius);
+        return models.Where(m => m.SphereRadius >= biggest / 2f).Max(m => m.DrawDistance);
+    }
+
+    // Rooms covering the whole map (2000 km, e.g. in "playboyx") are not taken for the box.
+    private const float LargestRoom = 2000f;
+
     // Box of an interior: its rooms but "limbo" (the outside), or its objects when it has no other room.
     public static (Vector3 Min, Vector3 Max, Vector3 Center, float Radius) InteriorBox(Gta4InteriorDef interior, Gta4Definitions definitions)
     {
@@ -222,6 +235,9 @@ public sealed class Gta4Scene
         var max = new Vector3(float.MinValue);
         foreach (var room in interior.Rooms.Skip(1))
         {
+            var size = room.BoxMax - room.BoxMin;
+            if (MathF.Max(size.X, MathF.Max(size.Y, size.Z)) > LargestRoom)
+                continue;
             min = Vector3.Min(min, room.BoxMin);
             max = Vector3.Max(max, room.BoxMax);
         }
