@@ -2078,7 +2078,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             + L("Sans lui, les sons traversent les murs de l'intérieur."), wrap: true);
         if (state.World.AudioOcclusion is not { } catalog)
         {
-            Widgets.Hint(L("Lecture des fichiers d'occlusion audio..."));
+            Widgets.Hint(state.World.AudioOcclusionError is { } error ? L($"Lecture impossible : {error}") : L("Lecture des fichiers d'occlusion audio..."));
             return;
         }
         var view = AudioOcclusionOf(catalog, interior, archetype, library, names);
@@ -2133,7 +2133,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             + L("lus dans les fichiers .dat151.rel. Cliquez une salle pour voir les siens."), wrap: true);
         if (state.World.AudioGameData is not { } data)
         {
-            Widgets.Hint(L("Lecture des données audio..."));
+            Widgets.Hint(state.World.AudioGameDataError is { } error ? L($"Lecture impossible : {error}") : L("Lecture des données audio..."));
             return;
         }
         if (data.Interior(interior.ArchetypeHash) is not { } settings)
@@ -2171,7 +2171,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
     {
         if (state.World.AudioGameData is not { } data)
         {
-            Widgets.Hint(L("Lecture des données audio..."));
+            Widgets.Hint(state.World.AudioGameDataError is { } error ? L($"Lecture impossible : {error}") : L("Lecture des données audio..."));
             return;
         }
         if (data.RoomOf(interior.ArchetypeHash, room.Name) is not { } audio)

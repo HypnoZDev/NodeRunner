@@ -85,6 +85,23 @@ internal sealed class WorldLoader : IDisposable
 
     public GameContent? Content { get; private set; }
 
+    // Data read in the background the first time it is asked for: a failure goes to the error log (once) instead of
+    // leaving the data "being read" for ever without a word.
+    private static Task<T> ReadWhenAsked<T>(string what, Func<T> read) => Task.Run(() =>
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.ErrorLog.Add(what, ex);
+            throw;
+        }
+    });
+
+    private static string? ErrorOf(Task? reading) => reading is { IsFaulted: true } ? reading.Exception!.GetBaseException().Message : null;
+
     // Vehicle palette, colours and sheets: read in the background the first time they are asked for (model viewer),
     // null until then.
     public VehicleData? Vehicles
@@ -96,7 +113,7 @@ internal sealed class WorldLoader : IDisposable
             if (_vehicleDataContent != content)
             {
                 _vehicleDataContent = content;
-                _vehicleData = Task.Run(() => VehicleData.Load(content));
+                _vehicleData = ReadWhenAsked(L("Véhicules"), () => VehicleData.Load(content));
             }
             return _vehicleData is { IsCompletedSuccessfully: true } done ? done.Result : null;
         }
@@ -124,8 +141,9 @@ internal sealed class WorldLoader : IDisposable
                             Diagnostics.ErrorLog.Add(L("Réglages des portes"), error);
                         return tunings;
                     }
-                    catch (Exception ex) when (ex is InvalidDataException or IOException)
+                    catch (Exception ex)
                     {
+                        // Any error: the doors are shown without their tuning.
                         Diagnostics.ErrorLog.Add(L("Réglages des portes"), ex);
                         return Data.Maps.DoorTunings.Empty;
                     }
@@ -149,11 +167,14 @@ internal sealed class WorldLoader : IDisposable
             if (_audioOcclusionContent != content)
             {
                 _audioOcclusionContent = content;
-                _audioOcclusion = Task.Run(() => AudioOcclusionCatalog.Load(content, new AudioOcclusionReader()));
+                _audioOcclusion = ReadWhenAsked(L("Occlusion audio"), () => AudioOcclusionCatalog.Load(content, new AudioOcclusionReader()));
             }
             return _audioOcclusion is { IsCompletedSuccessfully: true } done ? done.Result : null;
         }
     }
+
+    // Why the listing failed, null while it is being made or once it is there.
+    public string? AudioOcclusionError => ErrorOf(_audioOcclusion);
 
     // The same, waiting for the listing (export).
     public AudioOcclusionCatalog? WaitAudioOcclusion()
@@ -163,9 +184,9 @@ internal sealed class WorldLoader : IDisposable
         {
             return _audioOcclusion?.GetAwaiter().GetResult();
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        catch (Exception)
         {
-            return null;
+            return null; // Already in the error log.
         }
     }
 
@@ -182,7 +203,7 @@ internal sealed class WorldLoader : IDisposable
             if (_audioGameDataContent != content)
             {
                 _audioGameDataContent = content;
-                _audioGameData = Task.Run(() =>
+                _audioGameData = ReadWhenAsked(L("Données audio"), () =>
                 {
                     var data = Data.Audio.AudioGameData.Load(content, new GameDataReader());
                     foreach (var error in data.Errors)
@@ -194,6 +215,8 @@ internal sealed class WorldLoader : IDisposable
         }
     }
 
+    public string? AudioGameDataError => ErrorOf(_audioGameData);
+
     // The same, waiting for the reading (export).
     public AudioGameData? WaitAudioGameData()
     {
@@ -202,9 +225,9 @@ internal sealed class WorldLoader : IDisposable
         {
             return _audioGameData?.GetAwaiter().GetResult();
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        catch (Exception)
         {
-            return null;
+            return null; // Already in the error log.
         }
     }
 
