@@ -192,6 +192,20 @@ internal sealed class WorldLoader : IDisposable
         }
     }
 
+    // The same, waiting for the reading (export).
+    public AudioGameData? WaitAudioGameData()
+    {
+        _ = AudioGameData;
+        try
+        {
+            return _audioGameData?.GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
     private GameContent? _audioGameDataContent;
     private Task<AudioGameData>? _audioGameData;
 

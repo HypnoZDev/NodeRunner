@@ -13,6 +13,13 @@ public static class FiveMResource
 
     public const string DefaultName = "noderunner_map";
 
+    public const string AudioFolderName = "audio";
+
+    private const string AudioGameDataExtension = "151.rel";
+
+    // Audio settings of the interiors, in the resource ("audio/<resource>_game.dat151.rel").
+    public static string AudioGameDataFile(string resourceName) => $"{AudioFolderName}/{resourceName}_game.dat{AudioGameDataExtension}";
+
     // Resource names usable everywhere (server.cfg "ensure", folder name, every file system): lower-case letters,
     // digits, '_' and '-', starting with a letter or a digit, at most 64 characters.
     public static bool IsValidName(string name) =>
@@ -40,7 +47,9 @@ public static class FiveMResource
         text.TrimStart('﻿').StartsWith(GeneratedMarker, StringComparison.Ordinal);
 
     // newTypeFiles: .ytyp files of the resource that are not game files (interiors made by the user), declared to the game.
-    public static string BuildManifest(string author, string version, IEnumerable<string> mapFiles, IEnumerable<string>? newTypeFiles = null)
+    // audioGameData: the resource's audio settings file (AudioGameDataFile), if any.
+    public static string BuildManifest(string author, string version, IEnumerable<string> mapFiles, IEnumerable<string>? newTypeFiles = null,
+        string? audioGameData = null)
     {
         var sb = new StringBuilder();
         sb.Append(GeneratedMarker).Append(' ').Append(version).Append(" (").Append(author).Append(")\n");
@@ -61,6 +70,13 @@ public static class FiveMResource
             sb.Append('\n');
         foreach (var file in types)
             sb.Append("data_file 'DLC_ITYP_REQUEST' '").Append(StreamFolderName).Append('/').Append(file).Append("'\n");
+        if (audioGameData is not null)
+        {
+            // The game adds "151.rel" to the declared name.
+            sb.Append('\n');
+            sb.Append("files {\n    '").Append(audioGameData).Append("',\n}\n");
+            sb.Append("data_file 'AUDIO_GAMEDATA' '").Append(audioGameData[..^AudioGameDataExtension.Length]).Append("'\n");
+        }
         return sb.ToString();
     }
 }

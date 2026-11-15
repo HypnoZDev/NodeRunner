@@ -40,6 +40,16 @@ public class FiveMResourceTests
     }
 
     [Fact]
+    public void Manifest_declares_the_audio_game_data()
+    {
+        string file = FiveMResource.AudioGameDataFile("my_mlo");
+        Assert.Equal("audio/my_mlo_game.dat151.rel", file);
+        string manifest = FiveMResource.BuildManifest("Inside Rockstar", "0.1.0", ["a.ymap"], null, file);
+        Assert.Contains("'audio/my_mlo_game.dat151.rel',", manifest);
+        Assert.Contains("data_file 'AUDIO_GAMEDATA' 'audio/my_mlo_game.dat'", manifest);
+    }
+
+    [Fact]
     public void Other_manifests_are_not_ours() =>
         Assert.False(FiveMResource.IsGeneratedManifest("fx_version 'cerulean'\ngame 'gta5'\n"));
 }

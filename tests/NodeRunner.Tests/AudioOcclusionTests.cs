@@ -99,6 +99,38 @@ public class AudioOcclusionTests
     }
 
     [Fact]
+    public void NewInteriorGetsItsAudioSettingsWrittenAndReadBack()
+    {
+        var interior = new Archetype
+        {
+            NameHash = 0x1234ABCD,
+            Kind = ArchetypeKind.Interior,
+            InteriorRooms = [new(Vector3.Zero, Vector3.One) { Name = "limbo" }, new(Vector3.Zero, Vector3.One) { Name = "hall" },
+                new(Vector3.Zero, Vector3.One) { Name = "office" }, new(Vector3.Zero, Vector3.One) { Name = "hall" }],
+        };
+
+        var (settings, rooms) = InteriorAudioBuilder.Build(interior, null);
+        Assert.Equal(3, rooms.Count); // One item per room name.
+        Assert.Equal(1f, rooms[0].ExteriorAudibility);
+        Assert.Equal(Joaat.Hash("office"), rooms[2].RoomName);
+        Assert.Equal(rooms.Select(r => r.NameHash), settings.Rooms);
+
+        var bytes = GameDataWriter.Write([settings], rooms);
+        var read = new GameDataReader().Read(bytes, "test");
+        Assert.Equal(settings with { File = "test" }, read.Interiors.Single() with { Rooms = settings.Rooms });
+        Assert.Equal(settings.Rooms, read.Interiors.Single().Rooms);
+        Assert.Equal(rooms.Select(r => r with { File = "test" }), read.Rooms.OrderBy(r => rooms.FindIndex(x => x.NameHash == r.NameHash)));
+
+        // Index sorted like the game's files, then the offsets of the item references: 3 ambient zones, 3 rooms.
+        int dataLength = BitConverter.ToInt32(bytes, 4);
+        int at = 8 + dataLength + 8;
+        int count = BitConverter.ToInt32(bytes, at);
+        var names = Enumerable.Range(0, count).Select(i => BitConverter.ToUInt32(bytes, at + 4 + i * 12)).ToList();
+        Assert.Equal(names.OrderBy(n => System.Numerics.BitOperations.RotateRight(n, 8)), names);
+        Assert.Equal(6, BitConverter.ToInt32(bytes, at + 4 + count * 12));
+    }
+
+    [Fact]
     public void ReaderRefusesOtherFiles() =>
         Assert.Throws<InvalidDataException>(() => new AudioOcclusionReader().Read("<xml/>"u8.ToArray()));
 }

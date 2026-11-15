@@ -451,6 +451,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
         int occlusionFiles = report.Saved.Count(occluderNames.Contains);
         int typeFiles = report.Saved.Count(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase));
+        int audioFiles = report.Saved.Count(f => f.EndsWith(".ymt", StringComparison.OrdinalIgnoreCase)
+            || f.EndsWith(".dat151.rel", StringComparison.OrdinalIgnoreCase));
         var extra = new List<string>();
         if (typeFiles > 0)
             extra.Add(L($"{typeFiles} intérieur(s) .ytyp"));
@@ -460,13 +462,15 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             extra.Add(L($"{occlusionFiles} YMAP d'occlusion"));
         if (pathFiles > 0)
             extra.Add(L($"{pathFiles} pathnodes .ynd"));
+        if (audioFiles > 0)
+            extra.Add(L($"{audioFiles} fichier(s) audio d'intérieur"));
         if (copied.Count > 0)
             extra.Add(L($"{copied.Count} fichier(s) du projet"));
         if (fromLibrary.Count > 0)
             extra.Add(L($"{fromLibrary.Count} fichier(s) de la bibliothèque"));
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
         _result = report.Errors.Count == 0
-            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles} YMAP{extraText} exporté(s) dans {target}"), true, target)
+            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}"), true, target)
             : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 ? target : null);
     }
 

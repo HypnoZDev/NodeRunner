@@ -608,6 +608,7 @@ public static partial class English
             "Files of the project's stream folder (models, textures, collisions of an imported mapping or mod), copied as they are. A file modified in NodeRunner is written instead."),
         ("{0} fichier(s)", "{0} file(s)"),
         ("{0} fichier(s) du projet", "{0} project file(s)"),
+        ("{0} fichier(s) audio d'intérieur", "{0} interior audio file(s)"),
         ("Dossier où créer les projets (chaque projet aura son sous-dossier).", "Folder where projects are created (each project gets its own sub-folder)."),
         ("Dossier où créer la ressource FiveM (par exemple le dossier « resources » de ton serveur).",
             "Folder where the FiveM resource is created (for example your server's \"resources\" folder)."),

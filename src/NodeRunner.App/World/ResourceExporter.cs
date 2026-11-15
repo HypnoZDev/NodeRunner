@@ -62,6 +62,10 @@ internal static class ResourceExporter
             if (Directory.Exists(stream))
                 foreach (var old in Directory.EnumerateFiles(stream).Where(IsStreamedFile))
                     File.Delete(old);
+            string audio = Path.Combine(resourceFolder, FiveMResource.AudioFolderName);
+            if (Directory.Exists(audio))
+                foreach (var old in Directory.EnumerateFiles(audio, "*_game.dat151.rel"))
+                    File.Delete(old);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -83,16 +87,19 @@ internal static class ResourceExporter
         files = report.Saved.Concat(copied).Concat(fromLibrary).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var newTypes = NewTypeFiles(world, files);
         ManifestFileSaver.Save(world, files, newTypes, stream, report);
+        string? audioGameData = AudioGameDataFileSaver.Save(world, files, interiorFiles, resourceFolder, report);
         files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
-                FiveMResource.BuildManifest(Program.Author, Program.Version, files, newTypes));
+                FiveMResource.BuildManifest(Program.Author, Program.Version, files, newTypes, audioGameData));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             report.Errors.Add($"{FiveMResource.ManifestFileName} : {ex.Message}");
         }
+        if (audioGameData is not null)
+            report.Saved.Add(audioGameData);
         return report;
     }
 

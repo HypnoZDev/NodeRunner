@@ -1950,7 +1950,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         }
         if (data.Interior(interior.ArchetypeHash) is not { } settings)
         {
-            WarningText(L("Cet intérieur n'a pas de réglages audio : le jeu le traite comme l'extérieur (pas d'écho de pièce, pluie audible)."));
+            WarningText(L("Cet intérieur n'a pas de réglages audio : le jeu le traite comme l'extérieur (pas d'écho de pièce, pluie audible). L'export FiveM lui en crée (ceux de l'intérieur copié s'il y en a un, sinon des réglages neutres)."));
             return;
         }
         if (Widgets.BeginProperties("##interior_audio"))
@@ -1989,8 +1989,8 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (data.RoomOf(interior.ArchetypeHash, room.Name) is not { } audio)
         {
             WarningText(data.Interior(interior.ArchetypeHash) is null
-                ? L("L'intérieur n'a pas de réglages audio.")
-                : L("Aucun réglage audio ne porte le nom de cette salle : le jeu lui donne des réglages par défaut."));
+                ? L("L'intérieur n'a pas de réglages audio : l'export FiveM lui en crée.")
+                : L("Aucun réglage audio ne porte le nom de cette salle : le jeu lui donne des réglages par défaut. L'export FiveM lui en crée (ceux de la salle de même nom de l'intérieur copié, sinon des réglages neutres)."));
             return;
         }
         if (!Widgets.BeginProperties("##room_audio"))
