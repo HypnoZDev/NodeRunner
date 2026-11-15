@@ -31,6 +31,8 @@ public static class ScriptedMapVariants
     // DLC pack that put the mansions in use ("A Safehouse in the Hills", 2025).
     public const string MansionsPack = "mp2025_02";
 
+    private const float PlaceholderDistance = 10f;
+
     // Names (as given) of the maps to hide by default. regularMaps are the maps always loaded: a scripted interior at
     // the same spot as one of theirs is an alternative version too. withMansions: the new mansions replace the
     // original houses (MansionsPack applied).
@@ -43,6 +45,10 @@ public static class ScriptedMapVariants
             : IsNamedAlternative(name, names, OriginalHouses) || IsNewMansion(name, names)).ToHashSet();
         // Blocks only casting the sun's shadow in the game (e.g. hei_shadowsunmesh_kt1_08), never seen.
         hidden.UnionWith(names.Where(name => name.Contains("shadowsunmesh") || name.Contains("shadowmesh")));
+        // Placeholders only shown within a few metres (e.g. dt1_05_fib_reflection): their parent LOD, a low-detail mesh
+        // of the whole city made for a cutscene's reflections, would stand in for them from everywhere.
+        hidden.UnionWith(maps.Where(m => m.Map.Entities.Count > 0 && m.Map.Entities.All(e => e.LodDistance is > 0f and <= PlaceholderDistance))
+            .Select(m => m.Name));
 
         static (int, int, int) Spot(Vector3 p) => ((int)MathF.Round(p.X), (int)MathF.Round(p.Y), (int)MathF.Round(p.Z));
         var regularSpots = regularMaps.SelectMany(m => m.Entities).Where(e => e.IsInterior).Select(e => Spot(e.Position)).ToHashSet();

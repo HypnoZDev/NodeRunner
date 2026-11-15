@@ -68,6 +68,26 @@ public class ScriptedMapVariantsTests
         Assert.Equal(["variant"], hidden);
     }
 
+    [Fact]
+    public void Placeholders_seen_only_up_close_are_hidden()
+    {
+        static MapData With(params float[] distances) => new()
+        {
+            NameHash = 0,
+            Entities = distances.Select(d => new MapEntity { ArchetypeHash = 1, Position = Vector3.Zero, LodDistance = d }).ToList(),
+        };
+        var maps = new List<(string, MapData)>
+        {
+            ("dt1_05_fib_reflection", With(5f)),
+            ("props", With(5f, 80f)),
+            ("default_distance", With(-1f)),
+        };
+
+        var hidden = ScriptedMapVariants.DefaultHidden(maps, []);
+
+        Assert.Equal(["dt1_05_fib_reflection"], hidden);
+    }
+
     private static List<(string, MapData)> Named(params string[] names) =>
         names.Select(n => (n, new MapData { NameHash = 0, Entities = [] })).ToList();
 
