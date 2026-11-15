@@ -68,6 +68,7 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
             var point = ReadPoint(meta.Data, offset, names);
             point.Source = meta.Data.Bytes(offset, PointSize).ToArray();
             point.FromFile = true;
+            point.FilePosition = point.Position;
             points.Add(point);
         }
         var sizes = ClusterSizes(meta, region);

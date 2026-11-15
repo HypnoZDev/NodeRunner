@@ -59,6 +59,11 @@ public sealed class ScenarioPoint
     // point, even when its Source was copied from another point.
     public bool FromFile { get; set; }
 
+    // Position in its region file when read (a point moved since differs).
+    public Vector3 FilePosition { get; set; }
+
+    public bool IsMovedOrAdded => !FromFile || Position != FilePosition;
+
     public ScenarioValues Values
     {
         get => new(Position, Heading, TypeHash, Probability, StartHour, EndHour, Availability, Radius, TimeTillPedLeaves, Flags);

@@ -3,6 +3,8 @@ using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Paths;
+using NodeRunner.Data.Scenarios;
+using System.Numerics;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
@@ -12,12 +14,13 @@ namespace NodeRunner.App.World;
 // detail line, shown on click. Entities / PathNodes: the object or road node of each detail line, selected on click.
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
     IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null,
-    IReadOnlyList<MapEntity>? Entities = null, IReadOnlyList<PathNode>? PathNodes = null);
+    IReadOnlyList<MapEntity>? Entities = null, IReadOnlyList<PathNode>? PathNodes = null,
+    IReadOnlyList<ScenarioPoint>? ScenarioPoints = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
 // still seen from far away.
-internal static class ExportChecker
+internal static partial class ExportChecker
 {
     private const int MaxDetails = 12;
 
@@ -29,7 +32,14 @@ internal static class ExportChecker
         string ResourceName,
         List<(string Name, string StreamFolder)> OtherProjects,
         bool RemoveGround = false,
-        IReadOnlyList<int>? PathAreas = null);
+        IReadOnlyList<int>? PathAreas = null,
+        IReadOnlyList<ExportChecker.PointCopy>? Scenarios = null,
+        IReadOnlyList<ExportChecker.NodeCopy>? Nodes = null);
+
+    // Scenario points and road nodes as they are when the check starts (the check runs in the background).
+    public sealed record PointCopy(ScenarioPoint Point, Vector3 Position, ScenarioCategory Category, string? TypeName, bool Changed);
+
+    public sealed record NodeCopy(PathNode Node, Vector3 Position, bool Changed);
 
     public sealed record Result(List<ExportCheckItem> Items, string Summary, List<CollisionFileCut> CollisionCuts, List<OccluderFileCut> OcclusionCuts);
 
@@ -69,7 +79,12 @@ internal static class ExportChecker
             }
             others.Add((name, Path.Combine(folder, FiveMResource.StreamFolderName)));
         }
-        return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others, PathAreas: state.PathAreasToSave);
+        var scenarios = state.World.Scenarios?.AllPoints
+            .Select(p => new PointCopy(p, p.Position, p.Category, p.TypeName, p.IsMovedOrAdded)).ToList();
+        var nodes = state.World.PathNetwork?.Areas.SelectMany(a => a.Nodes)
+            .Select(n => new NodeCopy(n, n.Position, n.IsMovedOrAdded)).ToList();
+        return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others, PathAreas: state.PathAreasToSave,
+            Scenarios: scenarios, Nodes: nodes);
     }
 
     public static Result Run(Input input, WorldLoader world)
@@ -154,6 +169,7 @@ internal static class ExportChecker
         // Deleted scenery (now or in an earlier session): compared with the game's file.
         var scenery = new List<string>();
         var sceneryEntities = new List<(MapEntity, Archetype?)>();
+        var removedEntities = new List<(MapEntity, Archetype?)>();
         int removedTotal = 0;
         var removedDoors = new List<string>();
         var movedDoors = new List<DoorCheck.MovedDoor>();
@@ -181,6 +197,7 @@ internal static class ExportChecker
                 foreach (var entity in removed)
                 {
                     var archetype = world.Maps?.GetArchetype(entity.ArchetypeHash);
+                    removedEntities.Add((entity, archetype));
                     if (!RemovedEntities.IsScenery(entity, archetype))
                         continue;
                     scenery.Add($"{names.Describe(entity.ArchetypeHash)} ({fileName})");
@@ -258,6 +275,7 @@ internal static class ExportChecker
         CheckDoors(input, world, names, sceneryEntities.Select(s => s.Item1).ToList(), removedDoors, movedDoors, items);
         CheckOccluders(world, names, items);
         CheckPathNodes(input, world, items);
+        CheckPlacements(input, world, names, removedEntities, cuts, items);
 
         summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);

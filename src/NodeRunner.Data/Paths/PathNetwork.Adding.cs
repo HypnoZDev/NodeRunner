@@ -31,6 +31,7 @@ public sealed partial class PathNetwork
             Id = new PathNodeId((ushort)areaId, (ushort)index),
             Position = position,
             GamePosition = position,
+            IsAdded = true,
             IsPedestrian = pedestrian,
             StreetNameHash = streetName,
             Values = values with { Flags2 = (byte)(values.Flags2 & ~0x04) },
