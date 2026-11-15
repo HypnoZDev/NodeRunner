@@ -46,8 +46,8 @@ internal sealed partial class SplashForm : Form
 
     // Game choice: shown from ChoiceFrom, the highlighted game starts by itself after ChoiceDelay without any input.
     private const float ChoiceFrom = 0.3f, ChoiceDelay = 3f;
-    private static readonly RectangleF Gta5Button = new(Gutter, 342f, 112f, 32f);
-    private static readonly RectangleF Gta4Button = new(Gutter + 124f, 342f, 112f, 32f);
+    private static readonly RectangleF Gta5Button = new(Gutter, 334f, 128f, 42f);
+    private static readonly RectangleF Gta4Button = new(Gutter + 140f, 334f, 128f, 42f);
 
     // Timeline of the intro, in seconds.
     private const float TraceFrom = 0.15f, TraceTo = 1.0f;
@@ -65,6 +65,7 @@ internal sealed partial class SplashForm : Form
     private float _chosenAt;
     private bool _choiceTouched;
     private GameKind? _hover;
+    private readonly GraphicsPath _numeralV = Numeral("V"), _numeralIV = Numeral("IV");
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 15 };
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly PrivateFontCollection _fonts = new();
@@ -405,21 +406,24 @@ internal sealed partial class SplashForm : Form
             path.AddArc(rect.Right - D, rect.Bottom - D, D, D, 0, 90);
             path.AddArc(rect.X, rect.Bottom - D, D, D, 90, 90);
             path.CloseFigure();
-            if (selected)
-            {
-                using var fill = new LinearGradientBrush(rect, Color.FromArgb(Alpha(0xFF), Accent), Color.FromArgb(Alpha(0xFF), AccentLight), 0f);
+            using (var fill = new SolidBrush(Color.FromArgb(Alpha(selected ? 70 : _hover == game ? 45 : 22), Accent)))
                 g.FillPath(fill, path);
-            }
-            else
-            {
-                using var fill = new SolidBrush(Color.FromArgb(Alpha(_hover == game ? 60 : 30), AccentLight));
-                g.FillPath(fill, path);
-            }
-            using (var pen = new Pen(Color.FromArgb(Alpha(selected ? 0xFF : _hover == game ? 200 : 110), AccentLight), 1.2f))
+            using (var pen = new Pen(Color.FromArgb(Alpha(selected ? 0xFF : _hover == game ? 200 : 100), AccentLight), selected ? 1.4f : 1f))
                 g.DrawPath(pen, path);
+
+            const float NumeralHeight = 24f;
+            var numeral = game == GameKind.Gta5 ? _numeralV : _numeralIV;
+            var nb = numeral.GetBounds();
+            float k = NumeralHeight / nb.Height;
+            var saved = g.Save();
+            g.TranslateTransform(rect.X + 12f, rect.Y + (rect.Height - NumeralHeight) / 2f);
+            g.ScaleTransform(k, k);
+            DrawNumeral(g, numeral, selected, Alpha, 1f / k);
+            g.Restore(saved);
+
             var size = g.MeasureString(text, _taglineFont);
-            using var ink = new SolidBrush(Color.FromArgb(Alpha(0xFF), selected ? Color.White : Color.FromArgb(0xC8, 0xD2, 0xE8)));
-            g.DrawString(text, _taglineFont, ink, rect.X + (rect.Width - size.Width) / 2f, rect.Y + (rect.Height - size.Height) / 2f);
+            using var ink = new SolidBrush(Color.FromArgb(Alpha(0xFF), selected ? Color.White : Color.FromArgb(0xA8, 0xB2, 0xC8)));
+            g.DrawString(text, _taglineFont, ink, rect.X + 12f + nb.Width * k + 10f, rect.Y + (rect.Height - size.Height) / 2f);
         }
         if (_chosen)
             return;
@@ -435,8 +439,61 @@ internal sealed partial class SplashForm : Form
             float left = Math.Clamp((ChoiceFrom + ChoiceDelay - t) / ChoiceDelay, 0f, 1f);
             var rect = _game == GameKind.Gta5 ? Gta5Button : Gta4Button;
             using var pen = new Pen(Color.FromArgb(Alpha(0xFF), Color.White), 1.6f);
-            g.DrawArc(pen, rect.Right - 22f, rect.Y + 9f, 14f, 14f, -90f, 360f * left);
+            g.DrawArc(pen, rect.Right - 22f, rect.Y + (rect.Height - 14f) / 2f, 14f, 14f, -90f, 360f * left);
         }
+    }
+
+    // Roman numeral in layers: a dark outer outline, a light inner one, then the fill (the accent gradient with a
+    // shine across the middle when selected, dark otherwise). unit: one design unit in the numeral's own scale.
+    private static void DrawNumeral(Graphics g, GraphicsPath numeral, bool selected, Func<int, int> alpha, float unit)
+    {
+        var b = numeral.GetBounds();
+        using (var outer = new Pen(Color.FromArgb(alpha(0xFF), 0x06, 0x0A, 0x14), 4.2f * unit) { LineJoin = LineJoin.Miter })
+            g.DrawPath(outer, numeral);
+        using (var inner = new Pen(Color.FromArgb(alpha(selected ? 0xFF : 150), selected ? Color.White : AccentLight), 1.8f * unit) { LineJoin = LineJoin.Miter })
+            g.DrawPath(inner, numeral);
+        if (selected)
+        {
+            using var fill = new LinearGradientBrush(new RectangleF(b.X, b.Y - 1f, b.Width, b.Height + 2f), Color.Black, Color.Black, 90f)
+            {
+                InterpolationColors = new ColorBlend
+                {
+                    Colors = [Color.FromArgb(alpha(0xFF), Accent), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), 0xE8, 0xF6, 0xFF), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), 0x24, 0x4F, 0xC0)],
+                    Positions = [0f, 0.42f, 0.5f, 0.58f, 1f],
+                },
+            };
+            g.FillPath(fill, numeral);
+        }
+        else
+        {
+            using var fill = new LinearGradientBrush(new RectangleF(b.X, b.Y - 1f, b.Width, b.Height + 2f), Color.FromArgb(alpha(0xFF), 0x1A, 0x24, 0x3C), Color.FromArgb(alpha(0xFF), 0x0C, 0x12, 0x22), 90f);
+            g.FillPath(fill, numeral);
+        }
+    }
+
+    // "V" (thick left stroke, thin right one) and "I" with slab serifs, drawn as polygons in a 1-high box.
+    private static GraphicsPath Numeral(string letters)
+    {
+        PointF[] v =
+        [
+            new(0f, 0f), new(0.42f, 0f), new(0.42f, 0.12f), new(0.34f, 0.12f), new(0.555f, 0.66f), new(0.74f, 0.12f),
+            new(0.66f, 0.12f), new(0.66f, 0f), new(1f, 0f), new(1f, 0.12f), new(0.92f, 0.12f), new(0.54f, 1f),
+            new(0.45f, 1f), new(0.08f, 0.12f), new(0f, 0.12f),
+        ];
+        PointF[] i =
+        [
+            new(0f, 0f), new(0.48f, 0f), new(0.48f, 0.12f), new(0.36f, 0.12f), new(0.36f, 0.88f), new(0.48f, 0.88f),
+            new(0.48f, 1f), new(0f, 1f), new(0f, 0.88f), new(0.12f, 0.88f), new(0.12f, 0.12f), new(0f, 0.12f),
+        ];
+        var path = new GraphicsPath(FillMode.Winding);
+        float x = 0f;
+        foreach (char c in letters)
+        {
+            var shape = c == 'I' ? i : v;
+            path.AddPolygon(shape.Select(p => new PointF((x + p.X) * 100f, p.Y * 100f)).ToArray());
+            x += shape.Max(p => p.X) + 0.1f;
+        }
+        return path;
     }
 
     private void DrawMap(Graphics g, SplashRoadMap map, float t)
@@ -958,6 +1015,8 @@ internal sealed partial class SplashForm : Form
             _monoS.Dispose();
             _titleNode.Dispose();
             _titleStudio.Dispose();
+            _numeralV.Dispose();
+            _numeralIV.Dispose();
             _taglineFont.Dispose();
             _statusFont.Dispose();
             _wordmark.Dispose();
