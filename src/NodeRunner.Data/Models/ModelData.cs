@@ -47,6 +47,10 @@ public sealed class ModelMesh
     // Colors hold light worked out in advance (GTA IV: grey, about 0.5 in the open, 0 in nooks and under objects).
     public bool BakedLighting { get; init; }
 
+    // Shadow or grime laid over a surface by the brightness of its texture: white darkens fully, black leaves the
+    // surface as it is (GTA IV "gta_decal_dirt", e.g. shadows painted on interior floors). Drawn translucent.
+    public bool DarkeningDecal { get; init; }
+
     public TerrainBlend? Terrain { get; init; }
 
     // Hash of the shader's name (e.g. "vehicle_paint1").
