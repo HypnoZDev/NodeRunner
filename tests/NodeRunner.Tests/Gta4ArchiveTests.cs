@@ -258,6 +258,53 @@ public class Gta4MapTests : IDisposable
         Assert.Equal("mh_roads", defs.TextureParents["ROAD_MH1"]);
     }
 
+    // Same layout as the game's "mlo" sections (values made up).
+    private const string InteriorIde = """
+        mlo
+        shop_int, 0, 2, 1, 3, 150, -1, -1
+        	shop_walls, 1.5, -2, 0.25, -0, -0, -0.707107, -0.707107, 0, 384,
+        	shop_door, 0, 4, 0, -0, -0, -0, -1, 0, 384,
+        	shop_lod, 0, 0, 0, -0, -0, -0, -1, 1, 384,
+        mloroomstart
+        	limbo, 1, 1, 10, 10, 5, -10, -10, -1, 1, 0, 0
+        	2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        	roomend
+        	shoproom, 2, 1, 4, 4, 3, -4, -4, 0, 1, 12345, 96
+        	0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        	roomend
+        mloportalstart
+        	1, 0, -1, 4, 0, 1, 4, 0, 1, 4, 2, -1, 4, 2, 1, -1, -1, -1, 64, 16777215, 1
+        mloend
+        end
+        objs
+        shop_walls, shop, 100, 0, 0, -4, -4, 0, 4, 4, 3, 0, 0, 1.5, 6, null
+        end
+        """;
+
+    [Fact]
+    public void Definitions_ReadInteriors()
+    {
+        var defs = new Gta4Definitions();
+
+        Assert.Equal(0, defs.Read(InteriorIde));
+
+        Assert.NotNull(defs.Find(Joaat.Hash("shop_walls")));
+        var shop = defs.Interiors[Joaat.Hash("shop_int")];
+        Assert.Equal(3, shop.Objects.Length);
+        Assert.Equal(new Vector3(1.5f, -2, 0.25f), shop.Objects[0].Position);
+        Assert.Equal(new Quaternion(-0f, -0f, -0.707107f, -0.707107f), shop.Objects[0].Rotation);
+        Assert.Equal(1, shop.Objects[2].Lod);
+        Assert.Equal(["limbo", "shoproom"], shop.Rooms.Select(r => r.Name));
+        Assert.Equal([0, 1], shop.Rooms[1].Objects);
+        Assert.Equal(new Vector3(-4, -4, 0), shop.Rooms[1].BoxMin);
+        Assert.Equal(new Vector3(4, 4, 3), shop.Rooms[1].BoxMax);
+        Assert.Equal(12345u, shop.Rooms[1].TimecycleHash);
+        var portal = Assert.Single(shop.Portals);
+        Assert.Equal((1, 0), (portal.RoomFrom, portal.RoomTo));
+        Assert.Equal(new Vector3(1, 4, 2), portal.Corners[2]);
+        Assert.Equal([1], portal.Objects);
+    }
+
     private static byte[] Placements(params (Vector3 Position, Quaternion Stored, string Model, int LodParent)[] instances)
     {
         var data = new byte[68 + instances.Length * 48 + 56];

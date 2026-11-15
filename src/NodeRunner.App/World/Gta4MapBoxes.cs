@@ -68,6 +68,8 @@ internal sealed class Gta4MapBoxes
                 var transform = Matrix4x4.CreateFromQuaternion(instance.Orientation) * Matrix4x4.CreateTranslation(instance.Position);
                 _boxes[index] = map.Definitions.Find(instance.ModelHash) is { } model
                     ? new EntityBox(category, model.BoxMin, model.BoxMax, transform, false)
+                    : map.Definitions.Interiors.GetValueOrDefault(instance.ModelHash) is { } interior
+                    ? InteriorBox(interior, instance, map.Definitions)
                     : new EntityBox(category, default, default, transform, true);
                 min = Vector3.Min(min, instance.Position);
                 max = Vector3.Max(max, instance.Position);
@@ -101,6 +103,14 @@ internal sealed class Gta4MapBoxes
                 }
             }
         }
+    }
+
+    // The box of its rooms; an interior's placement is its real orientation (not inverted like the other objects).
+    private static EntityBox InteriorBox(Gta4InteriorDef interior, in Gta4Instance instance, Gta4Definitions definitions)
+    {
+        var box = Gta4Scene.InteriorBox(interior, definitions);
+        var transform = Matrix4x4.CreateFromQuaternion(Quaternion.Conjugate(instance.Orientation)) * Matrix4x4.CreateTranslation(instance.Position);
+        return new EntityBox(EntityBoxCategory.Interior, box.Min, box.Max, transform, false);
     }
 
     private static (int X, int Y) CellOf(Vector2 p) => ((int)MathF.Floor(p.X / CellSize), (int)MathF.Floor(p.Y / CellSize));

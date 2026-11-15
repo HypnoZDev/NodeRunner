@@ -61,7 +61,18 @@ internal sealed partial class PropertiesPanel
         if (Widgets.Section(L("Fichiers"), "gta4_files") && Widgets.BeginProperties("##gta4_files"))
         {
             FileRow(L("Placement"), entity.Map?.FilePath);
-            FileRow(L("Modèle"), archetype is null ? null : scene.Models.Locate(archetype)?.Path);
+            if (entity.IsInterior && archetype is not null)
+                Widgets.PropertyText(L("Intérieur"), L($"{archetype.InteriorEntities.Count} objets, {Math.Max(0, archetype.InteriorRooms.Count - 1)} salles, {archetype.InteriorPortals.Count} portails"),
+                    L("Défini dans un fichier .ide (section mlo) ; souvent le bâtiment entier, murs extérieurs compris."));
+            else
+                FileRow(L("Modèle"), archetype is null ? null : scene.Models.Locate(archetype)?.Path);
+            if (entity.Interior is { } interior)
+            {
+                string room = scene.Library.GetArchetype(interior.ArchetypeHash) is { } type && entity.InteriorRoom >= 0 && entity.InteriorRoom < type.InteriorRooms.Count
+                    ? $" ({type.InteriorRooms[entity.InteriorRoom].Name})"
+                    : "";
+                Widgets.PropertyText(L("Intérieur"), names.Describe(interior.ArchetypeHash) + room);
+            }
             if (definition is not null)
             {
                 string? textures = scene.Textures.Locate(archetype?.TextureDictionaryHash ?? 0);

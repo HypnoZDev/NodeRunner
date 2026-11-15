@@ -37,6 +37,7 @@ public sealed class Gta4Scene
 
         var archetypes = map.Definitions.Models.Values
             .Select(m => ToArchetype(m, m.DrawableDictionary is null && !drawableNames.Contains(m.Hash) && fragmentNames.Contains(m.Hash)))
+            .Concat(map.Definitions.Interiors.Values.Select(i => ToArchetype(i, map.Definitions)))
             .ToList();
         var levels = LodLevels(map);
         var maps = new List<(MapData, string)>(map.Files.Count);
@@ -52,8 +53,9 @@ public sealed class Gta4Scene
                 {
                     ArchetypeHash = instance.ModelHash,
                     Position = instance.Position,
-                    // Stored inverted, as in the GTA V maps.
+                    // Stored inverted, as in the GTA V maps; an interior's is its real orientation (also as in GTA V).
                     StoredRotation = Quaternion.Conjugate(instance.Orientation),
+                    IsInterior = map.Definitions.Interiors.ContainsKey(instance.ModelHash),
                     ParentIndex = instance.LodParent,
                     Flags = isMain ? 0u : LodInParentMap,
                     LodDistance = instance.LodDistance > 0f ? instance.LodDistance : 0f,
@@ -93,7 +95,8 @@ public sealed class Gta4Scene
         var max = new Vector3(float.MinValue);
         foreach (var entity in entities)
         {
-            float radius = definitions.Find(entity.ArchetypeHash)?.SphereRadius ?? 0f;
+            float radius = definitions.Find(entity.ArchetypeHash)?.SphereRadius
+                ?? (definitions.Interiors.GetValueOrDefault(entity.ArchetypeHash) is { } interior ? InteriorBox(interior, definitions).Radius : 0f);
             min = Vector3.Min(min, entity.Position - new Vector3(radius));
             max = Vector3.Max(max, entity.Position + new Vector3(radius));
         }
@@ -108,6 +111,8 @@ public sealed class Gta4Scene
             names.Add(model.Name);
             names.Add(model.TextureDictionary);
         }
+        foreach (var interior in definitions.Interiors.Values)
+            names.Add(interior.Name);
         return names;
     }
 
@@ -138,6 +143,103 @@ public sealed class Gta4Scene
         AssetNameHash = model.Hash,
         DrawableDictionaryHash = model.DrawableDictionary is null ? 0 : Joaat.Hash(model.DrawableDictionary),
     };
+
+    // An interior: its objects (rotations stored as their real orientation, unlike the placement files), rooms and
+    // portals. Its simplified versions (LOD 1 and 2) stand in for the level below beyond the longest draw distance of
+    // that level, as the LOD models of the map do.
+    private static Archetype ToArchetype(Gta4InteriorDef interior, Gta4Definitions definitions)
+    {
+        var roomOf = new int[interior.Objects.Length];
+        var portalOf = new int[interior.Objects.Length];
+        Array.Fill(roomOf, -1);
+        Array.Fill(portalOf, -1);
+        for (int r = 0; r < interior.Rooms.Length; r++)
+        {
+            foreach (int i in interior.Rooms[r].Objects)
+            {
+                if (i < roomOf.Length)
+                    roomOf[i] = r;
+            }
+        }
+        for (int p = 0; p < interior.Portals.Length; p++)
+        {
+            foreach (int i in interior.Portals[p].Objects)
+            {
+                if (i < portalOf.Length)
+                    portalOf[i] = p;
+            }
+        }
+
+        float LongestDrawDistance(int lod) => interior.Objects.Where(o => o.Lod == lod)
+            .Select(o => definitions.Find(o.ModelHash)?.DrawDistance ?? 0f).DefaultIfEmpty(0f).Max();
+        float[] switchDistances = [0f, LongestDrawDistance(0), LongestDrawDistance(1)];
+
+        var objects = interior.Objects.Select((o, i) => new MapEntity
+        {
+            ArchetypeHash = o.ModelHash,
+            Position = o.Position,
+            StoredRotation = Quaternion.Conjugate(Normalized(o.Rotation)),
+            LodLevel = o.Lod switch
+            {
+                <= 0 => LodLevel.OrphanHd,
+                1 => LodLevel.Lod,
+                _ => LodLevel.Slod1,
+            },
+            ChildLodDistance = switchDistances[Math.Clamp(o.Lod, 0, 2)],
+            InteriorRoom = roomOf[i],
+            InteriorPortal = portalOf[i],
+        }).ToList();
+
+        var (min, max, center, radius) = InteriorBox(interior, definitions);
+        return new Archetype
+        {
+            NameHash = interior.Hash,
+            Kind = ArchetypeKind.Interior,
+            BoundsMin = min,
+            BoundsMax = max,
+            SphereCenter = center,
+            SphereRadius = radius,
+            AssetType = ArchetypeAssetType.Assetless,
+            InteriorEntities = objects,
+            InteriorRooms = [.. interior.Rooms.Select((r, i) => new InteriorRoom(r.BoxMin, r.BoxMax)
+            {
+                Name = r.Name,
+                TimecycleHash = r.TimecycleHash,
+                SourceIndex = i,
+            })],
+            InteriorPortals = [.. interior.Portals.Select((p, i) => new InteriorPortal(p.RoomFrom, p.RoomTo, 0)
+            {
+                Corners = p.Corners,
+                SourceIndex = i,
+            })],
+        };
+    }
+
+    // Box of an interior: its rooms but "limbo" (the outside), or its objects when it has no other room.
+    public static (Vector3 Min, Vector3 Max, Vector3 Center, float Radius) InteriorBox(Gta4InteriorDef interior, Gta4Definitions definitions)
+    {
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        foreach (var room in interior.Rooms.Skip(1))
+        {
+            min = Vector3.Min(min, room.BoxMin);
+            max = Vector3.Max(max, room.BoxMax);
+        }
+        if (min.X > max.X)
+        {
+            foreach (var o in interior.Objects)
+            {
+                float r = definitions.Find(o.ModelHash)?.SphereRadius ?? 0f;
+                min = Vector3.Min(min, o.Position - new Vector3(r));
+                max = Vector3.Max(max, o.Position + new Vector3(r));
+            }
+        }
+        if (min.X > max.X)
+            return (Vector3.Zero, Vector3.Zero, Vector3.Zero, 0f);
+        return (min, max, (min + max) / 2f, Vector3.Distance(min, max) / 2f);
+    }
+
+    private static Quaternion Normalized(Quaternion q) => q.LengthSquared() > 1e-6f ? Quaternion.Normalize(q) : Quaternion.Identity;
 
     // Level of detail of every instance (in the order of the files) from the LOD links: the height in the tree (0 =
     // detailed object, 1 = LOD, 2 and more = SLOD), and its number of children.

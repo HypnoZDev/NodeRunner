@@ -943,6 +943,9 @@ public static partial class English
         ("Placer la caméra devant l'objet", "Move the camera in front of the object"),
         ("Textures parentes", "Parent textures"),
         ("fichier introuvable", "file not found"),
+        ("{0} objets, {1} salles, {2} portails", "{0} objects, {1} rooms, {2} portals"),
+        ("Défini dans un fichier .ide (section mlo) ; souvent le bâtiment entier, murs extérieurs compris.",
+            "Defined in an .ide file (mlo section); often the whole building, outer walls included."),
         ("Clic sur un objet pour voir ses propriétés (lecture seule).", "Click an object to see its properties (read only)."),
         ("Affiche « Carte en 3D » dans le panneau Calques pour voir la carte.", "Show \"3D map\" in the Layers panel to see the map."),
     ];

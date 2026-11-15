@@ -42,7 +42,8 @@ public static class LodSelector
             // tunnel spans hundreds of metres: each object inside is shown within its own draw distance instead.
             foreach (var inside in entity.InteriorEntities)
             {
-                if (!inside.IsDeleted && !inside.IsWindowView && IsDrawn(pass, inside) && InRange(pass, inside))
+                if (!inside.IsDeleted && !inside.IsWindowView && IsDrawn(pass, inside) && InRange(pass, inside)
+                    && !IsChildlessStandIn(pass, inside, Vector3.Distance(pass.Camera, inside.Position)))
                     pass.Selected.Add(inside);
             }
             foreach (var set in entity.EntitySets)
