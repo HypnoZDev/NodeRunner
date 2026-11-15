@@ -23,7 +23,6 @@ internal sealed class MainUi
     private bool _showViewer;
     private bool _showLibrary = true;
     private bool _showArchives;
-    private bool _gta4ArchivesShown;
     private bool _showProject;
     private bool _showImGuiDemo;
     private bool _resetLayout;
@@ -266,13 +265,6 @@ internal sealed class MainUi
         if (_showLibrary) _libraryPanel.Draw(ref _showLibrary);
         if (_showProperties) _propertiesPanel.Draw(ref _showProperties);
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
-        if (_state.IsGta4 && !_gta4ArchivesShown)
-        {
-            // A GTA IV session opens on its archives (no 3D map yet).
-            _gta4ArchivesShown = true;
-            _showArchives = true;
-            ImGui.SetWindowFocus(L(ArchivePanel.Title));
-        }
         if (_showArchives) _archivePanel.Draw(ref _showArchives);
         if (_showProject) _projectPanel.Draw(ref _showProject);
         if (_focusLibrary && _showLibrary)

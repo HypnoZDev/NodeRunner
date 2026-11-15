@@ -436,7 +436,10 @@ public static class Gta4Drawables
             DiffuseTextureName = shader?.Diffuse,
             ShaderHash = name is null ? 0 : Joaat.Hash(name),
             DiffuseColor = PaintSlotOf(name) is > 0 and var slot ? new Vector4(2f, slot, slot, 1f) : null,
-            BlendMode = weights is not null ? MeshBlendMode.Opaque : BlendModeOf(preset),
+            // A glass shader stays see-through whatever its preset (vehicle windows often use "gta_vehicle_lights").
+            BlendMode = weights is not null ? MeshBlendMode.Opaque
+                : name is not null && name.Contains("glass", StringComparison.Ordinal) ? MeshBlendMode.Translucent
+                : BlendModeOf(preset),
             Emission = preset is not null && preset.Contains("emissive", StringComparison.Ordinal)
                 ? preset.Contains("night", StringComparison.Ordinal) ? MeshEmission.Night : MeshEmission.Always
                 : MeshEmission.None,
