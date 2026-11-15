@@ -399,6 +399,54 @@ internal sealed class PathNodeValuesCodec : EditCodec<PathNodeValuesEdit>
     }
 }
 
+internal sealed class PathNodeDeleteCodec : EditCodec<PathNodeDeleteEdit>
+{
+    public override string Tag => "path-node-delete";
+
+    protected override void Write(PathNodeDeleteEdit edit, EditWriter w)
+    {
+        w.Write(edit.Id.AreaId);
+        w.Write(edit.Id.NodeId);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var node = PathNodeCodecs.Node(network, r);
+        return PathNodeDeleteEdit.Apply(network, node, description) ?? throw new InvalidDataException("Path node not deleted here.");
+    }
+}
+
+internal sealed class PathLinkDeleteCodec : EditCodec<PathLinkDeleteEdit>
+{
+    public override string Tag => "path-link-delete";
+
+    protected override void Write(PathLinkDeleteEdit edit, EditWriter w)
+    {
+        w.Write(edit.Node.Id.AreaId);
+        w.Write(edit.Node.Id.NodeId);
+        w.Write(edit.Other.Id.AreaId);
+        w.Write(edit.Other.Id.NodeId);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var node = PathNodeCodecs.Node(network, r);
+        var other = PathNodeCodecs.Node(network, r);
+        return PathLinkDeleteEdit.Apply(network, node, other, description) ?? throw new InvalidDataException("Path link not deleted here.");
+    }
+}
+
+internal static class PathNodeCodecs
+{
+    public static PathNode Node(PathNetwork network, EditReader r)
+    {
+        var id = new PathNodeId(r.ReadUShort(), r.ReadUShort());
+        return network.GetNode(id) ?? throw new InvalidDataException($"Path node {id.AreaId}:{id.NodeId} not found here.");
+    }
+}
+
 internal sealed class RoomCodec : EditCodec<RoomEdit>
 {
     public override string Tag => "room";

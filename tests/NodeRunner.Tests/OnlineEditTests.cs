@@ -63,8 +63,14 @@ public class OnlineEditTests
         paths.SetArea(new PathNodeArea
         {
             AreaId = 5,
-            Nodes = [new PathNode { Id = new(5, 0), Position = new(1, 2, 3) }, new PathNode { Id = new(5, 1), Position = new(4, 5, 6) }],
-            Links = [],
+            Nodes =
+            [
+                new PathNode { Id = new(5, 0), Position = new(1, 2, 3) },
+                new PathNode { Id = new(5, 1), Position = new(4, 5, 6), FirstLink = 0, LinkCount = 1 },
+                new PathNode { Id = new(5, 2), Position = new(7, 8, 9), FirstLink = 1, LinkCount = 1 },
+            ],
+            Links = [new PathLink(new(5, 2), 0, 0, 0x20, 5), new PathLink(new(5, 1), 0, 0, 0x20, 5)],
+            VehicleNodeCount = 3,
         });
         return new World(library, new CollisionEdits(), paths, history ?? new EditHistory());
     }
@@ -116,7 +122,8 @@ public class OnlineEditTests
         text.Append(CultureInfo.InvariantCulture, $"deleted {w.Library.DeletedCount}\n");
         text.Append(w.Collisions.ToJson()).Append('\n');
         foreach (var node in w.Paths.GetArea(5)!.Nodes)
-            text.Append(CultureInfo.InvariantCulture, $"node {V(node.Position)} {node.Values}\n");
+            text.Append(CultureInfo.InvariantCulture, $"node {node.Id} {V(node.Position)} {node.Values} {node.FirstLink}+{node.LinkCount}\n");
+        text.Append(string.Join(",", w.Paths.GetArea(5)!.Links)).Append('\n');
         return text.ToString();
     }
 
@@ -221,6 +228,8 @@ public class OnlineEditTests
         var valuesBefore = node.Values;
         a.Paths.SetValues(node, valuesBefore.WithSpeed(3).WithDensity(9).WithSpecial(PathNodeSpecialType.StopSign).With(PathNodeFlag.Tunnel, true));
         Share(new PathNodeValuesEdit(a.Paths, node, valuesBefore, node.Values, "Modifier un nœud"));
+        Share(PathNodeDeleteEdit.Apply(a.Paths, a.Paths.GetNode(new(5, 0))!, "Supprimer un nœud")!);
+        Share(PathLinkDeleteEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, "Supprimer un lien")!);
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

@@ -23,9 +23,9 @@ internal static partial class PathFileSaver
             try
             {
                 if (network.GetArea(areaId) is not { } area || network.FilePath(areaId) is not { } path
-                    || files.ReadFile(path) is not { } source || files.GetResourceHeader(path) is not { } header)
+                    || files.GetResourceHeader(path) is not { } header)
                     throw new InvalidDataException(L("fichier du jeu introuvable"));
-                var file = ResourceFile.Write(header, writer.Write(source, area, network.LinkLength));
+                var file = writer.Write(area, network.LinkLength, header.Version);
                 Verify(file, area);
 
                 string target = Path.Combine(folder, name);
@@ -69,14 +69,16 @@ internal static partial class PathFileSaver
     private static void Verify(byte[] file, PathNodeArea area)
     {
         var written = new YndReader().Read(ResourceFile.Read(file).Content, area.AreaId);
-        if (written.Nodes.Count != area.Nodes.Count || written.Links.Count != area.Links.Count)
+        if (written.Nodes.Count != area.Nodes.Count || written.Links.Count != area.Links.Count
+            || written.VehicleNodeCount != area.VehicleNodeCount)
             throw new InvalidDataException(L("vérification échouée (nombre de nœuds)"));
         for (int i = 0; i < written.Nodes.Count; i++)
         {
             var difference = written.Nodes[i].Position - area.Nodes[i].Position;
             if (MathF.Abs(difference.X) > Tolerance || MathF.Abs(difference.Y) > Tolerance || MathF.Abs(difference.Z) > Tolerance)
                 throw new InvalidDataException(L($"vérification échouée (nœud n° {i}, position hors des limites du format ?)"));
-            if (written.Nodes[i].Values != area.Nodes[i].Values)
+            if (written.Nodes[i].Values != area.Nodes[i].Values || written.Nodes[i].Id != area.Nodes[i].Id
+                || written.Nodes[i].LinkCount != area.Nodes[i].LinkCount || (written.Nodes[i].Junction is null) != (area.Nodes[i].Junction is null))
                 throw new InvalidDataException(L($"vérification échouée (nœud n° {i}, réglages)"));
         }
     }

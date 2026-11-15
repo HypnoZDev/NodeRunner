@@ -5,7 +5,8 @@ namespace NodeRunner.Data.Paths;
 // A node of the game's road and pedestrian network (one point of a path, stored in a nodesN.ynd file).
 public sealed class PathNode
 {
-    public required PathNodeId Id { get; init; }
+    // Renumbered when a node before it in its file is deleted (PathNetwork.DeleteNode).
+    public required PathNodeId Id { get; set; }
 
     // Change it through PathNetwork.MoveNode, so that the network's Revision follows.
     public required Vector3 Position { get; set; }
@@ -17,9 +18,12 @@ public sealed class PathNode
 
     public bool IsPedestrian { get; init; }
 
-    public int FirstLink { get; init; }
+    public int FirstLink { get; set; }
 
-    public int LinkCount { get; init; }
+    public int LinkCount { get; set; }
+
+    // The junction data the file gives this node (height map of a crossing), kept as read.
+    public PathJunction? Junction { get; init; }
 
     // Change these through PathNetwork.SetValues, like the position.
     public byte Flags0 { get; set; }
@@ -104,6 +108,9 @@ public enum PathNodeFlag
     SwitchedOff,
     Tunnel,
 }
+
+// A junction of a .ynd file: its 8 first bytes as stored (heights and position), and its height map.
+public sealed record PathJunction(byte[] Header, byte Width, byte Depth, byte[] Heights);
 
 // Identifies a node across the whole map: area (file) number + node number in that file.
 public readonly record struct PathNodeId(ushort AreaId, ushort NodeId);

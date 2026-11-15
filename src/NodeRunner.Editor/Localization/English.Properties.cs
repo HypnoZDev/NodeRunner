@@ -818,5 +818,11 @@ public static partial class English
         ("Voie d'entrée ou de sortie (slip lane).", "Entry or exit lane (slip lane)."),
         ("prudence", "caution"),
         ("vérification échouée (nœud n° {0}, réglages)", "check failed (node {0}, settings)"),
+        ("Nœud {0}:{1} supprimé avec ses liens. Ctrl+Z pour annuler.", "Node {0}:{1} deleted with its links. Ctrl+Z to undo."),
+        ("Suppr. Supprime aussi ses liens ; les nœuds suivants du fichier sont renumérotés. Annulable avec Ctrl+Z.",
+            "Del. Also deletes its links; the next nodes of the file are renumbered. Ctrl+Z to undo."),
+        ("Supprimer ce lien (dans les deux sens). Annulable avec Ctrl+Z.", "Delete this link (both ways). Ctrl+Z to undo."),
+        ("Supprimer le lien {0}:{1} - {2}:{3}", "Delete link {0}:{1} - {2}:{3}"),
+        ("Supprimer le nœud {0}:{1}", "Delete node {0}:{1}"),
     ];
 }

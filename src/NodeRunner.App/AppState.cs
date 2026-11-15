@@ -774,7 +774,7 @@ internal sealed class AppState
         if (edit is IPathNodeEdit nodeEdit)
         {
             Select(null);
-            SelectedPathNode = nodeEdit.Node;
+            SelectedPathNode = edit is PathNodeDeleteEdit && !undone ? null : nodeEdit.Node;
         }
         else if (edit is OccluderBoxEdit boxEdit)
         {
@@ -862,6 +862,18 @@ internal sealed class AppState
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
         Notify(L($"Place de véhicule ajoutée dans {Path.GetFileName(map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+    }
+
+    public void DeleteSelectedPathNode()
+    {
+        if (SelectedPathNode is not { } node || World.PathNetwork is not { } network)
+            return;
+        var id = node.Id;
+        if (PathNodeDeleteEdit.Apply(network, node, L($"Supprimer le nœud {id.AreaId}:{id.NodeId}")) is not { } edit)
+            return;
+        History.Add(edit);
+        SelectedPathNode = null;
+        Notify(L($"Nœud {id.AreaId}:{id.NodeId} supprimé avec ses liens. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedCarGenerator()

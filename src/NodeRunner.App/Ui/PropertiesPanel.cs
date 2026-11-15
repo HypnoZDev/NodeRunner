@@ -2523,6 +2523,12 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         var p = node.Position;
         if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), state.FormatPosition(p)))
             ImGui.SetClipboardText(state.FormatPosition(p));
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Supprime aussi ses liens ; les nœuds suivants du fichier sont renumérotés. Annulable avec Ctrl+Z.")))
+        {
+            state.DeleteSelectedPathNode();
+            return;
+        }
 
         if (Widgets.Section(L("Nœud"), "path_node") && Widgets.BeginProperties("##path_node"))
         {
@@ -2545,6 +2551,15 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             {
                 var target = network.GetNode(link.Target);
                 Widgets.Property(L($"Vers {link.Target.AreaId}:{link.Target.NodeId}"));
+                if (target is not null && Widgets.IconButton(Icons.Trash, $"##delete_link{i}", L("Supprimer ce lien (dans les deux sens). Annulable avec Ctrl+Z.")))
+                {
+                    var edit = PathLinkDeleteEdit.Apply(network, node, target, L($"Supprimer le lien {node.Id.AreaId}:{node.Id.NodeId} - {target.Id.AreaId}:{target.Id.NodeId}"));
+                    if (edit is not null)
+                        state.History.Add(edit);
+                    break;
+                }
+                if (target is not null)
+                    ImGui.SameLine();
                 string lanes = L($"{link.LanesForward} voie(s) aller, {link.LanesBackward} retour, {network.LinkLength(node, link)} m");
                 if (link.IsShortcut) lanes += L(", raccourci");
                 if (link.IsNarrowRoad) lanes += L(", étroite");

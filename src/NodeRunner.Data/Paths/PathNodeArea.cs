@@ -12,12 +12,13 @@ public sealed class PathNodeArea
 
     public required int AreaId { get; init; }
 
-    public required IReadOnlyList<PathNode> Nodes { get; init; }
+    // Replaced, not changed in place, when nodes or links are deleted (PathNetwork).
+    public required IReadOnlyList<PathNode> Nodes { get; set; }
 
-    public required IReadOnlyList<PathLink> Links { get; init; }
+    public required IReadOnlyList<PathLink> Links { get; set; }
 
-    public int VehicleNodeCount { get; init; }
-    public int PedestrianNodeCount { get; init; }
+    public int VehicleNodeCount { get; set; }
+    public int PedestrianNodeCount { get; set; }
 
     public IEnumerable<PathLink> LinksOf(PathNode node)
     {

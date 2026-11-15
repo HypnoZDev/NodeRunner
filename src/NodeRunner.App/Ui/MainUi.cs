@@ -316,6 +316,8 @@ internal sealed class MainUi
                 _state.DeleteSelectedOccluder();
             else if (_state.SelectedCarGenerator is not null)
                 _state.DeleteSelectedCarGenerator();
+            else if (_state.SelectedPathNode is not null)
+                _state.DeleteSelectedPathNode();
             else if (_state.SelectedTimecycle is not null)
                 _state.DeleteSelectedTimecycleZone();
             else if (_state.SelectedLodLight is not null)

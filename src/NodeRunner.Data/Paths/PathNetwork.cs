@@ -80,8 +80,7 @@ public sealed partial class PathNetwork
     }
 
     // A copy of this network where the changed areas are read again from the game, and the user's saved files (by
-    // area) put back: node positions and values are taken from them, links stay the game's. A saved file whose nodes and
-    // links do not match the game's is reported in errors and left out.
+    // area) put in their place, whole (nodes may have been deleted). Unreadable files are reported in errors.
     public PathNetwork WithSavedAreas(IGameFileSystem files, IPathNodeReader reader, IReadOnlyDictionary<int, byte[]> saved, List<string> errors)
     {
         var network = new PathNetwork();
@@ -99,22 +98,10 @@ public sealed partial class PathNetwork
             }
             try
             {
-                var area = reader.Read(data, areaId);
-                network._areas[areaId] = area;
+                network._areas[areaId] = reader.Read(data, areaId);
                 if (!saved.TryGetValue(areaId, out var savedData))
                     continue;
-                var mine = reader.Read(savedData, areaId);
-                if (mine.Nodes.Count != area.Nodes.Count || mine.Links.Count != area.Links.Count
-                    || mine.Nodes.Where((n, i) => n.Id != area.Nodes[i].Id).Any())
-                {
-                    errors.Add($"{FileName(areaId)} : nœuds différents de ceux du jeu, non repris");
-                    continue;
-                }
-                for (int i = 0; i < area.Nodes.Count; i++)
-                {
-                    area.Nodes[i].Position = mine.Nodes[i].Position;
-                    area.Nodes[i].Values = mine.Nodes[i].Values;
-                }
+                network._areas[areaId] = reader.Read(savedData, areaId);
                 network._saved.Add(areaId);
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException)
