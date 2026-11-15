@@ -1722,7 +1722,7 @@ internal sealed class AppState
             if (edits.IsEmpty)
                 File.Delete(file);
             else
-                File.WriteAllText(file, edits.ToJson());
+                SafeFile.WriteAllText(file, edits.ToJson());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1789,7 +1789,7 @@ internal sealed class AppState
             if (CollisionEdits.Files.Count == 0)
                 File.Delete(file);
             else
-                File.WriteAllText(file, CollisionEdits.ToJson());
+                SafeFile.WriteAllText(file, CollisionEdits.ToJson());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {

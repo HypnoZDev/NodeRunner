@@ -213,7 +213,7 @@ public sealed class AppSettings
 
     public void Save(string path)
     {
-        File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
+        SafeFile.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
     }
 }
 
