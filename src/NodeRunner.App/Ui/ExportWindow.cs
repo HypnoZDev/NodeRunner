@@ -9,12 +9,14 @@ namespace NodeRunner.App.Ui;
 
 // "Export as a FiveM resource" window: resource name, destination folder (a server's "resources" folder), list of the
 // map files, the check before export (conflicts with other resources and projects, deleted scenery), then the line to
-// add to server.cfg.
-internal sealed class ExportWindow(AppState state, Action chooseFolder)
+// add to server.cfg. The same window exports a single-player pack (dlc.rpf).
+internal sealed class ExportWindow(AppState state, Action chooseFolder, Action chooseSoloPackFile)
 {
     public const string Title = $"{Icons.Package}  Exporter en ressource FiveM###Export";
+    public const string SoloTitle = $"{Icons.HardDrive}  Exporter en pack solo###Export";
 
     private bool _open;
+    private bool _solo;
     private string _name = FiveMResource.DefaultName;
     private (string Text, bool Success, string? Folder)? _result;
 
@@ -23,7 +25,11 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
     private ExportChecker.Result? _check;
     private (string? Folder, string Name, int Maps, bool RemoveGround) _checkedFor;
 
-    public void Open()
+    public void Open() => Open(solo: false);
+
+    public void OpenSolo() => Open(solo: true);
+
+    private void Open(bool solo)
     {
         if (state.Online.IsGuest)
         {
@@ -31,7 +37,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             return;
         }
         _open = true;
-        _name = state.ExportResourceName;
+        _solo = solo;
+        _name = solo ? SoloPack.ToPackName(state.ExportResourceName) : state.ExportResourceName;
         _result = null;
         StartCheck();
     }
@@ -58,7 +65,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSizeConstraints(new Vector2(520f, 0f), new Vector2(520f, float.MaxValue));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
+        bool visible = ImGui.Begin(_solo ? L(SoloTitle) : L(Title), ref _open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
         ImGui.PopStyleVar();
         if (visible)
             DrawContent();
@@ -69,63 +76,37 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
 
     private void DrawContent()
     {
-        Widgets.Hint(L("Crée un dossier prêt pour le dossier « resources » d'un serveur FiveM : fxmanifest.lua ")
-            + L("et les fichiers modifiés (YMAP, pathnodes) dans « stream ». Les fichiers du jeu ne sont pas touchés."), wrap: true);
+        if (_solo)
+            Widgets.Hint(L("Crée un pack pour GTA V solo (dlc.rpf) avec les mêmes fichiers que l'export FiveM : YMAP, ")
+                + L("collisions, modèles importés... Les fichiers du jeu ne sont pas touchés."), wrap: true);
+        else
+            Widgets.Hint(L("Crée un dossier prêt pour le dossier « resources » d'un serveur FiveM : fxmanifest.lua ")
+                + L("et les fichiers modifiés (YMAP, pathnodes) dans « stream ». Les fichiers du jeu ne sont pas touchés."), wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
 
         var maps = state.MapsToExport;
         var pathAreas = state.PathAreasToSave;
         string? folder = state.ExportFolder;
-        bool nameValid = FiveMResource.IsValidName(_name);
+        bool nameValid = _solo ? SoloPack.ToPackName(_name) == _name : FiveMResource.IsValidName(_name);
         string? target = folder is not null && nameValid ? Path.Combine(folder, _name) : null;
-        var targetState = target is not null ? ResourceExporter.Inspect(target) : ResourceExporter.TargetState.New;
+        var targetState = target is not null && !_solo ? ResourceExporter.Inspect(target) : ResourceExporter.TargetState.New;
 
         if (Widgets.BeginProperties("##export", 0.30f))
         {
-            Widgets.Property(L("Nom de la ressource"), L("Nom utilisé dans server.cfg (ensure ...) : minuscules, chiffres, _ et -"));
+            if (_solo)
+                Widgets.Property(L("Nom du pack"), L("Nom du dossier du pack dans dlcpacks : minuscules, chiffres et _"));
+            else
+                Widgets.Property(L("Nom de la ressource"), L("Nom utilisé dans server.cfg (ensure ...) : minuscules, chiffres, _ et -"));
             if (ImGui.InputText("##resource_name", ref _name, 64))
                 _result = null;
-            if (ImGui.IsItemDeactivatedAfterEdit() && !FiveMResource.IsValidName(_name))
-                _name = FiveMResource.ToValidName(_name); // Fixed when the field is left: "Ma carte" -> "ma_carte".
+            // Fixed when the field is left: "Ma carte" -> "ma_carte".
+            if (ImGui.IsItemDeactivatedAfterEdit() && !nameValid)
+                _name = _solo ? SoloPack.ToPackName(_name) : FiveMResource.ToValidName(_name);
 
-            Widgets.Property(L("Dossier"), L("Le dossier « resources » de ton serveur FiveM, par exemple"));
-            // Button first: the path takes what is left of the cell.
-            if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir..."), L("Choisir le dossier où créer la ressource")))
-            {
-                _result = null;
-                chooseFolder();
-            }
-            ImGui.SameLine();
-            ImGui.AlignTextToFramePadding();
-            if (folder is null)
-                ImGui.TextColored(UiTheme.TextFaint, L("aucun dossier choisi"));
+            if (_solo)
+                DrawSoloTarget(nameValid);
             else
-            {
-                ImGui.TextUnformatted(Widgets.Fit(folder, ImGui.GetContentRegionAvail().X));
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-                    ImGui.SetTooltip(folder);
-            }
-
-            if (target is not null)
-            {
-                var (text, color) = targetState switch
-                {
-                    ResourceExporter.TargetState.Ours => (L("existe déjà (export précédent) : sera remplacée"), UiTheme.Warning),
-                    ResourceExporter.TargetState.Foreign => (L("ce dossier existe et n'a pas été créé par NodeRunner : choisis un autre nom"), UiTheme.Error),
-                    _ => (L("nouvelle ressource"), UiTheme.TextMuted),
-                };
-                Widgets.Property(L("Ressource"));
-                ImGui.AlignTextToFramePadding();
-                ImGui.TextColored(color, Widgets.Fit(text, ImGui.GetContentRegionAvail().X));
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-                    ImGui.SetTooltip($"{target}\n{text}");
-            }
-            else if (!nameValid)
-            {
-                Widgets.Property(L("Ressource"));
-                ImGui.AlignTextToFramePadding();
-                ImGui.TextColored(UiTheme.Error, L("nom invalide (minuscules, chiffres, _ et -)"));
-            }
+                DrawFolder(folder, target, targetState, nameValid);
 
             Widgets.Property("YMAP", L("Les YMAP modifiés pendant cette session et ceux déjà enregistrés"));
             ImGui.AlignTextToFramePadding();
@@ -173,17 +154,83 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
             DrawCheck(maps.Count);
 
         ImGui.Dummy(new Vector2(0, 4));
-        bool canExport = (maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0) && target is not null && targetState != ResourceExporter.TargetState.Foreign;
-        ImGui.BeginDisabled(!canExport);
-        if (Widgets.PrimaryButton(L($"{Icons.Package}  Exporter"), 120f) && target is not null)
-            Export(maps, pathAreas, target);
-        ImGui.EndDisabled();
+        bool hasChanges = maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
+        if (_solo)
+        {
+            ImGui.BeginDisabled(!hasChanges || !nameValid);
+            if (Widgets.PrimaryButton(L($"{Icons.Save}  Enregistrer le dlc.rpf..."), 200f))
+            {
+                _result = null;
+                chooseSoloPackFile();
+            }
+            ImGui.EndDisabled();
+        }
+        else
+        {
+            bool canExport = hasChanges && target is not null && targetState != ResourceExporter.TargetState.Foreign;
+            ImGui.BeginDisabled(!canExport);
+            if (Widgets.PrimaryButton(L($"{Icons.Package}  Exporter"), 120f) && target is not null)
+                Export(maps, pathAreas, target);
+            ImGui.EndDisabled();
+        }
         ImGui.SameLine();
         if (Widgets.Button(L("Fermer"), width: 90f))
             _open = false;
 
         if (_result is { } result)
             DrawResult(result);
+    }
+
+    private void DrawFolder(string? folder, string? target, ResourceExporter.TargetState targetState, bool nameValid)
+    {
+        Widgets.Property(L("Dossier"), L("Le dossier « resources » de ton serveur FiveM, par exemple"));
+        // Button first: the path takes what is left of the cell.
+        if (Widgets.Button(L($"{Icons.FolderOpen}  Choisir..."), L("Choisir le dossier où créer la ressource")))
+        {
+            _result = null;
+            chooseFolder();
+        }
+        ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        if (folder is null)
+            ImGui.TextColored(UiTheme.TextFaint, L("aucun dossier choisi"));
+        else
+        {
+            ImGui.TextUnformatted(Widgets.Fit(folder, ImGui.GetContentRegionAvail().X));
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(folder);
+        }
+
+        if (target is not null)
+        {
+            var (text, color) = targetState switch
+            {
+                ResourceExporter.TargetState.Ours => (L("existe déjà (export précédent) : sera remplacée"), UiTheme.Warning),
+                ResourceExporter.TargetState.Foreign => (L("ce dossier existe et n'a pas été créé par NodeRunner : choisis un autre nom"), UiTheme.Error),
+                _ => (L("nouvelle ressource"), UiTheme.TextMuted),
+            };
+            Widgets.Property(L("Ressource"));
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(color, Widgets.Fit(text, ImGui.GetContentRegionAvail().X));
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip($"{target}\n{text}");
+        }
+        else if (!nameValid)
+        {
+            Widgets.Property(L("Ressource"));
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(UiTheme.Error, L("nom invalide (minuscules, chiffres, _ et -)"));
+        }
+    }
+
+    private void DrawSoloTarget(bool nameValid)
+    {
+        Widgets.Property(L("Pack"), L("Emplacement du pack dans le dossier mods du jeu"));
+        ImGui.AlignTextToFramePadding();
+        if (nameValid)
+            ImGui.TextColored(UiTheme.TextMuted, Widgets.Fit($@"mods\update\x64\dlcpacks\{_name}\{SoloPack.ArchiveName}", ImGui.GetContentRegionAvail().X));
+        else
+            ImGui.TextColored(UiTheme.Error, L("nom invalide (minuscules, chiffres et _)"));
     }
 
     private static void DrawMapList(IReadOnlyList<MapData> maps)
@@ -440,12 +487,22 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         _ => "autre",
     };
 
+    // Called once the file is chosen (Save dialog of the main window).
+    public void ExportSolo(string dlcRpf)
+    {
+        if (_open && _solo && SoloPack.ToPackName(_name) == _name)
+            Export(state.MapsToExport, state.PathAreasToSave, dlcRpf);
+    }
+
     private void Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target)
     {
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
-        var report = ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion, state.CollisionEdits,
-            state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out var copied, out var fromLibrary);
+        var report = _solo
+            ? SoloPackExporter.Export(state.World, maps, pathAreas, _name, target, SelectedCuts(), occlusion, state.CollisionEdits,
+                state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out var copied, out var fromLibrary)
+            : ResourceExporter.Export(state.World, maps, pathAreas, target, SelectedCuts(), occlusion, state.CollisionEdits,
+                state.OccluderFileName, state.InteriorFilesToExport, state.SaveFolder, out copied, out fromLibrary);
         var occluderNames = state.OccluderEdits.StreamFileNames.Concat(occlusion.Select(c => c.FileName)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         int collisionFiles = report.Saved.Count(f => f.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase));
         int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
@@ -469,9 +526,10 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         if (fromLibrary.Count > 0)
             extra.Add(L($"{fromLibrary.Count} fichier(s) de la bibliothèque"));
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
+        string? folder = _solo ? Path.GetDirectoryName(target) : target;
         _result = report.Errors.Count == 0
-            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}"), true, target)
-            : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 ? target : null);
+            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}"), true, folder)
+            : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 && !_solo ? target : null);
     }
 
     private void DrawResult((string Text, bool Success, string? Folder) result)
@@ -482,7 +540,18 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder)
         ImGui.PushStyleColor(ImGuiCol.Text, result.Success ? UiTheme.Success : UiTheme.Error);
         ImGui.TextWrapped($"{(result.Success ? Icons.Check : Icons.TriangleAlert)}  {result.Text}");
         ImGui.PopStyleColor();
-        if (result.Success)
+        if (result.Success && _solo)
+        {
+            string line = $"<Item>{SoloPack.ListEntry(_name)}</Item>";
+            Widgets.Hint(L($@"Pour l'installer : place {SoloPack.ArchiveName} dans mods\update\x64\dlcpacks\{_name}\ du dossier du jeu, ")
+                + L(@"puis ajoute cette ligne à la fin de la liste de dlclist.xml (mods\update\update.rpf\common\data) :"), wrap: true);
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(UiTheme.AccentText, line);
+            ImGui.SameLine();
+            if (Widgets.Button(L($"{Icons.Copy}  Copier"), L("Copier la ligne pour dlclist.xml")))
+                ImGui.SetClipboardText(line);
+        }
+        else if (result.Success)
         {
             string line = $"ensure {_name}";
             Widgets.Hint(L("Copie le dossier dans « resources » si besoin, puis ajoute cette ligne au server.cfg :"), wrap: true);

@@ -40,7 +40,7 @@ internal sealed class MainUi
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);
         _projectPanel = new ProjectPanel(state);
-        _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true);
+        _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true, () => SaveSoloPackRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);
         _shortcutsWindow = new ShortcutsWindow(state);
@@ -170,6 +170,11 @@ internal sealed class MainUi
     public bool ChooseProjectsFolderRequested { get; set; }
 
     public bool ChooseExportFolderRequested { get; set; }
+
+    // Single-player pack to save: the main form asks where, then calls ExportSoloPack.
+    public bool SaveSoloPackRequested { get; set; }
+
+    public void ExportSoloPack(string dlcRpf) => _exportWindow.ExportSolo(dlcRpf);
 
     // File or folder of the archive explorer to extract: the main form asks where, then calls ExtractArchiveItem.
     public ArchiveTree.Node? ArchiveExtractRequested
@@ -409,6 +414,10 @@ internal sealed class MainUi
                 SaveRequested = true;
             if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E", false, !_state.IsGta4))
                 _exportWindow.Open();
+            if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(Gta5OnlyTip);
+            if (ImGui.MenuItem(L($"{Icons.HardDrive}  Exporter en pack solo..."), null, false, !_state.IsGta4))
+                _exportWindow.OpenSolo();
             if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
             ImGui.Separator();

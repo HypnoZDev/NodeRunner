@@ -79,6 +79,63 @@ public class ArchiveTests : IDisposable
         Assert.Equal(PlainText, files.ReadFile(@"test.rpf\a.txt"));
     }
 
+    [Fact]
+    public void RpfWriter_WritesArchivesTheReaderOpens()
+    {
+        var resource = ResourceFile.Write(new ResourceHeader(2, ResourceSystemFlags, ResourceGraphicsFlags), ResourceContent);
+        var inner = new RpfWriter();
+        inner.Add("stream/e.txt", PlainText);
+        inner.Add("stream/c.ymap", resource);
+
+        var outer = new RpfWriter();
+        outer.Add("Setup2.xml", XmlText);
+        outer.Add(@"x64\levels\gta5\inner.rpf", inner.ToArray());
+        outer.Add("a.txt", PlainText);
+        outer.Add("b.txt", []);
+        File.WriteAllBytes(Path.Combine(_folder, "dlc.rpf"), outer.ToArray());
+
+        using var files = Open();
+
+        Assert.Empty(files.Errors);
+        Assert.Equal(["dlc.rpf", @"dlc.rpf\x64\levels\gta5\inner.rpf"], files.EnumerateArchives().Order());
+        Assert.Equal(XmlText, files.ReadFile(@"dlc.rpf\setup2.xml"));
+        Assert.Equal(PlainText, files.ReadFile(@"dlc.rpf\a.txt"));
+        Assert.Empty(files.ReadFile(@"dlc.rpf\b.txt")!);
+        Assert.Equal(PlainText, files.ReadFile(@"dlc.rpf\x64\levels\gta5\inner.rpf\stream\e.txt"));
+        Assert.Equal(ResourceContent, files.ReadFile(@"dlc.rpf\x64\levels\gta5\inner.rpf\stream\c.ymap"));
+        Assert.Equal(new ResourceHeader(2, ResourceSystemFlags, ResourceGraphicsFlags),
+            files.GetResourceHeader(@"dlc.rpf\x64\levels\gta5\inner.rpf\stream\c.ymap"));
+    }
+
+    [Fact]
+    public void RpfWriter_StoresLargeResourcesSizeInTheirHeader()
+    {
+        // Random content does not compress: the resource file is a little over 16 MB.
+        var content = new byte[17 * 1024 * 1024];
+        new Random(1).NextBytes(content);
+        uint flags = MetaDocument.PageFlags(content.Length / 0x10000 + 1, 0x10000);
+        var resource = ResourceFile.Write(new ResourceHeader(2, flags, ResourceGraphicsFlags), content);
+        Assert.True(resource.Length > 0xFFFFFF);
+
+        var writer = new RpfWriter();
+        writer.Add("big.ytd", resource);
+        File.WriteAllBytes(Path.Combine(_folder, "dlc.rpf"), writer.ToArray());
+
+        using var files = Open();
+        Assert.Equal(resource.Length, files.GetInfo(@"dlc.rpf\big.ytd")!.Value.StoredSize);
+        Assert.Equal(content, files.ReadFile(@"dlc.rpf\big.ytd"));
+    }
+
+    [Fact]
+    public void RpfWriter_RejectsAFileWhereAFolderIs()
+    {
+        var writer = new RpfWriter();
+        writer.Add("stream/a.ymap", PlainText);
+        Assert.Throws<ArgumentException>(() => writer.Add("stream", PlainText));
+        Assert.Throws<ArgumentException>(() => writer.Add("stream/a.ymap/b.txt", PlainText));
+        Assert.Throws<ArgumentException>(() => writer.Add("../a.txt", PlainText));
+    }
+
     [Theory]
     [InlineData(1, 0x2000)]
     [InlineData(5, 0x4000)]

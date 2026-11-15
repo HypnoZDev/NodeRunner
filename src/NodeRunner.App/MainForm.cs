@@ -1215,6 +1215,12 @@ internal sealed unsafe partial class MainForm : Form
             ChooseExportFolder();
         }
 
+        if (_ui.SaveSoloPackRequested)
+        {
+            _ui.SaveSoloPackRequested = false;
+            SaveSoloPack();
+        }
+
         if (_ui.SaveRequested)
         {
             _ui.SaveRequested = false;
@@ -1774,6 +1780,20 @@ internal sealed unsafe partial class MainForm : Form
         };
         if (dialog.ShowDialog(this) == DialogResult.OK)
             _ui.ExtractArchiveItem(node, dialog.SelectedPath);
+    }
+
+    private void SaveSoloPack()
+    {
+        using var save = new SaveFileDialog
+        {
+            Title = L("Enregistrer le pack solo"),
+            FileName = SoloPack.ArchiveName,
+            Filter = L("Archive RPF (*.rpf)|*.rpf"),
+            InitialDirectory = _state.ExportFolder ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            OverwritePrompt = true,
+        };
+        if (save.ShowDialog(this) == DialogResult.OK)
+            _ui.ExportSoloPack(save.FileName);
     }
 
     private void ChooseExportFolder()

@@ -49,6 +49,7 @@ public static partial class English
         ("Paramètres", "Settings"),
         ("Enregistrer les fichiers modifiés", "Save modified files"),
         ("Exporter en ressource FiveM...", "Export as FiveM resource..."),
+        ("Exporter en pack solo...", "Export as single-player pack..."),
         ("Choisir le dossier de GTA V...", "Choose the GTA V folder..."),
         ("Relancer la détection automatique", "Run automatic detection again"),
         ("Quitter", "Quit"),

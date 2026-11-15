@@ -126,7 +126,7 @@ internal static class ResourceExporter
     }
 
     // The .ytyp files written that the game does not have (interiors made by the user).
-    private static List<string> NewTypeFiles(WorldLoader world, IEnumerable<string> saved)
+    public static List<string> NewTypeFiles(WorldLoader world, IEnumerable<string> saved)
     {
         var types = saved.Where(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase)).ToList();
         if (types.Count == 0 || world.Content is not { } content)

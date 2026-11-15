@@ -78,6 +78,9 @@ public sealed class GameContent
 
     public IReadOnlyList<string> Packs { get; private set; } = [];
 
+    // Load order ("order" of setup2.xml) of the game's last pack: a pack meant to win over the game's must come after it.
+    public int HighestPackOrder { get; private set; }
+
     public int ActiveArchiveCount => _active.Count;
 
     public List<string> Errors { get; } = new();
@@ -212,6 +215,7 @@ public sealed class GameContent
         // OrderBy is stable: packs of equal order keep the order of dlclist.xml.
         packs = packs.OrderBy(p => p.Setup.Order).ToList();
         AllPacks = packs.Select(p => new DlcPackInfo(p.Name, p.Setup.Name ?? p.Name)).ToList();
+        HighestPackOrder = packs.Count > 0 ? packs[^1].Setup.Order : 0;
 
         // Only the packs up to the chosen one exist for the rest of the process.
         int last = selection.LastPack is { } lastPack
