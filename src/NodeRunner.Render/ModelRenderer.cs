@@ -33,6 +33,7 @@ cbuffer Object : register(b2)
     float4 Tint;
     uint4 PickId;      // x: number of the object, for picking.
     float4 Emission;   // x: how much the mesh gives off its own light (0 = only lit by the sun).
+                       // y = 1: the vertex colour is light worked out in advance (GTA IV), darkening nooks.
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
 };
@@ -113,7 +114,16 @@ float4 Shade(PS_INPUT input, float4 color)
     if (sun > 0.0f)
         sun *= SunShadow(input.world, n);
     float sky = 0.5f + 0.5f * n.z;
-    float3 light = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky) + SunColor.rgb * sun;
+    float3 ambient = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky);
+    if (Emission.y > 0.5f)
+    {
+        // About 0.5 in the open: doubled, so only nooks and the ground under objects get darker. The sun is
+        // partly shaded too (beyond the shadow distance, this is the only shade left).
+        float baked = saturate(dot(input.color.rgb, float3(0.667f, 0.667f, 0.667f)));
+        ambient *= baked;
+        sun *= 0.5f + 0.5f * baked;
+    }
+    float3 light = ambient + SunColor.rgb * sun;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * 1.4f);
 
@@ -487,7 +497,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
                 terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
-                terrain is null && mesh.TintTextureName is not null));
+                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
@@ -525,7 +535,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var texture = textures.Length > 0 ? textures[0] : null;
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
-                r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null);
+                r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize);
     }
@@ -662,7 +672,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 // A missing layer shows layer 0 instead; without the mask, the vertex weights alone.
                 var mask = part.Layers![3];
                 bool useMask = mask is not null && part.TerrainMode != TerrainBlendMode.VertexOnly;
-                SetMesh(emission, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
+                SetMesh(emission, part.BakedLighting, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
                     part.TerrainMode == TerrainBlendMode.Layered ? 1f : 0f, 0f));
                 for (int l = 0; l < 3; l++)
                     _context.PSSetShaderResource((uint)l + 1, (part.Layers[l] ?? baseTexture).View);
@@ -670,7 +680,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             }
             else
             {
-                SetMesh(emission, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
+                SetMesh(emission, part.BakedLighting, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
                 if (part.TintTexture is not null)
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
@@ -748,11 +758,12 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         WriteConstants();
     }
 
-    private void SetMesh(float emission, Vector4 terrain)
+    private void SetMesh(float emission, bool bakedLighting, Vector4 terrain)
     {
-        if (_constants.Emission.X == emission && _constants.Terrain == terrain)
+        var value = new Vector4(emission, bakedLighting ? 1f : 0f, 0f, 0f);
+        if (_constants.Emission == value && _constants.Terrain == terrain)
             return;
-        _constants.Emission = new Vector4(emission, 0f, 0f, 0f);
+        _constants.Emission = value;
         _constants.Terrain = terrain;
         WriteConstants();
     }
@@ -811,7 +822,7 @@ public sealed class GpuModel : IDisposable
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
-        int Mesh, GpuTexture? TintTexture);
+        int Mesh, GpuTexture? TintTexture, bool BakedLighting);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -848,7 +859,8 @@ public sealed class GpuModel : IDisposable
 public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
-        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted);
+        MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted,
+        bool BakedLighting);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

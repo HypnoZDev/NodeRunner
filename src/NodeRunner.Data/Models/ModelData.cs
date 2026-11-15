@@ -44,6 +44,9 @@ public sealed class ModelMesh
     // The colour comes from Colors, not from a texture (shaders cpv_only: e.g. the dark heart of bushes).
     public bool VertexColored { get; init; }
 
+    // Colors hold light worked out in advance (GTA IV: grey, about 0.5 in the open, 0 in nooks and under objects).
+    public bool BakedLighting { get; init; }
+
     public TerrainBlend? Terrain { get; init; }
 
     // Hash of the shader's name (e.g. "vehicle_paint1").
