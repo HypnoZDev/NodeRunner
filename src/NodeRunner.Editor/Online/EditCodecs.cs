@@ -81,6 +81,8 @@ public sealed class EditCodecs
         .Add(new PathLinkAddCodec())
         .Add(new PathLinkLanesCodec())
         .Add(new ScenarioCodec())
+        .Add(new ScenarioAddCodec())
+        .Add(new ScenarioDeleteCodec())
         .Add(new RoomCodec())
         .Add(new PortalCodec())
         .Add(new InteriorLayoutCodec())

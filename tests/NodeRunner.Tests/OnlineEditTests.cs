@@ -76,6 +76,7 @@ public class OnlineEditTests
         var region = new NodeRunner.Data.Scenarios.ScenarioRegion
         {
             Name = "test_region",
+            OwnPointCount = 2,
             Points = [new NodeRunner.Data.Scenarios.ScenarioPoint { Position = new(1, 1, 1) }, new NodeRunner.Data.Scenarios.ScenarioPoint { Position = new(2, 2, 2) }],
         };
         foreach (var (point, i) in region.Points.Select((p, i) => (p, i)))
@@ -249,6 +250,9 @@ public class OnlineEditTests
         var scenarioBefore = scenario.Values;
         a.Scenarios.SetValues(scenario, scenarioBefore with { Position = new(3, 4, 5), Heading = 1.5f, TypeHash = 0x1234, Probability = 50, StartHour = 6, EndHour = 22, Availability = 2, Radius = 4, TimeTillPedLeaves = 9, Flags = 0x81 });
         Share(new ScenarioEdit(a.Scenarios, scenario, scenarioBefore, scenario.Values, "Modifier un point de scénario"));
+        var scenarioRegion = a.Scenarios.Regions[0];
+        Share(ScenarioAddEdit.Apply(a.Scenarios, scenarioRegion, scenario.Values with { Position = new(9, 9, 9) }, scenarioRegion.Points[0], "Ajouter un point de scénario"));
+        Share(ScenarioDeleteEdit.Apply(a.Scenarios, scenarioRegion.Points[0], "Supprimer un point de scénario")!);
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

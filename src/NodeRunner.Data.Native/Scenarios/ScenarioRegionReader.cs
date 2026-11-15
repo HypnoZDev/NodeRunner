@@ -9,18 +9,20 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
 {
     // Structure name hashes as they appear in the files.
     private const uint RegionStructure = 1492970064;
-    private const uint PointStructure = 4103049490;
+    internal const uint PointStructure = 4103049490;
     private const uint ClusterStructure = 750308016;
 
     private const int RegionSize = 376;
-    private const int PointSize = 64;
+    internal const int PointSize = 64;
     private const int ClusterSize = 80;
     private const int ArrayFieldSize = 16;
 
     // CScenarioPointRegion fields.
-    private const int RegionMyPoints = 8 + 16;  // Points (container) -> MyPoints
+    internal const int RegionMyPoints = 8 + 16;  // Points (container) -> MyPoints
     private const int RegionClusters = 264;
-    private const int RegionTypeNames = 280;    // LookUps -> TypeNames
+    internal const int RegionGrid = 184;
+    internal const int RegionGridCells = 248;
+    internal const int RegionTypeNames = 280;    // LookUps -> TypeNames
     private const int RegionPedModelSets = RegionTypeNames + 16;
     private const int RegionVehicleModelSets = RegionTypeNames + 32;
     private const int RegionGroupNames = RegionTypeNames + 48;
@@ -59,8 +61,12 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
 
         var points = new List<ScenarioPoint>();
         foreach (int offset in PointOffsets(meta, region))
-            points.Add(ReadPoint(meta.Data, offset, names));
-        return new ScenarioRegion { Name = name, Points = points, TypeHashes = names.Types };
+        {
+            var point = ReadPoint(meta.Data, offset, names);
+            point.Source = meta.Data.Bytes(offset, PointSize).ToArray();
+            points.Add(point);
+        }
+        return new ScenarioRegion { Name = name, Points = points, TypeHashes = names.Types, OwnPointCount = meta.ReadArray(region + RegionMyPoints, PointSize).Count };
     }
 
     internal static int Region(MetaResource meta)

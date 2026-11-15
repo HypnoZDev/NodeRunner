@@ -558,6 +558,70 @@ internal sealed class ScenarioCodec : EditCodec<ScenarioEdit>
     }
 }
 
+internal sealed class ScenarioAddCodec : EditCodec<ScenarioAddEdit>
+{
+    public override string Tag => "scenario-add";
+
+    protected override void Write(ScenarioAddEdit edit, EditWriter w)
+    {
+        w.Write(edit.RegionName);
+        w.Write(edit.Index);
+        w.Write(edit.TemplateIndex);
+        ScenarioCodecs.Write(w, edit.Values);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var set = r.Context.Scenarios ?? throw new InvalidOperationException("No scenarios here.");
+        var region = ScenarioCodecs.Region(set, r.ReadString());
+        int index = r.ReadInt();
+        int template = r.ReadInt();
+        var values = ScenarioCodecs.ReadValues(r);
+        var source = template >= 0 && template < region.Points.Count ? region.Points[template] : null;
+        return ScenarioAddEdit.Apply(set, region, values, source, description, index);
+    }
+}
+
+internal sealed class ScenarioDeleteCodec : EditCodec<ScenarioDeleteEdit>
+{
+    public override string Tag => "scenario-delete";
+
+    protected override void Write(ScenarioDeleteEdit edit, EditWriter w)
+    {
+        w.Write(edit.RegionName);
+        w.Write(edit.Index);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var set = r.Context.Scenarios ?? throw new InvalidOperationException("No scenarios here.");
+        var region = ScenarioCodecs.Region(set, r.ReadString());
+        int index = r.ReadInt();
+        var point = index >= 0 && index < region.Points.Count ? region.Points[index] : throw new InvalidDataException($"Scenario point {region.Name}:{index} not found here.");
+        return ScenarioDeleteEdit.Apply(set, point, description) ?? throw new InvalidDataException("Scenario point not deleted here.");
+    }
+}
+
+internal static class ScenarioCodecs
+{
+    public static void Write(EditWriter w, ScenarioValues v)
+    {
+        w.Write(v.Position);
+        w.Write(v.Heading);
+        w.Write(v.TypeHash);
+        foreach (byte b in (byte[])[v.Probability, v.StartHour, v.EndHour, v.Availability, v.Radius, v.TimeTillPedLeaves])
+            w.Write(b);
+        w.Write(v.Flags);
+    }
+
+    public static ScenarioValues ReadValues(EditReader r) => new(r.ReadVector3(), r.ReadFloat(), r.ReadUInt(), r.ReadByte(), r.ReadByte(),
+        r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadUInt());
+
+    public static ScenarioRegion Region(ScenarioSet set, string name) =>
+        set.Regions.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase))
+        ?? throw new InvalidDataException($"Scenario region {name} not found here.");
+}
+
 internal static class PathNodeCodecs
 {
     public static void Write(EditWriter w, PathNodeValues v)

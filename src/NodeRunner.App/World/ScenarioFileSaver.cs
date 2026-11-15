@@ -20,15 +20,16 @@ internal static class ScenarioFileSaver
                 if (region.Path is not { } path || files.GetResourceHeader(path) is not { } header)
                     throw new InvalidDataException(L("fichier du jeu introuvable"));
                 var source = region.SavedContent ?? files.ReadFile(path) ?? throw new InvalidDataException(L("fichier du jeu illisible"));
-                var content = ScenarioRegionWriter.Patch(source, region);
+                var (content, pageFlags) = ScenarioRegionWriter.Write(source, region);
                 var written = new ScenarioRegionReader().Read(content, region.Name);
-                for (int i = 0; i < written.Points.Count; i++)
-                {
-                    if (written.Points[i].Values != region.Points[i].Values)
-                        throw new InvalidDataException(L($"vérification échouée (point n° {i})"));
-                }
-                // Same size as the game's file: its page flags still fit.
-                var file = ResourceFile.Write(header, content);
+                // Laid out again, the region's own points are in the order of the grid: compared as sets.
+                var expected = region.Points.GroupBy(p => p.Values).ToDictionary(g => g.Key, g => g.Count());
+                if (written.Points.Count != region.Points.Count
+                    || written.Points.GroupBy(p => p.Values).Any(g => expected.GetValueOrDefault(g.Key) != g.Count()))
+                    throw new InvalidDataException(L("vérification échouée (points)"));
+                var file = ResourceFile.Write(pageFlags is { } flags
+                    ? header with { SystemFlags = (header.SystemFlags & 0xF0000000) | flags }
+                    : header, content);
                 string target = Path.Combine(folder, name);
                 string temporary = target + ".tmp";
                 File.WriteAllBytes(temporary, file);

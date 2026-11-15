@@ -46,6 +46,63 @@ public sealed class ScenarioSet
 
     public void MarkSaved(ScenarioRegion region) => _saved.Add(region);
 
+    // Every scenario type the game lists, by name.
+    public IEnumerable<(uint Hash, string Name)> Types => _typeNames.Select(p => (p.Key, p.Value)).OrderBy(t => t.Value, StringComparer.Ordinal);
+
+    // Adds a point among the region's own points (at index, by default after them). template: a point of the same
+    // region whose other fields (models, group, interior...) the new one takes.
+    public ScenarioPoint AddPoint(ScenarioRegion region, ScenarioValues values, ScenarioPoint? template, int? index = null)
+    {
+        if (template is not null && template.Region != region)
+            throw new ArgumentException("The template must be a point of the same region.", nameof(template));
+        var point = new ScenarioPoint
+        {
+            Position = values.Position,
+            Source = template?.Source?.ToArray(),
+            PedModelSetHash = template?.PedModelSetHash ?? 0,
+            VehicleModelSetHash = template?.VehicleModelSetHash ?? 0,
+            GroupHash = template?.GroupHash ?? 0,
+            InteriorHash = template?.InteriorHash ?? 0,
+            RequiredMapHash = template?.RequiredMapHash ?? 0,
+        };
+        InsertPoint(region, Math.Clamp(index ?? region.OwnPointCount, 0, region.OwnPointCount), point, values);
+        return point;
+    }
+
+    // Puts a deleted point back at its place.
+    public void InsertPoint(ScenarioRegion region, int index, ScenarioPoint point, ScenarioValues values)
+    {
+        region.Insert(index, point);
+        _changed.Add(region);
+        SetValues(point, values);
+    }
+
+    // Deletes one of a region's own points (those of its clusters stay); its index before the deletion, or -1.
+    public int DeletePoint(ScenarioPoint point)
+    {
+        if (point.Region is not { } region || point.Index >= region.OwnPointCount || region.Points[point.Index] != point)
+            return -1;
+        int index = point.Index;
+        region.RemoveAt(index);
+        _changed.Add(region);
+        Revision++;
+        return index;
+    }
+
+    // The point of a region closest to position (within maxDistance), or null.
+    public ScenarioPoint? Nearest(System.Numerics.Vector3 position, float maxDistance = float.MaxValue)
+    {
+        ScenarioPoint? best = null;
+        float bestDistance = maxDistance * maxDistance;
+        foreach (var point in AllPoints)
+        {
+            float d = System.Numerics.Vector3.DistanceSquared(point.Position, position);
+            if (d < bestDistance)
+                (best, bestDistance) = (point, d);
+        }
+        return best;
+    }
+
     // A copy of this set where the changed regions are read again from the game, and the user's saved files (by region
     // name) put in their place. Unreadable files are reported in errors.
     public ScenarioSet WithSavedRegions(IGameFileSystem files, IScenarioRegionReader reader, IReadOnlyDictionary<string, byte[]> saved, List<string> errors)

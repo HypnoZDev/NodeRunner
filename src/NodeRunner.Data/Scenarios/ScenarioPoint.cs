@@ -51,6 +51,10 @@ public sealed class ScenarioPoint
 
     public int Index { get; set; }
 
+    // The point's 64 bytes in its file (fields NodeRunner does not change are kept from them); null for a point made
+    // from nothing.
+    public byte[]? Source { get; set; }
+
     public ScenarioValues Values
     {
         get => new(Position, Heading, TypeHash, Probability, StartHour, EndHour, Availability, Radius, TimeTillPedLeaves, Flags);

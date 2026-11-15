@@ -1182,6 +1182,17 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         string copied = state.FormatPosition(point.Position, ScenarioHeading(point));
         if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
             ImGui.SetClipboardText(copied);
+        if (Widgets.Button(L($"{Icons.Copy}  Dupliquer"), L("Nouveau point à 2 m, avec les mêmes réglages, à placer ensuite avec les poignées.")))
+        {
+            state.AddScenarioPoint(point);
+            return;
+        }
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.Trash}  Supprimer"), L("Suppr. Annulable avec Ctrl+Z.")))
+        {
+            state.DeleteSelectedScenario();
+            return;
+        }
 
         string Name(uint hash, string empty) => hash == 0 || hash == NoneHash ? empty : names.Describe(hash);
         if (state.World.Scenarios is not { } set)
@@ -1245,10 +1256,10 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                 Track(current);
             }
 
-            Widgets.Property(L("Type"), L("Activité jouée à ce point. Seuls les types déjà présents dans ce fichier de région sont proposés."));
-            if (point.Region is { } typeRegion)
+            Widgets.Property(L("Type"), L("Activité jouée à ce point (liste des scénarios du jeu, scenarios.meta)."));
+            if (point.Region is not null)
             {
-                var types = typeRegion.TypeHashes.Distinct().Select(h => (Hash: h, Name: set.TypeName(h) ?? names.Describe(h))).OrderBy(t => t.Name).ToList();
+                var types = set.Types.ToList();
                 string shown = point.TypeName ?? names.Describe(point.TypeHash);
                 if (ImGui.BeginCombo("##scenario_type", shown, ImGuiComboFlags.HeightLarge))
                 {

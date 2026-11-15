@@ -322,6 +322,8 @@ internal sealed class MainUi
                 _state.DeleteSelectedCarGenerator();
             else if (_state.SelectedPathNode is not null)
                 _state.DeleteSelectedPathNode();
+            else if (_state.SelectedScenario is not null)
+                _state.DeleteSelectedScenario();
             else if (_state.SelectedTimecycle is not null)
                 _state.DeleteSelectedTimecycleZone();
             else if (_state.SelectedLodLight is not null)
@@ -516,6 +518,10 @@ internal sealed class MainUi
                 _state.AddPathNode(null);
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute un nœud de route (pathnode) au sol devant la caméra, avec les réglages du nœud de véhicules le plus proche. Reliez-le ensuite à un autre nœud dans Propriétés."));
+            if (ImGui.MenuItem(L($"{Icons.Users}  Point de scénario"), null, false, _state.World.Scenarios is not null))
+                _state.AddScenarioPoint(null);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Ajoute un point de scénario au sol devant la caméra (un PNJ, un véhicule ou un animal y fait une activité), copie du point le plus proche. Choisissez ensuite son type dans Propriétés."));
             if (ImGui.MenuItem(L($"{Icons.Moon}  Lumière LOD"), null, false, _state.World.Maps is not null))
                 _state.AddLodLight();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))

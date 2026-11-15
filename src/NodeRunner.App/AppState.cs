@@ -95,7 +95,8 @@ internal sealed class AppState
     // again (map loading).
     public Data.Scenarios.ScenarioPoint? SelectedScenario
     {
-        get => _selectedScenarioSet == World.Scenarios ? _selectedScenario : null;
+        get => _selectedScenarioSet == World.Scenarios && _selectedScenario is { Region: { } region } point
+               && point.Index < region.Points.Count && region.Points[point.Index] == point ? point : null;
         set
         {
             _selectedScenario = value;
@@ -797,6 +798,12 @@ internal sealed class AppState
             Select(null);
             SelectedScenario = scenarioEdit.Point;
         }
+        else if (edit is ScenarioAddEdit or ScenarioDeleteEdit)
+        {
+            Select(null);
+            bool shown = edit is ScenarioAddEdit ? !undone : undone;
+            SelectedScenario = shown ? (edit as ScenarioAddEdit)?.Point ?? ((ScenarioDeleteEdit)edit).Point : null;
+        }
         else if (edit is OccluderBoxEdit boxEdit)
         {
             Select(null);
@@ -968,6 +975,47 @@ internal sealed class AppState
         History.Add(edit);
         SelectedPathNode = null;
         Notify(L($"Nœud {id.AreaId}:{id.NodeId} supprimé avec ses liens. Ctrl+Z pour annuler."));
+    }
+
+    // A scenario point: a copy of from (2 m beside it), or 15 m in front of the camera on the ground, in the region of the
+    // nearest point (whose models, group... it takes). Selected, with the "move" tool.
+    public void AddScenarioPoint(Data.Scenarios.ScenarioPoint? from)
+    {
+        Notice = null;
+        if (World.Scenarios is not { } set)
+            return;
+        var flatForward = Camera.Forward with { Z = 0 };
+        flatForward = flatForward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(flatForward) : System.Numerics.Vector3.UnitY;
+        var position = from is null ? Camera.Position + flatForward * 15f : from.Position + new System.Numerics.Vector3(-flatForward.Y, flatForward.X, 0) * 2f;
+        position = position with { Z = GroundHeightAt(position) ?? from?.Position.Z ?? Camera.Position.Z - 10f };
+        // Regions are streamed around their points: far from any, the new one might never be loaded.
+        var template = from ?? set.Nearest(position, 500f);
+        if (template?.Region is not { } region)
+        {
+            Notify(L("Aucun point de scénario à moins de 500 m : rapprochez-vous d'une zone qui en a."), warning: true);
+            return;
+        }
+        var values = template.Values with { Position = position };
+        var edit = ScenarioAddEdit.Apply(set, region, values, template, L($"Ajouter un point de scénario ({region.Name}.ymt)"));
+        History.Add(edit);
+        Select(null);
+        SelectedScenario = edit.Point;
+        Tool = TransformTool.Move;
+    }
+
+    public void DeleteSelectedScenario()
+    {
+        if (SelectedScenario is not { } point || World.Scenarios is not { } set)
+            return;
+        string region = point.Region?.Name ?? "";
+        if (ScenarioDeleteEdit.Apply(set, point, L($"Supprimer le point de scénario {point.Index} ({region}.ymt)")) is not { } edit)
+        {
+            Notify(L("Ce point fait partie d'un groupe (cluster) du fichier : il ne peut pas encore être supprimé."), warning: true);
+            return;
+        }
+        History.Add(edit);
+        SelectedScenario = null;
+        Notify(L($"Point de scénario supprimé de {region}.ymt. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedCarGenerator()
