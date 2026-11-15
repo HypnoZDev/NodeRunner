@@ -68,23 +68,38 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
             DrawGta4Notice(position, size);
     }
 
-    // GTA IV session: no 3D map yet, the archives are what can be explored.
+    // GTA IV session: while reading, a notice in the middle; once the map is shown as boxes, a short line at the bottom.
     private void DrawGta4Notice(Vector2 position, Vector2 size)
     {
-        ImGui.SetNextWindowPos(position + size * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+        var gta4 = state.Gta4;
+        bool mapShown = gta4.IsLoaded && gta4.MapBoxes is { Count: > 0 };
+        if (mapShown)
+            ImGui.SetNextWindowPos(new Vector2(position.X + size.X * 0.5f, position.Y + size.Y - Margin), ImGuiCond.Always, new Vector2(0.5f, 1f));
+        else
+            ImGui.SetNextWindowPos(position + size * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
         ImGui.SetNextWindowSizeConstraints(new Vector2(0f, 0f), new Vector2(Math.Min(460f, size.X - 2f * Margin), float.MaxValue));
         if (ImGui.Begin("##gta4_notice", OverlayFlags | ImGuiWindowFlags.NoInputs))
         {
             ImGui.PushTextWrapPos(Math.Min(440f, size.X - 4f * Margin));
-            ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  GTA IV");
-            var gta4 = state.Gta4;
-            if (gta4.IsBusy)
-                ImGui.TextUnformatted(L("Ouverture des archives de GTA IV..."));
-            else if (gta4.Error is { } error)
-                ImGui.TextColored(UiTheme.Error, L($"Lecture de GTA IV impossible : {error}"));
+            if (mapShown)
+            {
+                bool boxesShown = EntityBoxLayer.Categories.Any(c => state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
+                ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  " + L($"Liberty City : {Widgets.Count(gta4.MapBoxes!.Count)} objets"));
+                ImGui.TextDisabled(boxesShown
+                    ? L("Objets affichés en boîtes. Les modèles 3D de GTA IV arrivent dans une prochaine version.")
+                    : L("Affiche « Boîtes des objets » dans le panneau Calques pour voir la carte."));
+            }
             else
-                ImGui.TextUnformatted(L($"{Widgets.Count(gta4.Files.EnumerateArchives().Count())} archives ouvertes, {Widgets.Count(gta4.Files.AllFiles.Count)} fichiers."));
-            ImGui.TextDisabled(L("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3)."));
+            {
+                ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  GTA IV");
+                if (gta4.IsBusy)
+                    ImGui.TextUnformatted(L("Ouverture des archives de GTA IV..."));
+                else if (gta4.Error is { } error)
+                    ImGui.TextColored(UiTheme.Error, L($"Lecture de GTA IV impossible : {error}"));
+                else
+                    ImGui.TextUnformatted(L($"{Widgets.Count(gta4.Files.EnumerateArchives().Count())} archives ouvertes, {Widgets.Count(gta4.Files.AllFiles.Count)} fichiers."));
+                ImGui.TextDisabled(L("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3)."));
+            }
             ImGui.PopTextWrapPos();
         }
         ImGui.End();

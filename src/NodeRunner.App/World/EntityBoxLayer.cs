@@ -14,6 +14,10 @@ internal enum EntityBoxCategory
     Interior,
 }
 
+// A box to draw: the model's bounds in model space and the object's transform; Missing = model unknown (a cross at
+// Position is drawn instead).
+internal readonly record struct EntityBox(EntityBoxCategory Category, Vector3 Min, Vector3 Max, Matrix4x4 Transform, bool Missing);
+
 // Draws every placed object near the camera as the bounding box of its archetype, turned and scaled like the object.
 internal sealed class EntityBoxLayer : IDisposable
 {
@@ -27,11 +31,11 @@ internal sealed class EntityBoxLayer : IDisposable
 
     private readonly ColorMesh?[] _meshes = new ColorMesh?[Categories.Count];
     private readonly int[] _counts = new int[Categories.Count];
-    private MapLibrary? _library;
+    private object? _source;
     private Task<BuildResult>? _building;
     private Vector2 _builtCenter = new(float.NaN);
     private float _builtRadius;
-    private int _builtStructure = -1; // MapLibrary.StructureVersion: objects deleted or brought back since.
+    private int _builtStructure = -1; // Objects deleted or brought back since (MapLibrary.StructureVersion).
 
     public static string Label(EntityBoxCategory category) => category switch
     {
@@ -59,11 +63,17 @@ internal sealed class EntityBoxLayer : IDisposable
 
     public int MissingArchetypeCount { get; private set; }
 
-    public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, float radius, bool enabled)
+    public void Update(WorldLoader loader, ColorRenderer renderer, Vector3 cameraPosition, float radius, bool enabled) =>
+        Update(loader.Maps, loader.Maps is { } maps ? (center, r) => LibraryBoxes(maps, center, r) : null, loader.Maps?.StructureVersion ?? 0,
+            renderer, cameraPosition, radius, enabled);
+
+    // Boxes of another map (GTA IV): source identifies the map, boxes lists the objects around a point.
+    public void Update(object? source, Func<Vector2, float, IEnumerable<EntityBox>>? boxes, int structure, ColorRenderer renderer,
+        Vector3 cameraPosition, float radius, bool enabled)
     {
-        if (loader.Maps != _library)
+        if (source != _source)
         {
-            _library = loader.Maps;
+            _source = source;
             _builtCenter = new Vector2(float.NaN);
             DisposeMeshes();
         }
@@ -76,24 +86,24 @@ internal sealed class EntityBoxLayer : IDisposable
                 Diagnostics.ErrorLog.Add(L("Cadres des objets"), finished.Exception!.GetBaseException());
                 _builtCenter = new Vector2(float.NaN); // Computed again at the next frame.
             }
-            else if (finished.Result.Library == _library)
+            else if (finished.Result.Source == _source)
             {
                 Apply(finished.Result, renderer);
             }
         }
 
-        if (_library is null || !enabled || _building is not null)
+        if (_source is null || boxes is null || !enabled || _building is not null)
             return;
 
         var center = new Vector2(cameraPosition.X, cameraPosition.Y);
         bool moved = float.IsNaN(_builtCenter.X) || Vector2.Distance(center, _builtCenter) > RebuildDistance;
-        if (moved || MathF.Abs(radius - _builtRadius) > 1f || _library.StructureVersion != _builtStructure)
+        if (moved || MathF.Abs(radius - _builtRadius) > 1f || structure != _builtStructure)
         {
-            var library = _library;
-            _builtStructure = library.StructureVersion;
+            var built = _source;
+            _builtStructure = structure;
             _builtCenter = center;
             _builtRadius = radius;
-            _building = Task.Run(() => Build(library, center, radius));
+            _building = Task.Run(() => Build(built, boxes(center, radius)));
         }
     }
 
@@ -106,34 +116,39 @@ internal sealed class EntityBoxLayer : IDisposable
         }
     }
 
-    private sealed record BuildResult(MapLibrary Library, LineBatch[] Batches, int[] Counts, int Missing);
+    private sealed record BuildResult(object Source, LineBatch[] Batches, int[] Counts, int Missing);
 
-    private static BuildResult Build(MapLibrary library, Vector2 center, float radius)
+    private static BuildResult Build(object source, IEnumerable<EntityBox> boxes)
     {
         var batches = Categories.Select(_ => new LineBatch()).ToArray();
         var counts = new int[Categories.Count];
         int missing = 0;
 
-        foreach (var entity in library.EntitiesAround(center, radius))
+        foreach (var box in boxes)
         {
-            var category = Classify(entity);
-            var batch = batches[(int)category];
-            var color = Color(category);
-            var transform = entity.Transform;
-            counts[(int)category]++;
-
-            var archetype = library.GetArchetype(entity.ArchetypeHash);
-            if (archetype is null)
+            var batch = batches[(int)box.Category];
+            counts[(int)box.Category]++;
+            if (box.Missing)
             {
                 missing++;
-                AddCross(batch, entity.Position, new Vector4(1f, 0.2f, 1f, 1f));
+                AddCross(batch, box.Transform.Translation, new Vector4(1f, 0.2f, 1f, 1f));
                 continue;
             }
-
-            batch.AddBox(archetype.BoundsMin, archetype.BoundsMax, transform, color);
+            batch.AddBox(box.Min, box.Max, box.Transform, Color(box.Category));
         }
 
-        return new BuildResult(library, batches, counts, missing);
+        return new BuildResult(source, batches, counts, missing);
+    }
+
+    private static IEnumerable<EntityBox> LibraryBoxes(MapLibrary library, Vector2 center, float radius)
+    {
+        foreach (var entity in library.EntitiesAround(center, radius))
+        {
+            var archetype = library.GetArchetype(entity.ArchetypeHash);
+            yield return archetype is null
+                ? new EntityBox(Classify(entity), default, default, Matrix4x4.CreateTranslation(entity.Position), true)
+                : new EntityBox(Classify(entity), archetype.BoundsMin, archetype.BoundsMax, entity.Transform, false);
+        }
     }
 
     private static EntityBoxCategory Classify(MapEntity entity) =>

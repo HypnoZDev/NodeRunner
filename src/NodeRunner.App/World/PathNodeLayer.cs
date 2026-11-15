@@ -1,4 +1,5 @@
 using System.Numerics;
+using NodeRunner.Data.Native.Gta4;
 using NodeRunner.Data.Paths;
 using NodeRunner.Render;
 
@@ -71,6 +72,7 @@ internal sealed class PathNodeLayer : IDisposable
             return;
 
         _built = network;
+        _builtGta4 = null;
         _builtRevision = network?.Revision ?? 0;
         DisposeMeshes();
         if (network is null)
@@ -99,6 +101,63 @@ internal sealed class PathNodeLayer : IDisposable
                         continue;
                     float width = node.IsPedestrian || target.IsPedestrian ? FootpathWidth
                         : Math.Max(1, link.LanesForward + link.LanesBackward) * LaneWidth;
+                    AddStrip(surfaces[(int)category], node.Position + SurfaceOffset, target.Position + SurfaceOffset, width, color with { W = SurfaceAlpha });
+                }
+            }
+        }
+
+        for (int i = 0; i < batches.Length; i++)
+        {
+            _counts[i] = batches[i].LineCount;
+            _meshes[i] = renderer.CreateMesh(batches[i]);
+            _surfaces[i] = renderer.CreateMesh(surfaces[i]);
+            _points[i] = renderer.CreateMesh(points[i]);
+        }
+    }
+
+    private List<Gta4PathArea>? _builtGta4;
+
+    // GTA IV road network: same categories; boat paths are not drawn. Wide roads (4 lanes, or 3 one way) are shown as
+    // highways, the files have no highway flag.
+    public void UpdateGta4(List<Gta4PathArea>? areas, ColorRenderer renderer)
+    {
+        if (areas == _builtGta4)
+            return;
+        _builtGta4 = areas;
+        _built = null;
+        DisposeMeshes();
+        if (areas is null)
+            return;
+
+        var byIndex = areas.ToDictionary(a => a.Index);
+        var batches = Categories.Select(_ => new LineBatch()).ToArray();
+        var surfaces = Categories.Select(_ => new TriangleBatch()).ToArray();
+        var points = Categories.Select(_ => new TriangleBatch()).ToArray();
+        foreach (var area in areas)
+        {
+            for (int i = 0; i < area.Nodes.Length; i++)
+            {
+                var node = area.Nodes[i];
+                if (node.IsBoat)
+                    continue;
+                var nodeCategory = node.IsVehicle ? PathCategory.Road : PathCategory.Pedestrian;
+                AddPoint(points[(int)nodeCategory], node.Position + LineOffset, Brighter(Color(nodeCategory)));
+                foreach (var link in area.LinksOf(node))
+                {
+                    // Each link is stored on both nodes: drawn once.
+                    if (((int)link.Area, (int)link.Node).CompareTo((area.Index, i)) <= 0 || !byIndex.TryGetValue(link.Area, out var targetArea)
+                        || link.Node >= targetArea.Nodes.Length)
+                        continue;
+                    var target = targetArea.Nodes[link.Node];
+                    if (target.IsBoat)
+                        continue;
+                    int lanes = link.LanesForward + link.LanesBackward;
+                    var category = !node.IsVehicle || !target.IsVehicle ? PathCategory.Pedestrian
+                        : lanes >= 4 || Math.Max(link.LanesForward, link.LanesBackward) >= 3 ? PathCategory.Highway
+                        : PathCategory.Road;
+                    var color = Color(category);
+                    batches[(int)category].AddLine(node.Position + LineOffset, target.Position + LineOffset, color * new Vector4(1, 1, 1, 0.8f));
+                    float width = category == PathCategory.Pedestrian ? FootpathWidth : Math.Max(1, lanes) * LaneWidth;
                     AddStrip(surfaces[(int)category], node.Position + SurfaceOffset, target.Position + SurfaceOffset, width, color with { W = SurfaceAlpha });
                 }
             }

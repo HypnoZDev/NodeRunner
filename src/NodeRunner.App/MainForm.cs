@@ -598,10 +598,23 @@ internal sealed unsafe partial class MainForm : Form
         if (collisionTool)
             _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion,
                 _state.CollisionDragPreview);
-        _pathNodeLayer.Update(_state.World, lines, deferChanges: _ui.IsGizmoDragging || ImGui.IsAnyItemActive());
+        if (_state.IsGta4)
+            _pathNodeLayer.UpdateGta4(_state.Gta4.PathAreas, lines);
+        else
+            _pathNodeLayer.Update(_state.World, lines, deferChanges: _ui.IsGizmoDragging || ImGui.IsAnyItemActive());
         _pathNodeLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)));
         bool entitiesEnabled = EntityBoxLayer.Categories.Any(c => _state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
-        _entityBoxLayer.Update(_state.World, lines, camera.Position, _state.Settings.EntityRadius, entitiesEnabled);
+        if (_state.IsGta4)
+        {
+            var gta4Boxes = _state.Gta4.MapBoxes;
+            _entityBoxLayer.Update(gta4Boxes, gta4Boxes is null ? null : gta4Boxes.Around, 0, lines, camera.Position, _state.Settings.EntityRadius,
+                entitiesEnabled);
+            ShowGta4Map(gta4Boxes);
+        }
+        else
+        {
+            _entityBoxLayer.Update(_state.World, lines, camera.Position, _state.Settings.EntityRadius, entitiesEnabled);
+        }
         _entityBoxLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
         bool roomsEnabled = RoomLayer.Parts.Any(p => _state.IsLayerVisible(RoomLayer.LayerName(p)));
         _roomLayer.Update(_state.World, lines, camera.Position, roomsEnabled);
@@ -646,6 +659,22 @@ internal sealed unsafe partial class MainForm : Form
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
+    }
+
+    private Gta4MapBoxes? _gta4MapShown;
+
+    // Once the GTA IV map is read: a camera left outside Liberty City (a GTA V position) is moved above its centre.
+    private void ShowGta4Map(Gta4MapBoxes? boxes)
+    {
+        if (boxes is null || boxes == _gta4MapShown)
+            return;
+        _gta4MapShown = boxes;
+        var position = _state.Camera.Position;
+        if (boxes.Count == 0 || (position.X >= boxes.Min.X && position.X <= boxes.Max.X && position.Y >= boxes.Min.Y && position.Y <= boxes.Max.Y))
+            return;
+        var center = (boxes.Min + boxes.Max) * 0.5f;
+        _state.Camera.Position = new Vector3(center.X, center.Y - 400f, 350f);
+        _state.Camera.LookAt(new Vector3(center.X, center.Y, 0f));
     }
 
     // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose

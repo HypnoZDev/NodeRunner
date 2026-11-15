@@ -919,5 +919,11 @@ public static partial class English
         ("{0} archives ouvertes, {1} fichiers.", "{0} archives open, {1} files."),
         ("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3).",
             "The GTA IV 3D map comes in a future version. Meanwhile, its archives can be browsed in the archive explorer (F3)."),
+        ("Lecture de la carte", "Reading the map"),
+        ("Carte de GTA IV", "GTA IV map"),
+        ("Liberty City : {0} objets", "Liberty City: {0} objects"),
+        ("Objets affichés en boîtes. Les modèles 3D de GTA IV arrivent dans une prochaine version.",
+            "Objects shown as boxes. GTA IV 3D models come in a future version."),
+        ("Affiche « Boîtes des objets » dans le panneau Calques pour voir la carte.", "Show \"Object boxes\" in the Layers panel to see the map."),
     ];
 }
