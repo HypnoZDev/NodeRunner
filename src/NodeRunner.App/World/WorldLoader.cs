@@ -439,6 +439,10 @@ internal sealed class WorldLoader : IDisposable
             var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;
+            // The navmesh tiles the DLC packs of this map version replace.
+            var navMeshes = NavMeshCatalog.Create(source, new YnvReader(), content.EnumerateFiles(".ynv"));
+            if (!Publish(generation, () => NavMeshes = navMeshes))
+                return;
 
             progress.Report(L("Lecture des objets de la carte..."));
             var savedErrors = new List<string>();

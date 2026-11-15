@@ -29,14 +29,16 @@ public sealed partial class NavMeshCatalog
 
     public int TileCount => _paths.Count;
 
-    // Lists the map navmeshes of the base game and update.rpf (DLC packs are not handled yet).
-    public static NavMeshCatalog Create(IGameFileSystem files, INavMeshReader reader)
+    // Lists the map navmeshes of the base game and update.rpf (before the DLC packs are known).
+    public static NavMeshCatalog Create(IGameFileSystem files, INavMeshReader reader) =>
+        Create(files, reader, files.EnumerateFiles(".ynv").Where(p => !p.Contains("dlcpacks", StringComparison.OrdinalIgnoreCase)));
+
+    // Lists the given navmesh files, one version per tile (e.g. the game's choice among the DLC packs).
+    public static NavMeshCatalog Create(IGameFileSystem files, INavMeshReader reader, IEnumerable<string> paths)
     {
         var catalog = new NavMeshCatalog(files, reader);
-        foreach (var path in files.EnumerateFiles(".ynv"))
+        foreach (var path in paths)
         {
-            if (path.Contains("dlcpacks", StringComparison.OrdinalIgnoreCase))
-                continue;
             var match = TileFileName().Match(Path.GetFileName(path));
             if (!match.Success)
                 continue; // Vehicle navmeshes (trailers, boats...) are not part of the map.
