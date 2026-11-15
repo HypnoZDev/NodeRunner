@@ -585,9 +585,9 @@ internal sealed unsafe partial class MainForm : Form
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
-                () => DrawWater(viewProjection, lighting), occlusionPreview ? _occlusionCuller : null);
+                () => DrawWater(viewProjection, lighting, scene), occlusionPreview ? _occlusionCuller : null);
         else
-            DrawWater(viewProjection, lighting);
+            DrawWater(viewProjection, lighting, scene);
 
         // The car of the selected parking spot.
         var previewSpot = _state.IsLayerVisible(CarGeneratorLayer.LayerName) ? _state.SelectedCarGenerator : null;
@@ -687,7 +687,7 @@ internal sealed unsafe partial class MainForm : Form
 
     // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose
     // depth tells how much water is crossed).
-    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting)
+    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene)
     {
         var water = _state.IsGta4 ? _state.Gta4.Water : _state.World.Water;
         if (!ReferenceEquals(water, _waterShown))
@@ -699,7 +699,8 @@ internal sealed unsafe partial class MainForm : Form
             return;
         // Wrapped every hour, so the time stays precise enough for the waves.
         float time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
-        _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth());
+        _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth(),
+            _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height));
         _waterRenderer.DrawSurfaces();
         if (_state.IsLayerVisible(ModelLayer.LayerName))
             _modelLayer.DrawWater(_waterRenderer);

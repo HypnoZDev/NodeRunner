@@ -12,15 +12,16 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
     public const string Title = $"{Icons.Settings}  Paramètres d'affichage###Settings";
 
     // A quality preset: the values it sets.
-    private sealed record Preset(string Name, string Tooltip, float ViewDistance, float FogDistance, int Anisotropy, bool Shadows, float ShadowDistance);
+    private sealed record Preset(string Name, string Tooltip, float ViewDistance, float FogDistance, int Anisotropy, bool Shadows, float ShadowDistance,
+        bool WaterReflections);
 
     private static readonly Preset[] Presets =
     [
-        new("Basse", "Pour un PC modeste : moins d'objets détaillés au loin, brouillard plus proche (rien n'est dessiné derrière), textures filtrées simplement, sans ombres.",
-            0.6f, 2000f, 1, false, 400f),
-        new("Moyenne", "Réglages par défaut.", 1f, 4000f, 8, true, 400f),
+        new("Basse", "Pour un PC modeste : moins d'objets détaillés au loin, brouillard plus proche (rien n'est dessiné derrière), textures filtrées simplement, sans ombres ni reflets sur l'eau.",
+            0.6f, 2000f, 1, false, 400f, false),
+        new("Moyenne", "Réglages par défaut.", 1f, 4000f, 8, true, 400f, true),
         new("Haute", "Pour une carte graphique récente : détails plus loin, brouillard lointain, textures du sol nettes au loin, ombres plus loin.",
-            1.5f, 8000f, 16, true, 800f),
+            1.5f, 8000f, 16, true, 800f, true),
     ];
 
     private bool _open;
@@ -59,6 +60,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                 settings.Anisotropy = preset.Anisotropy;
                 settings.Shadows = preset.Shadows;
                 settings.ShadowDistance = preset.ShadowDistance;
+                settings.WaterReflections = preset.WaterReflections;
                 settings.Fog = true;
                 state.SaveSettings();
             }
@@ -113,6 +115,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     if (ImGui.SliderFloat("##shadow_distance", ref shadowDistance, 100f, 1500f, "%.0f m", ImGuiSliderFlags.Logarithmic))
                         settings.ShadowDistance = shadowDistance;
                     SaveWhenReleased();
+                }
+
+                Widgets.Property(L("Eau réaliste"), L("Reflets des bâtiments, des ponts et des bateaux sur l'eau, fond qui ondule sous les vagues. Sans : l'eau reflète seulement le ciel (plus rapide)."));
+                bool reflections = settings.WaterReflections;
+                if (ImGui.Checkbox("##water_reflections", ref reflections))
+                {
+                    settings.WaterReflections = reflections;
+                    state.SaveSettings();
                 }
 
                 Widgets.Property(L("Carte graphique"), L("Carte utilisée pour la vue 3D. Automatique = la plus puissante (la carte dédiée d'un portable à deux cartes). Prend effet au prochain démarrage ; si la carte choisie ne marche pas, NodeRunner prend une autre carte."));
@@ -607,7 +617,8 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         var settings = state.Settings;
         return settings.Fog && MathF.Abs(settings.ViewDistanceMultiplier - preset.ViewDistance) < 0.01f
             && MathF.Abs(settings.FogDistance - preset.FogDistance) < 1f && settings.Anisotropy == preset.Anisotropy
-            && settings.Shadows == preset.Shadows && (!preset.Shadows || MathF.Abs(settings.ShadowDistance - preset.ShadowDistance) < 1f);
+            && settings.Shadows == preset.Shadows && (!preset.Shadows || MathF.Abs(settings.ShadowDistance - preset.ShadowDistance) < 1f)
+            && settings.WaterReflections == preset.WaterReflections;
     }
 
     private void SaveWhenReleased()

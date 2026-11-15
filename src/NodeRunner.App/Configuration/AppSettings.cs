@@ -101,6 +101,9 @@ public sealed class AppSettings
 
     public float ShadowDistance { get; set; } = 400f;
 
+    // Water mirroring the scene (not only the sky), bottom bent by the waves.
+    public bool WaterReflections { get; set; } = true;
+
     // Objects hidden behind the occluders are not drawn, as in the game.
     public bool OcclusionPreview { get; set; }
 
@@ -189,6 +192,7 @@ public sealed class AppSettings
         (SnapMove, SnapRotate, SnapScale, BackupMinutes, CopyFormat) = (d.SnapMove, d.SnapRotate, d.SnapScale, d.BackupMinutes, d.CopyFormat);
         (ShowSky, TimeOfDay, Fog, FogDistance) = (d.ShowSky, d.TimeOfDay, d.Fog, d.FogDistance);
         (Shadows, ShadowDistance, Anisotropy, ViewDistanceMultiplier) = (d.Shadows, d.ShadowDistance, d.Anisotropy, d.ViewDistanceMultiplier);
+        WaterReflections = d.WaterReflections;
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);
     }

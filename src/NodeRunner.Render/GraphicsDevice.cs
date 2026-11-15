@@ -23,6 +23,8 @@ public sealed class GraphicsDevice : IDisposable
     private ID3D11DepthStencilView? _depthView;
     private ID3D11Texture2D? _depthCopy;
     private ID3D11ShaderResourceView? _depthCopyView;
+    private ID3D11Texture2D? _colorCopy;
+    private ID3D11ShaderResourceView? _colorCopyView;
     private IDCompositionDevice? _composition;
     private IDCompositionTarget? _compositionTarget;
     private IDCompositionVisual? _compositionVisual;
@@ -390,8 +392,35 @@ public sealed class GraphicsDevice : IDisposable
         return _depthCopyView!;
     }
 
+    // Copies the picture drawn so far into a texture that shaders can read, and returns it.
+    public ID3D11ShaderResourceView CopyColor()
+    {
+        if (_colorCopy is null)
+        {
+            _colorCopy = Device.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)Width,
+                Height = (uint)Height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = BackBufferFormat,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.ShaderResource,
+            });
+            _colorCopyView = Device.CreateShaderResourceView(_colorCopy);
+        }
+        CopyBackBuffer(_colorCopy);
+        return _colorCopyView!;
+    }
+
+    // Also the colour copy, which has the size of the window too.
     private void DisposeDepthBuffer()
     {
+        _colorCopyView?.Dispose();
+        _colorCopyView = null;
+        _colorCopy?.Dispose();
+        _colorCopy = null;
         _depthCopyView?.Dispose();
         _depthCopyView = null;
         _depthCopy?.Dispose();

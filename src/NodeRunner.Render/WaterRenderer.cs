@@ -22,7 +22,8 @@ cbuffer Constants : register(b0)
     float4 SkyAmbient;
     float4 Zenith;
     float4 Horizon;      // Also the fog colour.
-    float4 Settings;     // x: 1 = fog on, y: fog distance, z: 1 = scene depth available.
+    float4 Settings;     // x: 1 = fog on, y: fog distance, z: 1 = scene depth available, w: 1 = scene colour available.
+    float4 Viewport;     // xy: top-left pixel of the 3D view, zw: its size.
 };
 // Water meshes of the models (pools, fountains, streams): placement and wave strength of the model drawn.
 cbuffer MeshConstants : register(b1)
@@ -31,6 +32,7 @@ cbuffer MeshConstants : register(b1)
     float4 MeshWaves; // x: wave strength.
 };
 Texture2D<float> SceneDepth : register(t0);
+Texture2D SceneColor : register(t1);
 
 struct VS_INPUT { float3 pos : POSITION; float waves : TEXCOORD0; };
 struct VS_MESH_INPUT { float3 pos : POSITION; float3 normal : NORMAL; };
@@ -90,6 +92,68 @@ float3 SkyColor(float3 ray)
     return lerp(Horizon.rgb, Zenith.rgb, pow(saturate(ray.z), 0.45f));
 }
 
+// How far behind what is drawn a point is (m along the view, > 0 = hidden), and the pixel it falls on.
+// Returns -1e9 off screen or where only the sky is drawn.
+float Behind(float3 p, out int2 pixel, out float2 ndc)
+{
+    float4 clip = mul(ViewProjection, float4(p, 1.0f));
+    pixel = int2(0, 0);
+    ndc = float2(2.0f, 2.0f);
+    if (clip.w <= SunDirection.w)
+        return -1e9f;
+    ndc = clip.xy / clip.w;
+    if (abs(ndc.x) >= 1.0f || abs(ndc.y) >= 1.0f)
+        return -1e9f;
+    pixel = int2(Viewport.xy + (ndc * float2(0.5f, -0.5f) + 0.5f) * Viewport.zw);
+    float depth = SceneDepth.Load(int3(pixel, 0));
+    return depth > 0.0f ? clip.w - SunDirection.w / depth : -1e9f;
+}
+
+// What the water mirrors among the things drawn on screen (buildings, bridges, boats): the reflected ray is followed
+// in steps that grow with the distance until it goes behind something. a: how much to trust it (0 = the sky only).
+float4 ScreenReflection(float3 start, float3 r, float distance)
+{
+    float step = max(0.3f, distance * 0.008f);
+    float3 previous = start;
+    float3 p = start;
+    [loop] for (int i = 0; i < 32; i++)
+    {
+        previous = p;
+        p += r * step;
+        int2 pixel;
+        float2 ndc;
+        float behind = Behind(p, pixel, ndc);
+        if (abs(ndc.x) >= 1.0f || abs(ndc.y) >= 1.0f)
+            return 0.0f; // Off screen (or behind the camera): it does not come back.
+        if (behind > 0.0f && behind < step * 3.0f + 2.0f)
+        {
+            // Closer to the surface hit, by halves.
+            float3 a = previous, b = p;
+            [unroll] for (int j = 0; j < 5; j++)
+            {
+                float3 m = 0.5f * (a + b);
+                int2 mp;
+                float2 mn;
+                if (Behind(m, mp, mn) > 0.0f)
+                {
+                    b = m;
+                    pixel = mp;
+                    ndc = mn;
+                }
+                else
+                {
+                    a = m;
+                }
+            }
+            // Faded near the edges of the view, where the next pixel would be missing.
+            float2 edge = saturate((1.0f - abs(ndc)) * 6.0f);
+            return float4(SceneColor.Load(int3(pixel, 0)).rgb, edge.x * edge.y);
+        }
+        step *= 1.2f;
+    }
+    return 0.0f;
+}
+
 float4 PS(PS_INPUT input) : SV_Target
 {
     float3 camera = CameraTime.xyz;
@@ -134,6 +198,12 @@ float4 PS(PS_INPUT input) : SV_Target
     float3 r = reflect(-v, n);
     r.z = abs(r.z);
     float3 reflection = SkyColor(r);
+    bool detailed = Settings.z > 0.5f && Settings.w > 0.5f;
+    if (detailed)
+    {
+        float4 mirrored = ScreenReflection(input.world, r, distance);
+        reflection = lerp(reflection, mirrored.rgb, mirrored.a);
+    }
     float facing = saturate(dot(r, SunDirection.xyz));
     float3 glint = SunColor.rgb * (pow(facing, 900.0f) * (2.0f + 10.0f * SunColor.a) + pow(facing, 60.0f) * 0.25f);
 
@@ -144,6 +214,18 @@ float4 PS(PS_INPUT input) : SV_Target
     // Premultiplied alpha: the reflection is opaque, the body as opaque as the water is thick.
     float3 color = reflection * fresnel + body * (1.0f - fresnel) * opacity + glint * edge + foamColor * foam;
     float alpha = saturate(fresnel + (1.0f - fresnel) * opacity + foam);
+
+    // The bottom seen through the water, bent by the waves (not where something in front of the water would show).
+    if (detailed && alpha < 0.999f)
+    {
+        float2 bend = slope * float2(1.0f, -1.0f) * min(thickness, 4.0f) * Viewport.w * 0.012f / max(distance * 0.05f, 1.0f);
+        int2 pixel = int2(input.pos.xy + bend);
+        float waterDepth = input.pos.z;
+        if (SceneDepth.Load(int3(pixel, 0)) >= waterDepth)
+            pixel = int2(input.pos.xy);
+        color += SceneColor.Load(int3(pixel, 0)).rgb * (1.0f - alpha);
+        alpha = 1.0f;
+    }
 
     // Same fog as the models.
     float fog = Settings.x * saturate((distance - 0.25f * Settings.y) / (0.75f * Settings.y));
@@ -162,6 +244,7 @@ float4 PS(PS_INPUT input) : SV_Target
         public Vector4 Zenith;
         public Vector4 Horizon;
         public Vector4 Settings;
+        public Vector4 Viewport;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -296,8 +379,11 @@ float4 PS(PS_INPUT input) : SV_Target
     }
 
     // Starts drawing water over the frame, before DrawSurfaces and DrawMesh, then End. sceneDepth: copy of the depth
-    // buffer after the solid models (null: the water is opaque everywhere). time moves the waves (seconds).
-    public void Begin(Matrix4x4 viewProjection, Camera camera, SceneLighting lighting, float time, ID3D11ShaderResourceView? sceneDepth)
+    // buffer after the solid models (null: the water is opaque everywhere). sceneColor: copy of the picture drawn so
+    // far, for reflections of the scene and the bottom bent by the waves (null: the sky only is mirrored). viewport:
+    // pixel rectangle of the 3D view (x, y, width, height). time moves the waves (seconds).
+    public void Begin(Matrix4x4 viewProjection, Camera camera, SceneLighting lighting, float time, ID3D11ShaderResourceView? sceneDepth,
+        ID3D11ShaderResourceView? sceneColor, Vector4 viewport)
     {
         var constants = new Constants
         {
@@ -308,7 +394,9 @@ float4 PS(PS_INPUT input) : SV_Target
             SkyAmbient = new Vector4(lighting.SkyAmbient, 0f),
             Zenith = new Vector4(lighting.Zenith, 0f),
             Horizon = new Vector4(lighting.Horizon, 0f),
-            Settings = new Vector4(lighting.FogDistance > 0f ? 1f : 0f, MathF.Max(lighting.FogDistance, 1f), sceneDepth is null ? 0f : 1f, 0f),
+            Settings = new Vector4(lighting.FogDistance > 0f ? 1f : 0f, MathF.Max(lighting.FogDistance, 1f), sceneDepth is null ? 0f : 1f,
+                sceneColor is null ? 0f : 1f),
+            Viewport = viewport,
         };
         var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, constants);
@@ -323,6 +411,10 @@ float4 PS(PS_INPUT input) : SV_Target
             _context.PSUnsetShaderResource(0);
         else
             _context.PSSetShaderResource(0, sceneDepth);
+        if (sceneColor is null)
+            _context.PSUnsetShaderResource(1);
+        else
+            _context.PSSetShaderResource(1, sceneColor);
         _context.GSSetShader(null);
         _context.OMSetDepthStencilState(_depthState, 0);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
@@ -359,7 +451,12 @@ float4 PS(PS_INPUT input) : SV_Target
         }
     }
 
-    public void End() => _context.PSUnsetShaderResource(0); // The depth copy is written again next frame.
+    // The copies are written again next frame.
+    public void End()
+    {
+        _context.PSUnsetShaderResource(0);
+        _context.PSUnsetShaderResource(1);
+    }
 
     public void Dispose()
     {
