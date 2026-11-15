@@ -747,8 +747,8 @@ internal sealed partial class SplashForm : Form
         int Alpha(int a) => (int)(a * visible);
         using (var tagline = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0xA8, 0xB2, 0xC8)))
             g.DrawString(_game == GameKind.Gta4
-                ? L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA IV.")
-                : L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V."), _taglineFont, tagline, Gutter, 240f);
+                ? L("Liberty City, ouverte en grand.")
+                : L("Pensé pour les mappeurs FiveM."), _taglineFont, tagline, Gutter, 240f);
         using (var version = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90)))
             g.DrawString($"v{Program.Version}", _smallFont, version, Design.Width - 66f, 20f);
 

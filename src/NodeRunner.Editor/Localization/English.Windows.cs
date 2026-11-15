@@ -591,7 +591,7 @@ public static partial class English
         ("modèle vide", "empty model"),
 
         // Start-up screen and loading
-        ("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V.", "The 3D studio to explore, understand and edit the GTA V map."),
+        ("Pensé pour les mappeurs FiveM.", "Built for FiveM mappers."),
         ("Non affilié à Rockstar Games ni à Take-Two Interactive", "Not affiliated with Rockstar Games or Take-Two Interactive"),
         ("{0:N0} nœuds  ·  {1:N0} km de routes", "{0:N0} nodes  ·  {1:N0} km of roads"),
         ("Chargement", "Loading"),
@@ -990,7 +990,7 @@ public static partial class English
         ("Jeu à ouvrir", "Game to open"),
         ("Clique sur un jeu ou appuie sur Entrée", "Click a game or press Enter"),
         ("Démarrage dans {0} s  ·  clic ou Entrée pour choisir", "Starting in {0} s  ·  click or Enter to choose"),
-        ("Le studio 3D pour explorer, comprendre et modifier la carte de GTA IV.", "The 3D studio to explore, understand and edit the GTA IV map."),
+        ("Liberty City, ouverte en grand.", "Liberty City, wide open."),
         ("Ouverture des archives de GTA IV...", "Opening the GTA IV archives..."),
         ("Lecture de GTA IV impossible : {0}", "Cannot read GTA IV: {0}"),
         ("{0} archives ouvertes, {1} fichiers.", "{0} archives open, {1} files."),
