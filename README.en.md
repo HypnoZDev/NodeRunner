@@ -65,7 +65,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - A **prop library** shared by all your projects: packs (folder or .zip) with thumbnails, favourites, and placement by
   dragging a prop into the 3D view.
 - Import a mapping (folder, .zip, .oiv) and files exported as XML by **Sollumz** or CodeWalker (`.ydr.xml`, `.ytd.xml`,
-  `.ybn.xml`, `.ytyp.xml`): converted automatically.
+  `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`): converted automatically.
 
 **Together (Online, beta)**
 - Up to 5 people on the same project with an `NRS-XXXX` code: everyone sees the others' changes, selection and camera

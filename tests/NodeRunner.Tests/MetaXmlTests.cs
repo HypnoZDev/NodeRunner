@@ -87,6 +87,26 @@ public class MetaXmlTests
     }
 
     [Fact]
+    public void EmptyArrayOfAnUndescribedStructureIsAccepted()
+    {
+        // Like containerLods in a .ymap: no game file describes its items, and it is always empty.
+        var document = new MetaDocument();
+        document.Structures.Add(Structure(RootType, 32,
+            (ArrayInfo, 0, 0x05, 0, Joaat.Hash("undescribed")),
+            (Joaat.Hash("lods"), 0, Array, 0, 0),
+            (Joaat.Hash("scale"), 16, Float, 0, 0)));
+        var schema = new MetaSchema();
+        schema.Add(document);
+
+        var written = MetaXml.Build(XElement.Parse("""<TestRoot><lods itemType="undescribed" /><scale value="3" /></TestRoot>"""), schema);
+        var root = MetaDocument.Read(written.Write().Content);
+        Assert.Equal(3f, BinaryPrimitives.ReadSingleLittleEndian(root.Blocks[root.RootBlock].Data.AsSpan(16)));
+
+        Assert.Throws<InvalidDataException>(() => MetaXml.Build(
+            XElement.Parse("""<TestRoot><lods><Item /></lods></TestRoot>"""), schema));
+    }
+
+    [Fact]
     public void SollumzStyleXmlIsWrittenWhereTheDescriptionsSay()
     {
         var xml = XElement.Parse("""

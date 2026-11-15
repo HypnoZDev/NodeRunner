@@ -66,7 +66,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
   placement en glissant le prop dans la vue 3D.
 - Import d'un mapping (dossier, .zip, .oiv) et des fichiers exportés par **Sollumz** ou CodeWalker en XML (`.ydr.xml`,
-  `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`) : convertis automatiquement.
+  `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`) : convertis automatiquement.
 
 **À plusieurs (Online, bêta)**
 - Jusqu'à 5 personnes sur le même projet avec un code `NRS-XXXX` : chacun voit les modifications, la sélection et la

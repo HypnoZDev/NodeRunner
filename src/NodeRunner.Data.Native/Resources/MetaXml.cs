@@ -294,11 +294,12 @@ public static class MetaXml
             {
                 case Structure:
                 {
-                    var info = Require(items.RefKey, $"0x{items.RefKey:X8}");
                     var list = field.Elements("Item").ToList();
                     count = list.Count;
+                    // Empty arrays of types no game file describes (containerLods) need no description.
                     if (count == 0)
                         return;
+                    var info = Require(items.RefKey, $"0x{items.RefKey:X8}");
                     start = Reserve(items.RefKey, count * info.Size);
                     for (int i = 0; i < count; i++)
                         WriteStructure(list[i], info, start.Block, start.Offset + i * info.Size);

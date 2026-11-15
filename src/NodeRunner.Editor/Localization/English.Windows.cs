@@ -646,7 +646,7 @@ public static partial class English
         ("\n\nDont {0} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.", "\n\nIncluding {0} XML export(s) (Sollumz, CodeWalker) converted to game files."),
         ("{0} (XML pas encore pris en charge)", "{0} (XML not supported yet)"),
         ("{0} (conversion impossible : {1})", "{0} (cannot convert: {1})"),
-        ("les fichiers de GTA V doivent être chargés (ils décrivent le format des .ytyp)", "the GTA V files must be loaded (they describe the .ytyp format)"),
+        ("les fichiers de GTA V doivent être chargés (ils décrivent le format des .ytyp et .ymap)", "the GTA V files must be loaded (they describe the .ytyp and .ymap formats)"),
         ("les fichiers de GTA V doivent être chargés (ils décrivent le format des manifestes)", "the GTA V files must be loaded (they describe the manifest format)"),
         (" (dont {0} remplacé(s))", " ({0} replaced)"),
         ("Ajoute des fichiers au projet ouvert : .ydr, .ytyp, .ybn... ou leurs exports XML (Sollumz, CodeWalker), convertis au passage.\nUn fichier du même nom déjà dans le projet est remplacé (nouvel export depuis Blender), puis la carte est rechargée.\nAstuce : on peut aussi glisser les fichiers sur la fenêtre.",
