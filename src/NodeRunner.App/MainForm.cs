@@ -388,7 +388,7 @@ internal sealed unsafe partial class MainForm : Form
         if (_state.Settings.MaxFps > 0 && 1.0 / _state.Settings.MaxFps - (_clock.Elapsed.TotalSeconds - _lastFrameTime) is var wait && wait > 0)
         {
             if (wait > 0.002)
-                Thread.Sleep((int)((wait - 0.002) * 1000));
+                PreciseSleep.For(wait - 0.002);
             else
                 Thread.Yield();
             return;
