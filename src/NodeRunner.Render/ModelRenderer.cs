@@ -155,7 +155,9 @@ float4 PSTerrain(PS_INPUT input) : SV_Target
     float4 c1 = Layer1.Sample(ColorSampler, input.uv);
     float4 c2 = Layer2.Sample(ColorSampler, input.uv);
     float4 c3 = Layer3.Sample(ColorSampler, input.uv);
-    float4 color = lerp(lerp(c0, c1, w.b), lerp(c2, c3, w.b), w.g);
+    // Terrain.z: each layer laid over the previous ones by its own weight (x, y, z), as GTA IV does.
+    float4 color = Terrain.z > 0.5f ? lerp(lerp(lerp(c0, c1, w.x), c2, w.y), c3, w.z)
+        : lerp(lerp(c0, c1, w.b), lerp(c2, c3, w.b), w.g);
     return float4(Shade(input, color).rgb, 1.0f);
 }
 
@@ -660,7 +662,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 // A missing layer shows layer 0 instead; without the mask, the vertex weights alone.
                 var mask = part.Layers![3];
                 bool useMask = mask is not null && part.TerrainMode != TerrainBlendMode.VertexOnly;
-                SetMesh(emission, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f, 0f, 0f));
+                SetMesh(emission, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
+                    part.TerrainMode == TerrainBlendMode.Layered ? 1f : 0f, 0f));
                 for (int l = 0; l < 3; l++)
                     _context.PSSetShaderResource((uint)l + 1, (part.Layers[l] ?? baseTexture).View);
                 _context.PSSetShaderResource(4, (mask ?? baseTexture).View);

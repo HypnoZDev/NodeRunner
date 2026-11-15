@@ -68,12 +68,15 @@ public static class Gta4Drawables
     // Dictionary: hashes at 0x10, drawables at 0x18 (pointer arrays).
     private const int DictionaryHashes = 0x10, DictionaryItems = 0x18;
 
-    public static ModelData? ReadDrawable(Resource res, int drawable, uint nameHash)
+    public static ModelData? ReadDrawable(Resource res, int drawable, uint nameHash) => ReadDrawable(res, drawable, nameHash, []);
+
+    // A drawable without its own shader group uses sharedShaders (the pieces of a fragment).
+    private static ModelData? ReadDrawable(Resource res, int drawable, uint nameHash, List<Shader> sharedShaders)
     {
         if (drawable < 0)
             return null;
         int group = res.Pointer(drawable + DrawableShaderGroup);
-        var shaders = ReadShaders(res, group);
+        var shaders = group >= 0 ? ReadShaders(res, group) : sharedShaders;
         var meshes = new List<ModelMesh>();
         int lod = res.Pointer(drawable + DrawableModels);
         if (lod >= 0)
@@ -108,7 +111,8 @@ public static class Gta4Drawables
     }
 
     // Fragment: main drawable at 0xB4 (its skeleton at 0x0C: bone matrices at 0x10, bone count at 0x14), pieces at
-    // 0xD4, piece count in bytes 0x1F3 / 0x1F6. Piece: bone at 0x0E, drawable at 0x90, modelled around its bone.
+    // 0xD4, piece count in bytes 0x1F3 / 0x1F6. Piece: bone at 0x0E, drawable at 0x90, modelled around its bone; the
+    // pieces have no shader group, they use the main drawable's.
     private const int FragmentDrawable = 0xB4, FragmentChildren = 0xD4, FragmentChildCountA = 0x1F3, FragmentChildCountB = 0x1F6;
     private const int ChildBone = 0x0E, ChildDrawable = 0x90, SkeletonMatrices = 0x10, SkeletonBoneCount = 0x14;
 
@@ -117,6 +121,10 @@ public static class Gta4Drawables
         int main = res.Pointer(FragmentDrawable);
         var meshes = new List<ModelMesh>();
         var textures = new Dictionary<uint, TextureData>();
+        int mainGroup = main >= 0 ? res.Pointer(main + DrawableShaderGroup) : -1;
+        var sharedShaders = mainGroup >= 0 ? ReadShaders(res, mainGroup) : [];
+        if (mainGroup >= 0)
+            Merge(textures, Gta4Textures.ReadDictionary(res, res.Pointer(mainGroup + ShaderGroupTextures)));
         if (ReadDrawable(res, main, nameHash) is { } body)
         {
             meshes.AddRange(body.Meshes);
@@ -131,7 +139,7 @@ public static class Gta4Drawables
         for (int i = 0; i < count && children >= 0; i++)
         {
             int child = res.Pointer(children + i * 4);
-            if (child < 0 || ReadDrawable(res, res.Pointer(child + ChildDrawable), nameHash) is not { } piece)
+            if (child < 0 || ReadDrawable(res, res.Pointer(child + ChildDrawable), nameHash, sharedShaders) is not { } piece)
                 continue;
             Merge(textures, piece.EmbeddedTextures);
             int bone = res.UShort(child + ChildBone);
@@ -172,6 +180,7 @@ public static class Gta4Drawables
         Normals = mesh.Normals.Select(n => Vector3.TransformNormal(n, transform) is var t && t.LengthSquared() > 1e-12f ? Vector3.Normalize(t) : n).ToArray(),
         TexCoords = mesh.TexCoords,
         Colors = mesh.Colors,
+        Terrain = mesh.Terrain,
         Indices = mesh.Indices,
         DiffuseTextureName = mesh.DiffuseTextureName,
         ShaderHash = mesh.ShaderHash,
@@ -179,13 +188,16 @@ public static class Gta4Drawables
         Emission = mesh.Emission,
     };
 
-    // A shader: its kind (name) and diffuse texture.
-    private sealed record Shader(string? Name, string? Diffuse);
+    // A shader: its kind (name, "gta_normal_spec"), its preset ("gta_cutout", which tells how it is blended), its
+    // diffuse texture and, for the ground shaders, the textures of its layers.
+    private sealed record Shader(string? Name, string? Preset, string? Diffuse, string?[] Layers);
 
     private static readonly uint DiffuseSampler = Joaat.Hash("texturesampler");
 
+    private static readonly uint[] LayerSamplers = [.. Enumerable.Range(0, 4).Select(i => Joaat.Hash($"texturesampler_layer{i}"))];
+
     // Shader group: shaders at 8. Shader: parameter data at 0x14, count at 0x1C, types at 0x24 (0 = texture), name
-    // hashes at 0x34, name at 0x44. Texture parameter: name at 0x14.
+    // hashes at 0x34, name at 0x44, preset file (".sps") at 0x48. Texture parameter: name at 0x14.
     private static List<Shader> ReadShaders(Resource res, int group)
     {
         var shaders = new List<Shader>();
@@ -195,7 +207,7 @@ public static class Gta4Drawables
         {
             if (shader < 0)
             {
-                shaders.Add(new Shader(null, null));
+                shaders.Add(new Shader(null, null, null, new string?[4]));
                 continue;
             }
             int values = res.Pointer(shader + 0x14);
@@ -203,15 +215,26 @@ public static class Gta4Drawables
             int types = res.Pointer(shader + 0x24);
             int hashes = res.Pointer(shader + 0x34);
             string? diffuse = null;
+            var layers = new string?[LayerSamplers.Length];
             for (int i = 0; i < count && values >= 0 && types >= 0 && hashes >= 0; i++)
             {
-                if (types + i >= res.Data.Length || res.Data[types + i] != 0 || res.UInt(hashes + i * 4) != DiffuseSampler)
+                if (types + i >= res.Data.Length || res.Data[types + i] != 0)
+                    continue;
+                uint parameter = res.UInt(hashes + i * 4);
+                int layer = Array.IndexOf(LayerSamplers, parameter);
+                if (parameter != DiffuseSampler && layer < 0)
                     continue;
                 int texture = res.Pointer(values + i * 4);
-                if (texture >= 0)
-                    diffuse = res.String(res.Pointer(texture + 0x14)) is { } name ? Gta4Textures.BareName(name) : null;
+                string? name = texture >= 0 && res.String(res.Pointer(texture + 0x14)) is { } text ? Gta4Textures.BareName(text) : null;
+                if (layer >= 0)
+                    layers[layer] = name;
+                else
+                    diffuse = name;
             }
-            shaders.Add(new Shader(res.String(res.Pointer(shader + 0x44)), diffuse));
+            string? preset = res.String(res.Pointer(shader + 0x48));
+            if (preset is not null && preset.EndsWith(".sps", StringComparison.OrdinalIgnoreCase))
+                preset = preset[..^4];
+            shaders.Add(new Shader(res.String(res.Pointer(shader + 0x44)), preset, diffuse ?? layers[0], layers));
         }
         return shaders;
     }
@@ -261,6 +284,10 @@ public static class Gta4Drawables
         var normals = new Vector3[vertexCount];
         var texCoords = new Vector2[vertexCount];
         var colors = new Vector4[vertexCount];
+        // Ground: one set of texture coordinates per layer, then the layer weights two by two (the first one, always
+        // 1, is the base layer's).
+        int layerCount = shader is null ? 0 : Array.FindLastIndex(shader.Layers, l => l is not null) + 1;
+        var weights = layerCount > 1 ? new Vector4[vertexCount] : null;
         var span = res.Data.AsSpan(vertices, vertexCount * stride);
         for (int v = 0; v < vertexCount; v++)
         {
@@ -269,6 +296,12 @@ public static class Gta4Drawables
             normals[v] = layout.Normal(vertex);
             texCoords[v] = layout.TexCoord(vertex);
             colors[v] = layout.Color(vertex);
+            if (weights is not null)
+            {
+                var first = layout.TexCoord(vertex, layerCount);
+                var second = layout.TexCoord(vertex, layerCount + 1);
+                weights[v] = Vector4.Clamp(new Vector4(first.Y, second.X, second.Y, 0f), Vector4.Zero, Vector4.One);
+            }
         }
 
         indexCount -= indexCount % 3;
@@ -284,6 +317,8 @@ public static class Gta4Drawables
             FlatNormals(positions, triangles, normals);
 
         string? name = shader?.Name?.ToLowerInvariant();
+        // The preset tells how the surface is blended ("gta_default" shaders are used with "gta_decal", "gta_alpha"...).
+        string? preset = (shader?.Preset ?? shader?.Name)?.ToLowerInvariant();
         return new ModelMesh
         {
             Positions = positions,
@@ -293,19 +328,26 @@ public static class Gta4Drawables
             Indices = triangles,
             DiffuseTextureName = shader?.Diffuse,
             ShaderHash = name is null ? 0 : Joaat.Hash(name),
-            BlendMode = BlendModeOf(name),
-            Emission = name is not null && name.Contains("emissive", StringComparison.Ordinal)
-                ? name.Contains("night", StringComparison.Ordinal) ? MeshEmission.Night : MeshEmission.Always
+            BlendMode = weights is not null ? MeshBlendMode.Opaque : BlendModeOf(preset),
+            Emission = preset is not null && preset.Contains("emissive", StringComparison.Ordinal)
+                ? preset.Contains("night", StringComparison.Ordinal) ? MeshEmission.Night : MeshEmission.Always
                 : MeshEmission.None,
+            Terrain = weights is null ? null : new TerrainBlend
+            {
+                LayerNames = [shader!.Layers[1], shader.Layers[2], shader.Layers[3]],
+                Mode = TerrainBlendMode.Layered,
+                Weights = weights,
+                MaskTexCoords = new Vector2[vertexCount],
+            },
         };
     }
 
-    private static MeshBlendMode BlendModeOf(string? shader) => shader switch
+    private static MeshBlendMode BlendModeOf(string? preset) => preset switch
     {
         null => MeshBlendMode.Opaque,
-        _ when shader.Contains("glass", StringComparison.Ordinal) || shader.Contains("decal", StringComparison.Ordinal)
-            || shader.Contains("alpha", StringComparison.Ordinal) => MeshBlendMode.Translucent,
-        _ when shader.Contains("cutout", StringComparison.Ordinal) => MeshBlendMode.Cutout,
+        _ when preset.Contains("cutout", StringComparison.Ordinal) || preset.Contains("trees", StringComparison.Ordinal) => MeshBlendMode.Cutout,
+        _ when preset.Contains("glass", StringComparison.Ordinal) || preset.Contains("decal", StringComparison.Ordinal)
+            || preset.Contains("alpha", StringComparison.Ordinal) => MeshBlendMode.Translucent,
         _ => MeshBlendMode.Opaque,
     };
 
@@ -381,12 +423,14 @@ public static class Gta4Drawables
             return n.LengthSquared() > 1e-8f ? Vector3.Normalize(n) : Vector3.UnitZ;
         }
 
-        public Vector2 TexCoord(ReadOnlySpan<byte> v)
+        // Texture coordinates of the given set (0 to 7).
+        public Vector2 TexCoord(ReadOnlySpan<byte> v, int set = 0)
         {
-            int at = _offsets[TexCoordElement];
+            int element = TexCoordElement + set;
+            int at = set is >= 0 and < 8 ? _offsets[element] : -1;
             if (at < 0)
                 return Vector2.Zero;
-            return _types[TexCoordElement] switch
+            return _types[element] switch
             {
                 1 or 3 => new Vector2(Half(v, at), Half(v, at + 2)),
                 5 or 6 or 7 => new Vector2(Single(v, at), Single(v, at + 4)),

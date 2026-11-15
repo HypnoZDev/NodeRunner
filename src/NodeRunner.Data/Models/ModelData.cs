@@ -92,6 +92,9 @@ public enum TerrainBlendMode
     VertexOnly,
 
     MaskOnly,
+
+    // GTA IV: each layer laid over the previous ones by its own weight (Weights x, y, z for layers 1 to 3).
+    Layered,
 }
 
 // Whether a mesh gives off its own light (decided by its shader in the game files).
