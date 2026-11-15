@@ -32,7 +32,7 @@ public static class MappingImport
     public static bool IsXmlExport(string name) =>
         name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && IsStreamed(name[..^4]);
 
-    private static bool IsImported(string name) => IsStreamed(name) || IsXmlExport(name);
+    public static bool IsImported(string name) => IsStreamed(name) || IsXmlExport(name);
 
     // Game file name of an imported file ("name.ybn.xml" -> "name.ybn").
     private static string TargetName(string name) => IsXmlExport(name) ? name[..^4] : name;
@@ -60,6 +60,47 @@ public static class MappingImport
                 duplicates.Add(Path.GetRelativePath(folder, file));
         }
         return (files, duplicates);
+    }
+
+    // What to add again from a watched folder after its files changed: the changed files that can be imported; for
+    // another file (an image of a .ytd.xml...), the XML exports of its folder and of the folder above, inside the
+    // watched one. The watched folder itself among the changes (events lost) = all of it.
+    public static List<string> WatchedSources(IEnumerable<string> changed, string folder)
+    {
+        folder = Path.GetFullPath(folder).TrimEnd('\\', '/');
+        var sources = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string file)
+        {
+            if (seen.Add(file))
+                sources.Add(file);
+        }
+        bool Inside(string path) => path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        foreach (string path in changed.Select(p => Path.GetFullPath(p).TrimEnd('\\', '/')))
+        {
+            if (string.Equals(path, folder, StringComparison.OrdinalIgnoreCase))
+                return Directory.Exists(folder) ? [folder] : [];
+            if (!Inside(path) || !File.Exists(path))
+                continue;
+            if (IsImported(Path.GetFileName(path)))
+            {
+                Add(path);
+                continue;
+            }
+            string? directory = Path.GetDirectoryName(path);
+            for (int level = 0; level < 2 && directory is not null && (Inside(directory) || string.Equals(directory, folder, StringComparison.OrdinalIgnoreCase)); level++)
+            {
+                foreach (string file in Directory.EnumerateFiles(directory, "*.xml").Order(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (IsXmlExport(Path.GetFileName(file)))
+                        Add(file);
+                }
+                if (string.Equals(directory, folder, StringComparison.OrdinalIgnoreCase))
+                    break;
+                directory = Path.GetDirectoryName(directory);
+            }
+        }
+        return sources;
     }
 
     // A free folder for the project in projectsFolder ("name", then "name 2"...).

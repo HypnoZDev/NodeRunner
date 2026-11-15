@@ -21,6 +21,25 @@ public class MappingImportTests : IDisposable
     }
 
     [Fact]
+    public void ChangesInAWatchedFolderGiveTheFilesToAddAgain()
+    {
+        Touch(@"export\a.ydr.xml");
+        Touch(@"export\a\a.dds");
+        Touch(@"export\b.ytd.xml");
+        Touch(@"export\b.ytd\b.dds");
+        Touch(@"export\c.ymap");
+        Touch(@"export\notes.txt");
+        Touch(@"outside.ymap");
+        string folder = Path.Combine(_root, "export");
+        string P(string relative) => Path.Combine(_root, relative);
+
+        Assert.Equal([P(@"export\c.ymap")], MappingImport.WatchedSources([P(@"export\c.ymap"), P(@"export\c.ymap"), P("outside.ymap"), P(@"export\gone.ydr")], folder));
+        // A texture changed: the XML exports next to it and in the folder above are converted again.
+        Assert.Equal([P(@"export\a.ydr.xml"), P(@"export\b.ytd.xml")], MappingImport.WatchedSources([P(@"export\b.ytd\b.dds")], folder));
+        Assert.Equal([folder], MappingImport.WatchedSources([folder + @"\"], folder));
+    }
+
+    [Fact]
     public void CopiesStreamedFilesIntoANewProjectWithoutTouchingTheSource()
     {
         Touch(@"cayo\fxmanifest.lua");

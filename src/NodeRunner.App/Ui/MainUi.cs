@@ -147,6 +147,10 @@ internal sealed class MainUi
 
     public bool AddFolderRequested { get; set; }
 
+    public bool LinkFolderRequested { get; set; }
+
+    public bool UnlinkFolderRequested { get; set; }
+
     public void ShowProjectPanel()
     {
         _showProject = true;
@@ -724,6 +728,17 @@ internal sealed class MainUi
             AddFolderRequested = true;
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(L("Ajoute tout un dossier au projet ouvert (dossier d'export de Sollumz, dossier stream...), sous-dossiers compris."));
+        if (_state.Project?.WatchedFolder is { } watched)
+        {
+            if (ImGui.MenuItem(L($"{Icons.RefreshCw}  Délier le dossier Sollumz « {Path.GetFileName(watched)} »")))
+                UnlinkFolderRequested = true;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(L($"Dossier lié : {watched}\nÀ chaque nouvel export dans ce dossier, les fichiers sont ajoutés au projet et la carte est rechargée.\nDélier arrête la surveillance (les fichiers déjà ajoutés restent dans le projet)."));
+        }
+        else if (ImGui.MenuItem(L($"{Icons.RefreshCw}  Lier un dossier Sollumz (surveillé)..."), null, false, hasProject))
+            LinkFolderRequested = true;
+        if (_state.Project?.WatchedFolder is null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Lie au projet le dossier où Sollumz (Blender) exporte : ses fichiers sont ajoutés tout de suite,\npuis à chaque nouvel export (XML convertis au passage), et la carte est rechargée toute seule."));
         ImGui.Separator();
         if (ImGui.MenuItem(L($"{Icons.ListTree}  Contenu du projet (objets ajoutés, déplacés, supprimés)"), null, false, hasProject))
             ShowProjectPanel();

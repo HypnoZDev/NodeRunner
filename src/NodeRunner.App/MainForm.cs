@@ -46,6 +46,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly RoomLayer _roomLayer = new();
     private readonly OcclusionLayer _occlusionLayer = new();
     private readonly CarGeneratorLayer _carGeneratorLayer = new();
+    private readonly FolderWatch _folderWatch = new();
     private readonly TimecycleLayer _timecycleLayer = new();
     private readonly LodLightLayer _lodLightLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
@@ -325,6 +326,7 @@ internal sealed unsafe partial class MainForm : Form
         _roomLayer.Dispose();
         _occlusionLayer.Dispose();
         _carGeneratorLayer.Dispose();
+        _folderWatch.Dispose();
         _timecycleLayer.Dispose();
         _lodLightLayer.Dispose();
         DisposeCollisionPreview();
@@ -1329,6 +1331,20 @@ internal sealed unsafe partial class MainForm : Form
             BrowseForProjectFolder();
         }
 
+        if (_ui.LinkFolderRequested)
+        {
+            _ui.LinkFolderRequested = false;
+            BrowseForWatchedFolder();
+        }
+
+        if (_ui.UnlinkFolderRequested)
+        {
+            _ui.UnlinkFolderRequested = false;
+            SetWatchedFolder(null);
+        }
+
+        AddWatchedChanges();
+
         if (_state.LibraryRequest is var library and not LibraryAction.None)
         {
             _state.LibraryRequest = LibraryAction.None;
@@ -1544,6 +1560,66 @@ internal sealed unsafe partial class MainForm : Form
         AddToProject([dialog.SelectedPath]);
     }
 
+    // Links a folder (export folder of Sollumz...) to the project: its files are added now, then again whenever they change.
+    private void BrowseForWatchedFolder()
+    {
+        if (_state.Project is not { } project)
+            return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = L("Choisis le dossier d'export de Sollumz (ou de Blender) à lier au projet : ses fichiers seront ajoutés au projet à chaque nouvel export."),
+            UseDescriptionForTitle = true,
+            InitialDirectory = (project.WatchedFolder ?? project.LastAddFolder) is { } last && Directory.Exists(last) ? last : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        string folder = Path.GetFullPath(dialog.SelectedPath).TrimEnd('\\', '/');
+        string projectFolder = Path.GetFullPath(project.Folder).TrimEnd('\\', '/');
+        // NodeRunner writes into the project: watching it would add its own files again and again.
+        if (string.Equals(folder, projectFolder, StringComparison.OrdinalIgnoreCase)
+            || folder.StartsWith(projectFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || projectFolder.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show(this, L("Ce dossier contient le projet ou en fait partie : choisis le dossier où Sollumz exporte, en dehors du projet."),
+                L("Lier un dossier Sollumz"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!SetWatchedFolder(folder))
+            return;
+        AddToProject([folder], watched: true);
+    }
+
+    private bool SetWatchedFolder(string? folder)
+    {
+        if (_state.Project is not { } project)
+            return false;
+        project.WatchedFolder = folder;
+        try
+        {
+            project.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, L($"Le projet n'a pas pu être enregistré :\n{ex.Message}"), L("Lier un dossier Sollumz"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+        if (folder is null)
+            _state.Notify(L("Dossier Sollumz délié : ses nouveaux exports ne sont plus ajoutés au projet."));
+        return true;
+    }
+
+    // New exports in the folder linked to the project: added to it, then the map is loaded again.
+    private void AddWatchedChanges()
+    {
+        string? folder = _state.Online.IsGuest ? null : _state.Project?.WatchedFolder;
+        _folderWatch.Watch(folder);
+        if (folder is null || _folderWatch.TakeChanges() is not { } changed)
+            return;
+        var sources = NodeRunner.Editor.MappingImport.WatchedSources(changed, folder);
+        if (sources.Count > 0)
+            AddToProject(sources, watched: true);
+    }
+
     private void HandleLibraryRequest(LibraryAction action)
     {
         string library = _state.LibraryFolder;
@@ -1634,7 +1710,8 @@ internal sealed unsafe partial class MainForm : Form
     }
 
     // Converts and copies the files into the open project's stream folder, then loads its map again.
-    private void AddToProject(IReadOnlyList<string> sources)
+    // watched: from the folder linked to the project (the folder offered next time is kept).
+    private void AddToProject(IReadOnlyList<string> sources, bool watched = false)
     {
         if (_state.Project is not { } project || !ConfirmLeaveChanges())
             return;
@@ -1648,15 +1725,18 @@ internal sealed unsafe partial class MainForm : Form
             MessageBox.Show(this, L($"Les fichiers n'ont pas pu être ajoutés :\n{ex.Message}"), L("Ajouter au projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
-        string first = Path.GetFullPath(sources[0].TrimEnd('\\', '/'));
-        project.LastAddFolder = Directory.Exists(first) ? first : Path.GetDirectoryName(first);
-        try
+        if (!watched)
         {
-            project.Save();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Only the folder offered next time is lost.
+            string first = Path.GetFullPath(sources[0].TrimEnd('\\', '/'));
+            project.LastAddFolder = Directory.Exists(first) ? first : Path.GetDirectoryName(first);
+            try
+            {
+                project.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Only the folder offered next time is lost.
+            }
         }
         if (result.Copied > 0 && _state.OpenProject(project.Folder, keepOthers: true) is { } error)
         {
@@ -1674,7 +1754,9 @@ internal sealed unsafe partial class MainForm : Form
         string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) non repris :\n") + string.Join("\n", result.Ignored.Take(10));
         if (result.Copied > 0 && result.Ignored.Count == 0 && result.Skipped.Count == 0)
         {
-            _state.Notify(L($"{result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée."));
+            _state.Notify(watched
+                ? L($"Dossier Sollumz : {result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée.")
+                : L($"{result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée."));
             return;
         }
         MessageBox.Show(this, L($"{result.Copied} fichier(s) ajouté(s) au projet « {project.Name} »{replaced}.{converted}{skipped}{ignored}"),
