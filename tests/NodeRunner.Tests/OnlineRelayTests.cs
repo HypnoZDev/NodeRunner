@@ -31,7 +31,7 @@ public class OnlineRelayTests
         var start = new SessionSnapshot("projet", zip, "carte");
 
         var hostDoc = new OnlineSessionTests.Doc();
-        using var host = OnlineSession.HostOnRelay(hostDoc, "Ben", "1.0", start, relay);
+        using var host = OnlineSession.HostOnRelay(hostDoc, "Hugo", "1.0", start, relay);
         Pump(() => host.Code is not null, host);
         Assert.Matches("^NRS-[A-Z2-9]{4}$", host.Code);
 

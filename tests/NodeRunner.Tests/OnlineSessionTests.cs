@@ -79,13 +79,13 @@ public class OnlineSessionTests
     public void Host_and_guests_see_the_same_map_whoever_edits_or_undoes()
     {
         var hostDoc = new Doc();
-        using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start, port: 47900);
+        using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start, port: 47900);
         hostDoc.Move(3, new Vector3(1, 2, 3), "Déplacer avant l'arrivée");
 
         var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
         var (lea, leaDoc) = Guest(host, hostDoc, "Léa");
         var all = new[] { host, marc, lea };
-        Assert.Equal(["Ben", "Marc", "Léa"], host.Participants);
+        Assert.Equal(["Hugo", "Marc", "Léa"], host.Participants);
         Pump(() => marc.Participants.Count == 3 && lea.Participants.Count == 3, all);
         bool Same() => OnlineEditTests.Snapshot(hostDoc.World) == OnlineEditTests.Snapshot(marcDoc.World)
             && OnlineEditTests.Snapshot(hostDoc.World) == OnlineEditTests.Snapshot(leaDoc.World);
@@ -125,7 +125,7 @@ public class OnlineSessionTests
     public void Everyone_sees_what_the_others_have_selected()
     {
         var hostDoc = new Doc();
-        using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start, port: 47930);
+        using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start, port: 47930);
         var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
         var (lea, leaDoc) = Guest(host, hostDoc, "Léa");
         var all = new[] { host, marc, lea };
@@ -140,13 +140,13 @@ public class OnlineSessionTests
 
         // The host's own selection reaches the guests too.
         host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [hostDoc.World.Map.Entities[1]]));
-        Pump(() => SeenBy(marc, marcDoc, "Ben").Count == 1, all);
-        Assert.Same(marcDoc.World.Map.Entities[1], SeenBy(marc, marcDoc, "Ben")[0]);
+        Pump(() => SeenBy(marc, marcDoc, "Hugo").Count == 1, all);
+        Assert.Same(marcDoc.World.Map.Entities[1], SeenBy(marc, marcDoc, "Hugo")[0]);
 
         // Another element (a road node...) instead of objects: its bytes reach the others as they are.
         host.ShareSelection(SelectionCodec.Encode(hostDoc.World.Library, [], [7, 1, 2]));
-        Pump(() => marc.Presence.TryGetValue("Ben", out var d) && SelectionCodec.DecodeItem(d) is [7, 1, 2], all);
-        Assert.Empty(SeenBy(marc, marcDoc, "Ben"));
+        Pump(() => marc.Presence.TryGetValue("Hugo", out var d) && SelectionCodec.DecodeItem(d) is [7, 1, 2], all);
+        Assert.Empty(SeenBy(marc, marcDoc, "Hugo"));
         Assert.Null(SelectionCodec.DecodeItem(marc.Presence["Marc"]));
 
         // Nothing selected, or gone: removed from the list.
@@ -159,14 +159,14 @@ public class OnlineSessionTests
         // Cameras: Léa's reaches Marc through the host, the host's reaches both; a newcomer gets those already known.
         lea.ShareCamera([1, 2, 3]);
         host.ShareCamera([9]);
-        Pump(() => marc.Cameras.ContainsKey("Léa") && marc.Cameras.ContainsKey("Ben") && lea.Cameras.ContainsKey("Ben"), all);
+        Pump(() => marc.Cameras.ContainsKey("Léa") && marc.Cameras.ContainsKey("Hugo") && lea.Cameras.ContainsKey("Hugo"), all);
         Assert.Equal([1, 2, 3], marc.Cameras["Léa"]);
         Assert.False(lea.Cameras.ContainsKey("Léa"));
         var (zoe, _) = Guest(host, hostDoc, "Zoé");
         Pump(() => zoe.Cameras.ContainsKey("Léa"), host, marc, lea, zoe);
 
         lea.End("Au revoir.");
-        Pump(() => !marc.Presence.ContainsKey("Léa") && !marc.Cameras.ContainsKey("Léa") && marc.Presence.ContainsKey("Ben"), host, marc, zoe);
+        Pump(() => !marc.Presence.ContainsKey("Léa") && !marc.Cameras.ContainsKey("Léa") && marc.Presence.ContainsKey("Hugo"), host, marc, zoe);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class OnlineSessionTests
         try
         {
             var hostDoc = new Doc();
-            using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start with { ProjectZip = Zip("projet.json") }, port: 47960);
+            using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start with { ProjectZip = Zip("projet.json") }, port: 47960);
             var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
             hostDoc.Move(2, new Vector3(4, 4, 4), "Hôte");
             Pump(() => marc.ChangeCount == 1, host, marc);
@@ -209,7 +209,7 @@ public class OnlineSessionTests
     public void A_change_that_crosses_another_is_refused_and_the_guest_resynced()
     {
         var hostDoc = new Doc();
-        using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start, port: 47920);
+        using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start, port: 47920);
         var (marc, marcDoc) = Guest(host, hostDoc, "Marc");
         Assert.Equal(1, marcDoc.Opened);
 
@@ -230,7 +230,7 @@ public class OnlineSessionTests
     public void Another_version_or_other_game_files_are_refused()
     {
         var hostDoc = new Doc();
-        using var host = OnlineSession.Host(hostDoc, "Ben", "1.0", Start, port: 47940);
+        using var host = OnlineSession.Host(hostDoc, "Hugo", "1.0", Start, port: 47940);
 
         var oldDoc = new Doc();
         using var old = OnlineSession.Join(oldDoc, "Marc", "0.9", $"localhost:{host.Port}");
