@@ -41,6 +41,7 @@ internal sealed class ShortcutsWindow(AppState state)
             Group(L("Sélection et outils"),
                 (L("Clic gauche"), L("Sélectionner")),
                 (L("Ctrl + clic"), L("Ajouter ou retirer de la sélection")),
+                (L("Double-clic sur une porte"), L("L'ouvrir ou la fermer (vue 3D seulement)")),
                 (L("Échap"), L("Désélectionner")),
                 ("1", L("Outil Sélection")),
                 ("2", L("Outil Déplacer")),

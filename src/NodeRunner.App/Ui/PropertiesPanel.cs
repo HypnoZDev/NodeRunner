@@ -298,6 +298,25 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         Widgets.PropertyText(L("Drapeau de porte"), (archetype.Flags & DoorCheck.DoorFlag) != 0 ? L("oui") : L("non"),
             L($"Drapeau 0x{DoorCheck.DoorFlag:X} du type : présent sur la moitié des portes du jeu, sur presque aucun autre objet."));
         DrawDoorTuning(entity, shape, names);
+        if (shape.Kind == DoorKind.Hinged)
+        {
+            var clear = state.OpenDoors.ClearanceOf(entity, state);
+            var blocked = new List<string>();
+            if (clear is { MinBlocked: true } a)
+                blocked.Add(L($"{MathF.Abs(a.ReachedMin):0}° au lieu de {MathF.Abs(a.WantedMin):0}°"));
+            if (clear is { MaxBlocked: true } b)
+                blocked.Add(L($"{MathF.Abs(b.ReachedMax):0}° au lieu de {MathF.Abs(b.WantedMax):0}°"));
+            Widgets.PropertyText(L("Passage"),
+                clear is null ? L("non vérifié (collisions pas encore lues)")
+                : blocked.Count == 0 ? L("libre")
+                : clear.Value.NoPassage ? L($"trop peu ouverte pour passer : {string.Join(L(" / "), blocked)}")
+                : L($"libre (s'arrête sur un mur : {string.Join(L(" / "), blocked)})"),
+                L("La porte est tournée pas à pas contre les collisions autour d'elle (murs, meubles des fichiers de carte et des intérieurs). ")
+                + L("En jeu, elle s'arrêtera sur l'obstacle : partie rouge de l'arc dans la vue 3D. Souvent un pivot mal placé ou un mur trop près.\n")
+                + L($"Une porte qui s'ouvre à {DoorClearance.Passage:0}° ou plus d'un côté laisse passer : s'arrêter contre le mur voisin est normal.\n")
+                + L("Les objets posés à part (props) ne sont pas comptés."),
+                clear is { NoPassage: true } ? UiTheme.Warning : null);
+        }
         var p = entity.Position;
         Widgets.PropertyText(L("Position (doorlock)"), L($"{p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}"),
             L("Position exacte utilisée par les scripts de serrure (objCoords). Menu ... > Copier pour doorlock."));
@@ -305,6 +324,11 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         Widgets.PropertyText(L("Hash du modèle"), $"{unchecked((int)archetype.NameHash)} / 0x{archetype.NameHash:X8}",
             L("objHash dans qb-doorlock (décimal), model dans ox_doorlock."));
         Widgets.EndProperties();
+        if (shape.Kind != DoorKind.Fixed
+            && Widgets.Button(state.OpenDoors.IsOpen(entity) ? L($"{Icons.DoorOpen}  Fermer la porte") : L($"{Icons.DoorOpen}  Ouvrir la porte"),
+                L("Ouvre la porte dans la vue 3D comme en jeu, pour voir où elle passe (rien n'est modifié ni enregistré).\n")
+                + L("Raccourci : double-clic sur une porte dans la vue 3D."), ImGui.GetContentRegionAvail().X))
+            state.ToggleDoors([entity]);
     }
 
     // What doortuning.ymt says of this door model: how far it opens, what opens it by itself, and a copy for a project.
@@ -438,7 +462,12 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             _doors = cache;
         }
         var doors = cache.Doors;
-        if (doors.Count == 0 || doors.All(state.IsSelected) && state.SelectedEntities.Count == doors.Count)
+        if (doors.Count == 0 || doors.Count == 1 && doors[0] == entity)
+            return;
+        if (Widgets.Button(doors.Any(state.OpenDoors.IsOpen) ? L($"{Icons.DoorOpen}  Fermer les portes ({doors.Count})") : L($"{Icons.DoorOpen}  Ouvrir les portes ({doors.Count})"),
+                L("Ouvre ces portes dans la vue 3D comme en jeu (rien n'est modifié ni enregistré)."), ImGui.GetContentRegionAvail().X))
+            state.ToggleDoors(doors);
+        if (doors.All(state.IsSelected) && state.SelectedEntities.Count == doors.Count)
             return;
         bool interior = entity.IsInterior || entity.Interior is not null;
         if (Widgets.Button(L($"{Icons.DoorOpen}  Sélectionner les portes ({doors.Count})"),

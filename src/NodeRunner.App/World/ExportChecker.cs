@@ -280,6 +280,7 @@ internal static partial class ExportChecker
         }
 
         CheckDoors(input, world, names, sceneryEntities.Select(s => s.Item1).ToList(), removedDoors, movedDoors, items);
+        CheckDoorSwings(world, names, addedEntities.Concat(movedDoors.Select(m => m.Current)), cuts, items);
         CheckOccluders(world, names, items);
         CheckPathNodes(input, world, items);
         CheckPlacements(input, world, names, removedEntities, cuts, items);
@@ -337,6 +338,43 @@ internal static partial class ExportChecker
                 L($"Leur type (archétype, dans le .ytyp) n'a pas le drapeau « Dynamic » (0x{DoorCheck.DynamicFlag:X}) : le jeu les garde figées. ")
                 + L($"Dans Sollumz, cochez « Dynamic » dans les drapeaux de l'archétype (les portes du jeu ont aussi 0x{DoorCheck.DoorFlag:X}), ")
                 + L("puis réexportez le .ytyp. Ignorez ce message si la porte doit rester fermée."));
+    }
+
+    private const int MaxDoorSwingChecks = 300;
+
+    // Swinging doors placed or moved by the project whose leaf runs into a wall or furniture when it opens.
+    private static void CheckDoorSwings(WorldLoader world, HashNames names, IEnumerable<MapEntity> changed,
+        List<CollisionFileCut> cuts, List<ExportCheckItem> items)
+    {
+        if (world.Collisions is null)
+            return;
+        var edits = new CollisionEdits();
+        foreach (var cut in cuts)
+            edits.SetRemoved(cut.File.Path, cut.Polygons, true);
+        var query = new CollisionQuery();
+        var blocked = new List<(MapEntity Door, string Line)>();
+        foreach (var door in changed.Where(e => e.LodLevel is LodLevel.Hd or LodLevel.OrphanHd && Doors.IsDoor(names.TryGet(e.ArchetypeHash)))
+                     .Distinct().Take(MaxDoorSwingChecks))
+        {
+            if (DoorAnimator.Check(door, world, query, edits) is not { NoPassage: true } c)
+                continue;
+            var sides = new List<string>();
+            if (c.MinBlocked)
+                sides.Add(L($"{MathF.Abs(c.ReachedMin):0}° au lieu de {MathF.Abs(c.WantedMin):0}°"));
+            if (c.MaxBlocked)
+                sides.Add(L($"{MathF.Abs(c.ReachedMax):0}° au lieu de {MathF.Abs(c.WantedMax):0}°"));
+            var p = door.Position;
+            blocked.Add((door, L($"{names.Describe(door.ArchetypeHash)} ({p.X:0.00}, {p.Y:0.00}, {p.Z:0.00}) : {string.Join(L(" / "), sides)}")));
+        }
+        if (blocked.Count == 0)
+            return;
+        items.Add(new ExportCheckItem(false,
+            blocked.Count == 1 ? L("1 porte ne s'ouvre pas assez pour passer") : L($"{blocked.Count} portes ne s'ouvrent pas assez pour passer"),
+            Limit(blocked.Select(b => b.Line).ToList()),
+            L("En jeu, la porte s'arrêtera sur le mur ou le meuble (collision). Souvent un pivot mal placé, une porte tournée du ")
+            + L("mauvais côté ou un mur trop près. Sélectionnez-la et double-cliquez dessus pour la voir s'ouvrir ; ignorez ce ")
+            + L("message si elle doit rester fermée ou est ouverte par un script."),
+            Entities: blocked.Take(MaxDetails).Select(b => b.Door).ToList()));
     }
 
     // The road network files shipped with the export (areas changed by hand).

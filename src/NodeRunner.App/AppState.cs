@@ -507,6 +507,20 @@ internal sealed class AppState
 
     public CollisionQuery CollisionQuery { get; } = new();
 
+    // Doors opened in the 3D view (display only).
+    public DoorAnimator OpenDoors { get; } = new();
+
+    // Opens or closes the door (or each door) in the 3D view.
+    public void ToggleDoors(IReadOnlyList<MapEntity> doors)
+    {
+        bool open = !doors.Any(OpenDoors.IsOpen);
+        string? message = null;
+        foreach (var door in doors)
+            message = OpenDoors.Set(door, open, this) ?? message;
+        if (message is not null)
+            Notify(message, warning: true);
+    }
+
     // Position that puts the object on the collision below it, or null when the collisions are not loaded yet or
     // nothing lies below.
     public System.Numerics.Vector3? GroundPosition(MapEntity entity, Archetype? archetype)

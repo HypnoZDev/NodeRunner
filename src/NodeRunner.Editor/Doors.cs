@@ -81,7 +81,7 @@ public enum DoorKind
 // types of the game), sliding and garage doors in their middle (measured).
 public readonly record struct DoorShape(DoorKind Kind, float Width, float Height, float Bottom, float Side)
 {
-    private const int ArcSegments = 24;
+    public const int ArcSegments = 24;
 
     public static DoorShape Of(Archetype archetype, string? name)
     {
@@ -115,6 +115,16 @@ public readonly record struct DoorShape(DoorKind Kind, float Width, float Height
             _ => (-limit, limit),
         };
     }
+
+    // The leaf moved in the model's space, `amount` open (0 = closed, 1 = open): swinging doors turn by `angle` degrees
+    // around their hinge, sliding doors move by their width (direction +1 / -1), garage doors go up.
+    public Matrix4x4 Opened(float amount, float angle, float direction = 1f) => Kind switch
+    {
+        DoorKind.Hinged => Matrix4x4.CreateRotationZ(angle * amount * MathF.PI / 180f),
+        DoorKind.Sliding => Matrix4x4.CreateTranslation(direction * Width * 0.95f * amount, 0, 0),
+        DoorKind.Garage => Matrix4x4.CreateTranslation(0, 0, Height * 0.9f * amount),
+        _ => Matrix4x4.Identity,
+    };
 
     // Lines showing how the door opens, in the model's space: swinging doors = the closed leaf and the circle swept by
     // its edge between the angles given (degrees); sliding = arrows along the door; garage = an arrow going up.
@@ -174,7 +184,7 @@ public enum DoorLockFormat
 public static class DoorLockScript
 {
     // Two doors this close (and at the same height) form a double door.
-    private const float PairDistance = 2.8f;
+    public const float PairDistance = 2.8f;
 
     public static List<IReadOnlyList<DoorItem>> Group(IReadOnlyList<DoorItem> doors)
     {

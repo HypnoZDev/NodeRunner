@@ -41,6 +41,33 @@ public class DoorsTests
     }
 
     [Fact]
+    public void WallStopsTheDoorOnItsSide()
+    {
+        // A 1 m leaf hinged at the origin along +X, 2 m high; a wall 0.5 m away on the +Y side.
+        var shape = new DoorShape(DoorKind.Hinged, 1f, 2f, 0f, 1f);
+        var wall = new NodeRunner.Data.Collisions.CollisionMesh
+        {
+            BoundsMin = new Vector3(-2, 0.5f, -1),
+            BoundsMax = new Vector3(2, 0.5f, 3),
+            Vertices = [new(-2, 0.5f, -1), new(2, 0.5f, -1), new(2, 0.5f, 3), new(-2, 0.5f, 3)],
+            Indices = [0, 1, 2, 0, 2, 3],
+            Materials = [0, 0],
+        };
+        var at = Matrix4x4.CreateTranslation(100, 200, 30);
+        var placed = new PlacedCollision(wall, at);
+        var (min, max) = DoorClearance.Reach(shape, -90f, 90f, at, [placed]);
+        Assert.Equal(-90f, min);
+        Assert.InRange(max, 24f, 33f);
+        Assert.True(DoorClearance.IsBlocked(90f, max));
+        Assert.False(DoorClearance.NoPassage(-90f, 90f, min, max));
+        Assert.True(DoorClearance.NoPassage(-90f, 90f, -20f, max));
+        Assert.False(DoorClearance.NoPassage(0f, 45f, 0f, 45f));
+
+        Assert.Equal((-90f, 90f), DoorClearance.Reach(shape, -90f, 90f, at, []));
+        Assert.Equal(Vector3.UnitY, Vector3.Round(Vector3.Transform(Vector3.UnitX, shape.Opened(1f, 90f))));
+    }
+
+    [Fact]
     public void HideScriptUsesNameOrHash()
     {
         var models = new[]

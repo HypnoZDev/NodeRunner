@@ -481,6 +481,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         _state.Thumbnails.Render(_modelRenderer!, imguiRenderer, graphics, _state.World);
         var scene = SceneViewport();
+        ToggleClickedDoor(scene);
         PickClickedObject(scene);
         PickContextObject(scene);
         PickCollision(scene);
@@ -562,10 +563,13 @@ internal sealed unsafe partial class MainForm : Form
             _modelLayer.Update(scene4?.Library, scene4?.Models, gta4.ModelReader,
                 () => scene4 is null ? null : new TextureResolver(scene4.Textures, gta4.TextureReader), _modelRenderer, camera.Position,
                 settings.ViewDistanceMultiplier, hour, modelsEnabled);
+            _modelLayer.Doors = null;
         }
         else
         {
             _modelLayer.Update(_state.World, _modelRenderer, camera.Position, settings.ViewDistanceMultiplier, hour, modelsEnabled);
+            _state.OpenDoors.Update(_state.World.Maps);
+            _modelLayer.Doors = _state.OpenDoors;
         }
 
         // Sun shadows: the objects seen from the sun first, into their own images.
@@ -828,6 +832,8 @@ internal sealed unsafe partial class MainForm : Form
             {
                 if (_state.Tool == TransformTool.Collision)
                     _collisionDragStart = _collisionDragCurrent = e.Location;
+                else if (e.Clicks == 2 && (ModifierKeys & Keys.Control) == 0)
+                    _doorClick = e.Location;
                 else
                     _pickRequest = (e.Location, (ModifierKeys & Keys.Control) != 0);
             }
@@ -914,6 +920,28 @@ internal sealed unsafe partial class MainForm : Form
         _state.SelectCollision(picked, mode);
         if (drag)
             _state.Notify(picked.Count == 0 ? L("aucune surface de collision dans le rectangle") : L($"{_state.SelectedCollision.Count} surface(s) de collision sélectionnée(s)"), warning: picked.Count == 0);
+    }
+
+    private Point? _doorClick;
+
+    // Double click on a door: opens or closes it in the view; on anything else, an ordinary click.
+    private void ToggleClickedDoor(Rectangle scene)
+    {
+        if (_doorClick is not { } click || _modelRenderer is null || _pickBuffer is null)
+            return;
+        _doorClick = null;
+        if (!_state.IsGta4 && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
+        {
+            var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+            if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } door
+                && Doors.IsDoor(names.TryGet(door.ArchetypeHash)))
+            {
+                _state.Select(door);
+                _state.ToggleDoors([door]);
+                return;
+            }
+        }
+        _pickRequest = (click, false);
     }
 
     private void PickClickedObject(Rectangle scene)
@@ -1113,7 +1141,8 @@ internal sealed unsafe partial class MainForm : Form
         {
             var entity = selected[i];
             if (library.GetArchetype(entity.ArchetypeHash) is { } archetype)
-                lines.AddBox(archetype.BoundsMin, archetype.BoundsMax, entity.Transform,
+                lines.AddBox(archetype.BoundsMin, archetype.BoundsMax,
+                    !_state.IsGta4 && _state.OpenDoors.TryGetPose(entity, out var opened) ? opened * entity.Transform : entity.Transform,
                     i == selected.Count - 1 ? SelectionBoxColor : SecondarySelectionBoxColor);
         }
         // How the selected doors open.
@@ -1126,8 +1155,26 @@ internal sealed unsafe partial class MainForm : Form
                 var transform = door.Transform;
                 var tuning = _state.World.DoorTunings?.OfModel(door.ArchetypeHash);
                 var (min, max) = DoorShape.Swing(tuning);
-                foreach (var (from, to) in DoorShape.Of(type, names.TryGet(door.ArchetypeHash)).Lines(min, max))
-                    lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorArcColor);
+                var shape = DoorShape.Of(type, names.TryGet(door.ArchetypeHash));
+                // Where the door touches a wall or furniture: the part of the arc it cannot reach, in red. Checked for
+                // the last selected door only (it reads the collision around it).
+                if (shape.Kind == DoorKind.Hinged && door == selected[^1] && _state.OpenDoors.ClearanceOf(door, _state) is { Blocked: true } clear)
+                {
+                    foreach (var (from, to) in shape.Lines(clear.ReachedMin, clear.ReachedMax))
+                        lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorArcColor);
+                    foreach (var (wanted, reached) in new[] { (clear.WantedMin, clear.ReachedMin), (clear.WantedMax, clear.ReachedMax) })
+                    {
+                        if (!DoorClearance.IsBlocked(wanted, reached))
+                            continue;
+                        foreach (var (from, to) in shape.Lines(MathF.Min(wanted, reached), MathF.Max(wanted, reached)).Take(DoorShape.ArcSegments))
+                            lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorBlockedColor);
+                    }
+                }
+                else
+                {
+                    foreach (var (from, to) in shape.Lines(min, max))
+                        lines.AddLine(Vector3.Transform(from, transform), Vector3.Transform(to, transform), DoorArcColor);
+                }
                 // Where vehicles or people make the door open by itself.
                 if (tuning is { HasTriggerBox: true })
                     lines.AddBox(tuning.TriggerBoxMin, tuning.TriggerBoxMax, transform, DoorTriggerColor);
@@ -1139,6 +1186,7 @@ internal sealed unsafe partial class MainForm : Form
     private const int MaxDoorArcs = 40;
     private static readonly Vector4 DoorArcColor = new(0.35f, 1f, 0.55f, 0.9f);
     private static readonly Vector4 DoorTriggerColor = new(1f, 0.8f, 0.25f, 0.8f);
+    private static readonly Vector4 DoorBlockedColor = new(1f, 0.3f, 0.25f, 0.95f);
 
     private static readonly Vector4 MarkerColor = new(0.30f, 0.55f, 1f, 1f);
 

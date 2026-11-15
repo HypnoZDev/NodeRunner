@@ -280,6 +280,9 @@ internal sealed class ModelLayer : IDisposable
         return slot;
     }
 
+    // Doors opened in the view, drawn at their open position.
+    public DoorAnimator? Doors { get; set; }
+
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
         Action? beforeTranslucent = null, OcclusionCuller? occlusion = null)
     {
@@ -316,17 +319,25 @@ internal sealed class ModelLayer : IDisposable
             }
 
             var model = slot.Model;
-            if (model is null || !frustum.Intersects(entity.SphereCenter, entity.SphereRadius)
-                || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > maxDistance)
+            // An opened door leaves its closed sphere: twice the radius covers it.
+            var transform = entity.Transform;
+            float radius = entity.SphereRadius;
+            if (Doors is { Count: > 0 } doors && doors.TryGetPose(entity.Entity, out var opened))
+            {
+                transform = opened * transform;
+                radius *= 2f;
+            }
+            if (model is null || !frustum.Intersects(entity.SphereCenter, radius)
+                || Vector3.Distance(camera, entity.SphereCenter) - radius > maxDistance)
                 continue;
             // The selection stays visible, so it can still be seen and moved.
             bool isSelected = _selectedSet.Count > 0 && _selectedSet.Contains(entity.Entity);
-            if (occlusion is not null && !isSelected && occlusion.IsHidden(entity.SphereCenter, entity.SphereRadius))
+            if (occlusion is not null && !isSelected && occlusion.IsHidden(entity.SphereCenter, radius))
                 continue;
 
             var tint = isSelected ? SelectedTint : Vector3.One;
-            renderer.Draw(model, entity.Transform, viewProjection, tint);
-            _drawn.Add(new DrawnEntity(entity.Entity, model, entity.Transform, tint));
+            renderer.Draw(model, transform, viewProjection, tint);
+            _drawn.Add(new DrawnEntity(entity.Entity, model, transform, tint));
             triangles += model.TriangleCount;
         }
 
@@ -379,7 +390,9 @@ internal sealed class ModelLayer : IDisposable
                 var model = slot.Model;
                 if (model is null || entity.SphereRadius < minRadius || !frustum.Intersects(entity.SphereCenter, entity.SphereRadius))
                     continue;
-                renderer.DrawShadow(model, entity.Transform, lightViewProjection);
+                var transform = Doors is { Count: > 0 } doors && doors.TryGetPose(entity.Entity, out var opened)
+                    ? opened * entity.Transform : entity.Transform;
+                renderer.DrawShadow(model, transform, lightViewProjection);
             }
         }
     }
