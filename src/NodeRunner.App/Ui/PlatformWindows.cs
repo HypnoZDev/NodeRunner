@@ -76,6 +76,14 @@ internal static unsafe class PlatformWindows
                     viewports[i].PlatformRequestMove = true;
             }
         }
+        // ImGui asserts on a zero DPI scale (viewport not yet placed on a monitor, or a stale monitor index).
+        var all = ImGui.GetPlatformIO().Viewports;
+        for (int i = 0; i < all.Size; i++)
+        {
+            var vp = all[i].NativePtr;
+            if (!(vp->DpiScale > 0f && vp->DpiScale < 99f))
+                vp->DpiScale = 1f;
+        }
     }
 
     // After the main window's interface is drawn.
@@ -106,6 +114,8 @@ internal static unsafe class PlatformWindows
         _origin = _surface!.PointToScreen(Point.Empty);
         _scale = UiTheme.Scale;
         var screens = Screen.AllScreens;
+        if (screens.Length == 0 && Screen.PrimaryScreen is { } primary)
+            screens = [primary];
         ref var monitors = ref ImGui.GetPlatformIO().NativePtr->Monitors;
         if (monitors.Data != IntPtr.Zero)
             ImGui.MemFree(monitors.Data);
