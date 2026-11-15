@@ -44,6 +44,14 @@ public sealed partial class PathNetwork
             _changed.Add(areaId);
     }
 
+    // Speed, density, special type and the other flags of a node: only its own file changes.
+    public void SetValues(PathNode node, PathNodeValues values)
+    {
+        node.Values = values;
+        Revision++;
+        _changed.Add(node.Id.AreaId);
+    }
+
     // Links only reach the neighbouring areas.
     private IEnumerable<int> AreasLinkingTo(PathNodeId id)
     {
@@ -72,7 +80,7 @@ public sealed partial class PathNetwork
     }
 
     // A copy of this network where the changed areas are read again from the game, and the user's saved files (by
-    // area) put back: only node positions are taken from them, links stay the game's. A saved file whose nodes and
+    // area) put back: node positions and values are taken from them, links stay the game's. A saved file whose nodes and
     // links do not match the game's is reported in errors and left out.
     public PathNetwork WithSavedAreas(IGameFileSystem files, IPathNodeReader reader, IReadOnlyDictionary<int, byte[]> saved, List<string> errors)
     {
@@ -103,7 +111,10 @@ public sealed partial class PathNetwork
                     continue;
                 }
                 for (int i = 0; i < area.Nodes.Count; i++)
+                {
                     area.Nodes[i].Position = mine.Nodes[i].Position;
+                    area.Nodes[i].Values = mine.Nodes[i].Values;
+                }
                 network._saved.Add(areaId);
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException)

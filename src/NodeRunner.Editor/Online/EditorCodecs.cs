@@ -374,6 +374,31 @@ internal sealed class PathNodeMoveCodec : EditCodec<PathNodeMoveEdit>
     }
 }
 
+internal sealed class PathNodeValuesCodec : EditCodec<PathNodeValuesEdit>
+{
+    public override string Tag => "path-node-values";
+
+    protected override void Write(PathNodeValuesEdit edit, EditWriter w)
+    {
+        w.Write(edit.Node.Id.AreaId);
+        w.Write(edit.Node.Id.NodeId);
+        var v = edit.After;
+        foreach (byte b in (byte[])[v.Flags0, v.Flags1, v.Flags2, v.Flags3, v.Flags4, v.LinkCountExtra])
+            w.Write(b);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var id = new PathNodeId(r.ReadUShort(), r.ReadUShort());
+        var after = new PathNodeValues(r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var node = network.GetNode(id) ?? throw new InvalidDataException($"Path node {id.AreaId}:{id.NodeId} not found here.");
+        var before = node.Values;
+        network.SetValues(node, after);
+        return new PathNodeValuesEdit(network, node, before, after, description);
+    }
+}
+
 internal sealed class RoomCodec : EditCodec<RoomEdit>
 {
     public override string Tag => "room";

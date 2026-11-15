@@ -2530,24 +2530,11 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             Widgets.PropertyText(L("Catégorie"), PathNodeLayer.CategoryOf(node));
             if (node.StreetNameHash != 0)
                 Widgets.PropertyText(L("Rue"), names.Describe(node.StreetNameHash));
-            Widgets.PropertyText(L("Vitesse"), node.SpeedCategory switch { 0 => L("lente"), 1 => L("normale"), 2 => L("rapide"), _ => L("très rapide") });
-            Widgets.PropertyText(L("Densité de trafic"), $"{node.Density} / 15");
-            if (node.Special != PathNodeSpecialType.None)
-                Widgets.PropertyText(L("Type spécial"), SpecialLabel(node.Special));
-            var flags = new List<string>();
-            if (node.IsJunction) flags.Add("carrefour");
-            if (node.IsHighway) flags.Add("autoroute");
-            if (node.IsTunnel) flags.Add("tunnel");
-            if (node.IsOffRoad) flags.Add("hors-piste");
-            if (node.IsSlipRoad) flags.Add("bretelle");
-            if (node.NoBigVehicles) flags.Add(L("pas de gros véhicules"));
-            if (node.NoGps) flags.Add(L("ignoré par le GPS"));
-            if (node.IsSwitchedOff) flags.Add(L("sans trafic par défaut"));
-            Widgets.PropertyText(L("Particularités"), flags.Count == 0 ? L("aucune") : string.Join(", ", flags));
-            if (!Simple)
-                Widgets.PropertyText(L("Octets bruts"), $"{node.Flags0:X2} {node.Flags1:X2} {node.Flags2:X2} {node.Flags3:X2} {node.Flags4:X2} {node.LinkCountExtra:X2}",
-                    L("Flags 0 à 4 et octet de liens, tels que stockés dans le fichier .ynd"));
+            if (node.IsJunction)
+                Widgets.PropertyText(L("Carrefour"), L("oui"), L("Les données de carrefour du jeu restent les mêmes."));
+            DrawPathNodeValues(node, network);
             Widgets.EndProperties();
+            Widgets.Hint(L("Enregistré dans le .ynd du projet au Ctrl+S, ajouté à l'export FiveM."), wrap: true);
         }
 
         var area = network.GetArea(node.Id.AreaId);
@@ -2571,14 +2558,101 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         }
     }
 
+    private int? _densityDraft;
+
+    // Speed, density, special type and flags of a node; one undo step per change (the density when the slider is
+    // released, the network being rebuilt on every change).
+    private void DrawPathNodeValues(PathNode node, PathNetwork network)
+    {
+        string change = L($"Modifier le nœud {node.Id.AreaId}:{node.Id.NodeId}");
+        var values = node.Values;
+        void Commit(PathNodeValues after)
+        {
+            if (after == values)
+                return;
+            network.SetValues(node, after);
+            state.History.Add(new PathNodeValuesEdit(network, node, values, after, change));
+        }
+
+        Widgets.Property(L("Vitesse"), L("Vitesse des véhicules sur cette portion de route."));
+        string[] speeds = [L("lente"), L("normale"), L("rapide"), L("très rapide")];
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.BeginCombo("##node_speed", speeds[values.Speed]))
+        {
+            for (int i = 0; i < speeds.Length; i++)
+                if (ImGui.Selectable(speeds[i], i == values.Speed))
+                    Commit(values.WithSpeed(i));
+            ImGui.EndCombo();
+        }
+
+        Widgets.Property(L("Densité de trafic"), L("Quantité de véhicules créés ici : 0 = aucun, 15 = le plus."));
+        int density = _densityDraft ?? values.Density;
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.SliderInt("##node_density", ref density, 0, 15, "%d / 15"))
+            _densityDraft = Math.Clamp(density, 0, 15);
+        if (ImGui.IsItemDeactivated())
+        {
+            if (_densityDraft is { } chosen)
+                Commit(values.WithDensity(chosen));
+            _densityDraft = null;
+        }
+
+        Widgets.Property(L("Type spécial"), L("Rôle particulier du nœud : place de parking, passage piéton, arrêt au feu..."));
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.BeginCombo("##node_special", SpecialLabel(values.Special), ImGuiComboFlags.HeightLarge))
+        {
+            foreach (var type in Enum.GetValues<PathNodeSpecialType>())
+                if (ImGui.Selectable(SpecialLabel(type), type == values.Special))
+                    Commit(values.WithSpecial(type));
+            ImGui.EndCombo();
+        }
+
+        foreach (var (flag, label, tooltip) in NodeFlags)
+        {
+            Widgets.Property(label, tooltip);
+            bool on = values.Has(flag);
+            if (ImGui.Checkbox($"##node_flag{(int)flag}", ref on))
+                Commit(values.With(flag, on));
+        }
+
+        if (Simple)
+            return;
+        Widgets.Property(L("Octets bruts"), L("Flags 0 à 4 et 3 bits bas de l'octet de liens, tels que stockés dans le fichier .ynd, en hexadécimal."));
+        string raw = $"{values.Flags0:X2} {values.Flags1:X2} {values.Flags2:X2} {values.Flags3:X2} {values.Flags4:X2} {values.LinkCountExtra:X2}";
+        if (CommitText("##node_raw", raw, "", out string typed) && typed != raw)
+        {
+            var parts = typed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var bytes = new byte[6];
+            bool valid = parts.Length == 6;
+            for (int i = 0; valid && i < 6; i++)
+                valid = byte.TryParse(parts[i], System.Globalization.NumberStyles.HexNumber, null, out bytes[i]);
+            if (valid && bytes[5] < 8)
+                Commit(new PathNodeValues(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]));
+            else
+                state.Notify(L("Octets invalides : 6 nombres hexadécimaux attendus (ex. 02 00 40 00 08 02), le dernier de 00 à 07."), warning: true);
+        }
+    }
+
+    private static (PathNodeFlag Flag, string Label, string Tooltip)[] NodeFlags =>
+    [
+        (PathNodeFlag.Highway, L("Autoroute"), L("Route marquée autoroute (freeway) par le jeu.")),
+        (PathNodeFlag.Tunnel, L("Tunnel"), L("Portion de route dans un tunnel.")),
+        (PathNodeFlag.OffRoad, L("Hors-piste"), L("Chemin de terre ou hors route.")),
+        (PathNodeFlag.SlipRoad, L("Bretelle"), L("Voie d'entrée ou de sortie (slip lane).")),
+        (PathNodeFlag.NoBigVehicles, L("Pas de gros véhicules"), L("Camions et bus évitent ce nœud.")),
+        (PathNodeFlag.NoGps, L("Ignoré par le GPS"), L("Le GPS ne fait pas passer d'itinéraire par ce nœud.")),
+        (PathNodeFlag.SwitchedOff, L("Sans trafic par défaut"), L("Route coupée : le jeu n'y crée pas de trafic, sauf si un script la rouvre.")),
+    ];
+
     private static string SpecialLabel(PathNodeSpecialType type) => type switch
     {
+        PathNodeSpecialType.None => L("aucun"),
         PathNodeSpecialType.ParkingSpace => L("place de parking"),
         PathNodeSpecialType.PedCrossing => L("passage piéton"),
         PathNodeSpecialType.PedAssistedMovement => L("déplacement piéton guidé"),
         PathNodeSpecialType.TrafficLightStop => L("arrêt au feu"),
         PathNodeSpecialType.StopSign => "stop",
-        PathNodeSpecialType.Caution => "prudence",
+        PathNodeSpecialType.Caution => L("prudence"),
         PathNodeSpecialType.PedCrossingNoWait => L("passage piéton sans attente"),
         PathNodeSpecialType.EmergencyVehiclesOnly => L("véhicules d'urgence seulement"),
         PathNodeSpecialType.OffRoadJunction => L("carrefour hors-piste"),

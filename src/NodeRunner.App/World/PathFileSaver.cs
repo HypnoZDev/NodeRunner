@@ -76,6 +76,8 @@ internal static partial class PathFileSaver
             var difference = written.Nodes[i].Position - area.Nodes[i].Position;
             if (MathF.Abs(difference.X) > Tolerance || MathF.Abs(difference.Y) > Tolerance || MathF.Abs(difference.Z) > Tolerance)
                 throw new InvalidDataException(L($"vérification échouée (nœud n° {i}, position hors des limites du format ?)"));
+            if (written.Nodes[i].Values != area.Nodes[i].Values)
+                throw new InvalidDataException(L($"vérification échouée (nœud n° {i}, réglages)"));
         }
     }
 

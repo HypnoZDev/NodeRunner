@@ -771,7 +771,7 @@ internal sealed class AppState
 
     internal void SelectAfterUndo(IEdit? edit, bool undone)
     {
-        if (edit is PathNodeMoveEdit nodeEdit)
+        if (edit is IPathNodeEdit nodeEdit)
         {
             Select(null);
             SelectedPathNode = nodeEdit.Node;

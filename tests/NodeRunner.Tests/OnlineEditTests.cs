@@ -116,7 +116,7 @@ public class OnlineEditTests
         text.Append(CultureInfo.InvariantCulture, $"deleted {w.Library.DeletedCount}\n");
         text.Append(w.Collisions.ToJson()).Append('\n');
         foreach (var node in w.Paths.GetArea(5)!.Nodes)
-            text.Append(CultureInfo.InvariantCulture, $"node {V(node.Position)}\n");
+            text.Append(CultureInfo.InvariantCulture, $"node {V(node.Position)} {node.Values}\n");
         return text.ToString();
     }
 
@@ -218,6 +218,9 @@ public class OnlineEditTests
         var nodeBefore = node.Position;
         a.Paths.MoveNode(node, new Vector3(8, 8, 8));
         Share(new PathNodeMoveEdit(a.Paths, node, nodeBefore, node.Position, "Déplacer un nœud"));
+        var valuesBefore = node.Values;
+        a.Paths.SetValues(node, valuesBefore.WithSpeed(3).WithDensity(9).WithSpecial(PathNodeSpecialType.StopSign).With(PathNodeFlag.Tunnel, true));
+        Share(new PathNodeValuesEdit(a.Paths, node, valuesBefore, node.Values, "Modifier un nœud"));
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

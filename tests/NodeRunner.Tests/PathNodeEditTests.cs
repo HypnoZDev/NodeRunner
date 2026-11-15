@@ -42,6 +42,45 @@ public class PathNodeEditTests
     }
 
     [Fact]
+    public void Changing_values_marks_the_area_and_can_be_undone()
+    {
+        var network = new PathNetwork();
+        var node = new PathNode { Id = new PathNodeId(7, 0), Position = Vector3.Zero, LinkCountExtra = 3, Flags2 = 0x04 };
+        var history = new EditHistory();
+        var before = node.Values;
+        var after = before.WithSpeed(2).WithDensity(12).WithSpecial(PathNodeSpecialType.TrafficLightStop)
+            .With(PathNodeFlag.Highway, true).With(PathNodeFlag.SwitchedOff, true);
+
+        network.SetValues(node, after);
+        history.Add(new PathNodeValuesEdit(network, node, before, after, "Modifier"));
+        Assert.Contains(7, network.ChangedAreas);
+        Assert.Equal(2, node.SpeedCategory);
+        Assert.Equal(12, node.Density);
+        Assert.Equal(PathNodeSpecialType.TrafficLightStop, node.Special);
+        Assert.True(node.IsHighway && node.IsSwitchedOff && node.IsJunction);
+        Assert.Equal(1, node.LinkCountExtra & 1);
+
+        history.Undo();
+        Assert.Equal(before, node.Values);
+        Assert.False(after.With(PathNodeFlag.SwitchedOff, false).Has(PathNodeFlag.SwitchedOff));
+    }
+
+    [Fact]
+    public void Writer_writes_node_values_and_keeps_link_counts()
+    {
+        var source = YndReaderTests.BuildSampleYnd();
+        var area = new YndReader().Read(source, 529);
+        var node = area.Nodes[0];
+        int linkCount = node.LinkCount;
+        node.Values = node.Values.WithSpeed(3).WithDensity(5).With(PathNodeFlag.Tunnel, true).With(PathNodeFlag.NoGps, true);
+
+        var reread = new YndReader().Read(new YndWriter().Write(source, area, (_, link) => link.Length), 529);
+        Assert.Equal(node.Values, reread.Nodes[0].Values);
+        Assert.Equal(linkCount, reread.Nodes[0].LinkCount);
+        Assert.Equal(area.Nodes[1].Values, reread.Nodes[1].Values);
+    }
+
+    [Fact]
     public void Link_length_is_the_game_value_without_its_target()
     {
         var network = new PathNetwork();
