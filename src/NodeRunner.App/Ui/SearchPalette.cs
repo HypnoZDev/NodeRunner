@@ -9,7 +9,7 @@ namespace NodeRunner.App.Ui;
 
 // Global search (Ctrl+K): a small window at the top of the screen with a field and a list of results: a position
 // pasted from a FiveM script, a hash (0x3073333B, or decimal), the nearest objects whose type matches, map files
-// (.ymap) and types (archetypes). Arrows choose, Enter goes there (camera, selection), Escape or a click elsewhere
+// (.ymap, or .wpl for GTA IV) and types (archetypes). Arrows choose, Enter goes there (camera, selection), Escape or a click elsewhere
 // closes it. A typed name whose hash is that of a type without a known name becomes its name everywhere.
 internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, Action<uint> openInViewer)
 {
@@ -49,6 +49,15 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private (MapData Map, string Name)[] _maps = [];
 
     public bool IsOpen => _open;
+
+    // The map shown: GTA V, or GTA IV (read only, no viewer).
+    private MapLibrary? Library => state.IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps;
+
+    private HashNames Names => (state.IsGta4 ? state.Gta4.Scene?.Names : state.World.Names) ?? new HashNames();
+
+    private bool IsBusy => state.IsGta4 ? state.Gta4.IsBusy : state.World.IsBusy;
+
+    private string FileKind => state.IsGta4 ? "WPL" : "YMAP";
 
     public void Open()
     {
@@ -93,10 +102,10 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     {
         if (_justOpened || !ImGui.IsAnyItemActive())
             ImGui.SetKeyboardFocusHere();
-        Widgets.SearchField("##search_query", L("Objet, YMAP, type, ou position FiveM : vector3(x, y, z)"), ref _query,
-            flags: ImGuiInputTextFlags.AutoSelectAll);
+        Widgets.SearchField("##search_query", state.IsGta4 ? L("Objet, WPL, type, ou position : x, y, z") : L("Objet, YMAP, type, ou position FiveM : vector3(x, y, z)"),
+            ref _query, flags: ImGuiInputTextFlags.AutoSelectAll);
 
-        if (_query != _searched || state.World.Maps != _searchedLibrary)
+        if (_query != _searched || Library != _searchedLibrary)
             Search();
 
         if (_flat.Count > 0)
@@ -114,7 +123,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             _open = false;
         else if ((ImGui.IsKeyPressed(ImGuiKey.Enter) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter)) && _flat.Count > 0)
         {
-            if (ImGui.GetIO().KeyCtrl && HasModel(_flat[_index]))
+            if (ImGui.GetIO().KeyCtrl && HasModel(_flat[_index]) && !state.IsGta4)
                 OpenInViewer(_flat[_index]);
             else
                 Activate(_flat[_index]);
@@ -130,7 +139,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             DrawEmpty();
         else
             DrawResults();
-        DrawFooter();
+        DrawFooter(state.IsGta4);
     }
 
     private void Move(int delta)
@@ -144,14 +153,15 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         string query = _query.Trim();
         if (query.Length == 0)
         {
-            Widgets.Hint(L("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9"), wrap: true);
-            if (state.World.Maps is null)
-                Widgets.Hint(state.World.IsBusy ? L("Carte en cours de chargement : seules les positions sont disponibles.") : L("Aucune carte chargée."), wrap: true);
+            Widgets.Hint(state.IsGta4 ? L("Exemples : ag_bigandbushy · manhat01 · 0xA9BC5D05 · -200, 500, 20")
+                : L("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9"), wrap: true);
+            if (Library is null)
+                Widgets.Hint(IsBusy ? L("Carte en cours de chargement : seules les positions sont disponibles.") : L("Aucune carte chargée."), wrap: true);
         }
         else if (query.Length < 2)
             Widgets.Hint(L("Tape au moins 2 caractères."));
         else
-            Widgets.Hint(state.World.Maps is null ? L("Carte en cours de chargement.") : L($"Aucun résultat pour « {query} »."));
+            Widgets.Hint(Library is null ? L("Carte en cours de chargement.") : L($"Aucun résultat pour « {query} »."));
     }
 
     private void DrawResults()
@@ -184,7 +194,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private void DrawRow(ImDrawListPtr drawList, Result result, int index, float height)
     {
         ImGui.PushID(index);
-        bool choice = index == _index && HasModel(result);
+        // GTA IV has no viewer: Enter or a click is enough.
+        bool choice = index == _index && HasModel(result) && !state.IsGta4;
         if (ImGui.Selectable("##row", index == _index, choice ? ImGuiSelectableFlags.AllowOverlap : ImGuiSelectableFlags.None, new Vector2(0, height)))
         {
             ImGui.PopID();
@@ -266,14 +277,15 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         openInViewer(result.Kind == Kind.Object && result.Entity is { } entity ? entity.ArchetypeHash : result.Type);
     }
 
-    private static void DrawFooter()
+    private static void DrawFooter(bool withoutViewer)
     {
         ImGui.Dummy(new Vector2(0, 2));
         var p = ImGui.GetCursorScreenPos();
         ImGui.GetWindowDrawList().AddLine(new Vector2(ImGui.GetWindowPos().X, p.Y), new Vector2(ImGui.GetWindowPos().X + ImGui.GetWindowWidth(), p.Y), Widgets.Col(UiTheme.Divider));
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.PushFont(UiTheme.SmallFont);
-        ImGui.TextColored(UiTheme.TextFaint, L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
+        ImGui.TextColored(UiTheme.TextFaint, withoutViewer ? L("↑ ↓  choisir     Entrée  y aller     Échap  fermer")
+            : L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
         ImGui.PopFont();
     }
 
@@ -282,7 +294,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private void Search()
     {
         _searched = _query;
-        _searchedLibrary = state.World.Maps;
+        _searchedLibrary = Library;
         _groups.Clear();
         _flat.Clear();
         _index = 0;
@@ -292,9 +304,9 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         if (Coordinates.TryParse(query) is { } coordinates)
             AddGroup(L("Position"), [PositionResult(coordinates)]);
 
-        if (query.Length >= 2 && state.World.Maps is { } library)
+        if (query.Length >= 2 && Library is { } library)
         {
-            var names = state.World.Names ?? new HashNames();
+            var names = Names;
             BuildIndex(library, names);
             LearnTypedName(query, library, names);
             if (HashText.TryParse(query) is { } hash && FindHash(hash, library, names) is { Count: > 0 } byHash)
@@ -302,7 +314,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             var groups = new List<Group>
             {
                 new(L("Objets les plus proches"), FindObjects(query, names)),
-                new("YMAP", FindMaps(query)),
+                new(FileKind, FindMaps(query)),
                 new(L("Types (archétypes)"), FindTypes(query, library)),
             };
             // The kind with the best match first (e.g. a YMAP whose exact name was typed), otherwise in this order.
@@ -401,10 +413,15 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private Result TypeResult(uint hash, string name, int score, MapLibrary library, string prefix = "")
     {
         int count = _objectsByType.TryGetValue(hash, out var list) ? list.Count : 0;
-        string file = library.GetArchetypeFile(hash) is { } path ? Path.GetFileName(path) : "?";
+        string file = ArchetypeFile(hash, library) is { } path ? Path.GetFileName(path) : "?";
         string placed = count == 0 ? L("non placé") : count == 1 ? L("1 sur la carte") : L($"{count} sur la carte");
         return new Result(Kind.Type, Icons.Package, name, $"{prefix}{file} · {placed}", score) { Type = hash };
     }
+
+    // GTA V: the .ytyp declaring the type; GTA IV: the model file (the .ide files are not kept).
+    private string? ArchetypeFile(uint hash, MapLibrary library) =>
+        !state.IsGta4 ? library.GetArchetypeFile(hash)
+        : library.GetArchetype(hash) is { } archetype ? state.Gta4.Scene?.Models.Locate(archetype)?.Path : null;
 
     private bool IsType(uint hash, MapLibrary library) => library.GetArchetype(hash) is not null || _objectsByType.ContainsKey(hash);
 
@@ -414,7 +431,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         if (IsType(hash, library))
             results.Add(TypeResult(hash, names.Describe(hash), -1, library, $"0x{hash:X8} · "));
         foreach (var (map, name) in _maps.Where(m => m.Map.NameHash == hash).Take(MaxMaps))
-            results.Add(new Result(Kind.Map, Icons.File, name, L($"0x{hash:X8} · YMAP · {map.Entities.Count} objets"), -1) { Map = map });
+            results.Add(new Result(Kind.Map, Icons.File, name, L($"0x{hash:X8} · {FileKind} · {map.Entities.Count} objets"), -1) { Map = map });
         return results;
     }
 
@@ -470,6 +487,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             case Kind.Type:
                 if (_objectsByType.TryGetValue(result.Type, out var entities) && entities.Count > 0)
                     GoTo(entities.MinBy(e => Distance(e.Position))!);
+                else if (state.IsGta4)
+                    state.Notify(L("Ce type n'est placé nulle part sur la carte"), warning: true);
                 else
                     openInViewer(result.Type); // Placed nowhere: the viewer shows it (and can place it).
                 break;
@@ -479,7 +498,10 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private void GoTo(MapEntity entity)
     {
         state.Marker = null;
-        state.Select(entity);
+        if (state.IsGta4)
+            state.Gta4Selection = entity;
+        else
+            state.Select(entity);
         state.FocusOn(entity);
     }
 
@@ -489,7 +511,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         if (c.Z is { } z)
             return z;
         var point = new Vector2(c.X, c.Y);
-        var nearest = state.World.Maps?.EntitiesAround(point, 80f)
+        var nearest = Library?.EntitiesAround(point, 80f)
             .Where(e => e.Interior is null && !e.IsInterior && e.LodLevel is LodLevel.Hd or LodLevel.OrphanHd)
             .MinBy(e => Vector2.DistanceSquared(new Vector2(e.Position.X, e.Position.Y), point));
         return nearest?.Position.Z ?? state.Camera.Position.Z;
