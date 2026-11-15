@@ -62,6 +62,24 @@ public sealed class AudioOcclusionCatalog
 
     public string? PathOf(uint proxyHash) => _paths.GetValueOrDefault(proxyHash);
 
+    // The content of the files, read one by one as enumerated (those that cannot be read are skipped).
+    public IEnumerable<byte[]> Files()
+    {
+        foreach (var path in _paths.Values)
+        {
+            byte[]? data = null;
+            try
+            {
+                data = _content.ReadFile(path);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
+            {
+            }
+            if (data is not null)
+                yield return data;
+        }
+    }
+
     // The file's content, or the reason it could not be read; (null, null) when there is no such file.
     public (AudioOcclusion? Occlusion, string? Error) Get(uint proxyHash)
     {

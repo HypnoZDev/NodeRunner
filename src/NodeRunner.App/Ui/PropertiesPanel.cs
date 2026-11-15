@@ -1919,11 +1919,13 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
 
         if (view.OriginalLost)
             WarningText(L($"Intérieur déplacé : son occlusion audio d'origine ({view.FileHash}.ymt) ne s'applique plus, les sons traversent ses murs. ")
-                + L("Elle devra être refaite à la nouvelle position."));
+                + L("L'export FiveM en crée une nouvelle à cette position."));
         else if (!view.Found && view.Error is null)
-            Widgets.Hint(L("Cet intérieur n'a pas d'occlusion audio à cet endroit : les sons traversent ses murs."), wrap: true);
+            Widgets.Hint(L("Cet intérieur n'a pas d'occlusion audio à cet endroit : les sons traversent ses murs. ")
+                + L("L'export FiveM en crée une pour les intérieurs placés par le projet."), wrap: true);
         if (view.Mismatch)
-            WarningText(L("Le fichier ne correspond plus aux salles et portails de l'intérieur (modifiés depuis ?) : marqués « ? » ci-dessous."));
+            WarningText(L("Le fichier ne correspond plus aux salles et portails de l'intérieur (modifiés depuis ?) : marqués « ? » ci-dessous. ")
+                + L("S'ils ont été modifiés dans le projet, l'export FiveM refait le fichier."));
         if (view.Lines.Count > 0 && ImGui.TreeNode(L($"Détail des passages ({view.Lines.Count})###audio_links")))
         {
             ImGui.PushTextWrapPos(0);

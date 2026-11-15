@@ -79,6 +79,8 @@ internal static class ResourceExporter
         CopyProjectFiles(own, stream, report, copied);
         fromLibrary = LibraryFileSaver.Copy(world, stream, report.Saved.Concat(copied).ToList(), report);
         var files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();
+        AudioOcclusionFileSaver.Save(world, files, interiorFiles, stream, report);
+        files = report.Saved.Concat(copied).Concat(fromLibrary).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var newTypes = NewTypeFiles(world, files);
         ManifestFileSaver.Save(world, files, newTypes, stream, report);
         files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();

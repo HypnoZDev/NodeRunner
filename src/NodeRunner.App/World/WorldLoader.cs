@@ -153,6 +153,20 @@ internal sealed class WorldLoader : IDisposable
         }
     }
 
+    // The same, waiting for the listing (export).
+    public AudioOcclusionCatalog? WaitAudioOcclusion()
+    {
+        _ = AudioOcclusion;
+        try
+        {
+            return _audioOcclusion?.GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
     private GameContent? _audioOcclusionContent;
     private Task<AudioOcclusionCatalog>? _audioOcclusion;
 
