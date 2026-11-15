@@ -29,6 +29,11 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
     private void DrawLeft()
     {
         var settings = state.Settings;
+        if (state.IsGta4)
+        {
+            Item(Icons.Globe, World.Gta4World.EpisodeName(state.Gta4.Episode));
+            return;
+        }
         if (state.Project is { } project)
             Item(Icons.FolderOpen, project.Name);
         else

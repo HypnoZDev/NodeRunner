@@ -1921,10 +1921,15 @@ internal sealed class AppState
         SaveSettings();
     }
 
+    // Projects are FiveM resources of the GTA V map.
+    private static string Gta4ProjectsBlocked => L("Les projets sont des ressources FiveM pour GTA V : relance NodeRunner sur GTA V pour en ouvrir un.");
+
     // Opens the project of a folder (holding projet.json) and loads its map. The other projects shown are closed,
     // unless kept (the same project opened again).
     public string? OpenProject(string folder, bool keepOthers = false)
     {
+        if (IsGta4)
+            return Gta4ProjectsBlocked;
         if (Online.Blocks() is { } blocked)
             return blocked;
         MapProject project;
@@ -1945,6 +1950,8 @@ internal sealed class AppState
     // Creates a project in a folder and opens it.
     public string? CreateProject(string folder, string name)
     {
+        if (IsGta4)
+            return Gta4ProjectsBlocked;
         if (Online.Blocks() is { } blocked)
             return blocked;
         bool reload = Project is not null || MapProject.HasMapFiles(folder);
@@ -2089,8 +2096,12 @@ internal sealed class AppState
         }
     }
 
+    // Each game keeps its own layers: hiding the GTA V boxes does not hide those of Liberty City.
+    private HashSet<string> HiddenLayers => IsGta4 ? Settings.Gta4HiddenLayers : Settings.HiddenLayers;
+    private HashSet<string> ShownLayers => IsGta4 ? Settings.Gta4ShownLayers : Settings.ShownLayers;
+
     public bool IsLayerVisible(string layer) =>
-        IsHiddenByDefault(layer) ? Settings.ShownLayers.Contains(layer) : !Settings.HiddenLayers.Contains(layer);
+        IsHiddenByDefault(layer) ? ShownLayers.Contains(layer) : !HiddenLayers.Contains(layer);
 
     private static bool IsHiddenByDefault(string layer) =>
         layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
@@ -2100,8 +2111,8 @@ internal sealed class AppState
     public void SetLayerVisible(string layer, bool visible)
     {
         bool changed = IsHiddenByDefault(layer)
-            ? visible ? Settings.ShownLayers.Add(layer) : Settings.ShownLayers.Remove(layer)
-            : visible ? Settings.HiddenLayers.Remove(layer) : Settings.HiddenLayers.Add(layer);
+            ? visible ? ShownLayers.Add(layer) : ShownLayers.Remove(layer)
+            : visible ? HiddenLayers.Remove(layer) : HiddenLayers.Add(layer);
         if (changed)
             SaveSettings();
     }

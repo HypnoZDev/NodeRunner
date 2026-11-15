@@ -59,15 +59,20 @@ public static class Gta4PathNodes
         return new Gta4PathArea(index, nodes, links);
     }
 
-    // Every area of the base game that has nodes; unreadable areas are skipped.
-    public static List<Gta4PathArea> ReadAll(Gta4FileSystem files)
+    // Every area that has nodes, from the archive of the game or of an episode; unreadable areas are skipped.
+    public static List<Gta4PathArea> ReadAll(Gta4FileSystem files, Gta4Episode episode = Gta4Episode.Base)
     {
+        string folder = Gta4Map.EpisodeFolder(episode);
+        // An episode without its own road network uses the one of GTA IV.
+        string archive = folder.Length > 0 && files.EnumerateArchives().Contains($@"{folder}\{Archive}", StringComparer.OrdinalIgnoreCase)
+            ? $@"{folder}\{Archive}"
+            : Archive;
         var areas = new List<Gta4PathArea>();
         for (int i = 0; i < AreaCount; i++)
         {
             try
             {
-                if (files.ReadFile($@"{Archive}\nodes{i}.nod") is { Length: > HeaderSize } data)
+                if (files.ReadFile($@"{archive}\nodes{i}.nod") is { Length: > HeaderSize } data)
                     areas.Add(Read(data, i));
             }
             catch (InvalidDataException)

@@ -661,17 +661,14 @@ internal sealed unsafe partial class MainForm : Form
         DrawMarker(lines, viewProjection);
     }
 
-    private Gta4MapBoxes? _gta4MapShown;
+    private bool _gta4CameraPending;
 
-    // Once the GTA IV map is read: a camera left outside Liberty City (a GTA V position) is moved above its centre.
+    // Once the GTA IV map is read, in a first GTA IV session: the camera is moved above the centre of Liberty City.
     private void ShowGta4Map(Gta4MapBoxes? boxes)
     {
-        if (boxes is null || boxes == _gta4MapShown)
+        if (boxes is null || boxes.Count == 0 || !_gta4CameraPending)
             return;
-        _gta4MapShown = boxes;
-        var position = _state.Camera.Position;
-        if (boxes.Count == 0 || (position.X >= boxes.Min.X && position.X <= boxes.Max.X && position.Y >= boxes.Min.Y && position.Y <= boxes.Max.Y))
-            return;
+        _gta4CameraPending = false;
         var center = (boxes.Min + boxes.Max) * 0.5f;
         _state.Camera.Position = new Vector3(center.X, center.Y - 400f, 350f);
         _state.Camera.LookAt(new Vector3(center.X, center.Y, 0f));
@@ -1118,7 +1115,10 @@ internal sealed unsafe partial class MainForm : Form
     private void RestoreCamera()
     {
         var camera = _state.Camera;
-        if (_state.Settings.Camera is { } saved)
+        // Each game keeps its own camera; a first GTA IV session starts above Liberty City (ShowGta4Map).
+        var saved = _state.IsGta4 ? _state.Settings.Gta4Camera : _state.Settings.Camera;
+        _gta4CameraPending = _state.IsGta4 && saved is null;
+        if (saved is not null)
         {
             camera.Position = new Vector3(saved.X, saved.Y, saved.Z);
             camera.Yaw = saved.Yaw;
@@ -1136,7 +1136,7 @@ internal sealed unsafe partial class MainForm : Form
     private void SaveCamera()
     {
         var camera = _state.Camera;
-        _state.Settings.Camera = new CameraSettings
+        var saved = new CameraSettings
         {
             X = camera.Position.X,
             Y = camera.Position.Y,
@@ -1145,6 +1145,10 @@ internal sealed unsafe partial class MainForm : Form
             Pitch = camera.Pitch,
             Speed = _cameraController.Speed,
         };
+        if (_state.IsGta4)
+            _state.Settings.Gta4Camera = saved;
+        else
+            _state.Settings.Camera = saved;
         _state.SaveSettings();
     }
 

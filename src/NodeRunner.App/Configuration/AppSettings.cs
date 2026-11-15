@@ -20,6 +20,12 @@ public sealed class AppSettings
     public string? Gta4Folder { get; set; }
     public GameKind LastGame { get; set; } = GameKind.Gta5;
 
+    // GTA IV session: the game or episode whose map is shown, the camera and the layers, kept apart from GTA V.
+    public NodeRunner.Data.Native.Gta4.Gta4Episode Gta4Episode { get; set; }
+    public CameraSettings? Gta4Camera { get; set; }
+    public HashSet<string> Gta4HiddenLayers { get; set; } = new();
+    public HashSet<string> Gta4ShownLayers { get; set; } = new();
+
     public bool VSync { get; set; } = true;
 
     // Images per second at most; 0 = no limit (other than VSync).

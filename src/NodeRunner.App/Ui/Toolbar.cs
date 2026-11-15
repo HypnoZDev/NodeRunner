@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.App.World;
 using NodeRunner.Data.FileSystem;
 
 namespace NodeRunner.App.Ui;
@@ -29,16 +30,15 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
 
     private void DrawContent()
     {
-        DrawProject();
-        // GTA IV session: the GTA V folder has nothing to do with what is shown.
+        // GTA IV session: projects (FiveM resources) and the GTA V folder have nothing to do with what is shown.
         if (!state.IsGta4)
         {
+            DrawProject();
             Widgets.ToolbarSeparator();
             if (Widgets.ToolbarButton(Icons.HardDrive, "GTA V", L("Choisir le dossier d'installation de GTA V")))
                 browseGameFolder();
+            Widgets.ToolbarSeparator();
         }
-
-        Widgets.ToolbarSeparator();
         var history = state.History;
         string saveTip = state.Project is { } project
             ? L($"Enregistrer les fichiers modifiés dans le projet « {project.Name} » (Ctrl+S)")
@@ -61,9 +61,16 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         // Flat combo arrows, same colour as the field.
         ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetStyle().Colors[(int)ImGuiCol.FrameBg]);
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.GetStyle().Colors[(int)ImGuiCol.FrameBgHovered]);
-        DrawMapVersion();
-        ImGui.SameLine();
-        DrawDlcChoice();
+        if (state.IsGta4)
+        {
+            DrawGta4Episode();
+        }
+        else
+        {
+            DrawMapVersion();
+            ImGui.SameLine();
+            DrawDlcChoice();
+        }
         ImGui.PopStyleColor(2);
 
         Widgets.ToolbarSeparator();
@@ -156,6 +163,31 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         }
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(L("Version de la carte"));
+    }
+
+    // GTA IV or one of its episodes: each has its own version of the map.
+    private void DrawGta4Episode()
+    {
+        var gta4 = state.Gta4;
+        var current = gta4.Episode;
+        ImGui.SetNextItemWidth(230);
+        ImGui.BeginDisabled(!gta4.IsLoaded);
+        if (ImGui.BeginCombo("##gta4_episode", $"{Icons.Globe}  {Gta4World.EpisodeName(current)}"))
+        {
+            foreach (var episode in gta4.InstalledEpisodes)
+            {
+                if (ImGui.Selectable(Gta4World.EpisodeName(episode), episode == current) && episode != current)
+                {
+                    state.Settings.Gta4Episode = episode;
+                    state.SaveSettings();
+                    gta4.SetEpisode(episode);
+                }
+            }
+            ImGui.EndCombo();
+        }
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Carte affichée : GTA IV ou l'un de ses épisodes (Episodes from Liberty City),\nqui changent certains quartiers."));
     }
 
     public static string VersionName(MapVersion version) =>

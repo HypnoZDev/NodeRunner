@@ -33,7 +33,6 @@ internal static class Program
         var state = new AppState(paths, settings);
         _state = state;
         state.RedetectGame();
-        state.RestoreProject();
         state.SaveSettings(); // Creates settings.json on first launch so the user can find it.
 
         try
@@ -51,10 +50,16 @@ internal static class Program
                 {
                     started = true;
                     state.ActiveGame = chosen;
+                    // Projects belong to GTA V: the last one is opened again only there.
                     if (chosen == GameKind.Gta4)
-                        state.Gta4.Load(state.Gta4Folder!);
+                    {
+                        state.Gta4.Load(state.Gta4Folder!, settings.Gta4Episode);
+                    }
                     else
+                    {
+                        state.RestoreProject();
                         state.World.Load(state.Game, settings.MapSelection, settings.HiddenScriptedMaps, state.SaveFolder);
+                    }
                     if (hasGta5 && hasGta4 && settings.LastGame != chosen)
                     {
                         settings.LastGame = chosen;
@@ -69,6 +74,10 @@ internal static class Program
                 // Closed before a choice (Alt+F4): the highlighted game.
                 if (!started)
                     Start(game);
+            }
+            else
+            {
+                state.RestoreProject();
             }
             Application.Run(main);
         }

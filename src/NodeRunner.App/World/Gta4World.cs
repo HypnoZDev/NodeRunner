@@ -29,7 +29,13 @@ internal sealed class Gta4World : IDisposable
 
     public bool IsLoaded => !_busy && Folder is not null && _error is null;
 
-    public void Load(string folder)
+    // Game or episode whose map is shown.
+    public Gta4Episode Episode { get; private set; }
+
+    // Episodes whose files are present (GTA IV first), known once the archives are open.
+    public IReadOnlyList<Gta4Episode> InstalledEpisodes { get; private set; } = [];
+
+    public void Load(string folder, Gta4Episode episode)
     {
         if (_busy)
             return;
@@ -38,20 +44,17 @@ internal sealed class Gta4World : IDisposable
         _paths = null;
         _boxes = null;
         Folder = folder;
+        Episode = episode;
         Task.Run(() =>
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 Files.Open(folder, new Progress(s => _status = s));
-                _status = L("Lecture des pathnodes");
-                _paths = Gta4PathNodes.ReadAll(Files);
-                _status = L("Lecture de la carte");
-                var map = Gta4Map.Load(Files);
-                foreach (string error in map.Errors)
-                    Diagnostics.ErrorLog.Add(L("Carte de GTA IV"), error);
-                _boxes = new Gta4MapBoxes(map);
-                _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
+                InstalledEpisodes = Enum.GetValues<Gta4Episode>().Where(e => Gta4Map.IsInstalled(Files, e)).ToList();
+                if (!InstalledEpisodes.Contains(episode))
+                    Episode = Gta4Episode.Base;
+                ReadMap(clock);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -64,6 +67,52 @@ internal sealed class Gta4World : IDisposable
             }
         });
     }
+
+    // Shows the map of another episode; the archives stay open.
+    public void SetEpisode(Gta4Episode episode)
+    {
+        if (_busy || !IsLoaded || episode == Episode)
+            return;
+        _busy = true;
+        _paths = null;
+        _boxes = null;
+        Episode = episode;
+        Task.Run(() =>
+        {
+            try
+            {
+                ReadMap(System.Diagnostics.Stopwatch.StartNew());
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _error = ex.Message;
+                _paths ??= [];
+            }
+            finally
+            {
+                _busy = false;
+            }
+        });
+    }
+
+    private void ReadMap(System.Diagnostics.Stopwatch clock)
+    {
+        _status = L("Lecture des pathnodes");
+        _paths = Gta4PathNodes.ReadAll(Files, Episode);
+        _status = L("Lecture de la carte");
+        var map = Gta4Map.Load(Files, Episode);
+        foreach (string error in map.Errors)
+            Diagnostics.ErrorLog.Add(L("Carte de GTA IV"), error);
+        _boxes = new Gta4MapBoxes(map);
+        _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
+    }
+
+    public static string EpisodeName(Gta4Episode episode) => episode switch
+    {
+        Gta4Episode.LostAndDamned => "The Lost and Damned",
+        Gta4Episode.BalladOfGayTony => "The Ballad of Gay Tony",
+        _ => "GTA IV",
+    };
 
     public void Dispose() => Files.Dispose();
 

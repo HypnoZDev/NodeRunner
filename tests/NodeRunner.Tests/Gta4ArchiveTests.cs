@@ -304,10 +304,42 @@ public class Gta4MapTests : IDisposable
     [InlineData("platform:/../outside.ide", null)]
     public void GamePath_MapsDevicesToFolders(string device, string? expected) => Assert.Equal(expected, Gta4Map.GamePath(device));
 
+    [Fact]
+    public void ApplyEpisode_ReplacesPlacementsAndAddsDefinitions()
+    {
+        List<(string Kind, string Path)> base_ =
+        [
+            ("IDE", @"pc\data\maps\manhat\manhat01.ide"),
+            ("IPL", @"pc\data\maps\manhat\manhat01.ipl"),
+            ("IPL", @"common\data\maps\ambient.ipl"),
+            ("IPL", @"pc\data\maps\manhat\manhat02.ipl"),
+        ];
+        const string content = """
+            # data files
+            RADIO common/data/radiohud.dat
+            IDE pc/data/maps/manhat/manhat01.ide
+            IPL pc/data/maps/manhat/manhat01.ipl
+            DELAYED_IDE pc/data/maps/interiors/Int_1.ide
+            DISABLE_FILE common:/DATA/MAPS/AMBIENT.IPL
+            IPL ../outside.ipl
+            """;
+
+        var entries = Gta4Map.ApplyEpisode(base_, "TLAD", content);
+
+        Assert.Equal(
+        [
+            ("IDE", @"pc\data\maps\manhat\manhat01.ide"),
+            ("IPL", @"tlad\pc\data\maps\manhat\manhat01.ipl"),
+            ("IPL", @"pc\data\maps\manhat\manhat02.ipl"),
+            ("IDE", @"tlad\pc\data\maps\manhat\manhat01.ide"),
+            ("IDE", @"tlad\pc\data\maps\interiors\int_1.ide"),
+        ], entries);
+    }
+
     // An unencrypted ".img" holding one file stored as is.
     private static byte[] PlainArchive(string name, byte[] content)
     {
-        byte[] nameBytes = Encoding.ASCII.GetBytes(name + " ");
+        byte[] nameBytes = Encoding.ASCII.GetBytes(name + "\0");
         int blocks = (content.Length + ImgArchive.BlockSize - 1) / ImgArchive.BlockSize;
         var output = new byte[(1 + blocks) * ImgArchive.BlockSize];
         var span = output.AsSpan();
