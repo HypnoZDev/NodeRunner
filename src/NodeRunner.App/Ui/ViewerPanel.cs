@@ -59,8 +59,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     public void OpenArchetype(uint archetypeHash)
     {
-        if (Library?.GetArchetype(archetypeHash) is not { } archetype || Models?.Locate(archetype) is not { } location)
-            return;
+        if (Library?.GetArchetype(archetypeHash) is { } archetype)
+            OpenArchetype(archetype);
+    }
+
+    // A type as read from its file (it may not be the one the loaded map uses).
+    public bool OpenArchetype(Archetype archetype)
+    {
+        if (Models?.Locate(archetype) is not { } location)
+            return false;
+        uint archetypeHash = archetype.NameHash;
         string name = Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
         if (IsGta4 && !name.StartsWith("0x", StringComparison.Ordinal))
             name = name.ToLowerInvariant();
@@ -68,6 +76,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _filter = 1;
         _search = "";
         _scrollToItem = true;
+        return true;
     }
 
     public void OpenFile(string path)

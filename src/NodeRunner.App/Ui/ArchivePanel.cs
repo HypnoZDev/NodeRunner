@@ -10,8 +10,11 @@ namespace NodeRunner.App.Ui;
 // Dockable "Explorateur d'archives" panel: the archives of the session's game (GTA V or IV) as a tree (or a search
 // through every file), the size and type of each file, and actions by type: model in the viewer, YMAP on the map, text
 // shown, extraction to disk.
-internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInViewer, Action<MapData> revealMap)
+internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInViewer, Action<MapData> revealMap,
+    Action<Archetype> openTypeInViewer)
 {
+    private readonly TypesWindow _typesWindow = new(state, openTypeInViewer);
+
     public const string Title = $"{Icons.Package}  Explorateur d'archives###Archives";
     private const string TextTitle = $"{Icons.File}  Texte###ArchiveText";
     private const int MaxSearchResults = 5000;
@@ -52,6 +55,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         ImGui.End();
         if (_showText)
             DrawTextWindow();
+        _typesWindow.Draw();
     }
 
     private void UpdateTree()
@@ -227,6 +231,8 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
                 openInViewer(node.Path);
             if (extension == ".ymap" && ImGui.MenuItem(L($"{Icons.MapPinned}  Aller sur la carte")))
                 GoToMap(node);
+            if (extension == ".ytyp" && ImGui.MenuItem(L($"{Icons.Boxes}  Voir les types")))
+                ShowTypes(node);
             if (IsTextFile(node.Name) && ImGui.MenuItem(L($"{Icons.File}  Afficher le texte")))
                 ShowText(node);
             if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Extraire...")))
@@ -253,6 +259,9 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             case ".ymap":
                 GoToMap(node);
                 break;
+            case ".ytyp":
+                ShowTypes(node);
+                break;
             default:
                 if (IsTextFile(node.Name))
                     ShowText(node);
@@ -277,6 +286,12 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         [".xml", ".meta", ".txt", ".dat", ".ini", ".lua", ".json", ".csv", ".cfg", ".ide", ".ipl", ".log", ".pso.xml"];
 
     private static bool IsTextFile(string name) => TextExtensions.Contains(Path.GetExtension(name).ToLowerInvariant());
+
+    private void ShowTypes(Node node)
+    {
+        if (_tree!.Files.ReadFile(node.Path) is { } data)
+            _typesWindow.Open(node.Path, data);
+    }
 
     private void ShowText(Node node)
     {

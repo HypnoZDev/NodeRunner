@@ -38,7 +38,7 @@ internal sealed class MainUi
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
-        _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap);
+        _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap, OpenTypeInViewer);
         _projectPanel = new ProjectPanel(state);
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true, () => SaveSoloPackRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
@@ -93,6 +93,17 @@ internal sealed class MainUi
     }
 
     private bool _focusLibrary;
+
+    private void OpenTypeInViewer(NodeRunner.Data.Maps.Archetype archetype)
+    {
+        if (!_viewerPanel.OpenArchetype(archetype))
+        {
+            _state.Notify(L("Modèle introuvable pour ce type (aucun fichier .ydr / .ydd / .yft de ce nom)"), warning: true);
+            return;
+        }
+        _showViewer = true;
+        ImGui.SetWindowFocus(ViewerPanel.Title);
+    }
 
     private void OpenFileInViewer(string path)
     {
