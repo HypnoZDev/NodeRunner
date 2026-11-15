@@ -121,6 +121,11 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
             LastError = L("Ouvrez ou créez d'abord un projet : la session partage le projet ouvert.");
             return;
         }
+        if (state.ExtraProjects.Count > 0)
+        {
+            LastError = L("La session partage un seul projet : retirez d'abord de la vue les autres projets ouverts (menu Fichier).");
+            return;
+        }
         if (state.World is not { Maps: not null, IsBusy: false })
         {
             LastError = L("Attendez la fin du chargement de la carte.");

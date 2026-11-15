@@ -7,7 +7,8 @@ namespace NodeRunner.Data.Native.Archives;
 // The game's files plus the type, model and texture files of two folders, each seen as one more archive activated after
 // the game: the prop library shared by every project (GameContent.LibraryRoot), then the project's "stream" folder
 // (GameContent.LooseFilesRoot). Like in FiveM, a file wins over the game's files of the same name, and the project's
-// over the library's. Maps (.ymap) of the project are handled by the project itself; those of the library are ignored.
+// over the library's. Other projects shown with the open one add their stream folders under the same root, below the
+// open project's. Maps (.ymap) of the project are handled by the project itself; those of the library are ignored.
 // A collision file (.ybn) changed in the project keeps its first version in the "originaux" folder next to the stream
 // folder: that one is read, the changes are made on it again.
 public sealed class LooseFileOverlay : IGameFileSystem
@@ -21,6 +22,8 @@ public sealed class LooseFileOverlay : IGameFileSystem
     private readonly IGameFileSystem _game;
     private readonly string? _originals;
     private readonly Dictionary<string, string> _projectPaths = new(StringComparer.OrdinalIgnoreCase);
+    // Files of the other projects shown with the open one, under the same root; the open project's win.
+    private readonly Dictionary<string, (string Disk, string Stream)> _extraPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (string Disk, string Pack)> _libraryPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _libraryDuplicates = [];
 
@@ -41,7 +44,10 @@ public sealed class LooseFileOverlay : IGameFileSystem
 
     // The game's file system alone when neither folder holds any of these files. Skipped: files of the project's folder
     // that are not the project's own (a game's .ybn rewritten with the project's changes).
-    public static IGameFileSystem Over(IGameFileSystem game, string? folder, IReadOnlySet<string>? skipped = null, string? library = null)
+    // Extras: stream folders of other projects shown with the open one, read as they are (their changed collisions
+    // included).
+    public static IGameFileSystem Over(IGameFileSystem game, string? folder, IReadOnlySet<string>? skipped = null, string? library = null,
+        IReadOnlyList<string>? extras = null)
     {
         var overlay = new LooseFileOverlay(game, folder);
         foreach (var file in FilesOf(folder))
@@ -49,8 +55,17 @@ public sealed class LooseFileOverlay : IGameFileSystem
             if (skipped?.Contains(Path.GetFileName(file)) != true)
                 overlay._projectPaths.TryAdd($@"{GameContent.LooseFilesRoot}\{Path.GetFileName(file)}", file);
         }
+        foreach (var extra in extras ?? [])
+        {
+            foreach (var file in FilesOf(extra))
+            {
+                string path = $@"{GameContent.LooseFilesRoot}\{Path.GetFileName(file)}";
+                if (!overlay._projectPaths.ContainsKey(path))
+                    overlay._extraPaths.TryAdd(path, (file, extra));
+            }
+        }
         overlay.AddLibrary(library);
-        return overlay._projectPaths.Count == 0 && overlay._libraryPaths.Count == 0 ? game : overlay;
+        return overlay._projectPaths.Count == 0 && overlay._extraPaths.Count == 0 && overlay._libraryPaths.Count == 0 ? game : overlay;
     }
 
     private static List<string> FilesOf(string? folder)
@@ -115,6 +130,9 @@ public sealed class LooseFileOverlay : IGameFileSystem
     // The file of the project's stream folder behind a path of this overlay, or null for a game's or library's file.
     public string? StreamFileOf(string path) => _projectPaths.GetValueOrDefault(path);
 
+    // The stream folder of the other project whose file is behind a path of this overlay, or null.
+    public string? ExtraStreamOf(string path) => _extraPaths.TryGetValue(path, out var file) ? file.Stream : null;
+
     // The file of the library behind a path of this overlay, and its pack.
     public (string Disk, string Pack)? LibraryFileOf(string path) =>
         _libraryPaths.TryGetValue(path, out var file) ? file : null;
@@ -129,6 +147,7 @@ public sealed class LooseFileOverlay : IGameFileSystem
 
     private string? Disk(string path) =>
         _projectPaths.TryGetValue(path, out var own) ? own
+        : _extraPaths.TryGetValue(path, out var extra) ? extra.Disk
         : _libraryPaths.TryGetValue(path, out var shared) ? shared.Disk
         : null;
 
@@ -184,6 +203,7 @@ public sealed class LooseFileOverlay : IGameFileSystem
         string ext = extension;
         return _game.EnumerateFiles(extension)
             .Concat(_libraryPaths.Keys.Where(p => p.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+            .Concat(_extraPaths.Keys.Where(p => p.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
             .Concat(_projectPaths.Keys.Where(p => p.EndsWith(ext, StringComparison.OrdinalIgnoreCase)));
     }
 
@@ -192,7 +212,7 @@ public sealed class LooseFileOverlay : IGameFileSystem
         var archives = _game.EnumerateArchives();
         if (_libraryPaths.Count > 0)
             archives = archives.Append(GameContent.LibraryRoot);
-        if (_projectPaths.Count > 0)
+        if (_projectPaths.Count > 0 || _extraPaths.Count > 0)
             archives = archives.Append(GameContent.LooseFilesRoot);
         return archives;
     }

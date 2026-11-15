@@ -102,6 +102,9 @@ public sealed class AppSettings
 
     public string? ProjectFolder { get; set; }
 
+    // Other projects shown with the open one (each saved into its own folder).
+    public List<string> ExtraProjectFolders { get; set; } = [];
+
     public List<string> RecentProjects { get; set; } = [];
 
     public string? ProjectsFolder { get; set; }

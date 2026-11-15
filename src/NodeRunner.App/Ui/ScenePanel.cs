@@ -272,8 +272,8 @@ internal sealed unsafe class ScenePanel(AppState state)
                 state.FocusOn(entity);
         }
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal) && row.Map.FilePath is { } path && entity is null)
-            ImGui.SetTooltip(row.Map.IsCustom ? L($"YMAP du projet (objets ajoutés), absent des fichiers du jeu\n{(row.Map.IsSaved ? L($"Enregistré dans {state.SaveFolder}") : L("Pas encore enregistré (Ctrl+S)"))}")
-                : row.Map.IsSaved ? L($"Version enregistrée, dans {state.SaveFolder}\nFichier du jeu : {path}") : path);
+            ImGui.SetTooltip(row.Map.IsCustom ? L($"YMAP du projet (objets ajoutés), absent des fichiers du jeu\n{(row.Map.IsSaved ? L($"Enregistré dans {state.ExtraProjectOf(row.Map)?.StreamFolder ?? state.SaveFolder}") : L("Pas encore enregistré (Ctrl+S)"))}")
+                : row.Map.IsSaved ? L($"Version enregistrée, dans {state.ExtraProjectOf(row.Map)?.StreamFolder ?? state.SaveFolder}\nFichier du jeu : {path}") : path);
         DrawContextMenu(row, names);
 
         ImGui.TableNextColumn();

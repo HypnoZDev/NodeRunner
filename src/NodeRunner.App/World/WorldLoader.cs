@@ -218,9 +218,11 @@ internal sealed class WorldLoader : IDisposable
     public TimeSpan LoadDuration { get; private set; }
 
     // Starts loading game with this map selection (or clears everything if null).
-    public void Load(GameInstallation? game, MapSelection selection, IReadOnlySet<string>? hiddenScriptedMaps, string? saveFolder)
+    public void Load(GameInstallation? game, MapSelection selection, IReadOnlySet<string>? hiddenScriptedMaps, string? saveFolder,
+        IReadOnlyList<string>? extraFolders = null)
     {
         _saveFolder = saveFolder;
+        _extraFolders = extraFolders ?? [];
         bool sameGame = SameGame(game, Game);
         bool sameHidden = hiddenScriptedMaps is null
             ? _hiddenScriptedMaps is null
@@ -344,6 +346,12 @@ internal sealed class WorldLoader : IDisposable
     // Reads the DLC configuration, then the map objects, models and textures of this selection.
     private volatile string? _saveFolder;
 
+    // Stream folders of the other projects shown with the open one.
+    private volatile IReadOnlyList<string> _extraFolders = [];
+
+    // Maps loaded from another project's stream folder, by file name: that folder (where they are saved again).
+    public IReadOnlyDictionary<string, string> ExtraMapFolders { get; private set; } = new Dictionary<string, string>();
+
     private bool _reloadRequested;
 
     public void RequestMapReload() => _reloadRequested = true;
@@ -372,6 +380,24 @@ internal sealed class WorldLoader : IDisposable
         }
         return maps;
     }
+
+    // Occluder map files of another project's stream folder: rebuilt by that project, not shown here.
+    private static IReadOnlySet<string> ExtraOccluderFileNames(string streamFolder)
+    {
+        try
+        {
+            return OccluderEdits.Load(Path.GetDirectoryName(Path.GetFullPath(streamFolder))).StreamFileNames
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return new HashSet<string>();
+        }
+    }
+
+    // The project folder's name of a stream folder.
+    private static string ProjectName(string? streamFolder) =>
+        streamFolder is null ? "" : Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(streamFolder))) ?? "";
 
     // The game's .ybn files that the project changed and wrote into its stream folder: not the project's own files.
     private static HashSet<string> GameCollisionFiles(string? streamFolder)
@@ -406,7 +432,8 @@ internal sealed class WorldLoader : IDisposable
             progress.Report(L("Lecture des packs DLC..."));
             // The project's own types, models and textures (a mapping with custom buildings) and the library's count as
             // game files.
-            var source = LooseFileOverlay.Over(files, _saveFolder, GameCollisionFiles(_saveFolder), _libraryFolder);
+            var extras = _extraFolders;
+            var source = LooseFileOverlay.Over(files, _saveFolder, GameCollisionFiles(_saveFolder), _libraryFolder, extras);
             var content = GameContent.Load(source, new DlcManifestReader(), selection);
             if (!Publish(generation, () => Content = content))
                 return;
@@ -414,6 +441,17 @@ internal sealed class WorldLoader : IDisposable
             progress.Report(L("Lecture des objets de la carte..."));
             var savedErrors = new List<string>();
             var saved = ReadSavedMaps(_saveFolder, OccluderFileNames, savedErrors);
+            var extraMaps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var extra in extras)
+            {
+                foreach (var (name, bytes) in ReadSavedMaps(extra, ExtraOccluderFileNames(extra), savedErrors))
+                {
+                    if (saved.TryAdd(name, bytes))
+                        extraMaps[name] = extra;
+                    else
+                        savedErrors.Add(L($"{name} : présent dans plusieurs projets ouverts, version de « {ProjectName(extraMaps.GetValueOrDefault(name) ?? _saveFolder)} » affichée"));
+                }
+            }
             var maps = MapLibrary.Load(content, new YtypReader(), new YmapReader(), progress, hiddenScriptedMaps, saved);
             maps.SavedMapErrors.AddRange(savedErrors);
 
@@ -459,6 +497,7 @@ internal sealed class WorldLoader : IDisposable
                 if (generation != _generation)
                     return;
                 Maps = maps;
+                ExtraMapFolders = extraMaps;
                 if (paths is not null)
                     PathNetwork = paths;
                 Collisions = collisions;

@@ -54,6 +54,43 @@ public class PropLibraryTests
     }
 
     [Fact]
+    public void Other_open_projects_add_their_files_below_the_active_project()
+    {
+        var files = new GameContentTests.FakeGameFiles();
+        files.AddArchive(@"x64i.rpf\levels\a\meta.rpf", "x.ymap");
+        files.AddArchive(@"x64i.rpf\levels\a\models.rpf", "shop.ydr");
+        string root = Directory.CreateTempSubdirectory("nr-projects").FullName;
+        try
+        {
+            string active = Directory.CreateDirectory(Path.Combine(root, "pdp", "stream")).FullName;
+            string other = Directory.CreateDirectory(Path.Combine(root, "hopital", "stream")).FullName;
+            File.WriteAllBytes(Path.Combine(active, "desk.ydr"), Resource);
+            File.WriteAllBytes(Path.Combine(other, "desk.ydr"), Resource);   // the active project's wins
+            File.WriteAllBytes(Path.Combine(other, "bed.ydr"), Resource);
+            File.WriteAllBytes(Path.Combine(other, "shop.ydr"), Resource);   // replaces the game's
+
+            var overlay = (LooseFileOverlay)LooseFileOverlay.Over(files, active, null, null, [other]);
+            var content = GameContent.Load(overlay, new DlcManifestReader(), new MapSelection(MapVersion.Multiplayer));
+
+            string own = GameContent.LooseFilesRoot;
+            Assert.Equal([$@"{own}\bed.ydr", $@"{own}\desk.ydr", $@"{own}\shop.ydr"], content.EnumerateFiles(".ydr").Order());
+            Assert.Equal(Path.Combine(active, "desk.ydr"), overlay.StreamFileOf($@"{own}\desk.ydr"));
+            Assert.Null(overlay.ExtraStreamOf($@"{own}\desk.ydr"));
+            Assert.Equal(other, overlay.ExtraStreamOf($@"{own}\bed.ydr"));
+            Assert.Null(overlay.StreamFileOf($@"{own}\bed.ydr"));
+            Assert.True(overlay.FileExists($@"{own}\shop.ydr"));
+            Assert.Equal(1, overlay.FileCount);
+
+            // Another project alone is enough for an overlay.
+            Assert.IsType<LooseFileOverlay>(LooseFileOverlay.Over(files, null, null, null, [other]));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Library_alone_is_enough_for_an_overlay()
     {
         var files = new GameContentTests.FakeGameFiles();

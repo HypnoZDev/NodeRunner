@@ -160,6 +160,13 @@ internal sealed class MainUi
 
     public bool CloseProjectRequested { get; set; }
 
+    // Another project to show with the open one: a folder, or "" to browse for it.
+    public string? AddViewProjectRequested { get; set; }
+
+    public string? RemoveViewProjectRequested { get; set; }
+
+    public string? ActivateProjectRequested { get; set; }
+
     public bool ChooseProjectsFolderRequested { get; set; }
 
     public bool ChooseExportFolderRequested { get; set; }
@@ -624,8 +631,54 @@ internal sealed class MainUi
             }
             ImGui.EndMenu();
         }
-        if (ImGui.MenuItem(L($"{Icons.X}  Fermer le projet"), null, false, _state.Project is not null))
+        DrawOpenProjectsItems(recent);
+        if (ImGui.MenuItem(_state.ExtraProjects.Count > 0 ? L($"{Icons.X}  Fermer les projets") : L($"{Icons.X}  Fermer le projet"), null, false, _state.Project is not null))
             CloseProjectRequested = true;
+    }
+
+    // Several projects at once: others shown and edited with the open one, each saved into its own folder.
+    private void DrawOpenProjectsItems(List<string> recent)
+    {
+        bool hasProject = _state.Project is not null;
+        ImGui.Separator();
+        if (ImGui.MenuItem(L($"{Icons.Layers}  Ouvrir un autre projet en plus..."), null, false, hasProject))
+            AddViewProjectRequested = "";
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Affiche un autre projet (une autre ressource) en même temps que celui-ci, sans le fermer.\nChaque fichier modifié est enregistré dans son propre projet ; les objets ajoutés vont dans le projet actif.\nLa carte est rechargée."));
+        var others = recent.Where(f => !_state.ExtraProjects.Any(p => string.Equals(p.Folder, f, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (ImGui.BeginMenu(L("Ouvrir en plus un projet récent"), hasProject && others.Count > 0))
+        {
+            foreach (var folder in others)
+            {
+                bool exists = NodeRunner.Editor.MapProject.Exists(folder);
+                if (ImGui.MenuItem($"{Path.GetFileName(folder)}##more{folder}", null, false, exists))
+                    AddViewProjectRequested = folder;
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    ImGui.SetTooltip(exists ? folder : L($"{folder}\nIntrouvable (déplacé ou supprimé)"));
+            }
+            ImGui.EndMenu();
+        }
+        if (_state.Project is { } active && ImGui.BeginMenu(L($"Projets ouverts ({_state.ExtraProjects.Count + 1})"), _state.ExtraProjects.Count > 0))
+        {
+            ImGui.MenuItem(L($"{active.Name} (actif)") + "##active", null, true, false);
+            foreach (var project in _state.ExtraProjects)
+            {
+                if (ImGui.BeginMenu($"{project.Name}##open{project.Folder}"))
+                {
+                    if (ImGui.MenuItem(L("Rendre actif")))
+                        ActivateProjectRequested = project.Folder;
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(L("Le projet actif reçoit les objets ajoutés, les collisions, l'occlusion et les pathnodes, et c'est lui qu'on exporte.\nLa carte est rechargée ; les autres projets restent affichés."));
+                    if (ImGui.MenuItem(L("Retirer de la vue")))
+                        RemoveViewProjectRequested = project.Folder;
+                    ImGui.EndMenu();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(project.Folder);
+            }
+            ImGui.EndMenu();
+        }
+        ImGui.Separator();
     }
 
     // Project menu: imports, files added to the open project, project contents.

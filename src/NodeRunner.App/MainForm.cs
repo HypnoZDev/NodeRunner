@@ -500,7 +500,9 @@ internal sealed unsafe partial class MainForm : Form
 
     private void UpdateTitle()
     {
-        string title = _state.Project is { } project ? $"{project.Name} — {Program.Name}" : Program.Name;
+        string title = _state.Project is { } project
+            ? $"{project.Name}{(_state.ExtraProjects.Count > 0 ? " + " + string.Join(" + ", _state.ExtraProjects.Select(p => p.Name)) : "")} — {Program.Name}"
+            : Program.Name;
         if (Text != title)
             Text = title;
     }
@@ -538,7 +540,7 @@ internal sealed unsafe partial class MainForm : Form
         var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
 
         // Start loading when a game folder is found or changed, then build the GPU data once it is ready.
-        _state.World.Load(_state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder);
+        _state.World.Load(_state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
 
         // Sky behind everything, then opaque models, then the translucent navmesh, then lines.
         var settings = _state.Settings;
@@ -1278,6 +1280,53 @@ internal sealed unsafe partial class MainForm : Form
             if (ConfirmLeaveChanges())
                 _state.CloseProject();
         }
+
+        if (_ui.AddViewProjectRequested is { } more)
+        {
+            _ui.AddViewProjectRequested = null;
+            AddProjectToView(more);
+        }
+
+        if (_ui.RemoveViewProjectRequested is { } removed)
+        {
+            _ui.RemoveViewProjectRequested = null;
+            if (ConfirmLeaveChanges())
+                _state.RemoveProjectFromView(removed);
+        }
+
+        if (_ui.ActivateProjectRequested is { } activated)
+        {
+            _ui.ActivateProjectRequested = null;
+            if (ConfirmLeaveChanges())
+                _state.MakeProjectActive(activated);
+        }
+    }
+
+    // Shows another project with the open one; "" to pick its folder.
+    private void AddProjectToView(string folder)
+    {
+        if (folder.Length == 0)
+        {
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = L("Choisis le dossier du projet NodeRunner à ouvrir en plus (celui qui contient projet.json)."),
+                UseDescriptionForTitle = true,
+                InitialDirectory = Directory.Exists(_state.ProjectsFolder) ? _state.ProjectsFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+            folder = dialog.SelectedPath;
+            if (!MapProject.Exists(folder))
+            {
+                MessageBox.Show(this, L($"« {Path.GetFileName(folder)} » n'est pas un projet NodeRunner (pas de projet.json).\nOuvrez-le d'abord seul (Fichier > Ouvrir un projet) pour en faire un projet."),
+                    L("Ouvrir un autre projet en plus"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+        }
+        if (!ConfirmLeaveChanges())
+            return;
+        if (_state.AddProjectToView(folder) is { } error)
+            MessageBox.Show(this, L($"Le projet n'a pas pu être ouvert en plus :\n{error}"), L("Ouvrir un autre projet en plus"), MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 
     private void CreateProject(string folder, string name, bool saveAfter, bool exitAfter)
@@ -1541,7 +1590,7 @@ internal sealed unsafe partial class MainForm : Form
         {
             // Only the folder offered next time is lost.
         }
-        if (result.Copied > 0 && _state.OpenProject(project.Folder) is { } error)
+        if (result.Copied > 0 && _state.OpenProject(project.Folder, keepOthers: true) is { } error)
         {
             MessageBox.Show(this, L($"Le projet n'a pas pu être rechargé :\n{error}"), L("Ajouter au projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;

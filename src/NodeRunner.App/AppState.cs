@@ -1432,8 +1432,32 @@ internal sealed class AppState
 
     // Map files of a FiveM export: those to save, plus the saved versions taken back when the map was loaded
     // (modified in an earlier session).
+    // Those of the other open projects are left out: each project is exported on its own.
     public IReadOnlyList<MapData> MapsToExport =>
-        MapsToSave.Concat(World.Maps?.Maps.Where(m => m.IsSaved) ?? []).Distinct().ToList();
+        MapsToSave.Concat(World.Maps?.Maps.Where(m => m.IsSaved) ?? []).Distinct()
+            .Where(m => ExtraProjects.Count == 0 || SaveOwner(m) is null).ToList();
+
+    // The open project a map is saved into: the one it was loaded from; for a map not saved before (a lower-detail map
+    // rewritten after a deletion...), the one of a related map; null for the active project.
+    private MapProject? SaveOwner(MapData map)
+    {
+        if (ExtraProjects.Count == 0)
+            return null;
+        if (ExtraProjectOf(map) is { } owner)
+            return owner;
+        if (map.IsSaved || World.Maps is not { } library)
+            return null;
+        if (library.ParentMap(map) is { } parent && ExtraProjectOf(parent) is { } parentOwner)
+            return parentOwner;
+        var children = library.ChildMaps(map).ToList();
+        for (int depth = 0; depth < 4 && children.Count > 0; depth++)
+        {
+            if (children.Select(ExtraProjectOf).OfType<MapProject>().FirstOrDefault() is { } childOwner)
+                return childOwner;
+            children = children.SelectMany(library.ChildMaps).ToList();
+        }
+        return null;
+    }
 
     private readonly HashSet<MapData> _savedMaps = [];
     private MapLibrary? _savedMapsLibrary;
@@ -1456,7 +1480,8 @@ internal sealed class AppState
 
     // Archetype files of a FiveM export: those to save, plus the project's versions taken back when the map was loaded.
     public IReadOnlyList<string> InteriorFilesToExport => World.Maps is { } library
-        ? InteriorFilesToSave.Concat(ProjectInteriorFiles(library)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        ? InteriorFilesToSave.Concat(ProjectInteriorFiles(library)).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(f => ExtraProjectOfFile(f) is null).ToList()
         : [];
 
     private (MapLibrary Library, List<string> Files)? _projectInteriorFiles;
@@ -1623,11 +1648,19 @@ internal sealed class AppState
         var interiorFiles = InteriorFilesToSave;
         if (maps.Count == 0 && paths.Count == 0 && !collisions && !occluders && interiorFiles.Count == 0)
             return;
-        var report = maps.Count > 0 ? MapFileSaver.Save(World, maps, folder) : new MapFileSaver.Report([], []);
+        // Each file goes back to the open project it was loaded from.
+        var report = new MapFileSaver.Report([], []);
+        foreach (var group in maps.GroupBy(SaveOwner))
+        {
+            var saved = MapFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder);
+            report.Saved.AddRange(saved.Saved);
+            report.Errors.AddRange(saved.Errors);
+        }
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
             _savedMaps.Add(map);
         PathFileSaver.Save(World, paths, folder, report);
-        InteriorFileSaver.Save(World, interiorFiles, folder, report);
+        foreach (var group in interiorFiles.GroupBy(ExtraProjectOfFile))
+            InteriorFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder, report);
         if (collisions)
             SaveCollisionEdits(folder, report);
         if (occluders)
@@ -1639,7 +1672,9 @@ internal sealed class AppState
             int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
             int typeFiles = report.Saved.Count(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase));
             string text = FilesText(report.Saved.Count - pathFiles - typeFiles, pathFiles) + (typeFiles > 0 ? L($", {typeFiles} YTYP") : "");
-            LastSave = (L($"{text} enregistré(s) dans le projet « {Project!.Name} »"), true, DateTime.Now);
+            LastSave = (ExtraProjects.Count > 0
+                ? L($"{text} enregistré(s) dans les projets ouverts")
+                : L($"{text} enregistré(s) dans le projet « {Project!.Name} »"), true, DateTime.Now);
         }
         else
         {
@@ -1651,6 +1686,118 @@ internal sealed class AppState
     public MapProject? Project { get; private set; }
 
     public string? SaveFolder => Project?.StreamFolder;
+
+    // Other projects shown and edited with the open one (the active project): their maps and interiors are saved into
+    // their own folders; added objects, collisions, occlusion and road nodes go to the active project.
+    public IReadOnlyList<MapProject> ExtraProjects { get; private set; } = [];
+
+    // Their stream folders, a new list at each change (the map loader compares it every frame).
+    public IReadOnlyList<string> ExtraStreamFolders { get; private set; } = [];
+
+    // The other open project a map was loaded from, or null (the active project's, or the game's).
+    public MapProject? ExtraProjectOf(MapData map) =>
+        ExtraProjects.Count > 0 && map.FilePath is { } path
+        && World.ExtraMapFolders.TryGetValue(Path.GetFileName(path), out var stream)
+            ? ExtraProjects.FirstOrDefault(p => string.Equals(p.StreamFolder, stream, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+    // The other open project an archetype file (.ytyp) was loaded from, or null.
+    private MapProject? ExtraProjectOfFile(string path) =>
+        ExtraProjects.Count > 0 && World.ProjectFiles?.ExtraStreamOf(path) is { } stream
+            ? ExtraProjects.FirstOrDefault(p => string.Equals(p.StreamFolder, stream, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+    private void SetExtraProjects(IEnumerable<MapProject> projects)
+    {
+        ExtraProjects = projects.ToList();
+        ExtraStreamFolders = ExtraProjects.Select(p => p.StreamFolder).ToList();
+        Settings.ExtraProjectFolders = ExtraProjects.Select(p => p.Folder).ToList();
+    }
+
+    private static bool SameFolder(string a, string b) =>
+        string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    // Shows another project with the open one (the map is loaded again).
+    public string? AddProjectToView(string folder)
+    {
+        if (Online.Blocks() is { } blocked)
+            return blocked;
+        if (Project is null)
+            return L("Ouvrez d'abord un projet.");
+        if (SameFolder(folder, Project.Folder) || ExtraProjects.Any(p => SameFolder(folder, p.Folder)))
+            return L("Ce projet est déjà ouvert.");
+        MapProject project;
+        try
+        {
+            project = MapProject.Load(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return ex.Message;
+        }
+        if (ExtraProjects.Append(Project).FirstOrDefault(p => string.Equals(p.ResourceName, project.ResourceName, StringComparison.OrdinalIgnoreCase)) is { } same)
+            return L($"Le projet « {same.Name} » porte déjà le nom de ressource FiveM « {project.ResourceName} ». Changez-le dans l'un des deux (fenêtre « Exporter en ressource FiveM », Ctrl+E) avant de les ouvrir ensemble.");
+        SetExtraProjects(ExtraProjects.Append(project));
+        AddRecentProject(project.Folder);
+        SaveSettings();
+        LastSave = null;
+        LoadProjectEdits();
+        World.RequestMapReload();
+        return null;
+    }
+
+    // Stops showing another project (the map is loaded again).
+    public void RemoveProjectFromView(string folder)
+    {
+        if (Online.Blocks() is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
+        if (!ExtraProjects.Any(p => SameFolder(folder, p.Folder)))
+            return;
+        SetExtraProjects(ExtraProjects.Where(p => !SameFolder(folder, p.Folder)));
+        SaveSettings();
+        LastSave = null;
+        LoadProjectEdits();
+        World.RequestMapReload();
+    }
+
+    // Makes another open project the active one (the map is loaded again; the projects shown stay the same).
+    public void MakeProjectActive(string folder)
+    {
+        if (Online.Blocks() is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
+        if (Project is not { } previous || ExtraProjects.FirstOrDefault(p => SameFolder(folder, p.Folder)) is not { } next)
+            return;
+        var others = ExtraProjects.Select(p => p == next ? previous : p).ToList();
+        UseProject(next);
+        SetExtraProjects(others);
+        SaveSettings();
+    }
+
+    // The other projects shown at the last start, opened again (those gone are dropped).
+    private void RestoreExtraProjects()
+    {
+        var projects = new List<MapProject>();
+        foreach (var folder in Settings.ExtraProjectFolders)
+        {
+            try
+            {
+                if (Project is { } active && SameFolder(folder, active.Folder) || projects.Any(p => SameFolder(folder, p.Folder)))
+                    continue;
+                projects.Add(MapProject.Load(folder));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                Diagnostics.ErrorLog.Add(L("Projet"), L($"Projet introuvable ou illisible ({folder}) : {ex.Message}"), ex);
+            }
+        }
+        SetExtraProjects(projects);
+    }
 
     // Files of the project's stream folder locked by FiveM's Asset Escrow (looked for once per project).
     public IReadOnlyList<string> ProtectedProjectFiles
@@ -1723,6 +1870,7 @@ internal sealed class AppState
         {
             Project = MapProject.Load(folder);
             ApplyProjectMap(Project);
+            RestoreExtraProjects();
             LoadProjectEdits();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
@@ -1730,6 +1878,7 @@ internal sealed class AppState
             ProjectError = L($"Projet introuvable ou illisible ({folder}) : {ex.Message}");
             Diagnostics.ErrorLog.Add(L("Projet"), ProjectError, ex);
             Settings.ProjectFolder = null;
+            SetExtraProjects([]);
             SaveSettings();
         }
     }
@@ -1766,8 +1915,9 @@ internal sealed class AppState
         SaveSettings();
     }
 
-    // Opens the project of a folder (holding projet.json) and loads its map.
-    public string? OpenProject(string folder)
+    // Opens the project of a folder (holding projet.json) and loads its map. The other projects shown are closed,
+    // unless kept (the same project opened again).
+    public string? OpenProject(string folder, bool keepOthers = false)
     {
         if (Online.Blocks() is { } blocked)
             return blocked;
@@ -1780,6 +1930,8 @@ internal sealed class AppState
         {
             return ex.Message;
         }
+        if (!keepOthers)
+            SetExtraProjects([]);
         UseProject(project);
         return null;
     }
@@ -1801,6 +1953,11 @@ internal sealed class AppState
         {
             return ex.Message;
         }
+        if (ExtraProjects.Count > 0)
+        {
+            SetExtraProjects([]);
+            reload = true;
+        }
         UseProject(project, reload);
         return null;
     }
@@ -1816,6 +1973,7 @@ internal sealed class AppState
         }
         Project = null;
         Settings.ProjectFolder = null;
+        SetExtraProjects([]);
         SaveSettings();
         LastSave = null;
         LoadProjectEdits();
@@ -1825,6 +1983,8 @@ internal sealed class AppState
     private void UseProject(MapProject project, bool reload = true)
     {
         Project = project;
+        if (ExtraProjects.Any(p => SameFolder(p.Folder, project.Folder)))
+            SetExtraProjects(ExtraProjects.Where(p => !SameFolder(p.Folder, project.Folder)));
         ProjectError = null;
         LastSave = null;
         Settings.ProjectFolder = project.Folder;
