@@ -96,7 +96,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
     {
         var p = state.Camera.Position;
         string position = $"{Icons.MapPinned}  X {p.X:0}   Y {p.Y:0}   Z {p.Z:0}";
-        string edition = state.Game is { } game ? L($"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}") : L($"{Icons.HardDrive}  GTA V introuvable");
+        string edition = state.IsGta4 ? $"{Icons.HardDrive}  GTA IV" : state.Game is { } game ? L($"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}") : L($"{Icons.HardDrive}  GTA V introuvable");
         string fps = $"{Icons.Gauge}  {ImGui.GetIO().Framerate:0} FPS";
         int errorCount = Diagnostics.ErrorLog.Count;
         string errors = errorCount > 0 ? $"{Icons.TriangleAlert}  {errorCount}" : Icons.TriangleAlert;

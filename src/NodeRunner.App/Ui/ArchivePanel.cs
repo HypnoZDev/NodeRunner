@@ -3,13 +3,13 @@ using System.Text;
 using ImGuiNET;
 using NodeRunner.App.World;
 using NodeRunner.Data.Maps;
-using NodeRunner.Data.Native.Archives;
 using Node = NodeRunner.App.World.ArchiveTree.Node;
 
 namespace NodeRunner.App.Ui;
 
-// Dockable "Explorateur d'archives" panel: the game's archives as a tree (or a search through every file), the size
-// and type of each file, and actions by type: model in the viewer, YMAP on the map, text shown, extraction to disk.
+// Dockable "Explorateur d'archives" panel: the archives of the session's game (GTA V or IV) as a tree (or a search
+// through every file), the size and type of each file, and actions by type: model in the viewer, YMAP on the map, text
+// shown, extraction to disk.
 internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInViewer, Action<MapData> revealMap)
 {
     public const string Title = $"{Icons.Package}  Explorateur d'archives###Archives";
@@ -19,7 +19,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
 
     private Task<ArchiveTree>? _building;
     private ArchiveTree? _tree;
-    private RpfFileSystem? _treeFiles;
+    private object? _treeFiles;
     private readonly HashSet<Node> _expanded = [];
     private List<Node> _rows = [];
     private bool _rowsDirty = true;
@@ -56,7 +56,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
 
     private void UpdateTree()
     {
-        var files = state.World.Files;
+        object? files = OpenFiles();
         if (files != _treeFiles)
         {
             _treeFiles = files;
@@ -64,7 +64,13 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             _selected = null;
             _expanded.Clear();
             _rowsDirty = true;
-            _building = files is null ? null : Task.Run(() => ArchiveTree.Build(files));
+            IArchiveFiles? source = files switch
+            {
+                NodeRunner.Data.Native.Archives.RpfFileSystem rpf => new RpfArchiveFiles(rpf),
+                NodeRunner.Data.Native.Gta4.Gta4FileSystem img => new ImgArchiveFiles(img),
+                _ => null,
+            };
+            _building = source is null ? null : Task.Run(() => ArchiveTree.Build(source));
         }
         if (_building is { IsCompleted: true } finished)
         {
@@ -74,6 +80,8 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         }
     }
 
+    private object? OpenFiles() => state.IsGta4 ? (state.Gta4.IsLoaded ? state.Gta4.Files : null) : state.World.Files;
+
     private void DrawContent()
     {
         ImGui.SetNextItemWidth(-float.Epsilon);
@@ -82,7 +90,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
 
         if (_tree is null)
         {
-            Widgets.Hint(state.World.Files is null ? L("En attente de l'ouverture du jeu...") : L("Lecture du contenu des archives..."));
+            Widgets.Hint(OpenFiles() is null ? L("En attente de l'ouverture du jeu...") : L("Lecture du contenu des archives..."));
             return;
         }
 
@@ -206,7 +214,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             ImGui.TextDisabled($"{Widgets.Count(node.FileCount)} fich.");
         }
         ImGui.TableNextColumn();
-        ImGui.TextDisabled(node.IsFile ? Kind(node.Name) : node.IsArchive ? L("Archive RPF") : L("Dossier"));
+        ImGui.TextDisabled(node.IsFile ? Kind(node.Name) : node.IsArchive ? _tree!.Files.ArchiveKind : L("Dossier"));
         ImGui.PopID();
     }
 
@@ -327,7 +335,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         }
         else
         {
-            Widgets.Hint(L($"{(node.IsArchive ? L("Archive RPF") : L("Dossier"))} · {Widgets.Count(node.FileCount)} fichiers"));
+            Widgets.Hint(L($"{(node.IsArchive ? _tree!.Files.ArchiveKind : L("Dossier"))} · {Widgets.Count(node.FileCount)} fichiers"));
         }
     }
 
@@ -421,6 +429,17 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         ".txt" => L("Texte"),
         ".dat" => L("Données"),
         ".rpf" => L("Archive RPF"),
+        ".wdr" => L("Modèle"),
+        ".wdd" => L("Modèles (dictionnaire)"),
+        ".wft" => L("Modèle (véhicule, cassable)"),
+        ".wtd" => L("Textures"),
+        ".wpl" => L("Placements (WPL)"),
+        ".wbn" or ".wbd" => L("Collision"),
+        ".wnv" => L("Navmesh"),
+        ".nod" => L("Pathnodes"),
+        ".wad" => L("Animations"),
+        ".sco" => L("Script"),
+        ".img" => L("Archive IMG"),
         "" => L("Fichier"),
         var other => other[1..].ToUpperInvariant(),
     };

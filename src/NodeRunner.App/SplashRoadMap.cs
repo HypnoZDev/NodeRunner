@@ -2,13 +2,14 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using NodeRunner.Data.Native.Gta4;
 using NodeRunner.Data.Paths;
 
 namespace NodeRunner.App;
 
-// The road network of the start-up screen, drawn from the player's own path nodes (vehicle roads only), built on a
-// worker thread: the roads, a blurred copy for the neon glow, and a few long drives along the roads for the moving
-// lights. Bitmaps are in pixels, everything else in design units.
+// The road network of the start-up screen, drawn from the player's own path nodes (GTA V or IV, vehicle roads only),
+// built on a worker thread: the roads, a blurred copy for the neon glow, and a few long drives along the roads for the
+// moving lights. Bitmaps are in pixels, everything else in design units.
 internal sealed class SplashRoadMap : IDisposable
 {
     private static readonly Color Road = Color.FromArgb(0x4C, 0x8D, 0xFF);
@@ -39,13 +40,7 @@ internal sealed class SplashRoadMap : IDisposable
                 highway.Add(node.IsHighway);
             }
         }
-        if (positions.Count < 100)
-            return null;
-
-        var seen = new HashSet<(int, int)>();
-        var segments = new List<(int A, int B, bool Major)>();
-        var neighbours = new List<int>[positions.Count];
-
+        var links = new List<(int A, int B, bool Major)>();
         foreach (var a in network.Areas)
         {
             foreach (var node in a.Nodes)
@@ -54,16 +49,66 @@ internal sealed class SplashRoadMap : IDisposable
                     continue;
                 foreach (var link in a.LinksOf(node))
                 {
-                    if (link.IsShortcut || !index.TryGetValue(link.Target, out int to) || to == from)
-                        continue;
-                    if (!seen.Add((Math.Min(from, to), Math.Max(from, to))))
-                        continue;
-                    bool major = highway[from] || highway[to] || link.LanesForward + link.LanesBackward >= 4;
-                    segments.Add((from, to, major));
-                    (neighbours[from] ??= []).Add(to);
-                    (neighbours[to] ??= []).Add(from);
+                    if (!link.IsShortcut && index.TryGetValue(link.Target, out int to))
+                        links.Add((from, to, highway[from] || highway[to] || link.LanesForward + link.LanesBackward >= 4));
                 }
             }
+        }
+        return Build(positions, highway, links, area, scale);
+    }
+
+    // GTA IV roads: vehicle nodes without the boat routes; wide roads stand out (no motorway flag known).
+    public static SplashRoadMap? Build(IReadOnlyList<Gta4PathArea> areas, RectangleF area, float scale)
+    {
+        var byArea = areas.ToDictionary(a => a.Index);
+        var index = new Dictionary<(int, int), int>();
+        var positions = new List<Vector2>();
+        foreach (var a in areas)
+        {
+            foreach (var node in a.Nodes)
+            {
+                if (!node.IsVehicle || node.IsBoat)
+                    continue;
+                index[(node.Area, node.Id)] = positions.Count;
+                positions.Add(new Vector2(node.Position.X, node.Position.Y));
+            }
+        }
+        var links = new List<(int A, int B, bool Major)>();
+        foreach (var a in areas)
+        {
+            foreach (var node in a.Nodes)
+            {
+                if (!index.TryGetValue((node.Area, node.Id), out int from))
+                    continue;
+                foreach (var link in a.LinksOf(node))
+                {
+                    if (index.TryGetValue((link.Area, link.Node), out int to))
+                        links.Add((from, to, link.LanesForward + link.LanesBackward >= 4 || Math.Max(link.LanesForward, link.LanesBackward) >= 3));
+                }
+            }
+        }
+        var major = new bool[positions.Count];
+        foreach (var (a, b, m) in links.Where(l => l.Major))
+            major[a] = major[b] = true;
+        return Build(positions, [.. major], links, area, scale);
+    }
+
+    private static SplashRoadMap? Build(List<Vector2> positions, List<bool> highway, List<(int A, int B, bool Major)> links,
+        RectangleF area, float scale)
+    {
+        if (positions.Count < 100)
+            return null;
+
+        var seen = new HashSet<(int, int)>();
+        var segments = new List<(int A, int B, bool Major)>();
+        var neighbours = new List<int>[positions.Count];
+        foreach (var (from, to, major) in links)
+        {
+            if (to == from || !seen.Add((Math.Min(from, to), Math.Max(from, to))))
+                continue;
+            segments.Add((from, to, major));
+            (neighbours[from] ??= []).Add(to);
+            (neighbours[to] ??= []).Add(from);
         }
 
         // Only the main network (the largest group of linked roads): far-away separate maps would shrink it.

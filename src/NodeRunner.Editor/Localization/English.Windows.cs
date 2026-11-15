@@ -907,5 +907,17 @@ public static partial class English
         ("Afficher à chaque démarrage", "Show at every startup"),
         ("Toujours disponible dans Aide > Écran d'accueil.", "Always available in Help > Welcome screen."),
         ("Commencer", "Get started"),
+        // GTA IV
+        ("Archive IMG", "IMG archive"),
+        ("Placements (WPL)", "Placements (WPL)"),
+        ("Jeu à ouvrir", "Game to open"),
+        ("Clique sur un jeu ou appuie sur Entrée", "Click a game or press Enter"),
+        ("Démarrage dans {0} s  ·  clic ou Entrée pour choisir", "Starting in {0} s  ·  click or Enter to choose"),
+        ("Le studio 3D pour explorer, comprendre et modifier la carte de GTA IV.", "The 3D studio to explore, understand and edit the GTA IV map."),
+        ("Ouverture des archives de GTA IV...", "Opening the GTA IV archives..."),
+        ("Lecture de GTA IV impossible : {0}", "Cannot read GTA IV: {0}"),
+        ("{0} archives ouvertes, {1} fichiers.", "{0} archives open, {1} files."),
+        ("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3).",
+            "The GTA IV 3D map comes in a future version. Meanwhile, its archives can be browsed in the archive explorer (F3)."),
     ];
 }

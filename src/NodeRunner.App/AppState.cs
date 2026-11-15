@@ -35,6 +35,12 @@ internal sealed class AppState
 
     public WorldLoader World { get; }
 
+    // GTA IV: the folder found on this computer (null if none) and the files opened when it is the session's game.
+    public string? Gta4Folder { get; private set; }
+    public Gta4World Gta4 { get; } = new();
+    public GameKind ActiveGame { get; set; } = GameKind.Gta5;
+    public bool IsGta4 => ActiveGame == GameKind.Gta4;
+
     // The main selected object (the last one clicked), null if none.
     public MapEntity? Selection => SelectedEntities is [.., var last] ? last : null;
 
@@ -2137,6 +2143,8 @@ internal sealed class AppState
         OtherInstallations = found
             .Where(i => Game is null || !string.Equals(i.FolderPath, Game.FolderPath, StringComparison.OrdinalIgnoreCase))
             .ToList();
+
+        Gta4Folder = Gta4InstallLocator.Resolve(Settings.Gta4Folder) ?? Gta4InstallLocator.Find();
     }
 
     public bool TrySetManualGameFolder(string folder)

@@ -1,10 +1,7 @@
-using NodeRunner.Data.Native.Archives;
-using NodeRunner.Data.Native.Resources;
-
 namespace NodeRunner.App.World;
 
 // The game's files as a tree for the archive explorer: folders of the game directory, archives (.rpf, nested ones
-// included), the folders inside them and their files.
+// included, or .img), the folders inside them and their files.
 internal sealed class ArchiveTree
 {
     public sealed class Node(string name, string path, Node? parent)
@@ -24,11 +21,11 @@ internal sealed class ArchiveTree
     }
 
     public required Node Root { get; init; }
-    public required RpfFileSystem Files { get; init; }
+    public required IArchiveFiles Files { get; init; }
 
     public required IReadOnlyList<Node> AllFiles { get; init; }
 
-    public static ArchiveTree Build(RpfFileSystem files)
+    public static ArchiveTree Build(IArchiveFiles files)
     {
         var root = new Node("", "", null) { IsFolder = true, Depth = -1 };
         var byPath = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase) { [""] = root };
@@ -82,14 +79,7 @@ internal sealed class ArchiveTree
         return count;
     }
 
-    // A file as it would sit on disk: binary files decompressed, resources (.ydr, .ymap...) in their usual "RSC7"
-    // form (readable by the modding tools and usable in a FiveM "stream" folder).
-    public byte[]? Extract(string path)
-    {
-        if (Files.ReadFile(path) is not { } data)
-            return null;
-        return Files.GetResourceHeader(path) is { } header ? ResourceFile.Write(header, data) : data;
-    }
+    public byte[]? Extract(string path) => Files.Extract(path);
 
     // Writes every file below node into folder, keeping the folders (an archive becomes a folder of the same name).
     public (int Written, int Failed) ExtractAll(Node node, string folder, IProgress<(int Done, int Total)>? progress,

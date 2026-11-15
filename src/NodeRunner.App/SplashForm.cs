@@ -4,6 +4,7 @@ using System.Drawing.Text;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
 
 namespace NodeRunner.App;
@@ -12,7 +13,8 @@ namespace NodeRunner.App;
 // monogram traced in light, a flash, the monogram flies to its place above the name, the name is revealed; meanwhile a
 // network of nodes weaves itself on the right, replaced as soon as the path nodes are read by the real road network of
 // the map lighting up from the city outwards, with lights driving along the roads. Loading bar following the real
-// loading steps, credits.
+// loading steps, credits. When both GTA V and GTA IV are installed, the game is chosen first (the last one starts by
+// itself after a few seconds).
 internal sealed partial class SplashForm : Form
 {
     private static readonly Color Accent = Color.FromArgb(0x4C, 0x8D, 0xFF);
@@ -40,6 +42,12 @@ internal sealed partial class SplashForm : Form
     private static readonly Size Design = new(800, 450);
     private const float Gutter = 48f;
     private static readonly RectangleF MapArea = new(420f, 6f, 350f, 438f);
+    private static readonly RectangleF Gta4MapArea = new(430f, 24f, 350f, 300f);
+
+    // Game choice: shown from ChoiceFrom, the highlighted game starts by itself after ChoiceDelay without any input.
+    private const float ChoiceFrom = 0.3f, ChoiceDelay = 3f;
+    private static readonly RectangleF Gta5Button = new(Gutter, 342f, 112f, 32f);
+    private static readonly RectangleF Gta4Button = new(Gutter + 124f, 342f, 112f, 32f);
 
     // Timeline of the intro, in seconds.
     private const float TraceFrom = 0.15f, TraceTo = 1.0f;
@@ -50,6 +58,13 @@ internal sealed partial class SplashForm : Form
     private const float RevealTime = 1.9f;
 
     private readonly WorldLoader _world;
+    private readonly Gta4World _gta4;
+    private readonly Action<GameKind>? _choose;
+    private GameKind _game;
+    private bool _chosen;
+    private float _chosenAt;
+    private bool _choiceTouched;
+    private GameKind? _hover;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 15 };
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly PrivateFontCollection _fonts = new();
@@ -86,10 +101,16 @@ internal sealed partial class SplashForm : Form
     private Func<float>? _preloadModels;
     private double? _modelsStart;
 
-    public SplashForm(WorldLoader world, Func<float>? preloadModels)
+    // choose: null when the game is already loading; otherwise called once with the game picked on this screen.
+    public SplashForm(WorldLoader world, Gta4World gta4, Func<float>? preloadModels, GameKind game, Action<GameKind>? choose)
     {
         _world = world;
+        _gta4 = gta4;
         _preloadModels = preloadModels;
+        _game = game;
+        _choose = choose;
+        _chosen = choose is null;
+        KeyPreview = true;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         _scale = DeviceDpi / 96f;
@@ -170,18 +191,27 @@ internal sealed partial class SplashForm : Form
         double now = _clock.Elapsed.TotalSeconds;
         if (Opacity < 1.0)
             Opacity = Math.Min(1.0, EaseOut(Phase((float)now, 0f, 0.3f)));
+        if (!_chosen)
+        {
+            if (!_choiceTouched && now >= ChoiceFrom + ChoiceDelay)
+                Choose(_game);
+            Invalidate();
+            return;
+        }
         StartMap();
 
-        bool mapDone = !_world.IsBusy && (_world.Maps is not null || _world.Error is not null);
+        bool mapDone = _game == GameKind.Gta4
+            ? !_gta4.IsBusy && _gta4.Folder is not null
+            : !_world.IsBusy && (_world.Maps is not null || _world.Error is not null);
         bool done = now > Timeout;
         float target;
         if (!mapDone && !done)
-            target = Progress(_world.Status) * MapShare;
+            target = (_game == GameKind.Gta4 ? Gta4Progress(_gta4.Status) : Progress(_world.Status)) * MapShare;
         else
         {
             // Then the 3D models around the camera, read and sent to the GPU by the main window, still hidden.
             _modelsStart ??= now;
-            float models = done || _world.Maps is null ? 1f : PreloadModels();
+            float models = done || _game == GameKind.Gta4 || _world.Maps is null ? 1f : PreloadModels();
             done |= models >= ModelsEnough || now - _modelsStart > ModelsTimeout;
             target = MapShare + (1f - MapShare) * models;
         }
@@ -199,18 +229,71 @@ internal sealed partial class SplashForm : Form
         Invalidate();
     }
 
+    private void Choose(GameKind game)
+    {
+        if (_chosen)
+            return;
+        _game = game;
+        _chosen = true;
+        _chosenAt = Now;
+        Cursor = Cursors.Default;
+        _choose?.Invoke(game);
+    }
+
+    private GameKind? ButtonAt(Point pixel)
+    {
+        var p = new PointF(pixel.X / _scale, pixel.Y / _scale);
+        return Gta5Button.Contains(p) ? GameKind.Gta5 : Gta4Button.Contains(p) ? GameKind.Gta4 : null;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_chosen)
+            return;
+        _hover = Now >= ChoiceFrom ? ButtonAt(e.Location) : null;
+        Cursor = _hover is null ? Cursors.Default : Cursors.Hand;
+        _choiceTouched |= _hover is not null;
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+        if (!_chosen && e.Button == MouseButtons.Left && Now >= ChoiceFrom && ButtonAt(e.Location) is { } game)
+            Choose(game);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (_chosen)
+            return;
+        if (e.KeyCode is Keys.Left or Keys.Right)
+        {
+            _game = _game == GameKind.Gta5 ? GameKind.Gta4 : GameKind.Gta5;
+            _choiceTouched = true;
+        }
+        else if (e.KeyCode is Keys.Enter or Keys.Space)
+            Choose(_game);
+    }
+
     // The road network is drawn on a worker thread as soon as the path nodes are read; until then (or without them),
     // the drawn network stays.
     private void StartMap()
     {
-        if (_mapTask is null && _world.PathNetwork is { } network)
+        Func<SplashRoadMap?>? build = null;
+        float scale = _scale;
+        if (_game == GameKind.Gta4 && _gta4.PathAreas is { } areas)
+            build = () => SplashRoadMap.Build(areas, Gta4MapArea, scale);
+        else if (_game == GameKind.Gta5 && _world.PathNetwork is { } network)
+            build = () => SplashRoadMap.Build(network, MapArea, scale);
+        if (_mapTask is null && build is not null)
         {
-            float scale = _scale;
             _mapTask = Task.Run(() =>
             {
                 try
                 {
-                    return SplashRoadMap.Build(network, MapArea, scale);
+                    return build();
                 }
                 catch (Exception)
                 {
@@ -258,6 +341,15 @@ internal sealed partial class SplashForm : Form
         return 0.06f; // Opening the archives, reading the game's keys.
     }
 
+    // GTA IV: opening the archives (counted), then the path nodes.
+    private static float Gta4Progress(string status)
+    {
+        var match = CountPattern().Match(status);
+        if (match.Success && float.TryParse(match.Groups[2].Value, out float total) && total > 0)
+            return 0.06f + 0.84f * Math.Clamp(float.Parse(match.Groups[1].Value) / total, 0f, 1f);
+        return status.StartsWith(L("Lecture des pathnodes"), StringComparison.Ordinal) ? 0.95f : 0.06f;
+    }
+
     [GeneratedRegex(@"(\d+) / (\d+)")]
     private static partial Regex CountPattern();
 
@@ -289,6 +381,62 @@ internal sealed partial class SplashForm : Form
         float text = Phase(t, TextFrom, TextFrom + 0.45f);
         if (text > 0f)
             DrawTexts(g, text, reveal);
+        DrawChoice(g, t);
+    }
+
+    // The two game buttons where the loading bar will be, with the countdown; faded out once a game is picked.
+    private void DrawChoice(Graphics g, float t)
+    {
+        if (_choose is null)
+            return;
+        float visible = Phase(t, ChoiceFrom, ChoiceFrom + 0.4f) * (_chosen ? 1f - Phase(t, _chosenAt, _chosenAt + 0.3f) : 1f);
+        if (visible <= 0f)
+            return;
+        int Alpha(int a) => Math.Clamp((int)(a * visible), 0, 255);
+        using (var label = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x8A, 0x94, 0xAA)))
+            g.DrawString(L("Jeu à ouvrir"), _statusFont, label, Gutter, Gta5Button.Y - 22f);
+        foreach (var (game, rect, text) in new[] { (GameKind.Gta5, Gta5Button, "GTA V"), (GameKind.Gta4, Gta4Button, "GTA IV") })
+        {
+            bool selected = game == _game;
+            using var path = new GraphicsPath();
+            const float D = 8f;
+            path.AddArc(rect.X, rect.Y, D, D, 180, 90);
+            path.AddArc(rect.Right - D, rect.Y, D, D, 270, 90);
+            path.AddArc(rect.Right - D, rect.Bottom - D, D, D, 0, 90);
+            path.AddArc(rect.X, rect.Bottom - D, D, D, 90, 90);
+            path.CloseFigure();
+            if (selected)
+            {
+                using var fill = new LinearGradientBrush(rect, Color.FromArgb(Alpha(0xFF), Accent), Color.FromArgb(Alpha(0xFF), AccentLight), 0f);
+                g.FillPath(fill, path);
+            }
+            else
+            {
+                using var fill = new SolidBrush(Color.FromArgb(Alpha(_hover == game ? 60 : 30), AccentLight));
+                g.FillPath(fill, path);
+            }
+            using (var pen = new Pen(Color.FromArgb(Alpha(selected ? 0xFF : _hover == game ? 200 : 110), AccentLight), 1.2f))
+                g.DrawPath(pen, path);
+            var size = g.MeasureString(text, _taglineFont);
+            using var ink = new SolidBrush(Color.FromArgb(Alpha(0xFF), selected ? Color.White : Color.FromArgb(0xC8, 0xD2, 0xE8)));
+            g.DrawString(text, _taglineFont, ink, rect.X + (rect.Width - size.Width) / 2f, rect.Y + (rect.Height - size.Height) / 2f);
+        }
+        if (_chosen)
+            return;
+        string hint = _choiceTouched
+            ? L("Clique sur un jeu ou appuie sur Entrée")
+            : string.Format(L("Démarrage dans {0} s  ·  clic ou Entrée pour choisir"), Math.Max(1, (int)MathF.Ceiling(ChoiceFrom + ChoiceDelay - t)));
+        using var brush = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90));
+        var hintSize = g.MeasureString(hint, _smallFont);
+        g.DrawString(hint, _smallFont, brush, Gta4Button.Right + 16f, Gta4Button.Y + (Gta4Button.Height - hintSize.Height) / 2f);
+        if (!_choiceTouched)
+        {
+            // Countdown ring at the right of the highlighted button.
+            float left = Math.Clamp((ChoiceFrom + ChoiceDelay - t) / ChoiceDelay, 0f, 1f);
+            var rect = _game == GameKind.Gta5 ? Gta5Button : Gta4Button;
+            using var pen = new Pen(Color.FromArgb(Alpha(0xFF), Color.White), 1.6f);
+            g.DrawArc(pen, rect.Right - 22f, rect.Y + 9f, 14f, 14f, -90f, 360f * left);
+        }
     }
 
     private void DrawMap(Graphics g, SplashRoadMap map, float t)
@@ -541,23 +689,27 @@ internal sealed partial class SplashForm : Form
     {
         int Alpha(int a) => (int)(a * visible);
         using (var tagline = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0xA8, 0xB2, 0xC8)))
-            g.DrawString(L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V."), _taglineFont, tagline, Gutter, 240f);
+            g.DrawString(_game == GameKind.Gta4
+                ? L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA IV.")
+                : L("Le studio 3D pour explorer, comprendre et modifier la carte de GTA V."), _taglineFont, tagline, Gutter, 240f);
         using (var version = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90)))
             g.DrawString($"v{Program.Version}", _smallFont, version, Design.Width - 66f, 20f);
 
-        // Loading bar: current step and share on top, a light gliding along the filled part.
+        // Loading bar: current step and share on top, a light gliding along the filled part (once the game is chosen).
+        float bar = _choose is null ? 1f : _chosen ? Phase(Now, _chosenAt + 0.15f, _chosenAt + 0.5f) : 0f;
+        int BarAlpha(int a) => (int)(Alpha(a) * bar);
         float barTop = Design.Height - 74f, barWidth = Design.Width - Gutter * 2f;
-        using (var status = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x8A, 0x94, 0xAA)))
+        using (var status = new SolidBrush(Color.FromArgb(BarAlpha(0xFF), 0x8A, 0x94, 0xAA)))
         {
             g.DrawString(StatusText(), _statusFont, status, Gutter, barTop - 22f);
             string share = $"{Math.Clamp(_shownProgress, 0f, 1f) * 100f:0} %";
             g.DrawString(share, _statusFont, status, Gutter + barWidth - g.MeasureString(share, _statusFont).Width + 4f, barTop - 22f);
         }
-        using (var track = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x1E, 0x26, 0x38)))
+        using (var track = new SolidBrush(Color.FromArgb(BarAlpha(0xFF), 0x1E, 0x26, 0x38)))
             FillRounded(g, track, new RectangleF(Gutter, barTop, barWidth, 4f));
         float filled = Math.Max(4f, barWidth * Math.Clamp(_shownProgress, 0f, 1f));
         var fillRect = new RectangleF(Gutter, barTop, filled, 4f);
-        using (var fill = new LinearGradientBrush(new RectangleF(Gutter, barTop, barWidth, 4f), Color.FromArgb(Alpha(0xFF), Accent), Color.FromArgb(Alpha(0xFF), AccentLight), 0f))
+        using (var fill = new LinearGradientBrush(new RectangleF(Gutter, barTop, barWidth, 4f), Color.FromArgb(BarAlpha(0xFF), Accent), Color.FromArgb(BarAlpha(0xFF), AccentLight), 0f))
             FillRounded(g, fill, fillRect);
         float shine = Gutter + (Now * 240f) % (barWidth + 120f) - 60f;
         if (shine < Gutter + filled)
@@ -567,14 +719,14 @@ internal sealed partial class SplashForm : Form
             {
                 InterpolationColors = new ColorBlend
                 {
-                    Colors = [Color.FromArgb(0, Color.White), Color.FromArgb(Alpha(200), Color.White), Color.FromArgb(0, Color.White)],
+                    Colors = [Color.FromArgb(0, Color.White), Color.FromArgb(BarAlpha(200), Color.White), Color.FromArgb(0, Color.White)],
                     Positions = [0f, 0.5f, 1f],
                 },
             };
             g.FillRectangle(band, shine - 30f, barTop, 60f, 4f);
             g.ResetClip();
         }
-        using (var head = new SolidBrush(Color.FromArgb(Alpha(70), AccentLight)))
+        using (var head = new SolidBrush(Color.FromArgb(BarAlpha(70), AccentLight)))
             g.FillEllipse(head, Gutter + filled - 7f, barTop - 5f, 14f, 14f);
 
         // Author's wordmark (a shine passes over it after the name's), with the notice that always goes with it.
@@ -619,7 +771,7 @@ internal sealed partial class SplashForm : Form
     {
         if (_modelsStart is not null)
             return L("Chargement des modèles 3D...");
-        string status = _world.Status;
+        string status = _game == GameKind.Gta4 ? _gta4.Status : _world.Status;
         int colon = status.IndexOf(" :", StringComparison.Ordinal);
         string step = colon > 0 ? status[..colon] : status.TrimEnd('.');
         return $"{step}...";

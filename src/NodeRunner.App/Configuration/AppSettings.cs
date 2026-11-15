@@ -16,6 +16,10 @@ public sealed class AppSettings
 
     public string? GameFolder { get; set; }
 
+    // GTA IV folder chosen by hand (otherwise found automatically), and the game opened last time.
+    public string? Gta4Folder { get; set; }
+    public GameKind LastGame { get; set; } = GameKind.Gta5;
+
     public bool VSync { get; set; } = true;
 
     // Images per second at most; 0 = no limit (other than VSync).

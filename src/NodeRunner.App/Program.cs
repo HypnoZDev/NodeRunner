@@ -40,12 +40,35 @@ internal static class Program
         {
             // The map starts loading at once, behind the start-up screen, then the 3D models around the camera (main
             // window still hidden): the main window opens on a loaded view.
+            // With both games installed, the start-up screen asks which one to open (the last one by default).
             var main = new MainForm(state);
-            if (state.Game is not null)
+            bool hasGta5 = state.Game is not null, hasGta4 = state.Gta4Folder is not null;
+            if (hasGta5 || hasGta4)
             {
-                state.World.Load(state.Game, settings.MapSelection, settings.HiddenScriptedMaps, state.SaveFolder);
-                using var splash = new SplashForm(state.World, main.PreloadModels);
+                var game = !hasGta5 ? GameKind.Gta4 : !hasGta4 ? GameKind.Gta5 : settings.LastGame;
+                bool started = false;
+                void Start(GameKind chosen)
+                {
+                    started = true;
+                    state.ActiveGame = chosen;
+                    if (chosen == GameKind.Gta4)
+                        state.Gta4.Load(state.Gta4Folder!);
+                    else
+                        state.World.Load(state.Game, settings.MapSelection, settings.HiddenScriptedMaps, state.SaveFolder);
+                    if (hasGta5 && hasGta4 && settings.LastGame != chosen)
+                    {
+                        settings.LastGame = chosen;
+                        state.SaveSettings();
+                    }
+                }
+                bool offer = hasGta5 && hasGta4;
+                if (!offer)
+                    Start(game);
+                using var splash = new SplashForm(state.World, state.Gta4, main.PreloadModels, game, offer ? Start : null);
                 Application.Run(splash);
+                // Closed before a choice (Alt+F4): the highlighted game.
+                if (!started)
+                    Start(game);
             }
             Application.Run(main);
         }

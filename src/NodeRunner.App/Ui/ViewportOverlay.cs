@@ -63,6 +63,31 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         ImGui.End();
 
         ImGui.PopStyleVar(2);
+
+        if (state.IsGta4)
+            DrawGta4Notice(position, size);
+    }
+
+    // GTA IV session: no 3D map yet, the archives are what can be explored.
+    private void DrawGta4Notice(Vector2 position, Vector2 size)
+    {
+        ImGui.SetNextWindowPos(position + size * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+        ImGui.SetNextWindowSizeConstraints(new Vector2(0f, 0f), new Vector2(Math.Min(460f, size.X - 2f * Margin), float.MaxValue));
+        if (ImGui.Begin("##gta4_notice", OverlayFlags | ImGuiWindowFlags.NoInputs))
+        {
+            ImGui.PushTextWrapPos(Math.Min(440f, size.X - 4f * Margin));
+            ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  GTA IV");
+            var gta4 = state.Gta4;
+            if (gta4.IsBusy)
+                ImGui.TextUnformatted(L("Ouverture des archives de GTA IV..."));
+            else if (gta4.Error is { } error)
+                ImGui.TextColored(UiTheme.Error, L($"Lecture de GTA IV impossible : {error}"));
+            else
+                ImGui.TextUnformatted(L($"{Widgets.Count(gta4.Files.EnumerateArchives().Count())} archives ouvertes, {Widgets.Count(gta4.Files.AllFiles.Count)} fichiers."));
+            ImGui.TextDisabled(L("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3)."));
+            ImGui.PopTextWrapPos();
+        }
+        ImGui.End();
     }
 
     private void DrawBar()

@@ -540,7 +540,7 @@ internal sealed unsafe partial class MainForm : Form
         var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
 
         // Start loading when a game folder is found or changed, then build the GPU data once it is ready.
-        _state.World.Load(_state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
+        _state.World.Load(_state.IsGta4 ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
 
         // Sky behind everything, then opaque models, then the translucent navmesh, then lines.
         var settings = _state.Settings;
