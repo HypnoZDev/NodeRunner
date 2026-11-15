@@ -136,6 +136,35 @@ public class ArchiveTests : IDisposable
         Assert.Throws<ArgumentException>(() => writer.Add("../a.txt", PlainText));
     }
 
+    [Fact]
+    public void RpfEditor_ReplacesAFileOfACopyMadeOpen()
+    {
+        string game = Path.Combine(_folder, "game.rpf");
+        File.WriteAllBytes(game, BuildArchive(encrypted: true));
+        Assert.True(RpfEditor.IsEncrypted(game));
+
+        string copy = Path.Combine(_folder, "test.rpf");
+        RpfEditor.CopyAsOpen(game, copy, new TestKeys().Load(null!, null));
+        File.Delete(game);
+        Assert.False(RpfEditor.IsEncrypted(copy));
+
+        var replaced = Encoding.ASCII.GetBytes("<CMapTypes>replaced</CMapTypes>");
+        using (var editor = new RpfEditor(copy))
+        {
+            Assert.Equal(XmlText, editor.Read(@"B.XML"));
+            Assert.Equal(PlainText, editor.Read(@"sub\d.txt"));
+            Assert.Null(editor.Read(@"sub\missing.txt"));
+            editor.Replace("b.xml", replaced);
+        }
+
+        using var files = Open();
+        Assert.Empty(files.Errors);
+        Assert.Equal(replaced, files.ReadFile(@"test.rpf\b.xml"));
+        Assert.Equal(PlainText, files.ReadFile(@"test.rpf\a.txt"));
+        Assert.Equal(ResourceContent, files.ReadFile(@"test.rpf\c.ymap"));
+        Assert.Equal(PlainText, files.ReadFile(@"test.rpf\inner.rpf\e.txt"));
+    }
+
     [Theory]
     [InlineData(1, 0x2000)]
     [InlineData(5, 0x4000)]

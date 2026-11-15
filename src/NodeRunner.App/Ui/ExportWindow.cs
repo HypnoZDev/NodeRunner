@@ -20,6 +20,13 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     private string _name = FiveMResource.DefaultName;
     private (string Text, bool Success, string? Folder)? _result;
 
+    // Single-player pack: installation running in the background, its progress (written by that thread), packs installed.
+    private Task? _installing;
+    private volatile string _installProgress = "";
+    private bool _resultInstalled;
+    private List<string>? _installed;
+    private bool _modsOutdated;
+
     // Check before export, run in the background when the window opens and when the folder or the name changes.
     private Task<ExportChecker.Result>? _checking;
     private ExportChecker.Result? _check;
@@ -39,6 +46,8 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         _open = true;
         _solo = solo;
         _name = solo ? SoloPack.ToPackName(state.ExportResourceName) : state.ExportResourceName;
+        if (solo)
+            RefreshInstalled();
         _result = null;
         StartCheck();
     }
@@ -157,8 +166,15 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         bool hasChanges = maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
         if (_solo)
         {
-            ImGui.BeginDisabled(!hasChanges || !nameValid);
-            if (Widgets.PrimaryButton(L($"{Icons.Save}  Enregistrer le dlc.rpf..."), 200f))
+            FinishInstall();
+            bool busy = _installing is not null;
+            ImGui.BeginDisabled(!hasChanges || !nameValid || busy || SoloPackInstaller.Check(state.Game) != SoloPackInstaller.Support.Ready);
+            if (Widgets.PrimaryButton(L($"{Icons.ArrowDownToLine}  Installer dans le jeu"), 190f))
+                Install(maps, pathAreas);
+            ImGui.EndDisabled();
+            ImGui.SameLine();
+            ImGui.BeginDisabled(!hasChanges || !nameValid || busy);
+            if (Widgets.Button(L($"{Icons.Save}  Enregistrer le dlc.rpf..."), L("Enregistrer le pack ailleurs, pour l'installer soi-même ou le partager")))
             {
                 _result = null;
                 chooseSoloPackFile();
@@ -177,8 +193,146 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         if (Widgets.Button(L("Fermer"), width: 90f))
             _open = false;
 
-        if (_result is { } result)
+        if (_solo && _installing is not null)
+        {
+            ImGui.Dummy(new Vector2(0, 2));
+            ImGui.TextColored(UiTheme.TextMuted, $"{Icons.LoaderCircle}  {_installProgress}");
+        }
+        else if (_result is { } result)
             DrawResult(result);
+        if (_solo)
+            DrawInstalled();
+    }
+
+    private void RefreshInstalled()
+    {
+        _installed = null;
+        _modsOutdated = false;
+        if (state.Game is not { } game || SoloPackInstaller.Check(game) is SoloPackInstaller.Support.Enhanced or SoloPackInstaller.Support.NoGame)
+            return;
+        try
+        {
+            _installed = SoloPackInstaller.Installed(game);
+            _modsOutdated = SoloPackInstaller.IsModsCopyOutdated(game, state.World.Content?.ReadFile(Data.FileSystem.GameContent.DlcListPath));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            _installed = [];
+        }
+    }
+
+    // The pack is written to a temporary folder, then installed in the background (the first time, update.rpf is copied:
+    // 2 GB).
+    private void Install(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas)
+    {
+        if (state.Game is not { } game)
+            return;
+        string temp = Path.Combine(Path.GetTempPath(), "NodeRunner", "install-" + Guid.NewGuid().ToString("N"));
+        string dlcRpf = Path.Combine(temp, SoloPack.ArchiveName);
+        if (!Export(maps, pathAreas, dlcRpf, out string summary))
+        {
+            DeleteFolder(temp);
+            return;
+        }
+        string name = _name;
+        _result = null;
+        _installProgress = L("Installation...");
+        var progress = new InstallProgress(text => _installProgress = text);
+        _installing = Task.Run(() =>
+        {
+            try
+            {
+                SoloPackInstaller.Install(game, dlcRpf, name, progress);
+            }
+            finally
+            {
+                DeleteFolder(temp);
+            }
+        });
+        _installSummary = (name, summary, SoloPackInstaller.PackFolder(game, name));
+    }
+
+    private (string Name, string Summary, string Folder) _installSummary;
+
+    private void FinishInstall()
+    {
+        if (_installing is not { IsCompleted: true } done)
+            return;
+        _installing = null;
+        var (name, summary, folder) = _installSummary;
+        _resultInstalled = done.IsCompletedSuccessfully;
+        _result = done.IsCompletedSuccessfully
+            ? (L($"Pack « {name} » installé dans le jeu ({summary})."), true, folder)
+            : (InstallError(done.Exception?.GetBaseException()), false, null);
+        RefreshInstalled();
+    }
+
+    private static string InstallError(Exception? error) => error switch
+    {
+        UnauthorizedAccessException => L("Windows refuse d'écrire dans le dossier du jeu. Relance NodeRunner en administrateur ")
+            + L("(clic droit > Exécuter en tant qu'administrateur), ou enregistre le dlc.rpf pour l'installer toi-même."),
+        null => L("Échec de l'installation."),
+        _ => L($"Échec de l'installation : {error.Message}"),
+    };
+
+    private void DrawInstalled()
+    {
+        if (_modsOutdated)
+        {
+            ImGui.Dummy(new Vector2(0, 2));
+            ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Warning);
+            ImGui.TextWrapped(L($"{Icons.TriangleAlert}  La copie de update.rpf du dossier mods date d'avant une mise à jour du jeu : ")
+                + L("des packs récents du jeu n'y sont pas. Si le jeu plante au démarrage, remplace-la par celle du jeu (OpenIV) puis réinstalle tes packs."));
+            ImGui.PopStyleColor();
+        }
+        if (_installed is not { Count: > 0 } installed || state.Game is not { } game)
+            return;
+        ImGui.Dummy(new Vector2(0, 4));
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L("Packs installés par NodeRunner"));
+        ImGui.PopFont();
+        foreach (var name in installed)
+        {
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextUnformatted($"{Icons.Package}  {name}");
+            ImGui.SameLine();
+            ImGui.BeginDisabled(_installing is not null);
+            if (Widgets.Button(L($"{Icons.Trash}  Désinstaller##{name}"), L("Retire le pack du jeu (dossier mods). Le projet n'est pas touché.")))
+            {
+                try
+                {
+                    SoloPackInstaller.Uninstall(game, name);
+                    _resultInstalled = false;
+                    _result = (L($"Pack « {name} » désinstallé."), true, null);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+                {
+                    _result = (InstallError(ex), false, null);
+                }
+                RefreshInstalled();
+            }
+            ImGui.EndDisabled();
+        }
+        Widgets.Hint(L("Le dossier mods sert seulement en solo : ne lance pas GTA Online avec des mods installés."), wrap: true);
+    }
+
+    private static void DeleteFolder(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left in the temporary folder, which Windows empties.
+        }
+    }
+
+    // Called on the installing thread.
+    private sealed class InstallProgress(Action<string> report) : IProgress<string>
+    {
+        public void Report(string value) => report(value);
     }
 
     private void DrawFolder(string? folder, string? target, ResourceExporter.TargetState targetState, bool nameValid)
@@ -227,10 +381,25 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     {
         Widgets.Property(L("Pack"), L("Emplacement du pack dans le dossier mods du jeu"));
         ImGui.AlignTextToFramePadding();
-        if (nameValid)
-            ImGui.TextColored(UiTheme.TextMuted, Widgets.Fit($@"mods\update\x64\dlcpacks\{_name}\{SoloPack.ArchiveName}", ImGui.GetContentRegionAvail().X));
-        else
+        if (!nameValid)
             ImGui.TextColored(UiTheme.Error, L("nom invalide (minuscules, chiffres et _)"));
+        else if (_installed?.Contains(_name) == true)
+            ImGui.TextColored(UiTheme.Warning, L("déjà installé : sera remplacé"));
+        else
+            ImGui.TextColored(UiTheme.TextMuted, Widgets.Fit($@"mods\update\x64\dlcpacks\{_name}\{SoloPack.ArchiveName}", ImGui.GetContentRegionAvail().X));
+
+        Widgets.Property(L("Jeu"), L("GTA V solo lit les packs du dossier mods grâce à OpenIV.asi"));
+        ImGui.AlignTextToFramePadding();
+        var (text, color) = SoloPackInstaller.Check(state.Game) switch
+        {
+            SoloPackInstaller.Support.Ready => (L("dossier mods prêt (OpenIV.asi trouvé)"), UiTheme.TextMuted),
+            SoloPackInstaller.Support.NoModsLoader => (L("OpenIV.asi absent : installe-le avec OpenIV (Outils > ASI Manager), le jeu ne lit pas le dossier mods sans lui"), UiTheme.Warning),
+            SoloPackInstaller.Support.Enhanced => (L("GTA V Enhanced : installation pas encore possible, enregistre le dlc.rpf"), UiTheme.Warning),
+            _ => (L("dossier du jeu inconnu"), UiTheme.Warning),
+        };
+        ImGui.TextColored(color, Widgets.Fit(text, ImGui.GetContentRegionAvail().X));
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(text);
     }
 
     private static void DrawMapList(IReadOnlyList<MapData> maps)
@@ -494,8 +663,12 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             Export(state.MapsToExport, state.PathAreasToSave, dlcRpf);
     }
 
-    private void Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target)
+    private void Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target) =>
+        Export(maps, pathAreas, target, out _);
+
+    private bool Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target, out string summary)
     {
+        _resultInstalled = false;
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
         var report = _solo
@@ -527,9 +700,11 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             extra.Add(L($"{fromLibrary.Count} fichier(s) de la bibliothèque"));
         string extraText = extra.Count > 0 ? $" et {string.Join(" et ", extra)}" : "";
         string? folder = _solo ? Path.GetDirectoryName(target) : target;
+        summary = $"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText}";
         _result = report.Errors.Count == 0
             ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}"), true, folder)
             : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 && !_solo ? target : null);
+        return report.Errors.Count == 0;
     }
 
     private void DrawResult((string Text, bool Success, string? Folder) result)
@@ -540,7 +715,9 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         ImGui.PushStyleColor(ImGuiCol.Text, result.Success ? UiTheme.Success : UiTheme.Error);
         ImGui.TextWrapped($"{(result.Success ? Icons.Check : Icons.TriangleAlert)}  {result.Text}");
         ImGui.PopStyleColor();
-        if (result.Success && _solo)
+        if (result.Success && _solo && _resultInstalled)
+            Widgets.Hint(L("Lance GTA V en solo : la carte modifiée est chargée au démarrage du jeu."), wrap: true);
+        else if (result.Success && _solo && result.Folder is not null)
         {
             string line = $"<Item>{SoloPack.ListEntry(_name)}</Item>";
             Widgets.Hint(L($@"Pour l'installer : place {SoloPack.ArchiveName} dans mods\update\x64\dlcpacks\{_name}\ du dossier du jeu, ")
@@ -551,7 +728,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             if (Widgets.Button(L($"{Icons.Copy}  Copier"), L("Copier la ligne pour dlclist.xml")))
                 ImGui.SetClipboardText(line);
         }
-        else if (result.Success)
+        else if (result.Success && !_solo)
         {
             string line = $"ensure {_name}";
             Widgets.Hint(L("Copie le dossier dans « resources » si besoin, puis ajoute cette ligne au server.cfg :"), wrap: true);

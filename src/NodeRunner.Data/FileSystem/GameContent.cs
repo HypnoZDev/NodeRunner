@@ -24,7 +24,7 @@ public sealed record DlcPackInfo(string Name, string DisplayName);
 // update.rpf\common\data\dlclist.xml and mounted by order (setup2.xml): each declares archives (content.xml).
 public sealed class GameContent
 {
-    private const string DlcListPath = @"update\update.rpf\common\data\dlclist.xml";
+    public const string DlcListPath = @"update\update.rpf\common\data\dlclist.xml";
     private const string UpdateRoot = @"update\update.rpf";
     private const string DlcPatchFolder = @"update\update.rpf\dlc_patch\";
 

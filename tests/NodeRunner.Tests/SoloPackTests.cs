@@ -56,3 +56,31 @@ public class SoloPackTests
         Assert.Equal("dlcpacks:/ma_carte/", SoloPack.ListEntry("ma_carte"));
     }
 }
+
+public class DlcListTests
+{
+    private const string List = "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<SMandatoryPacksData>\r\n\t<Paths>\r\n\t\t<Item>dlcpacks:/mpBeach/</Item>\r\n\t\t<Item>dlcpacks:/patch2026_01/</Item>\r\n\t</Paths>\t\r\n</SMandatoryPacksData>\r\n";
+
+    private static byte[] Bytes(string text) => System.Text.Encoding.UTF8.GetBytes(text);
+
+    [Fact]
+    public void Add_PutsTheItemAfterTheLastOneWithItsIndentation()
+    {
+        var added = DlcList.Add(Bytes(List), "ma_carte")!;
+
+        Assert.Equal(List.Replace("<Item>dlcpacks:/patch2026_01/</Item>\r\n", "<Item>dlcpacks:/patch2026_01/</Item>\r\n\t\t<Item>dlcpacks:/ma_carte/</Item>\r\n"),
+            System.Text.Encoding.UTF8.GetString(added));
+        Assert.True(DlcList.Contains(added, "MA_CARTE"));
+        Assert.Null(DlcList.Add(added, "ma_carte"));
+        Assert.Equal(["dlcpacks:/mpBeach/", "dlcpacks:/patch2026_01/", "dlcpacks:/ma_carte/"], DlcList.Entries(added));
+    }
+
+    [Fact]
+    public void Remove_GivesBackTheOriginalFile()
+    {
+        var added = DlcList.Add(Bytes(List), "ma_carte")!;
+
+        Assert.Equal(Bytes(List), DlcList.Remove(added, "ma_carte"));
+        Assert.Null(DlcList.Remove(Bytes(List), "ma_carte"));
+    }
+}
