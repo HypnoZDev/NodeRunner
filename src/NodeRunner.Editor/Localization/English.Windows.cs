@@ -928,8 +928,7 @@ public static partial class English
             "Map shown: GTA IV or one of its episodes (Episodes from Liberty City),\nwhich change some districts."),
         ("Carte de GTA IV", "GTA IV map"),
         ("Liberty City : {0} objets", "Liberty City: {0} objects"),
-        ("Modèles 3D sans textures pour l'instant (gris) ; sélection des objets à venir.",
-            "3D models without textures for now (grey); object selection to come."),
+        ("Sélection des objets à venir.", "Object selection to come."),
         ("Affiche « Carte en 3D » dans le panneau Calques pour voir la carte.", "Show \"3D map\" in the Layers panel to see the map."),
     ];
 }

@@ -86,7 +86,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
                 bool modelsShown = state.IsLayerVisible(ModelLayer.LayerName);
                 ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  " + L($"Liberty City : {Widgets.Count(gta4.MapBoxes!.Count)} objets"));
                 ImGui.TextDisabled(modelsShown
-                    ? L("Modèles 3D sans textures pour l'instant (gris) ; sélection des objets à venir.")
+                    ? L("Sélection des objets à venir.")
                     : L("Affiche « Carte en 3D » dans le panneau Calques pour voir la carte."));
             }
             else
