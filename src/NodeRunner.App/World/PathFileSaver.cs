@@ -10,6 +10,7 @@ internal static partial class PathFileSaver
 {
     // Saved positions are rounded by the file format (1/4 m across, 1/32 m up).
     private const float Tolerance = 0.2f;
+    private const int GameVersion = 1;
 
     public static void Save(WorldLoader world, IEnumerable<int> areaIds, string folder, MapFileSaver.Report report, bool markSaved = true)
     {
@@ -22,10 +23,11 @@ internal static partial class PathFileSaver
             string name = PathNetwork.FileName(areaId);
             try
             {
-                if (network.GetArea(areaId) is not { } area || network.FilePath(areaId) is not { } path
-                    || files.GetResourceHeader(path) is not { } header)
-                    throw new InvalidDataException(L("fichier du jeu introuvable"));
-                var file = writer.Write(area, network.LinkLength, header.Version);
+                if (network.GetArea(areaId) is not { } area)
+                    continue;
+                // A new area (no game file) takes the version of the game's .ynd files.
+                int version = network.FilePath(areaId) is { } path && files.GetResourceHeader(path) is { } header ? header.Version : GameVersion;
+                var file = writer.Write(area, network.LinkLength, version);
                 Verify(file, area);
 
                 string target = Path.Combine(folder, name);

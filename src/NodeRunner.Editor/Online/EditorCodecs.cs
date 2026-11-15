@@ -382,15 +382,13 @@ internal sealed class PathNodeValuesCodec : EditCodec<PathNodeValuesEdit>
     {
         w.Write(edit.Node.Id.AreaId);
         w.Write(edit.Node.Id.NodeId);
-        var v = edit.After;
-        foreach (byte b in (byte[])[v.Flags0, v.Flags1, v.Flags2, v.Flags3, v.Flags4, v.LinkCountExtra])
-            w.Write(b);
+        PathNodeCodecs.Write(w, edit.After);
     }
 
     public override IEdit Apply(EditReader r, string description)
     {
         var id = new PathNodeId(r.ReadUShort(), r.ReadUShort());
-        var after = new PathNodeValues(r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+        var after = PathNodeCodecs.ReadValues(r);
         var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
         var node = network.GetNode(id) ?? throw new InvalidDataException($"Path node {id.AreaId}:{id.NodeId} not found here.");
         var before = node.Values;
@@ -438,8 +436,81 @@ internal sealed class PathLinkDeleteCodec : EditCodec<PathLinkDeleteEdit>
     }
 }
 
+internal sealed class PathNodeAddCodec : EditCodec<PathNodeAddEdit>
+{
+    public override string Tag => "path-node-add";
+
+    protected override void Write(PathNodeAddEdit edit, EditWriter w)
+    {
+        w.Write(edit.Position);
+        w.Write(edit.Pedestrian);
+        PathNodeCodecs.Write(w, edit.Values);
+        w.Write(edit.StreetName);
+        w.Write(edit.LinkedTo is not null);
+        if (edit.LinkedTo is { } id)
+        {
+            w.Write(id.AreaId);
+            w.Write(id.NodeId);
+            w.Write((byte)edit.LanesForward);
+            w.Write((byte)edit.LanesBackward);
+        }
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var position = r.ReadVector3();
+        bool pedestrian = r.ReadBool();
+        var values = PathNodeCodecs.ReadValues(r);
+        uint street = r.ReadUInt();
+        PathNode? linkTo = null;
+        int forward = 0, backward = 0;
+        if (r.ReadBool())
+        {
+            linkTo = PathNodeCodecs.Node(network, r);
+            forward = r.ReadByte();
+            backward = r.ReadByte();
+        }
+        return PathNodeAddEdit.Apply(network, position, pedestrian, values, street, linkTo, forward, backward, description)
+            ?? throw new InvalidDataException("Path node not added here.");
+    }
+}
+
+internal sealed class PathLinkAddCodec : EditCodec<PathLinkAddEdit>
+{
+    public override string Tag => "path-link-add";
+
+    protected override void Write(PathLinkAddEdit edit, EditWriter w)
+    {
+        w.Write(edit.Node.Id.AreaId);
+        w.Write(edit.Node.Id.NodeId);
+        w.Write(edit.Other.Id.AreaId);
+        w.Write(edit.Other.Id.NodeId);
+        w.Write((byte)edit.LanesForward);
+        w.Write((byte)edit.LanesBackward);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var node = PathNodeCodecs.Node(network, r);
+        var other = PathNodeCodecs.Node(network, r);
+        int forward = r.ReadByte(), backward = r.ReadByte();
+        return PathLinkAddEdit.Apply(network, node, other, forward, backward, description) ?? throw new InvalidDataException("Path link not added here.");
+    }
+}
+
 internal static class PathNodeCodecs
 {
+    public static void Write(EditWriter w, PathNodeValues v)
+    {
+        foreach (byte b in (byte[])[v.Flags0, v.Flags1, v.Flags2, v.Flags3, v.Flags4, v.LinkCountExtra])
+            w.Write(b);
+    }
+
+    public static PathNodeValues ReadValues(EditReader r) =>
+        new(r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+
     public static PathNode Node(PathNetwork network, EditReader r)
     {
         var id = new PathNodeId(r.ReadUShort(), r.ReadUShort());

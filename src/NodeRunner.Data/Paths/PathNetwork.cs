@@ -90,15 +90,12 @@ public sealed partial class PathNetwork
 
         foreach (int areaId in _changed.Concat(_saved).Concat(saved.Keys).Distinct())
         {
-            if (FilePath(areaId) is not { } path || files.ReadFile(path) is not { Length: > 0 } data)
-            {
-                if (saved.ContainsKey(areaId))
-                    errors.Add($"{FileName(areaId)} : aucun fichier du jeu de ce nom");
-                continue;
-            }
             try
             {
-                network._areas[areaId] = reader.Read(data, areaId);
+                // An area the game has no file for only exists through the user's file.
+                network._areas[areaId] = FilePath(areaId) is { } path && files.ReadFile(path) is { Length: > 0 } data
+                    ? reader.Read(data, areaId)
+                    : null;
                 if (!saved.TryGetValue(areaId, out var savedData))
                     continue;
                 network._areas[areaId] = reader.Read(savedData, areaId);
@@ -112,7 +109,12 @@ public sealed partial class PathNetwork
         return network;
     }
 
-    internal void SetArea(PathNodeArea area) => _areas[area.AreaId] = area;
+    internal void SetArea(PathNodeArea area, string? path = null)
+    {
+        _areas[area.AreaId] = area;
+        if (path is not null)
+            _paths[area.AreaId] = path;
+    }
 
     public PathNodeArea? GetArea(int areaId) =>
         areaId is >= 0 and < PathNodeArea.AreaCount ? _areas[areaId] : null;
@@ -161,11 +163,10 @@ public sealed partial class PathNetwork
                 if (data is null || data.Length == 0)
                     continue;
                 var area = reader.Read(data, areaId);
+                // Empty files are kept as places where nodes can be added.
+                network._paths[areaId] = path;
                 if (area.Nodes.Count > 0)
-                {
                     network._areas[areaId] = area;
-                    network._paths[areaId] = path;
-                }
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException)
             {

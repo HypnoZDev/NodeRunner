@@ -71,7 +71,7 @@ public class OnlineEditTests
             ],
             Links = [new PathLink(new(5, 2), 0, 0, 0x20, 5), new PathLink(new(5, 1), 0, 0, 0x20, 5)],
             VehicleNodeCount = 3,
-        });
+        }, "nodes5.ynd");
         return new World(library, new CollisionEdits(), paths, history ?? new EditHistory());
     }
 
@@ -230,6 +230,9 @@ public class OnlineEditTests
         Share(new PathNodeValuesEdit(a.Paths, node, valuesBefore, node.Values, "Modifier un nœud"));
         Share(PathNodeDeleteEdit.Apply(a.Paths, a.Paths.GetNode(new(5, 0))!, "Supprimer un nœud")!);
         Share(PathLinkDeleteEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, "Supprimer un lien")!);
+        // Area 5 spans x -5632 to -5120, y -8192 to -7680.
+        Share(PathNodeAddEdit.Apply(a.Paths, new Vector3(-5400, -8000, 4), false, node.Values, 0x55, node, 2, 1, "Ajouter un nœud")!);
+        Share(PathLinkAddEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, 1, 1, "Relier deux nœuds")!);
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

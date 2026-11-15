@@ -96,7 +96,7 @@ public class PathNodeEditTests
         (a[1].FirstLink, a[1].LinkCount) = (1, 2);
         (a[2].FirstLink, a[2].LinkCount) = (3, 2);
         (a[3].FirstLink, a[3].LinkCount) = (5, 0);
-        network.SetArea(new PathNodeArea { AreaId = 1, Nodes = a, Links = aLinks, VehicleNodeCount = 3, PedestrianNodeCount = 1 });
+        network.SetArea(new PathNodeArea { AreaId = 1, Nodes = a, Links = aLinks, VehicleNodeCount = 3, PedestrianNodeCount = 1 }, "nodes1.ynd");
         var b = N(2, 0);
         b.LinkCount = 1;
         network.SetArea(new PathNodeArea { AreaId = 2, Nodes = [b], Links = [L(1, 2)], VehicleNodeCount = 1 });
@@ -168,6 +168,81 @@ public class PathNodeEditTests
         Assert.Equal(junction.Header, back.Header);
         Assert.Equal((2, 3), (back.Width, back.Depth));
         Assert.Equal(junction.Heights, back.Heights);
+    }
+
+    // Inside area 1 (x from -7680 to -7168, y from -8192 to -7680).
+    private static readonly Vector3 InArea1 = new(-7400f, -8000f, 10f);
+
+    [Fact]
+    public void Adding_a_vehicle_node_goes_before_pedestrian_nodes_and_links_follow()
+    {
+        var network = LinkedNetwork();
+        var ped = network.GetNode(new(1, 3))!;
+        var last = network.GetNode(new(1, 2))!;
+        var other = network.GetNode(new(2, 0))!;
+        // A pedestrian node linked to the pedestrian node, to check the renumbering of links to it.
+        var walker = PathNodeAddEdit.Apply(network, InArea1, true, default, 0, ped, 0, 0, "piéton")!;
+        Assert.Equal(new PathNodeId(1, 4), walker.Node.Id);
+
+        var history = new EditHistory();
+        var edit = PathNodeAddEdit.Apply(network, InArea1, false, new PathNodeValues(2, 0, 4, 0, 8, 2), 0x1234, last, 2, 1, "Ajouter")!;
+        history.Add(edit);
+        var area = network.GetArea(1)!;
+        var added = edit.Node;
+        Assert.Equal(new PathNodeId(1, 3), added.Id);
+        Assert.False(added.IsJunction);
+        Assert.Equal(new PathNodeId(1, 4), ped.Id);
+        Assert.Equal(new PathNodeId(1, 5), walker.Node.Id);
+        Assert.Equal((4, 2), (area.VehicleNodeCount, area.PedestrianNodeCount));
+        Assert.Equal([new PathNodeId(1, 5)], area.LinksOf(ped).Select(l => l.Target));
+        Assert.Equal([new PathNodeId(1, 4)], area.LinksOf(walker.Node).Select(l => l.Target));
+        var toNew = area.LinksOf(last).Single(l => l.Target == added.Id);
+        var back = area.LinksOf(added).Single();
+        Assert.Equal(last.Id, back.Target);
+        Assert.Equal((2, 1), (back.LanesForward, back.LanesBackward));
+        Assert.Equal((1, 2), (toNew.LanesForward, toNew.LanesBackward));
+        Assert.Equal(back.Length, toNew.Length);
+        Assert.Equal([new PathNodeId(1, 1), new PathNodeId(2, 0), added.Id], area.LinksOf(last).Select(l => l.Target));
+        Assert.Equal([new PathNodeId(1, 2)], network.GetArea(2)!.LinksOf(other).Select(l => l.Target));
+
+        var reread = Rewrite(area, (_, l) => l.Length);
+        Assert.Equal(area.Links, reread.Links);
+
+        history.Undo();
+        Assert.Equal(5, area.Nodes.Count);
+        Assert.Equal(new PathNodeId(1, 3), ped.Id);
+        Assert.Equal(2, area.LinksOf(last).Count());
+        history.Redo();
+        Assert.Equal(new PathNodeId(1, 3), added.Id);
+        Assert.Equal(3, area.LinksOf(last).Count());
+    }
+
+    [Fact]
+    public void Linking_two_nodes_adds_both_ways_once()
+    {
+        var network = LinkedNetwork();
+        var first = network.GetNode(new(1, 0))!;
+        var other = network.GetNode(new(2, 0))!;
+        var edit = PathLinkAddEdit.Apply(network, first, other, 1, 1, "Relier")!;
+        Assert.Equal([new PathNodeId(1, 1), new PathNodeId(2, 0)], network.GetArea(1)!.LinksOf(first).Select(l => l.Target));
+        Assert.Equal(2, network.GetArea(2)!.LinksOf(other).Count());
+        Assert.Null(PathLinkAddEdit.Apply(network, other, first, 1, 1, "encore"));
+        Assert.Null(PathLinkAddEdit.Apply(network, first, first, 1, 1, "soi-même"));
+        edit.Undo();
+        Assert.Single(network.GetArea(1)!.LinksOf(first));
+    }
+
+    [Fact]
+    public void A_node_is_added_in_a_new_area_but_not_outside_the_map()
+    {
+        var network = new PathNetwork();
+        var added = network.AddNode(InArea1, false, default, 0);
+        Assert.NotNull(added);
+        Assert.Single(network.GetArea(1)!.Nodes);
+        Assert.Contains(1, network.ChangedAreas);
+        network.Restore(added.Value.Before);
+        Assert.Empty(network.GetArea(1)!.Nodes);
+        Assert.Null(network.AddNode(new Vector3(9000f, 0f, 0f), false, default, 0));
     }
 
     [Fact]

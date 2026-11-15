@@ -2529,6 +2529,16 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             state.DeleteSelectedPathNode();
             return;
         }
+        if (Widgets.Button(L($"{Icons.Waypoints}  Ajouter un nœud relié"), L("Nouveau nœud à 10 m, relié à celui-ci (mêmes réglages), à placer ensuite avec les poignées.")))
+        {
+            state.AddPathNode(node);
+            return;
+        }
+        ImGui.SameLine();
+        bool linking = state.PathLinkSource == node;
+        if (Widgets.Button(linking ? L($"{Icons.GitBranch}  Cliquez sur l'autre nœud...") : L($"{Icons.GitBranch}  Relier à un autre nœud"),
+                L("Puis cliquez sur un autre nœud dans la vue 3D : ils sont reliés dans les deux sens. Échap pour annuler.")))
+            state.PathLinkSource = linking ? null : node;
 
         if (Widgets.Section(L("Nœud"), "path_node") && Widgets.BeginProperties("##path_node"))
         {

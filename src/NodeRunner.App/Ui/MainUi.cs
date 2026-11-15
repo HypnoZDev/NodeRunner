@@ -508,6 +508,10 @@ internal sealed class MainUi
                 _state.AddTimecycleZone();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute une zone d'ambiance (timecycle modifier) devant la caméra, dans le YMAP du projet : le jeu y change la lumière, les couleurs ou le brouillard. Choisissez ensuite son modificateur dans Propriétés."));
+            if (ImGui.MenuItem(L($"{Icons.Route}  Nœud de route"), null, false, _state.World.PathNetwork is not null))
+                _state.AddPathNode(null);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Ajoute un nœud de route (pathnode) au sol devant la caméra, avec les réglages du nœud de véhicules le plus proche. Reliez-le ensuite à un autre nœud dans Propriétés."));
             if (ImGui.MenuItem(L($"{Icons.Moon}  Lumière LOD"), null, false, _state.World.Maps is not null))
                 _state.AddLodLight();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))

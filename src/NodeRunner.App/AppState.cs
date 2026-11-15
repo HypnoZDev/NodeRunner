@@ -774,7 +774,7 @@ internal sealed class AppState
         if (edit is IPathNodeEdit nodeEdit)
         {
             Select(null);
-            SelectedPathNode = edit is PathNodeDeleteEdit && !undone ? null : nodeEdit.Node;
+            SelectedPathNode = edit is PathNodeDeleteEdit && !undone || edit is PathNodeAddEdit && undone ? null : nodeEdit.Node;
         }
         else if (edit is OccluderBoxEdit boxEdit)
         {
@@ -862,6 +862,79 @@ internal sealed class AppState
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
         Notify(L($"Place de véhicule ajoutée dans {Path.GetFileName(map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+    }
+
+    // Node waiting for a click on another node to link them; forgotten as soon as it is no longer selected.
+    public Data.Paths.PathNode? PathLinkSource
+    {
+        get => _pathLinkSource is { } source && source == SelectedPathNode ? source : null;
+        set => _pathLinkSource = value;
+    }
+
+    private Data.Paths.PathNode? _pathLinkSource;
+
+    // A road node: 10 m from "from" (away from its neighbours) and linked to it, or 15 m in front of the camera with
+    // the settings of the nearest node. Selected, with the "move" tool.
+    public void AddPathNode(Data.Paths.PathNode? from)
+    {
+        Notice = null;
+        if (World.PathNetwork is not { } network)
+            return;
+        var flatForward = Camera.Forward with { Z = 0 };
+        flatForward = flatForward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(flatForward) : System.Numerics.Vector3.UnitY;
+        System.Numerics.Vector3 point;
+        var template = from;
+        int forward = 1, backward = 1;
+        if (from is not null)
+        {
+            var away = System.Numerics.Vector3.Zero;
+            var links = network.GetArea(from.Id.AreaId)?.LinksOf(from).ToList() ?? [];
+            foreach (var link in links)
+                if (network.GetNode(link.Target) is { } neighbour && (from.Position - neighbour.Position) with { Z = 0 } is { } d && d.LengthSquared() > 0.01f)
+                    away += System.Numerics.Vector3.Normalize(d);
+            var direction = away.LengthSquared() > 0.01f ? System.Numerics.Vector3.Normalize(away) : flatForward;
+            point = from.Position + direction * 10f;
+            if (links.Count > 0)
+                (forward, backward) = (links[0].LanesForward, links[0].LanesBackward);
+        }
+        else
+        {
+            point = Camera.Position + flatForward * 15f;
+            template = network.Areas.SelectMany(a => a.Nodes).Where(n => !n.IsPedestrian)
+                .MinBy(n => System.Numerics.Vector3.DistanceSquared(n.Position, point));
+        }
+        point = point with { Z = GroundHeightAt(point) ?? from?.Position.Z ?? Camera.Position.Z - 10f };
+        bool pedestrian = template?.IsPedestrian ?? false;
+        var values = template?.Values ?? new Data.Paths.PathNodeValues(2, 0, 0, 0, 8, 2);
+        if (!pedestrian)
+            values = values.WithSpecial(Data.Paths.PathNodeSpecialType.None);
+        if (PathNodeAddEdit.Apply(network, point, pedestrian, values, template?.StreetNameHash ?? 0, from, forward, backward,
+                L("Ajouter un nœud")) is not { } edit)
+        {
+            Notify(L("Impossible d'ajouter un nœud ici : hors de la carte, ou le nœud de départ a déjà 31 liens."), warning: true);
+            return;
+        }
+        History.Add(edit);
+        Select(null);
+        SelectedPathNode = edit.Node;
+        Tool = TransformTool.Move;
+    }
+
+    // Links two nodes both ways, with the lanes of the first one's first link (1 each way without one).
+    public void LinkPathNodes(Data.Paths.PathNode a, Data.Paths.PathNode b)
+    {
+        if (World.PathNetwork is not { } network)
+            return;
+        var first = network.GetArea(a.Id.AreaId)?.LinksOf(a).FirstOrDefault();
+        int forward = first?.LanesForward ?? 1, backward = first?.LanesBackward ?? 1;
+        if (PathLinkAddEdit.Apply(network, a, b, forward, backward,
+                L($"Relier les nœuds {a.Id.AreaId}:{a.Id.NodeId} et {b.Id.AreaId}:{b.Id.NodeId}")) is not { } edit)
+        {
+            Notify(L("Ces nœuds sont déjà reliés, ou l'un d'eux a déjà 31 liens."), warning: true);
+            return;
+        }
+        History.Add(edit);
+        Notify(L($"Nœuds {a.Id.AreaId}:{a.Id.NodeId} et {b.Id.AreaId}:{b.Id.NodeId} reliés. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedPathNode()

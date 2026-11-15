@@ -94,3 +94,99 @@ public sealed class PathLinkDeleteEdit : IPathNodeEdit
     public void Undo() => _network.Restore(_before);
     public void Redo() => _network.Restore(_after);
 }
+
+// A node added, linked or not to an existing node, in one undo step.
+public sealed class PathNodeAddEdit : IPathNodeEdit
+{
+    private readonly PathNetwork _network;
+    private readonly List<(PathAreasState Before, PathAreasState After)> _steps;
+
+    private PathNodeAddEdit(PathNetwork network, PathNode node, List<(PathAreasState, PathAreasState)> steps, string description)
+    {
+        _network = network;
+        Node = node;
+        _steps = steps;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public PathNode Node { get; }
+    public bool Pedestrian => Node.IsPedestrian;
+    public PathNodeValues Values { get; private init; }
+    public uint StreetName => Node.StreetNameHash;
+    public System.Numerics.Vector3 Position { get; private init; }
+
+    // The node it was linked to, by its number before the addition, and the lanes towards it and back.
+    public PathNodeId? LinkedTo { get; private init; }
+    public int LanesForward { get; private init; }
+    public int LanesBackward { get; private init; }
+
+    public static PathNodeAddEdit? Apply(PathNetwork network, System.Numerics.Vector3 position, bool pedestrian, PathNodeValues values,
+        uint streetName, PathNode? linkTo, int lanesForward, int lanesBackward, string description)
+    {
+        var linkedTo = linkTo?.Id;
+        if (network.AddNode(position, pedestrian, values, streetName) is not var (node, before, after))
+            return null;
+        var steps = new List<(PathAreasState, PathAreasState)> { (before, after) };
+        if (linkTo is not null)
+        {
+            if (network.AddLink(node, linkTo, lanesForward, lanesBackward) is not { } link)
+            {
+                network.Restore(before);
+                return null;
+            }
+            steps.Add(link);
+        }
+        return new PathNodeAddEdit(network, node, steps, description)
+        {
+            Values = values,
+            Position = position,
+            LinkedTo = linkedTo,
+            LanesForward = lanesForward,
+            LanesBackward = lanesBackward,
+        };
+    }
+
+    public void Undo()
+    {
+        for (int i = _steps.Count - 1; i >= 0; i--)
+            _network.Restore(_steps[i].Before);
+    }
+
+    public void Redo()
+    {
+        foreach (var step in _steps)
+            _network.Restore(step.After);
+    }
+}
+
+// Two nodes linked both ways.
+public sealed class PathLinkAddEdit : IPathNodeEdit
+{
+    private readonly PathNetwork _network;
+    private readonly PathAreasState _before, _after;
+
+    private PathLinkAddEdit(PathNetwork network, PathNode node, PathNode other, int forward, int backward, PathAreasState before, PathAreasState after, string description)
+    {
+        _network = network;
+        (Node, Other, LanesForward, LanesBackward) = (node, other, forward, backward);
+        (_before, _after) = (before, after);
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public PathNode Node { get; }
+    public PathNode Other { get; }
+    public int LanesForward { get; }
+    public int LanesBackward { get; }
+
+    public static PathLinkAddEdit? Apply(PathNetwork network, PathNode node, PathNode other, int lanesForward, int lanesBackward, string description) =>
+        network.AddLink(node, other, lanesForward, lanesBackward) is var (before, after)
+            ? new PathLinkAddEdit(network, node, other, lanesForward, lanesBackward, before, after, description)
+            : null;
+
+    public void Undo() => _network.Restore(_before);
+    public void Redo() => _network.Restore(_after);
+}

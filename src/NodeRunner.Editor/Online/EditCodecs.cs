@@ -76,6 +76,8 @@ public sealed class EditCodecs
         .Add(new PathNodeValuesCodec())
         .Add(new PathNodeDeleteCodec())
         .Add(new PathLinkDeleteCodec())
+        .Add(new PathNodeAddCodec())
+        .Add(new PathLinkAddCodec())
         .Add(new RoomCodec())
         .Add(new PortalCodec())
         .Add(new InteriorLayoutCodec())

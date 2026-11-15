@@ -922,10 +922,14 @@ internal sealed unsafe partial class MainForm : Form
             return;
         }
         // Road nodes first: a dot on the road is clicked on purpose, the road model is under it.
+        var linkSource = _state.PathLinkSource;
+        _state.PathLinkSource = null;
         if (!control && _state.World.PathNetwork is { } network
             && PathNodeLayer.PickNode(network, viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
                 new Vector2(scene.Width, scene.Height), c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)), 10f * UiTheme.Scale) is { } node)
         {
+            if (linkSource is not null && linkSource != node)
+                _state.LinkPathNodes(linkSource, node);
             _state.Select(null);
             _state.SelectedPathNode = node;
             return;
