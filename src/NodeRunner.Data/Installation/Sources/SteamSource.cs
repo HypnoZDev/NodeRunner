@@ -9,20 +9,25 @@ public sealed class SteamSource : IInstallCandidateSource
 
     public IEnumerable<string> GetCandidateFolders()
     {
+        foreach (var library in Libraries())
+            foreach (var name in GameFolderNames)
+                yield return Path.Combine(library, "steamapps", "common", name);
+    }
+
+    // Every Steam library folder of this computer.
+    internal static List<string> Libraries()
+    {
         var steamRoot =
             RegistryHelper.ReadMachineString(@"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath")
             ?? RegistryHelper.ReadUserString(@"Software\Valve\Steam", "SteamPath");
 
         if (string.IsNullOrWhiteSpace(steamRoot))
-            yield break;
+            return [];
 
         var libraries = new List<string> { steamRoot };
         var vdfPath = Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf");
         if (File.Exists(vdfPath))
             libraries.AddRange(SteamLibraryParser.ParseLibraryPaths(File.ReadAllText(vdfPath)));
-
-        foreach (var library in libraries.Distinct(StringComparer.OrdinalIgnoreCase))
-            foreach (var name in GameFolderNames)
-                yield return Path.Combine(library, "steamapps", "common", name);
+        return libraries.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

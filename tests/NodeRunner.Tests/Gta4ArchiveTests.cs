@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using NodeRunner.Data.Installation;
 using NodeRunner.Data.Native.Gta4;
 
 namespace NodeRunner.Tests;
@@ -61,7 +62,8 @@ public class Gta4ArchiveTests : IDisposable
         File.WriteAllText(Path.Combine(maps, "area.ide"), "objs\nend\n");
         File.WriteAllBytes(Path.Combine(_folder, "GTAIV.exe"), []);
 
-        Assert.True(Gta4FileSystem.IsGameFolder(_folder));
+        Assert.True(Gta4InstallLocator.IsGameFolder(_folder));
+        Assert.Equal(_folder, Gta4InstallLocator.Resolve(_folder));
         using var files = new Gta4FileSystem();
         files.Open(_folder);
 
@@ -144,5 +146,57 @@ public class Gta4ArchiveTests : IDisposable
         using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true))
             zlib.Write(ResourceContent);
         return output.ToArray();
+    }
+}
+
+// GTA IV path nodes built in memory: positions, links between areas, vehicle / pedestrian / boat nodes, lanes.
+public class Gta4PathNodesTests
+{
+    [Fact]
+    public void Read_DecodesNodesAndLinks()
+    {
+        // Two vehicle nodes (the second a boat node) and one pedestrian node; 3 links.
+        var data = new byte[16 + 3 * 32 + 3 * 8];
+        var span = data.AsSpan();
+        BinaryPrimitives.WriteInt32LittleEndian(span, 3);
+        BinaryPrimitives.WriteInt32LittleEndian(span[4..], 2);
+        BinaryPrimitives.WriteInt32LittleEndian(span[8..], 1);
+        BinaryPrimitives.WriteInt32LittleEndian(span[12..], 3);
+        void Node(int i, short x, short y, ushort firstLink, bool boat)
+        {
+            var n = data.AsSpan(16 + i * 32, 32);
+            BinaryPrimitives.WriteUInt16LittleEndian(n[8..], 29);
+            BinaryPrimitives.WriteUInt16LittleEndian(n[10..], (ushort)i);
+            BinaryPrimitives.WriteUInt16LittleEndian(n[18..], firstLink);
+            BinaryPrimitives.WriteInt16LittleEndian(n[20..], x);
+            BinaryPrimitives.WriteInt16LittleEndian(n[22..], y);
+            n[31] = (byte)(boat ? 2 : 0);
+        }
+        Node(0, 8918, -5999, 0, false);
+        Node(1, 80, 16, 2, true);
+        Node(2, 0, 0, 3, false);
+        void Link(int i, ushort area, ushort node, byte lanes)
+        {
+            var l = data.AsSpan(16 + 3 * 32 + i * 8, 8);
+            BinaryPrimitives.WriteUInt16LittleEndian(l, area);
+            BinaryPrimitives.WriteUInt16LittleEndian(l[2..], node);
+            l[5] = lanes;
+        }
+        Link(0, 29, 1, 0x09);
+        Link(1, 30, 7, 0x02);
+        Link(2, 29, 0, 0x09);
+
+        var area = Gta4PathNodes.Read(data, 29);
+
+        Assert.Equal(3, area.Nodes.Length);
+        Assert.Equal(1114.75f, area.Nodes[0].Position.X);
+        Assert.Equal(-749.875f, area.Nodes[0].Position.Y);
+        Assert.True(area.Nodes[0].IsVehicle);
+        Assert.False(area.Nodes[0].IsBoat);
+        Assert.True(area.Nodes[1].IsBoat);
+        Assert.False(area.Nodes[2].IsVehicle);
+        Assert.Equal([new Gta4PathLink(29, 1, 1, 1), new Gta4PathLink(30, 7, 2, 0)], area.LinksOf(area.Nodes[0]).ToArray());
+        Assert.Equal(1, area.Nodes[1].LinkCount);
+        Assert.Equal(0, area.Nodes[2].LinkCount);
     }
 }

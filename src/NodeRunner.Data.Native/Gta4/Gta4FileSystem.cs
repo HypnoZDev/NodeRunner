@@ -1,4 +1,5 @@
 using Microsoft.Win32.SafeHandles;
+using NodeRunner.Data.Installation;
 
 namespace NodeRunner.Data.Native.Gta4;
 
@@ -9,8 +10,6 @@ public readonly record struct Gta4FileInfo(long StoredSize, long Size, bool IsRe
 // and, for any other path, the loose file of the game folder.
 public sealed class Gta4FileSystem : IDisposable
 {
-    public static readonly string[] Executables = ["GTAIV.exe", "EFLC.exe"];
-
     private readonly List<SafeFileHandle> _disks = [];
     private readonly Dictionary<string, ImgEntry> _files = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _archives = [];
@@ -21,10 +20,6 @@ public sealed class Gta4FileSystem : IDisposable
     public IReadOnlyList<string> Errors => _errors;
 
     public IReadOnlyCollection<string> AllFiles => _files.Keys;
-
-    public static bool IsGameFolder(string? folder) =>
-        !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder)
-        && Executables.Any(e => File.Exists(Path.Combine(folder, e)));
 
     public void Open(string folder, IProgress<string>? progress = null)
     {
@@ -102,7 +97,7 @@ public sealed class Gta4FileSystem : IDisposable
 
     private Gta4Cipher? FindCipher(string root)
     {
-        foreach (string exe in Executables)
+        foreach (string exe in Gta4InstallLocator.Executables)
         {
             string path = Path.Combine(root, exe);
             if (!File.Exists(path))
