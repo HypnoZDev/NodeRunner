@@ -928,7 +928,17 @@ public static partial class English
             "Map shown: GTA IV or one of its episodes (Episodes from Liberty City),\nwhich change some districts."),
         ("Carte de GTA IV", "GTA IV map"),
         ("Liberty City : {0} objets", "Liberty City: {0} objects"),
-        ("Sélection des objets à venir.", "Object selection to come."),
+        ("Cap (°)", "Heading (°)"),
+        ("Clic gauche sur un objet de Liberty City pour voir ses propriétés (lecture seule).",
+            "Left click an object of Liberty City to see its properties (read only)."),
+        ("Copier {0}\nClic droit : avec le cap ({1})", "Copy {0}\nRight click: with the heading ({1})"),
+        ("Définition (.ide)", "Definition (.ide)"),
+        ("GTA IV : lecture seule", "GTA IV: read only"),
+        ("Placement", "Placement"),
+        ("Placer la caméra devant l'objet", "Move the camera in front of the object"),
+        ("Textures parentes", "Parent textures"),
+        ("fichier introuvable", "file not found"),
+        ("Clic sur un objet pour voir ses propriétés (lecture seule).", "Click an object to see its properties (read only)."),
         ("Affiche « Carte en 3D » dans le panneau Calques pour voir la carte.", "Show \"3D map\" in the Layers panel to see the map."),
     ];
 }

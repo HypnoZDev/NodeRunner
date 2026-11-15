@@ -13,7 +13,7 @@ namespace NodeRunner.App.Ui;
 // Properties panel (docked on the right) of the selected object: name and quick actions, then a label / value grid in
 // sections: placement (editable, each change can be undone), files, level of detail (parent and children can be
 // selected in turn), entity sets of an interior (shown or hidden live), render settings.
-internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, CollisionLayer collisionLayer)
+internal sealed partial class PropertiesPanel(AppState state, Action<uint> showModel, CollisionLayer collisionLayer)
 {
     private readonly CollisionProperties _collision = new(state, collisionLayer);
 
@@ -57,6 +57,12 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (state.Tool == TransformTool.Collision)
         {
             _collision.Draw();
+            ImGui.End();
+            return;
+        }
+        if (state.IsGta4)
+        {
+            DrawGta4();
             ImGui.End();
             return;
         }
@@ -910,8 +916,9 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         return Vector3.Transform((room.BoundsMin + room.BoundsMax) * 0.5f, interior.Transform);
     }
 
-    private void DrawLevelOfDetail(MapEntity entity, HashNames names)
+    private void DrawLevelOfDetail(MapEntity entity, HashNames names, Action<MapEntity>? select = null)
     {
+        select ??= e => state.Select(e);
         if (!Widgets.BeginProperties("##lod"))
             return;
 
@@ -923,7 +930,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
         if (entity.Parent is { } parent)
         {
             if (Widgets.Link($"{names.Describe(parent.ArchetypeHash)}##parent", L($"Sélectionner le parent : {LevelName(parent.LodLevel)}")))
-                state.Select(parent);
+                select(parent);
         }
         else
         {
@@ -943,7 +950,7 @@ internal sealed class PropertiesPanel(AppState state, Action<uint> showModel, Co
             for (int i = 0; i < children.Count && i < MaxChildrenListed; i++)
             {
                 if (Widgets.Link($"{names.Describe(children[i].ArchetypeHash)}##child{i}", L("Sélectionner cet enfant")))
-                    state.Select(children[i]);
+                    select(children[i]);
             }
             if (children.Count > MaxChildrenListed)
                 Widgets.Hint(L($"... et {children.Count - MaxChildrenListed} autres"));

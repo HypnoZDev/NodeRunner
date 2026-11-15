@@ -41,6 +41,20 @@ internal sealed class AppState
     public GameKind ActiveGame { get; set; } = GameKind.Gta5;
     public bool IsGta4 => ActiveGame == GameKind.Gta4;
 
+    // GTA IV: the object clicked in the 3D view (read only), forgotten when another map is shown.
+    public MapEntity? Gta4Selection
+    {
+        get => _gta4SelectionScene is not null && _gta4SelectionScene == Gta4.Scene ? _gta4Selection : null;
+        set
+        {
+            _gta4Selection = value;
+            _gta4SelectionScene = value is null ? null : Gta4.Scene;
+        }
+    }
+
+    private MapEntity? _gta4Selection;
+    private NodeRunner.Data.Native.Gta4.Gta4Scene? _gta4SelectionScene;
+
     // The main selected object (the last one clicked), null if none.
     public MapEntity? Selection => SelectedEntities is [.., var last] ? last : null;
 
@@ -191,6 +205,7 @@ internal sealed class AppState
         if (entity is not null && IsLocked(entity))
             return;
         _selection.Clear();
+        Gta4Selection = null;
         SelectedPathNode = null;
         SelectedOccluder = null;
         SelectedCarGenerator = null;
@@ -691,7 +706,7 @@ internal sealed class AppState
     {
         var center = entity.Position;
         float radius = 5f;
-        if (World.Maps?.GetArchetype(entity.ArchetypeHash) is { } archetype)
+        if ((IsGta4 ? Gta4.Scene?.Library : World.Maps)?.GetArchetype(entity.ArchetypeHash) is { } archetype)
         {
             center = System.Numerics.Vector3.Transform((archetype.BoundsMin + archetype.BoundsMax) * 0.5f, entity.Transform);
             radius = System.Numerics.Vector3.Distance(archetype.BoundsMin, archetype.BoundsMax) * 0.5f * Math.Max(entity.Scale.X, entity.Scale.Z);

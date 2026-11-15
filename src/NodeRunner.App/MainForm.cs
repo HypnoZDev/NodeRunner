@@ -584,7 +584,7 @@ internal sealed unsafe partial class MainForm : Form
         if (occlusionPreview)
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
         if (modelsEnabled)
-            _modelLayer.Draw(_modelRenderer, viewProjection, _state.SelectedEntities, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
+            _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
                 () => DrawWater(viewProjection, lighting), occlusionPreview ? _occlusionCuller : null);
         else
             DrawWater(viewProjection, lighting);
@@ -909,13 +909,17 @@ internal sealed unsafe partial class MainForm : Form
         if (_pickRequest is not var (click, control) || _graphics is null || _modelRenderer is null || _pickBuffer is null)
             return;
         _pickRequest = null;
-        // GTA IV objects cannot be selected yet.
-        if (_state.IsGta4)
-            return;
         if (!scene.Contains(click))
             return;
 
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+        // GTA IV: one object at a time, read only.
+        if (_state.IsGta4)
+        {
+            if (_state.IsLayerVisible(ModelLayer.LayerName))
+                _state.Gta4Selection = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);
+            return;
+        }
         // Road nodes first: a dot on the road is clicked on purpose, the road model is under it.
         if (!control && _state.World.PathNetwork is { } network
             && PathNodeLayer.PickNode(network, viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
@@ -1071,10 +1075,14 @@ internal sealed unsafe partial class MainForm : Form
             _state.Place(archetype, point);
     }
 
+    // The selected objects of the map shown (GTA V, or the one GTA IV object).
+    private IReadOnlyList<Data.Maps.MapEntity> SelectedForDrawing =>
+        !_state.IsGta4 ? _state.SelectedEntities : _state.Gta4Selection is { } gta4 ? [gta4] : [];
+
     private void DrawSelectionBox(ColorRenderer lines, Matrix4x4 viewProjection)
     {
-        var selected = _state.SelectedEntities;
-        if (selected.Count == 0 || _state.World.Maps is not { } library)
+        var selected = SelectedForDrawing;
+        if (selected.Count == 0 || (_state.IsGta4 ? _state.Gta4.Scene?.Library : _state.World.Maps) is not { } library)
             return;
         for (int i = 0; i < selected.Count; i++)
         {
@@ -1084,7 +1092,7 @@ internal sealed unsafe partial class MainForm : Form
                     i == selected.Count - 1 ? SelectionBoxColor : SecondarySelectionBoxColor);
         }
         // How the selected doors open.
-        if (_state.World.Names is { } names)
+        if (!_state.IsGta4 && _state.World.Names is { } names)
         {
             foreach (var door in selected.Take(MaxDoorArcs))
             {

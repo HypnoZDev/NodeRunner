@@ -17,6 +17,11 @@ public sealed class Gta4Scene
     // Texture dictionaries (".wtd") by name, with the parents of the definitions ("txdp").
     public required TextureCatalog Textures { get; init; }
 
+    // Model definitions (".ide") and the names of the models and texture dictionaries.
+    public required Gta4Definitions Definitions { get; init; }
+
+    public required HashNames Names { get; init; }
+
     public static Gta4Scene Build(Gta4Map map, Gta4FileSystem files, Gta4Episode episode)
     {
         // An episode's files win over the base game's of the same name; other folders (mods, the other episode) are left out.
@@ -69,10 +74,23 @@ public sealed class Gta4Scene
             Library = MapLibrary.FromMaps(archetypes, maps),
             Models = ModelCatalog.FromFiles(drawables, Files(".wdd"), fragments),
             Textures = TextureCatalogOf(Files(".wtd"), map.Definitions),
+            Definitions = map.Definitions,
+            Names = NamesOf(map.Definitions),
         };
     }
 
     private const uint LodInParentMap = 8;
+
+    private static HashNames NamesOf(Gta4Definitions definitions)
+    {
+        var names = new HashNames();
+        foreach (var model in definitions.Models.Values)
+        {
+            names.Add(model.Name);
+            names.Add(model.TextureDictionary);
+        }
+        return names;
+    }
 
     // Files are in order of priority, the last one wins for a name.
     private static TextureCatalog TextureCatalogOf(List<string> files, Gta4Definitions definitions)
