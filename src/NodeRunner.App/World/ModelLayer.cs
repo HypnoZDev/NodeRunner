@@ -96,11 +96,12 @@ internal sealed class ModelLayer : IDisposable
     }
 
     // An object drawn in the last frame (kept to find the one under the mouse).
-    private sealed record DrawnEntity(MapEntity Entity, GpuModel Model, Matrix4x4 Transform, Vector3 Tint);
+    private readonly record struct DrawnEntity(MapEntity Entity, GpuModel Model, Matrix4x4 Transform, Vector3 Tint);
 
     private static readonly Vector3 SelectedTint = new(1.7f, 1.35f, 0.6f);
 
     private readonly List<DrawnEntity> _drawn = new();
+    private readonly HashSet<MapEntity> _fallbacksDrawn = new();
     private readonly HashSet<MapEntity> _selectedSet = new();
 
     // A model read and put on the GPU by a background thread (null if the file has none), with the texture of each
@@ -286,7 +287,8 @@ internal sealed class ModelLayer : IDisposable
         _lastFrustum = frustum;
         double now = _clock.Elapsed.TotalSeconds;
         long triangles = 0;
-        var fallbacksDrawn = new HashSet<MapEntity>();
+        var fallbacksDrawn = _fallbacksDrawn;
+        fallbacksDrawn.Clear();
         _drawn.Clear();
         _selectedSet.Clear();
         _selectedSet.UnionWith(selected);
@@ -318,10 +320,11 @@ internal sealed class ModelLayer : IDisposable
                 || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > maxDistance)
                 continue;
             // The selection stays visible, so it can still be seen and moved.
-            if (occlusion is not null && !_selectedSet.Contains(entity.Entity) && occlusion.IsHidden(entity.SphereCenter, entity.SphereRadius))
+            bool isSelected = _selectedSet.Count > 0 && _selectedSet.Contains(entity.Entity);
+            if (occlusion is not null && !isSelected && occlusion.IsHidden(entity.SphereCenter, entity.SphereRadius))
                 continue;
 
-            var tint = _selectedSet.Contains(entity.Entity) ? SelectedTint : Vector3.One;
+            var tint = isSelected ? SelectedTint : Vector3.One;
             renderer.Draw(model, entity.Transform, viewProjection, tint);
             _drawn.Add(new DrawnEntity(entity.Entity, model, entity.Transform, tint));
             triangles += model.TriangleCount;
@@ -332,8 +335,9 @@ internal sealed class ModelLayer : IDisposable
         // Decals and glass over the solid meshes of every object, farthest first (they don't write depth: a far pane
         // drawn last would cover a near one).
         renderer.Begin(ModelPass.Translucent);
-        for (int i = _drawn.Count - 1; i >= 0; i--)
-            renderer.Draw(_drawn[i].Model, _drawn[i].Transform, viewProjection, _drawn[i].Tint);
+        var drawn = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_drawn);
+        for (int i = drawn.Length - 1; i >= 0; i--)
+            renderer.Draw(drawn[i].Model, drawn[i].Transform, viewProjection, drawn[i].Tint);
 
         DrawnObjectCount = _drawn.Count;
         DrawnTriangleCount = triangles;
@@ -345,7 +349,8 @@ internal sealed class ModelLayer : IDisposable
     {
         renderer.BeginShadow();
         double now = _clock.Elapsed.TotalSeconds;
-        var fallbacksDrawn = new HashSet<MapEntity>();
+        var fallbacksDrawn = _fallbacksDrawn;
+        fallbacksDrawn.Clear();
         for (int cascade = 0; cascade < ShadowMaps.CascadeCount; cascade++)
         {
             shadows.BeginCascade(cascade);
