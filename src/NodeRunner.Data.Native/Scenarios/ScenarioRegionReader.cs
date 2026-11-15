@@ -20,6 +20,9 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
     // CScenarioPointRegion fields.
     internal const int RegionMyPoints = 8 + 16;  // Points (container) -> MyPoints
     private const int RegionClusters = 264;
+    internal const int RegionChainNodes = 96;
+    internal const int RegionChainEdges = 96 + 16;
+    internal const int RegionChains = 96 + 32;
     internal const int RegionGrid = 184;
     internal const int RegionGridCells = 248;
     internal const int RegionTypeNames = 280;    // LookUps -> TypeNames
@@ -64,6 +67,7 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
         {
             var point = ReadPoint(meta.Data, offset, names);
             point.Source = meta.Data.Bytes(offset, PointSize).ToArray();
+            point.FromFile = true;
             points.Add(point);
         }
         return new ScenarioRegion { Name = name, Points = points, TypeHashes = names.Types, OwnPointCount = meta.ReadArray(region + RegionMyPoints, PointSize).Count };

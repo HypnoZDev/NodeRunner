@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Buffers.Binary;
 using NodeRunner.Data.Native.Resources;
 using NodeRunner.Data.Scenarios;
@@ -43,9 +44,15 @@ public static class ScenarioRegionWriter
         var offsets = R.PointOffsets(meta, start);
         if (offsets.Count != region.Points.Count)
             throw new InvalidDataException($"{offsets.Count} points dans le fichier, {region.Points.Count} attendus");
-        var types = TypeIndices(ReadTypes(meta, start));
+        var fileTypes = ReadTypes(meta, start);
+        var types = TypeIndices(fileTypes);
+        var changes = ChainChangesOf(meta, offsets, region, fileTypes);
         for (int i = 0; i < offsets.Count; i++)
             WritePoint(result.AsSpan(offsets[i], R.PointSize), region.Points[i].Values, types);
+        // Same points: chain nodes can only have moved, in place.
+        var (nodes, nodeCount) = meta.ReadArray(start + R.RegionChainNodes, ChainNodeSize);
+        for (int i = 0; i < nodeCount; i++)
+            MoveNode(result.AsSpan(nodes + i * ChainNodeSize, ChainNodeSize), changes);
         return result;
     }
 
@@ -112,6 +119,7 @@ public static class ScenarioRegionWriter
 
         // Types: those of the file, then the new ones.
         var types = ReadTypes(meta, start);
+        var changes = ChainChangesOf(meta, offsets, region, types);
         foreach (var point in region.Points)
         {
             if (!types.Contains(point.TypeHash))
@@ -148,6 +156,7 @@ public static class ScenarioRegionWriter
         // The region is the root block's only item.
         SetArray(document, root, R.RegionMyPoints, points, own.Count, R.PointStructure);
         SetArray(document, root, R.RegionTypeNames, typeBytes, types.Count, HashBlock);
+        UpdateChains(document, root, changes);
         // Without points of its own, a region keeps its grid (the game's are like that).
         if (own.Count == 0)
         {
@@ -198,6 +207,175 @@ public static class ScenarioRegionWriter
         BinaryPrimitives.WriteUInt64LittleEndian(span, block < 0 ? 0 : MetaDocument.Pointer(block, 0));
         BinaryPrimitives.WriteUInt16LittleEndian(span[8..], (ushort)count);
         BinaryPrimitives.WriteUInt16LittleEndian(span[10..], (ushort)count);
+    }
+
+    // Chain nodes stand on points (same position, 99.6 % of the game's): what became of the file's points.
+    private const int ChainNodeSize = 32, ChainEdgeSize = 8, ChainSize = 40;
+    private const int NodeType = 20, NodeHasIncoming = 24, NodeHasOutgoing = 25, ChainEdgeIds = 8;
+
+    private sealed record ChainChanges(Dictionary<Vector3, (Vector3 Position, uint OldType, uint NewType)> Moves, HashSet<Vector3> Gone)
+    {
+        public bool IsEmpty => Moves.Count == 0 && Gone.Count == 0;
+    }
+
+    private static Vector3 SourcePosition(ReadOnlySpan<byte> point) => new(
+        BinaryPrimitives.ReadSingleLittleEndian(point[R.PointPositionAndDirection..]),
+        BinaryPrimitives.ReadSingleLittleEndian(point[(R.PointPositionAndDirection + 4)..]),
+        BinaryPrimitives.ReadSingleLittleEndian(point[(R.PointPositionAndDirection + 8)..]));
+
+    private static ChainChanges ChainChangesOf(MetaResource meta, List<int> offsets, ScenarioRegion region, List<uint> fileTypes)
+    {
+        var kept = new HashSet<Vector3>();
+        var moves = new Dictionary<Vector3, (Vector3, uint, uint)>();
+        foreach (var point in region.Points)
+        {
+            if (!point.FromFile || point.Source is not { Length: >= R.PointSize } source)
+                continue;
+            var was = SourcePosition(source);
+            kept.Add(was);
+            int typeIndex = source[R.PointType];
+            uint oldType = typeIndex < fileTypes.Count ? fileTypes[typeIndex] : 0;
+            if (point.Position != was || point.TypeHash != oldType)
+                moves.TryAdd(was, (point.Position, oldType, point.TypeHash));
+        }
+        var gone = new HashSet<Vector3>();
+        foreach (int offset in offsets)
+        {
+            var position = SourcePosition(meta.Data.Bytes(offset, R.PointSize));
+            if (!kept.Contains(position))
+                gone.Add(position);
+        }
+        return new ChainChanges(moves, gone);
+    }
+
+    private static Vector3 NodePosition(ReadOnlySpan<byte> node) => new(
+        BinaryPrimitives.ReadSingleLittleEndian(node), BinaryPrimitives.ReadSingleLittleEndian(node[4..]), BinaryPrimitives.ReadSingleLittleEndian(node[8..]));
+
+    private static void MoveNode(Span<byte> node, ChainChanges changes)
+    {
+        if (!changes.Moves.TryGetValue(NodePosition(node), out var move))
+            return;
+        BinaryPrimitives.WriteSingleLittleEndian(node, move.Position.X);
+        BinaryPrimitives.WriteSingleLittleEndian(node[4..], move.Position.Y);
+        BinaryPrimitives.WriteSingleLittleEndian(node[8..], move.Position.Z);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(node[NodeType..]) == move.OldType)
+            BinaryPrimitives.WriteUInt32LittleEndian(node[NodeType..], move.NewType);
+    }
+
+    private static (byte[] Data, int Offset, int Count) RootArray(MetaDocument document, byte[] owner, int field, int itemSize)
+    {
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(owner.AsSpan(field + 8));
+        if (count == 0)
+            return ([], 0, 0);
+        var (block, offset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(owner.AsSpan(field)));
+        if (block < 0 || block >= document.Blocks.Count || offset + count * itemSize > document.Blocks[block].Data.Length)
+            throw new InvalidDataException("chaînes de scénarios illisibles");
+        return (document.Blocks[block].Data, offset, count);
+    }
+
+    // Nodes of moved points follow them; nodes of deleted points go with their edges, the chains losing those edges
+    // (an empty chain goes too).
+    private static void UpdateChains(MetaDocument document, byte[] root, ChainChanges changes)
+    {
+        if (changes.IsEmpty)
+            return;
+        var (nodeData, nodeAt, nodeCount) = RootArray(document, root, R.RegionChainNodes, ChainNodeSize);
+        if (nodeCount == 0)
+            return;
+        var nodeMap = new int[nodeCount];
+        var nodes = new List<byte[]>();
+        for (int i = 0; i < nodeCount; i++)
+        {
+            var node = nodeData.AsSpan(nodeAt + i * ChainNodeSize, ChainNodeSize).ToArray();
+            if (changes.Gone.Contains(NodePosition(node)))
+            {
+                nodeMap[i] = -1;
+                continue;
+            }
+            MoveNode(node, changes);
+            nodeMap[i] = nodes.Count;
+            nodes.Add(node);
+        }
+        if (nodes.Count == nodeCount)
+        {
+            // Nothing removed: moved in place.
+            for (int i = 0; i < nodeCount; i++)
+                nodes[i].CopyTo(nodeData.AsSpan(nodeAt + i * ChainNodeSize));
+            return;
+        }
+
+        var (edgeData, edgeAt, edgeCount) = RootArray(document, root, R.RegionChainEdges, ChainEdgeSize);
+        var edgeMap = new int[edgeCount];
+        var edges = new List<byte[]>();
+        foreach (var node in nodes)
+            node[NodeHasIncoming] = node[NodeHasOutgoing] = 0;
+        for (int i = 0; i < edgeCount; i++)
+        {
+            var edge = edgeData.AsSpan(edgeAt + i * ChainEdgeSize, ChainEdgeSize).ToArray();
+            int from = BinaryPrimitives.ReadUInt16LittleEndian(edge), to = BinaryPrimitives.ReadUInt16LittleEndian(edge.AsSpan(2));
+            int newFrom = from < nodeCount ? nodeMap[from] : -1, newTo = to < nodeCount ? nodeMap[to] : -1;
+            if (newFrom < 0 || newTo < 0)
+            {
+                edgeMap[i] = -1;
+                continue;
+            }
+            BinaryPrimitives.WriteUInt16LittleEndian(edge, (ushort)newFrom);
+            BinaryPrimitives.WriteUInt16LittleEndian(edge.AsSpan(2), (ushort)newTo);
+            nodes[newFrom][NodeHasOutgoing] = 1;
+            nodes[newTo][NodeHasIncoming] = 1;
+            edgeMap[i] = edges.Count;
+            edges.Add(edge);
+        }
+
+        var (chainData, chainAt, chainCount) = RootArray(document, root, R.RegionChains, ChainSize);
+        var chains = new List<(byte[] Chain, List<ushort> Ids)>();
+        uint idBlockKind = UnsignedShortBlock;
+        for (int i = 0; i < chainCount; i++)
+        {
+            var chain = chainData.AsSpan(chainAt + i * ChainSize, ChainSize).ToArray();
+            var (ids, idAt, idCount) = RootArray(document, chain, ChainEdgeIds, 2);
+            if (idCount > 0)
+                idBlockKind = document.Blocks[MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(chain.AsSpan(ChainEdgeIds))).Block].Structure;
+            var kept = new List<ushort>();
+            for (int k = 0; k < idCount; k++)
+            {
+                int id = BinaryPrimitives.ReadUInt16LittleEndian(ids.AsSpan(idAt + k * 2));
+                if (id < edgeCount && edgeMap[id] >= 0)
+                    kept.Add((ushort)edgeMap[id]);
+            }
+            if (kept.Count > 0)
+                chains.Add((chain, kept));
+        }
+        // Every chain's edge list, back to back in one new block.
+        int total = chains.Sum(c => c.Ids.Count);
+        int idBlock = -1;
+        if (total > 0)
+        {
+            var idBytes = new byte[total * 2];
+            int at = 0;
+            foreach (var (_, ids) in chains)
+            {
+                foreach (ushort id in ids)
+                {
+                    BinaryPrimitives.WriteUInt16LittleEndian(idBytes.AsSpan(at), id);
+                    at += 2;
+                }
+            }
+            document.Blocks.Add(new MetaDocument.Block(idBlockKind, idBytes));
+            idBlock = document.Blocks.Count - 1;
+        }
+        int next = 0;
+        foreach (var (chain, ids) in chains)
+        {
+            var field = chain.AsSpan(ChainEdgeIds);
+            BinaryPrimitives.WriteUInt64LittleEndian(field, MetaDocument.Pointer(idBlock, next * 2));
+            BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)ids.Count);
+            BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)ids.Count);
+            next += ids.Count;
+        }
+        SetArray(document, root, R.RegionChainNodes, [.. nodes.SelectMany(n => n)], nodes.Count, 0);
+        SetArray(document, root, R.RegionChainEdges, [.. edges.SelectMany(e => e)], edges.Count, 0);
+        SetArray(document, root, R.RegionChains, [.. chains.SelectMany(c => c.Chain)], chains.Count, 0);
     }
 
     private static List<uint> ReadTypes(MetaResource meta, int region)

@@ -55,6 +55,10 @@ public sealed class ScenarioPoint
     // from nothing.
     public byte[]? Source { get; set; }
 
+    // Read from its region file (Source then holds where it was): chain nodes found there follow it. False for an added
+    // point, even when its Source was copied from another point.
+    public bool FromFile { get; set; }
+
     public ScenarioValues Values
     {
         get => new(Position, Heading, TypeHash, Probability, StartHour, EndHour, Availability, Radius, TimeTillPedLeaves, Flags);
