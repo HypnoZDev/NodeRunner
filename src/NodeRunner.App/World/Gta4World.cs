@@ -40,6 +40,7 @@ internal sealed class Gta4World : IDisposable
         Folder = folder;
         Task.Run(() =>
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 Files.Open(folder, new Progress(s => _status = s));
@@ -50,6 +51,7 @@ internal sealed class Gta4World : IDisposable
                 foreach (string error in map.Errors)
                     Diagnostics.ErrorLog.Add(L("Carte de GTA IV"), error);
                 _boxes = new Gta4MapBoxes(map);
+                _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {

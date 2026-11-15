@@ -30,9 +30,13 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
     private void DrawContent()
     {
         DrawProject();
-        Widgets.ToolbarSeparator();
-        if (Widgets.ToolbarButton(Icons.HardDrive, "GTA V", L("Choisir le dossier d'installation de GTA V")))
-            browseGameFolder();
+        // GTA IV session: the GTA V folder has nothing to do with what is shown.
+        if (!state.IsGta4)
+        {
+            Widgets.ToolbarSeparator();
+            if (Widgets.ToolbarButton(Icons.HardDrive, "GTA V", L("Choisir le dossier d'installation de GTA V")))
+                browseGameFolder();
+        }
 
         Widgets.ToolbarSeparator();
         var history = state.History;

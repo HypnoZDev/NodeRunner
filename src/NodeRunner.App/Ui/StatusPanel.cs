@@ -19,10 +19,20 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
         {
             if (Widgets.Section(L("Projet"), "status_project"))
                 DrawProject();
-            if (Widgets.Section("GTA V", "status_game"))
-                DrawGame();
-            if (Widgets.Section(L("Carte chargée"), "status_world"))
-                DrawWorld();
+            if (state.IsGta4)
+            {
+                if (Widgets.Section("GTA IV", "status_game"))
+                    DrawGta4Game();
+                if (Widgets.Section(L("Carte chargée"), "status_world"))
+                    DrawGta4World();
+            }
+            else
+            {
+                if (Widgets.Section("GTA V", "status_game"))
+                    DrawGame();
+                if (Widgets.Section(L("Carte chargée"), "status_world"))
+                    DrawWorld();
+            }
             if (Widgets.Section(L("Rendu"), "status_render"))
                 DrawRender();
             if (Widgets.Section(L("Caméra"), "status_camera"))
@@ -82,6 +92,41 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
             }
             Widgets.EndProperties();
         }
+    }
+
+    private void DrawGta4Game()
+    {
+        var gta4 = state.Gta4;
+        if (gta4.Folder is not { } folder)
+        {
+            ImGui.TextColored(UiTheme.Warning, L("Aucune installation de GTA IV trouvée."));
+            return;
+        }
+        if (!Widgets.BeginProperties("##game"))
+            return;
+        Widgets.PropertyText(L("Dossier"), folder, folder);
+        if (gta4.IsLoaded)
+        {
+            Widgets.PropertyText(L("Archives (.img)"), Widgets.Count(gta4.Files.EnumerateArchives().Count()));
+            Widgets.PropertyText(L("Fichiers"), Widgets.Count(gta4.Files.AllFiles.Count));
+        }
+        Widgets.EndProperties();
+    }
+
+    private void DrawGta4World()
+    {
+        var gta4 = state.Gta4;
+        if (!Widgets.BeginProperties("##world"))
+            return;
+        var statusColor = gta4.Error is not null ? UiTheme.Error : gta4.IsBusy ? UiTheme.AccentText : UiTheme.Success;
+        Widgets.PropertyText(L("État"), gta4.Error is { } error ? L($"Lecture de GTA IV impossible : {error}") : gta4.Status, gta4.Error, statusColor);
+        if (gta4.MapBoxes is { } boxes)
+            Widgets.PropertyText(L("Objets placés"), Widgets.Count(boxes.Count));
+        if (entityBoxLayer.MissingArchetypeCount > 0)
+            Widgets.PropertyText(L("Sans type connu"), L($"{Widgets.Count(entityBoxLayer.MissingArchetypeCount)} objets proches (croix roses)"));
+        if (gta4.PathAreas is { } areas)
+            Widgets.PropertyText(L("Pathnodes"), L($"{Widgets.Count(areas.Sum(a => a.Nodes.Length))} nœuds · {Widgets.Count(areas.Sum(a => a.Links.Length))} liens"));
+        Widgets.EndProperties();
     }
 
     private void DrawWorld()

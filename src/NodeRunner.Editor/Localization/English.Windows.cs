@@ -920,6 +920,8 @@ public static partial class English
         ("La carte 3D de GTA IV arrive dans une prochaine version. En attendant, ses archives se parcourent dans l'explorateur d'archives (F3).",
             "The GTA IV 3D map comes in a future version. Meanwhile, its archives can be browsed in the archive explorer (F3)."),
         ("Lecture de la carte", "Reading the map"),
+        ("Aucune installation de GTA IV trouvée.", "No GTA IV installation found."),
+        ("Archives (.img)", "Archives (.img)"),
         ("Carte de GTA IV", "GTA IV map"),
         ("Liberty City : {0} objets", "Liberty City: {0} objects"),
         ("Objets affichés en boîtes. Les modèles 3D de GTA IV arrivent dans une prochaine version.",
