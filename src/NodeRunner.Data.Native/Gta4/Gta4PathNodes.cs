@@ -4,7 +4,6 @@ using System.Numerics;
 namespace NodeRunner.Data.Native.Gta4;
 
 // A path node of GTA IV. Vehicle nodes come first in each area, then pedestrian nodes.
-// Height: stored like x and y (int16 / 8); the scale is not confirmed for it.
 public readonly record struct Gta4PathNode(ushort Area, ushort Id, Vector3 Position, bool IsVehicle, bool IsBoat, int FirstLink,
     int LinkCount);
 
@@ -16,7 +15,8 @@ public sealed record Gta4PathArea(int Index, Gta4PathNode[] Nodes, Gta4PathLink[
 }
 
 // "nodesN.nod" (one per area of the 8 x 8 grid): header (node count, vehicle node count, pedestrian node count, link
-// count), 32-byte nodes, 8-byte links. Node: area and id at 8, first link at 18, position as int16 x 8 at 20, boat
+// count), 32-byte nodes, 8-byte links. Node: area and id at 8, first link at 18, position as int16 at 20 (x and y
+// in 1/8 m, height in 1/64 m), boat
 // flag in bit 1 of byte 31. Link: target area and node, then lanes (forward in the low 3 bits of byte 5, backward in
 // the next 3).
 public static class Gta4PathNodes
@@ -51,8 +51,8 @@ public static class Gta4PathNodes
             int first = BinaryPrimitives.ReadUInt16LittleEndian(n[18..]);
             int next = i + 1 < count ? BinaryPrimitives.ReadUInt16LittleEndian(data[(HeaderSize + (i + 1) * NodeSize + 18)..]) : linkCount;
             first = Math.Min(first, linkCount);
-            var position = new Vector3(BinaryPrimitives.ReadInt16LittleEndian(n[20..]), BinaryPrimitives.ReadInt16LittleEndian(n[22..]),
-                BinaryPrimitives.ReadInt16LittleEndian(n[24..])) / 8f;
+            var position = new Vector3(BinaryPrimitives.ReadInt16LittleEndian(n[20..]) / 8f, BinaryPrimitives.ReadInt16LittleEndian(n[22..]) / 8f,
+                BinaryPrimitives.ReadInt16LittleEndian(n[24..]) / 64f);
             nodes[i] = new Gta4PathNode(BinaryPrimitives.ReadUInt16LittleEndian(n[8..]), BinaryPrimitives.ReadUInt16LittleEndian(n[10..]),
                 position, i < vehicles, (n[31] & 2) != 0, first, Math.Clamp(next - first, 0, linkCount - first));
         }
