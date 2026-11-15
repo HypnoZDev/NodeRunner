@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -55,6 +55,22 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   recalée dans l'encadrement, et vérifier les portes oubliées ou en double avant l'export.
 - Entity sets des intérieurs (mobilier des appartements, bunkers, clubs...) à afficher en direct, avec les lignes de
   script prêtes à copier.
+- **Intérieurs (MLO)** : objets, salles, portails et entity sets modifiables, nouvel intérieur, intérieur placé ou
+  dupliqué ailleurs sur la carte, avec son **audio** (occlusion du son entre les salles, écho, son de fond) généré à
+  l'export.
+- **Véhicules garés** (car generators), **zones de timecycle** et **lumières LOD** : affichés, modifiables, ajoutés ou
+  supprimés.
+- **Occlusion** : boîtes et modèles d'occlusion visibles, modifiables, créés automatiquement autour d'un bâtiment.
+
+**Vos props et vos mappings**
+- **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
+  placement en glissant le prop dans la vue 3D.
+- Import d'un mapping (dossier, .zip, .oiv) et des fichiers exportés par **Sollumz** ou CodeWalker en XML (`.ydr.xml`,
+  `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`) : convertis automatiquement.
+
+**À plusieurs (Online, bêta)**
+- Jusqu'à 5 personnes sur le même projet avec un code `NRS-XXXX` : chacun voit les modifications, la sélection et la
+  caméra des autres en direct. L'hôte enregistre.
 
 **Exporter vers FiveM**
 - Un bouton, et votre ressource est prête : `fxmanifest.lua`, dossier `stream`, boîtes des YMAP recalculées.
@@ -72,7 +88,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.

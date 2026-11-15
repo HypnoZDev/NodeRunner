@@ -5,7 +5,7 @@
 **The GTA V map in 3D, to explore it, understand it and edit it. Free, portable, built for FiveM mapping.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip">
     <img src="https://img.shields.io/badge/Download-NodeRunner%20Studio%20for%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download NodeRunner Studio for Windows">
   </a>
   <br>
@@ -56,6 +56,20 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
   how they open (arc, game tunings), replace one with another door fitted in the frame, and check for forgotten or
   duplicate doors before exporting.
 - Interior entity sets (apartment, bunker, club furniture...) toggled live, with ready-to-copy script lines.
+- **Interiors (MLO)**: edit objects, rooms, portals and entity sets, create a new interior, place or duplicate an
+  interior elsewhere on the map, with its **audio** (sound occlusion between rooms, echo, ambience) generated on export.
+- **Parked vehicles** (car generators), **timecycle zones** and **LOD lights**: shown, edited, added or deleted.
+- **Occlusion**: occlusion boxes and models visible, editable, built automatically around a building.
+
+**Your props and mappings**
+- A **prop library** shared by all your projects: packs (folder or .zip) with thumbnails, favourites, and placement by
+  dragging a prop into the 3D view.
+- Import a mapping (folder, .zip, .oiv) and files exported as XML by **Sollumz** or CodeWalker (`.ydr.xml`, `.ytd.xml`,
+  `.ybn.xml`, `.ytyp.xml`): converted automatically.
+
+**Together (Online, beta)**
+- Up to 5 people on the same project with an `NRS-XXXX` code: everyone sees the others' changes, selection and camera
+  live. The host saves.
 
 **Export to FiveM**
 - One button and your resource is ready: `fxmanifest.lua`, `stream` folder, YMAP extents recalculated.
@@ -73,7 +87,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 
 ## Download
 
-**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.3.2/NodeRunner-1.3.2-win-x64.zip)**
+**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip)**
 · other versions are on the [Releases](https://github.com/HypnoZDev/NodeRunner/releases) page.
 
 1. Download the `NodeRunner-x.y.z-win-x64.zip` file.
