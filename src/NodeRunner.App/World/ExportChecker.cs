@@ -170,6 +170,7 @@ internal static partial class ExportChecker
         var scenery = new List<string>();
         var sceneryEntities = new List<(MapEntity, Archetype?)>();
         var removedEntities = new List<(MapEntity, Archetype?)>();
+        var addedEntities = new List<MapEntity>();
         int removedTotal = 0;
         var removedDoors = new List<string>();
         var movedDoors = new List<DoorCheck.MovedDoor>();
@@ -178,7 +179,12 @@ internal static partial class ExportChecker
             var reader = new YmapReader();
             foreach (var (fileName, gamePath, isCustom, kept) in input.Maps)
             {
-                if (isCustom || gamePath is null || content.ReadFile(gamePath) is not { } bytes)
+                if (isCustom || gamePath is null)
+                {
+                    addedEntities.AddRange(kept);
+                    continue;
+                }
+                if (content.ReadFile(gamePath) is not { } bytes)
                     continue;
                 MapData original;
                 try
@@ -190,6 +196,7 @@ internal static partial class ExportChecker
                     continue;
                 }
                 var removed = RemovedEntities.Find(original.Entities, kept);
+                addedEntities.AddRange(RemovedEntities.Find(kept, original.Entities));
                 removedTotal += removed.Count;
                 var doors = DoorCheck.Changed(original.Entities, kept, names.TryGet);
                 removedDoors.AddRange(doors.Removed.Select(d => $"{names.Describe(d.ArchetypeHash)} ({fileName})"));
@@ -276,6 +283,7 @@ internal static partial class ExportChecker
         CheckOccluders(world, names, items);
         CheckPathNodes(input, world, items);
         CheckPlacements(input, world, names, removedEntities, cuts, items);
+        CheckNavMesh(world, names, addedEntities, sceneryEntities, cuts, items);
 
         summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);
