@@ -792,6 +792,11 @@ internal sealed class AppState
             Select(null);
             SelectedPathNode = edit is PathNodeDeleteEdit && !undone || edit is PathNodeAddEdit && undone ? null : nodeEdit.Node;
         }
+        else if (edit is ScenarioEdit scenarioEdit)
+        {
+            Select(null);
+            SelectedScenario = scenarioEdit.Point;
+        }
         else if (edit is OccluderBoxEdit boxEdit)
         {
             Select(null);
@@ -1621,7 +1626,10 @@ internal sealed class AppState
         return cached.Files;
     }
 
-    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + InteriorFilesToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0)
+    // Scenario region files (.ymt) to write when saving: changed since loading, or taken back from the project.
+    public IReadOnlyList<Data.Scenarios.ScenarioRegion> ScenarioRegionsToSave => World.Scenarios?.RegionsToSave.ToList() ?? [];
+
+    public int PendingSaveCount => MapsToSave.Count + PathAreasToSave.Count + ScenarioRegionsToSave.Count + InteriorFilesToSave.Count + (CollisionsPending ? Math.Max(1, CollisionEdits.Files.Count) : 0)
         + (OccludersPending ? Math.Max(1, OccluderEdits.StreamFileNames.Count()) : 0);
 
     // Occluder changes not written to the project yet.
@@ -1748,6 +1756,7 @@ internal sealed class AppState
     // "2 YMAP", "2 YMAP, 1 YND".
     public string PendingSaveText => FilesText(MapsToSave.Count, PathAreasToSave.Count)
         + (InteriorFilesToSave.Count is var interiors and > 0 ? L($", {interiors} YTYP") : "")
+        + (ScenarioRegionsToSave.Count is var scenarios and > 0 ? L($", {scenarios} YMT") : "")
         + (CollisionsPending ? L($", {CollisionEdits.Files.Count} YBN") : "")
         + (OccludersPending ? L($", {OccluderEdits.StreamFileNames.Count()} YMAP d'occlusion") : "");
 
@@ -1765,10 +1774,11 @@ internal sealed class AppState
             return;
         var maps = MapsToSave;
         var paths = PathAreasToSave;
+        var scenarioRegions = ScenarioRegionsToSave;
         bool collisions = CollisionsPending;
         bool occluders = OccludersPending;
         var interiorFiles = InteriorFilesToSave;
-        if (maps.Count == 0 && paths.Count == 0 && !collisions && !occluders && interiorFiles.Count == 0)
+        if (maps.Count == 0 && paths.Count == 0 && scenarioRegions.Count == 0 && !collisions && !occluders && interiorFiles.Count == 0)
             return;
         // Each file goes back to the open project it was loaded from.
         var report = new MapFileSaver.Report([], []);
@@ -1781,6 +1791,7 @@ internal sealed class AppState
         foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
             _savedMaps.Add(map);
         PathFileSaver.Save(World, paths, folder, report);
+        ScenarioFileSaver.Save(World, scenarioRegions, folder, report);
         foreach (var group in interiorFiles.GroupBy(ExtraProjectOfFile))
             InteriorFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder, report);
         if (collisions)
@@ -1793,7 +1804,9 @@ internal sealed class AppState
             History.MarkSaved();
             int pathFiles = report.Saved.Count(f => f.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase));
             int typeFiles = report.Saved.Count(f => f.EndsWith(".ytyp", StringComparison.OrdinalIgnoreCase));
-            string text = FilesText(report.Saved.Count - pathFiles - typeFiles, pathFiles) + (typeFiles > 0 ? L($", {typeFiles} YTYP") : "");
+            int scenarioFiles = report.Saved.Count(f => f.EndsWith(".ymt", StringComparison.OrdinalIgnoreCase));
+            string text = FilesText(report.Saved.Count - pathFiles - typeFiles - scenarioFiles, pathFiles) + (typeFiles > 0 ? L($", {typeFiles} YTYP") : "")
+                + (scenarioFiles > 0 ? L($", {scenarioFiles} YMT") : "");
             LastSave = (ExtraProjects.Count > 0
                 ? L($"{text} enregistré(s) dans les projets ouverts")
                 : L($"{text} enregistré(s) dans le projet « {Project!.Name} »"), true, DateTime.Now);

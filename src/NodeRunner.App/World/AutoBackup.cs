@@ -107,7 +107,7 @@ internal sealed class AutoBackup
         if (Found is not { } found || _state.World.Maps is not { } maps)
             return 0;
         Found = null;
-        var context = new EditContext { Library = maps, Paths = _state.World.PathNetwork, Collisions = _state.CollisionEdits };
+        var context = new EditContext { Library = maps, Paths = _state.World.PathNetwork, Collisions = _state.CollisionEdits, Scenarios = _state.World.Scenarios };
         int applied = 0;
         foreach (var message in found.Messages)
         {

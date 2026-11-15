@@ -491,6 +491,12 @@ internal sealed class WorldLoader : IDisposable
             var pathErrors = new List<string>();
             var paths = PathNetwork?.WithSavedAreas(files, new YndReader(), PathFileSaver.ReadSaved(_saveFolder, pathErrors), pathErrors);
             maps.SavedMapErrors.AddRange(pathErrors);
+            var scenarioErrors = new List<string>();
+            var scenarios = Scenarios is { } loadedScenarios
+                ? loadedScenarios.WithSavedRegions(files, new ScenarioRegionReader(),
+                    ScenarioFileSaver.ReadSaved(_saveFolder, loadedScenarios.Regions.Select(r => r.Name).ToList(), scenarioErrors), scenarioErrors)
+                : null;
+            maps.SavedMapErrors.AddRange(scenarioErrors);
 
             lock (_lock)
             {
@@ -500,6 +506,8 @@ internal sealed class WorldLoader : IDisposable
                 ExtraMapFolders = extraMaps;
                 if (paths is not null)
                     PathNetwork = paths;
+                if (scenarios is not null)
+                    Scenarios = scenarios;
                 Collisions = collisions;
                 ProjectFiles = source as LooseFileOverlay;
                 Models = models;

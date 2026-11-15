@@ -14,9 +14,9 @@ public class OnlineEditTests
     private const uint InteriorHash = 0x500;
     private static readonly Quaternion Quarter = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
 
-    internal sealed record World(MapLibrary Library, CollisionEdits Collisions, PathNetwork Paths, EditHistory History)
+    internal sealed record World(MapLibrary Library, CollisionEdits Collisions, PathNetwork Paths, EditHistory History, NodeRunner.Data.Scenarios.ScenarioSet Scenarios)
     {
-        public EditContext Context => new() { Library = Library, Collisions = Collisions, Paths = Paths };
+        public EditContext Context => new() { Library = Library, Collisions = Collisions, Paths = Paths, Scenarios = Scenarios };
         public MapData Map => Library.Maps[0];
         public MapEntity Instance(int i) => Map.Entities[4 + i];
     }
@@ -72,7 +72,16 @@ public class OnlineEditTests
             Links = [new PathLink(new(5, 2), 0, 0, 0x20, 5), new PathLink(new(5, 1), 0, 0, 0x20, 5)],
             VehicleNodeCount = 3,
         }, "nodes5.ynd");
-        return new World(library, new CollisionEdits(), paths, history ?? new EditHistory());
+        var scenarios = new NodeRunner.Data.Scenarios.ScenarioSet();
+        var region = new NodeRunner.Data.Scenarios.ScenarioRegion
+        {
+            Name = "test_region",
+            Points = [new NodeRunner.Data.Scenarios.ScenarioPoint { Position = new(1, 1, 1) }, new NodeRunner.Data.Scenarios.ScenarioPoint { Position = new(2, 2, 2) }],
+        };
+        foreach (var (point, i) in region.Points.Select((p, i) => (p, i)))
+            (point.Region, point.Index) = (region, i);
+        scenarios.Regions.Add(region);
+        return new World(library, new CollisionEdits(), paths, history ?? new EditHistory(), scenarios);
     }
 
     // Everything an edit can change, in a fixed order, numbers written exactly.
@@ -124,6 +133,8 @@ public class OnlineEditTests
         foreach (var node in w.Paths.GetArea(5)!.Nodes)
             text.Append(CultureInfo.InvariantCulture, $"node {node.Id} {V(node.Position)} {node.Values} {node.FirstLink}+{node.LinkCount}\n");
         text.Append(string.Join(",", w.Paths.GetArea(5)!.Links)).Append('\n');
+        foreach (var point in w.Scenarios.AllPoints)
+            text.Append(CultureInfo.InvariantCulture, $"scenario {point.Index} {V(point.Position)} {F(point.Heading)} {point.Values}\n");
         return text.ToString();
     }
 
@@ -234,6 +245,10 @@ public class OnlineEditTests
         Share(PathNodeAddEdit.Apply(a.Paths, new Vector3(-5400, -8000, 4), false, node.Values, 0x55, node, 2, 1, "Ajouter un nœud")!);
         Share(PathLinkAddEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, 1, 1, "Relier deux nœuds")!);
         Share(PathLinkLanesEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, 3, 2, "Voies d'un lien")!);
+        var scenario = a.Scenarios.Regions[0].Points[1];
+        var scenarioBefore = scenario.Values;
+        a.Scenarios.SetValues(scenario, scenarioBefore with { Position = new(3, 4, 5), Heading = 1.5f, TypeHash = 0x1234, Probability = 50, StartHour = 6, EndHour = 22, Availability = 2, Radius = 4, TimeTillPedLeaves = 9, Flags = 0x81 });
+        Share(new ScenarioEdit(a.Scenarios, scenario, scenarioBefore, scenario.Values, "Modifier un point de scénario"));
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

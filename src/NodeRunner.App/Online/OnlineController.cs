@@ -56,7 +56,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     public EditHistory History => state.History;
 
     public EditContext? Context => state.World is { Maps: { } maps, IsBusy: false } world
-        ? new EditContext { Library = maps, Paths = world.PathNetwork, Collisions = state.CollisionEdits }
+        ? new EditContext { Library = maps, Paths = world.PathNetwork, Collisions = state.CollisionEdits, Scenarios = world.Scenarios }
         : null;
 
     public bool IsReady => state.World is { Maps: { } maps, IsBusy: false } && maps != _waitingFor;

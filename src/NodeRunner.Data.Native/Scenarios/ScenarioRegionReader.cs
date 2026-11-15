@@ -31,30 +31,24 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
     private const int ClusterMyPoints = 0 + 16; // Points (container) -> MyPoints
 
     // CScenarioPoint fields.
-    private const int PointType = 21;
+    internal const int PointType = 21;
     private const int PointModelSet = 22;
     private const int PointInterior = 23;
     private const int PointRequiredMap = 24;
-    private const int PointAvailability = 26;
-    private const int PointRadius = 29;
-    private const int PointTimeTillPedLeaves = 30;
+    internal const int PointAvailability = 26;
+    internal const int PointRadius = 29;
+    internal const int PointTimeTillPedLeaves = 30;
     private const int PointGroup = 32;
-    private const int PointProbability = 25;
-    private const int PointStartHour = 27;
-    private const int PointEndHour = 28;
-    private const int PointFlags = 36;
-    private const int PointPositionAndDirection = 48;
+    internal const int PointProbability = 25;
+    internal const int PointStartHour = 27;
+    internal const int PointEndHour = 28;
+    internal const int PointFlags = 36;
+    internal const int PointPositionAndDirection = 48;
 
     public ScenarioRegion Read(ReadOnlySpan<byte> data, string name)
     {
         var meta = new MetaResource(data);
-        int root = meta.RootBlock;
-        if (root < 0 || meta.BlockStructure(root) != RegionStructure)
-            throw new InvalidDataException("Ce fichier n'est pas une région de scénarios.");
-        meta.RequireStructure(RegionStructure, RegionSize, "CScenarioPointRegion");
-
-        var points = new List<ScenarioPoint>();
-        int region = meta.BlockStart(root);
+        int region = Region(meta);
         var names = new LookUps(
             ReadTypeNames(meta, region + RegionTypeNames),
             ReadTypeNames(meta, region + RegionPedModelSets),
@@ -63,18 +57,48 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
             ReadTypeNames(meta, region + RegionInteriorNames),
             ReadTypeNames(meta, region + RegionRequiredMaps));
 
-        ReadPoints(meta, region + RegionMyPoints, names, points);
+        var points = new List<ScenarioPoint>();
+        foreach (int offset in PointOffsets(meta, region))
+            points.Add(ReadPoint(meta.Data, offset, names));
+        return new ScenarioRegion { Name = name, Points = points, TypeHashes = names.Types };
+    }
 
+    internal static int Region(MetaResource meta)
+    {
+        int root = meta.RootBlock;
+        if (root < 0 || meta.BlockStructure(root) != RegionStructure)
+            throw new InvalidDataException("Ce fichier n'est pas une région de scénarios.");
+        meta.RequireStructure(RegionStructure, RegionSize, "CScenarioPointRegion");
+        return meta.BlockStart(root);
+    }
+
+    // Where each point is in the content: the region's own points, then those of each cluster.
+    internal static List<int> PointOffsets(MetaResource meta, int region)
+    {
+        var offsets = new List<int>();
+        AddPoints(meta, region + RegionMyPoints, offsets);
         var (clusters, clusterCount) = meta.ReadArray(region + RegionClusters, ClusterSize);
         if (clusterCount > 0)
         {
             meta.RequireStructure(ClusterStructure, ClusterSize, "CScenarioPointCluster");
             for (int i = 0; i < clusterCount; i++)
-                ReadPoints(meta, clusters + i * ClusterSize + ClusterMyPoints, names, points);
+                AddPoints(meta, clusters + i * ClusterSize + ClusterMyPoints, offsets);
         }
-
-        return new ScenarioRegion { Name = name, Points = points };
+        return offsets;
     }
+
+    private static void AddPoints(MetaResource meta, int arrayField, List<int> offsets)
+    {
+        var (offset, count) = meta.ReadArray(arrayField, PointSize);
+        if (count == 0)
+            return;
+        meta.RequireStructure(PointStructure, PointSize, "CScenarioPoint");
+        for (int i = 0; i < count; i++)
+            offsets.Add(offset + i * PointSize);
+    }
+
+    // The type list of the region: offset of its first hash and count.
+    internal static (int Offset, int Count) TypeList(MetaResource meta, int region) => meta.ReadArray(region + RegionTypeNames, sizeof(uint));
 
     private static uint[] ReadTypeNames(MetaResource meta, int fieldOffset)
     {
@@ -90,39 +114,28 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
 
     private static uint At(uint[] names, int index) => index < names.Length ? names[index] : 0;
 
-    private static void ReadPoints(MetaResource meta, int arrayField, LookUps names, List<ScenarioPoint> points)
+    private static ScenarioPoint ReadPoint(ResourceData data, int o, LookUps names)
     {
-        var (offset, count) = meta.ReadArray(arrayField, PointSize);
-        if (count == 0)
-            return;
-        meta.RequireStructure(PointStructure, PointSize, "CScenarioPoint");
-
-        var data = meta.Data;
-        for (int i = 0; i < count; i++)
+        int p = o + PointPositionAndDirection;
+        int modelSet = data.Byte(o + PointModelSet);
+        return new ScenarioPoint
         {
-            int o = offset + i * PointSize;
-            int p = o + PointPositionAndDirection;
-            uint type = At(names.Types, data.Byte(o + PointType));
-            int modelSet = data.Byte(o + PointModelSet);
-            points.Add(new ScenarioPoint
-            {
-                Position = new Vector3(Float(data, p), Float(data, p + 4), Float(data, p + 8)),
-                Heading = Float(data, p + 12),
-                TypeHash = type,
-                PedModelSetHash = At(names.PedModelSets, modelSet),
-                VehicleModelSetHash = At(names.VehicleModelSets, modelSet),
-                GroupHash = At(names.Groups, data.UInt16(o + PointGroup)),
-                InteriorHash = At(names.Interiors, data.Byte(o + PointInterior)),
-                RequiredMapHash = At(names.RequiredMaps, data.Byte(o + PointRequiredMap)),
-                Radius = data.Byte(o + PointRadius),
-                TimeTillPedLeaves = data.Byte(o + PointTimeTillPedLeaves),
-                Availability = data.Byte(o + PointAvailability),
-                Probability = data.Byte(o + PointProbability),
-                StartHour = data.Byte(o + PointStartHour),
-                EndHour = data.Byte(o + PointEndHour),
-                Flags = data.UInt32(o + PointFlags),
-            });
-        }
+            Position = new Vector3(Float(data, p), Float(data, p + 4), Float(data, p + 8)),
+            Heading = Float(data, p + 12),
+            TypeHash = At(names.Types, data.Byte(o + PointType)),
+            PedModelSetHash = At(names.PedModelSets, modelSet),
+            VehicleModelSetHash = At(names.VehicleModelSets, modelSet),
+            GroupHash = At(names.Groups, data.UInt16(o + PointGroup)),
+            InteriorHash = At(names.Interiors, data.Byte(o + PointInterior)),
+            RequiredMapHash = At(names.RequiredMaps, data.Byte(o + PointRequiredMap)),
+            Radius = data.Byte(o + PointRadius),
+            TimeTillPedLeaves = data.Byte(o + PointTimeTillPedLeaves),
+            Availability = data.Byte(o + PointAvailability),
+            Probability = data.Byte(o + PointProbability),
+            StartHour = data.Byte(o + PointStartHour),
+            EndHour = data.Byte(o + PointEndHour),
+            Flags = data.UInt32(o + PointFlags),
+        };
     }
 
     private static float Float(ResourceData data, int offset) => BitConverter.UInt32BitsToSingle(data.UInt32(offset));

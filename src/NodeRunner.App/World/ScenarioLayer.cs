@@ -19,6 +19,7 @@ internal sealed class ScenarioLayer : IDisposable
     private readonly ColorMesh?[] _meshes = new ColorMesh?[Categories.Count];
     private readonly int[] _counts = new int[Categories.Count];
     private ScenarioSet? _built;
+    private int _builtRevision;
 
     public static string Label(ScenarioCategory category) => category switch
     {
@@ -47,10 +48,11 @@ internal sealed class ScenarioLayer : IDisposable
     public void Update(WorldLoader loader, ColorRenderer renderer)
     {
         var scenarios = loader.Scenarios;
-        if (scenarios == _built)
+        if (scenarios == _built && scenarios?.Revision == _builtRevision)
             return;
 
         _built = scenarios;
+        _builtRevision = scenarios?.Revision ?? 0;
         DisposeMeshes();
         if (scenarios is null)
             return;

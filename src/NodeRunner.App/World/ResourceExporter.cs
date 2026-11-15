@@ -74,6 +74,8 @@ internal static class ResourceExporter
 
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
+        if (world.Scenarios is { } scenarios)
+            ScenarioFileSaver.Save(world, scenarios.RegionsToSave.ToList(), stream, report, markSaved: false);
         InteriorFileSaver.Save(world, interiorFiles, stream, report);
         var own = ProjectFiles(projectStream);
         if (report.Saved.Count == 0 && collisionEdits.Files.Count == 0 && OccluderMaps.Capture(world, occluderFileName).IsEmpty && own.Count == 0)

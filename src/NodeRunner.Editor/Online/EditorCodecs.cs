@@ -1,6 +1,7 @@
 using NodeRunner.Data.Collisions;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Paths;
+using NodeRunner.Data.Scenarios;
 
 namespace NodeRunner.Editor.Online;
 
@@ -521,6 +522,39 @@ internal sealed class PathLinkLanesCodec : EditCodec<PathLinkLanesEdit>
         var other = PathNodeCodecs.Node(network, r);
         int forward = r.ReadByte(), backward = r.ReadByte();
         return PathLinkLanesEdit.Apply(network, node, other, forward, backward, description) ?? throw new InvalidDataException("Path link lanes not changed here.");
+    }
+}
+
+internal sealed class ScenarioCodec : EditCodec<ScenarioEdit>
+{
+    public override string Tag => "scenario";
+
+    protected override void Write(ScenarioEdit edit, EditWriter w)
+    {
+        w.Write(edit.Point.Region?.Name ?? "");
+        w.Write(edit.Point.Index);
+        var v = edit.After;
+        w.Write(v.Position);
+        w.Write(v.Heading);
+        w.Write(v.TypeHash);
+        foreach (byte b in (byte[])[v.Probability, v.StartHour, v.EndHour, v.Availability, v.Radius, v.TimeTillPedLeaves])
+            w.Write(b);
+        w.Write(v.Flags);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var set = r.Context.Scenarios ?? throw new InvalidOperationException("No scenarios here.");
+        string region = r.ReadString();
+        int index = r.ReadInt();
+        var point = set.Regions.FirstOrDefault(g => string.Equals(g.Name, region, StringComparison.OrdinalIgnoreCase)) is { } found && index >= 0 && index < found.Points.Count
+            ? found.Points[index]
+            : throw new InvalidDataException($"Scenario point {region}:{index} not found here.");
+        var after = new ScenarioValues(r.ReadVector3(), r.ReadFloat(), r.ReadUInt(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(),
+            r.ReadByte(), r.ReadByte(), r.ReadUInt());
+        var before = point.Values;
+        set.SetValues(point, after);
+        return new ScenarioEdit(set, point, before, after, description);
     }
 }
 

@@ -97,6 +97,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
 
         var maps = state.MapsToExport;
         var pathAreas = state.PathAreasToSave;
+        var scenarioRegions = state.ScenarioRegionsToSave;
         string? folder = state.ExportFolder;
         bool nameValid = _solo ? SoloPack.ToPackName(_name) == _name : FiveMResource.IsValidName(_name);
         string? target = folder is not null && nameValid ? Path.Combine(folder, _name) : null;
@@ -125,7 +126,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             int editedOccluders = state.OccluderEdits.StreamFileNames.Count();
             int editedInteriors = state.InteriorFilesToExport.Count;
             int projectFiles = state.ProjectFileCount;
-            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 && editedCollisions == 0 && editedOccluders == 0 && editedInteriors == 0 && projectFiles == 0 ? L("aucune modification à exporter") : "aucun" : $"{maps.Count} fichier(s)");
+            ImGui.TextUnformatted(maps.Count == 0 ? pathAreas.Count == 0 && scenarioRegions.Count == 0 && editedCollisions == 0 && editedOccluders == 0 && editedInteriors == 0 && projectFiles == 0 ? L("aucune modification à exporter") : "aucun" : $"{maps.Count} fichier(s)");
             if (projectFiles > 0)
             {
                 Widgets.Property(L("Fichiers du projet"), L("Fichiers du dossier stream du projet (modèles, textures, collisions d'un mapping ou d'un mod importé), recopiés tels quels. Un fichier modifié dans NodeRunner est écrit à leur place."));
@@ -156,6 +157,12 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
                 ImGui.AlignTextToFramePadding();
                 ImGui.TextUnformatted(string.Join(", ", pathAreas.Select(Data.Paths.PathNetwork.FileName)));
             }
+            if (scenarioRegions.Count > 0)
+            {
+                Widgets.Property(L("Scénarios"), L("Fichiers de régions de scénarios (.ymt) dont des points ont été modifiés"));
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted(string.Join(", ", scenarioRegions.Select(r => r.Name + ".ymt")));
+            }
             Widgets.EndProperties();
         }
 
@@ -168,7 +175,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             DrawModsAssistant();
 
         ImGui.Dummy(new Vector2(0, 4));
-        bool hasChanges = maps.Count > 0 || pathAreas.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
+        bool hasChanges = maps.Count > 0 || pathAreas.Count > 0 || scenarioRegions.Count > 0 || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
         if (_solo)
         {
             FinishInstall();

@@ -6,23 +6,23 @@ namespace NodeRunner.Data.Scenarios;
 // parked car...).
 public sealed class ScenarioPoint
 {
-    public required Vector3 Position { get; init; }
+    public required Vector3 Position { get; set; }
 
-    public float Heading { get; init; }
+    public float Heading { get; set; }
 
-    public uint TypeHash { get; init; }
+    public uint TypeHash { get; set; }
 
     public string? TypeName { get; set; }
 
     public ScenarioCategory Category { get; set; } = ScenarioCategory.Other;
 
-    public byte StartHour { get; init; }
+    public byte StartHour { get; set; }
 
-    public byte EndHour { get; init; }
+    public byte EndHour { get; set; }
 
-    public byte Probability { get; init; }
+    public byte Probability { get; set; }
 
-    public uint Flags { get; init; }
+    public uint Flags { get; set; }
 
     // Model set of the point (0 = any), from the region's ped list or, for a vehicle scenario, its vehicle list: the
     // file only gives an index, both are kept.
@@ -39,20 +39,32 @@ public sealed class ScenarioPoint
     // A map file (.ymap) that must be loaded for the point to be used.
     public uint RequiredMapHash { get; init; }
 
-    public byte Radius { get; init; }
+    public byte Radius { get; set; }
 
-    public byte TimeTillPedLeaves { get; init; }
+    public byte TimeTillPedLeaves { get; set; }
 
     // 0 = solo and online, 1 = online only, 2 = solo only.
-    public byte Availability { get; init; }
+    public byte Availability { get; set; }
 
     // The region file holding the point, and its place there (points of the region first, then those of its clusters).
     public ScenarioRegion? Region { get; set; }
 
     public int Index { get; set; }
 
+    public ScenarioValues Values
+    {
+        get => new(Position, Heading, TypeHash, Probability, StartHour, EndHour, Availability, Radius, TimeTillPedLeaves, Flags);
+        internal set => (Position, Heading, TypeHash, Probability, StartHour, EndHour, Availability, Radius, TimeTillPedLeaves, Flags) =
+            (value.Position, value.Heading, value.TypeHash, value.Probability, value.StartHour, value.EndHour, value.Availability,
+                value.Radius, value.TimeTillPedLeaves, value.Flags);
+    }
+
     public Vector3 Direction => new(-MathF.Sin(Heading), MathF.Cos(Heading), 0f);
 }
+
+// What can be changed on a point (one undo step), and what a region file keeps of it.
+public readonly record struct ScenarioValues(Vector3 Position, float Heading, uint TypeHash, byte Probability, byte StartHour,
+    byte EndHour, byte Availability, byte Radius, byte TimeTillPedLeaves, uint Flags);
 
 // Broad families of scenarios, used for colours and layers.
 public enum ScenarioCategory

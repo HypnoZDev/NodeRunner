@@ -13,6 +13,7 @@ public sealed class EditContext
     public required MapLibrary Library { get; init; }
     public PathNetwork? Paths { get; init; }
     public CollisionEdits? Collisions { get; init; }
+    public NodeRunner.Data.Scenarios.ScenarioSet? Scenarios { get; init; }
 }
 
 // Turns one kind of edit into bytes, and bytes back into the same change made on this computer's map (returning the
@@ -79,6 +80,7 @@ public sealed class EditCodecs
         .Add(new PathNodeAddCodec())
         .Add(new PathLinkAddCodec())
         .Add(new PathLinkLanesCodec())
+        .Add(new ScenarioCodec())
         .Add(new RoomCodec())
         .Add(new PortalCodec())
         .Add(new InteriorLayoutCodec())

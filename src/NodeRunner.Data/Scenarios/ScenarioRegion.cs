@@ -9,6 +9,12 @@ public sealed class ScenarioRegion
 
     // Path of the file in the game's archives.
     public string? Path { get; set; }
+
+    // The scenario types the file lists (its points refer to them by index): those a point of this file can take.
+    public IReadOnlyList<uint> TypeHashes { get; init; } = [];
+
+    // Content of the user's saved file the region was read from (null: the game's).
+    public byte[]? SavedContent { get; set; }
 }
 
 // Decodes a scenario region file (.ymt in levels\gta5\scenario).

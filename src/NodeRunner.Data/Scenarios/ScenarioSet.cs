@@ -22,13 +22,87 @@ public sealed class ScenarioSet
 
     public List<string> Errors { get; } = new();
 
+    private Dictionary<uint, string> _typeNames = new();
+    private readonly HashSet<ScenarioRegion> _changed = new();
+    private readonly HashSet<ScenarioRegion> _saved = new();
+
+    // Changes at each edit (the layer is drawn again).
+    public int Revision { get; private set; }
+
+    // Regions to write when saving: changed since loading, or taken back from the project.
+    public IEnumerable<ScenarioRegion> RegionsToSave => Regions.Where(r => _changed.Contains(r) || _saved.Contains(r));
+
+    public string? TypeName(uint hash) => _typeNames.GetValueOrDefault(hash);
+
+    public void SetValues(ScenarioPoint point, ScenarioValues values)
+    {
+        point.Values = values;
+        point.TypeName = TypeName(values.TypeHash);
+        point.Category = ScenarioCategories.FromTypeName(point.TypeName);
+        if (point.Region is { } region)
+            _changed.Add(region);
+        Revision++;
+    }
+
+    public void MarkSaved(ScenarioRegion region) => _saved.Add(region);
+
+    // A copy of this set where the changed regions are read again from the game, and the user's saved files (by region
+    // name) put in their place. Unreadable files are reported in errors.
+    public ScenarioSet WithSavedRegions(IGameFileSystem files, IScenarioRegionReader reader, IReadOnlyDictionary<string, byte[]> saved, List<string> errors)
+    {
+        var set = new ScenarioSet { _typeNames = _typeNames };
+        set.Errors.AddRange(Errors);
+        foreach (var region in Regions)
+        {
+            if (!_changed.Contains(region) && !_saved.Contains(region) && !saved.ContainsKey(region.Name))
+            {
+                set.Regions.Add(region);
+                continue;
+            }
+            try
+            {
+                bool fromProject = saved.TryGetValue(region.Name, out var data);
+                if (!fromProject)
+                    data = region.Path is { } path ? files.ReadFile(path) : null;
+                if (data is null)
+                    continue;
+                var copy = set.Prepare(reader.Read(data, region.Name), region.Path);
+                if (fromProject)
+                {
+                    copy.SavedContent = data;
+                    set._saved.Add(copy);
+                }
+                set.Regions.Add(copy);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
+            {
+                errors.Add($"{region.Name}.ymt : {ex.Message}");
+                set.Regions.Add(region);
+            }
+        }
+        return set;
+    }
+
+    private ScenarioRegion Prepare(ScenarioRegion region, string? path)
+    {
+        region.Path = path;
+        foreach (var (point, index) in region.Points.Select((p, i) => (p, i)))
+        {
+            point.Region = region;
+            point.Index = index;
+            point.TypeName = _typeNames.GetValueOrDefault(point.TypeHash);
+            point.Category = ScenarioCategories.FromTypeName(point.TypeName);
+        }
+        return region;
+    }
+
     public IEnumerable<ScenarioPoint> AllPoints => Regions.SelectMany(r => r.Points);
 
     // Reads every scenario region of the base game.
     public static ScenarioSet Load(IGameFileSystem files, IScenarioRegionReader reader, IProgress<string>? progress = null)
     {
         var set = new ScenarioSet();
-        var typeNames = LoadTypeNames(files, set.Errors);
+        set._typeNames = LoadTypeNames(files, set.Errors);
 
         var chosen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files.EnumerateFiles(".ymt"))
@@ -54,16 +128,7 @@ public sealed class ScenarioSet
                 if (data is null || data.Length == 0)
                     continue;
 
-                var region = reader.Read(data, name);
-                region.Path = path;
-                foreach (var (point, index) in region.Points.Select((p, i) => (p, i)))
-                {
-                    point.Region = region;
-                    point.Index = index;
-                    point.TypeName = typeNames.GetValueOrDefault(point.TypeHash);
-                    point.Category = ScenarioCategories.FromTypeName(point.TypeName);
-                }
-                set.Regions.Add(region);
+                set.Regions.Add(set.Prepare(reader.Read(data, name), path));
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException)
             {
