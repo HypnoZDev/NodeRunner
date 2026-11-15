@@ -119,10 +119,13 @@ internal static unsafe class PlatformWindows
         ref var monitors = ref ImGui.GetPlatformIO().NativePtr->Monitors;
         if (monitors.Data != IntPtr.Zero)
             ImGui.MemFree(monitors.Data);
-        var data = (ImGuiPlatformMonitor*)ImGui.MemAlloc((uint)(screens.Length * sizeof(ImGuiPlatformMonitor)));
+        int count = screens.Length + 1;
+        var data = (ImGuiPlatformMonitor*)ImGui.MemAlloc((uint)(count * sizeof(ImGuiPlatformMonitor)));
+        var (desktop, desktopWork) = (Rectangle.Empty, Rectangle.Empty);
         for (int i = 0; i < screens.Length; i++)
         {
             var (bounds, work) = (screens[i].Bounds, screens[i].WorkingArea);
+            (desktop, desktopWork) = i == 0 ? (bounds, work) : (Rectangle.Union(desktop, bounds), Rectangle.Union(desktopWork, work));
             data[i] = new ImGuiPlatformMonitor
             {
                 MainPos = ToImGui(bounds.Location),
@@ -132,7 +135,19 @@ internal static unsafe class PlatformWindows
                 DpiScale = 1f,
             };
         }
-        monitors = new ImVector(screens.Length, screens.Length, (IntPtr)data);
+        // Last, a monitor covering everything around the screens: with several screens, a window created outside all
+        // of them (gap between screens of different sizes, position saved on a screen now unplugged) has no monitor,
+        // so a zero DPI scale, and ImGui asserts in the same frame. Real screens come first: a window inside one keeps it.
+        const float Around = 100_000f;
+        data[screens.Length] = new ImGuiPlatformMonitor
+        {
+            MainPos = ToImGui(desktop.Location) - new Vector2(Around),
+            MainSize = new Vector2(desktop.Width, desktop.Height) / _scale + new Vector2(2f * Around),
+            WorkPos = ToImGui(desktopWork.Location),
+            WorkSize = new Vector2(desktopWork.Width, desktopWork.Height) / _scale,
+            DpiScale = 1f,
+        };
+        monitors = new ImVector(count, count, (IntPtr)data);
     }
 
     private static Vector2 ToImGui(Point screen) => new Vector2(screen.X - _origin.X, screen.Y - _origin.Y) / _scale;
