@@ -48,7 +48,7 @@ public sealed class ScenarioAddEdit : IEdit
     }
 
     public void Undo() => _set.DeletePoint(Point);
-    public void Redo() => _set.InsertPoint(_region, _index, Point, Values);
+    public void Redo() => _set.InsertPoint(_region, _index, -1, Point, Values);
 }
 
 // One of a region's own points deleted.
@@ -57,9 +57,11 @@ public sealed class ScenarioDeleteEdit : IEdit
     private readonly ScenarioSet _set;
     private readonly ScenarioRegion _region;
 
-    private ScenarioDeleteEdit(ScenarioSet set, ScenarioRegion region, ScenarioPoint point, int index, string description)
+    private readonly int _group;
+
+    private ScenarioDeleteEdit(ScenarioSet set, ScenarioRegion region, ScenarioPoint point, int index, int group, string description)
     {
-        (_set, _region, Point, Index) = (set, region, point, index);
+        (_set, _region, Point, Index, _group) = (set, region, point, index, group);
         Values = point.Values;
         Description = description;
     }
@@ -72,10 +74,10 @@ public sealed class ScenarioDeleteEdit : IEdit
     public ScenarioValues Values { get; }
 
     public static ScenarioDeleteEdit? Apply(ScenarioSet set, ScenarioPoint point, string description) =>
-        point.Region is { } region && set.DeletePoint(point) is var index and >= 0
-            ? new ScenarioDeleteEdit(set, region, point, index, description)
+        point.Region is { } region && set.DeletePoint(point) is var (index, group)
+            ? new ScenarioDeleteEdit(set, region, point, index, group, description)
             : null;
 
-    public void Undo() => _set.InsertPoint(_region, Index, Point, Values);
+    public void Undo() => _set.InsertPoint(_region, Index, _group, Point, Values);
     public void Redo() => _set.DeletePoint(Point);
 }

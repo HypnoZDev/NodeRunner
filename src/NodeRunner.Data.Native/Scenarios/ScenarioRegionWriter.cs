@@ -114,8 +114,10 @@ public static class ScenarioRegionWriter
         var meta = new MetaResource(content);
         int start = R.Region(meta);
         var offsets = R.PointOffsets(meta, start);
-        if (offsets.Count - ownInFile != region.Points.Count - region.OwnPointCount)
-            throw new InvalidDataException("les points des groupes (clusters) ont changé");
+        var fileSizes = R.ClusterSizes(meta, start);
+        if (fileSizes.Count != region.ClusterSizes.Count)
+            throw new InvalidDataException("le nombre de groupes (clusters) a changé");
+        bool clustersSame = fileSizes.SequenceEqual(region.ClusterSizes);
 
         // Types: those of the file, then the new ones.
         var types = ReadTypes(meta, start);
@@ -129,10 +131,13 @@ public static class ScenarioRegionWriter
             throw new InvalidDataException("plus de 255 types de scénario dans la région");
         var indices = TypeIndices(types);
 
-        // Cluster points: in place, as before.
+        // Cluster points: in place when the clusters keep their points.
         var patched = content.ToArray();
-        for (int i = region.OwnPointCount; i < region.Points.Count; i++)
-            WritePoint(patched.AsSpan(offsets[ownInFile + i - region.OwnPointCount], R.PointSize), region.Points[i].Values, indices);
+        if (clustersSame)
+        {
+            for (int i = region.OwnPointCount; i < region.Points.Count; i++)
+                WritePoint(patched.AsSpan(offsets[ownInFile + i - region.OwnPointCount], R.PointSize), region.Points[i].Values, indices);
+        }
 
         var own = region.Points.Take(region.OwnPointCount).ToList();
         var grid = MakeGrid(own.Select(p => (p.Position, p.Flags)).ToList());
@@ -156,6 +161,8 @@ public static class ScenarioRegionWriter
         // The region is the root block's only item.
         SetArray(document, root, R.RegionMyPoints, points, own.Count, R.PointStructure);
         SetArray(document, root, R.RegionTypeNames, typeBytes, types.Count, HashBlock);
+        if (!clustersSame)
+            WriteClusters(document, root, region, indices);
         UpdateChains(document, root, changes);
         // Without points of its own, a region keeps its grid (the game's are like that).
         if (own.Count == 0)
@@ -173,6 +180,33 @@ public static class ScenarioRegionWriter
         BinaryPrimitives.WriteSingleLittleEndian(g[GridCellDimY..], grid.CellSize);
         var (written, pageFlags) = document.Write();
         return (written, pageFlags);
+    }
+
+    // Each cluster's points written again from the region's; a cluster left without points goes.
+    private static void WriteClusters(MetaDocument document, byte[] root, ScenarioRegion region, Dictionary<uint, byte> indices)
+    {
+        var (data, at, count) = RootArray(document, root, R.RegionClusters, R.ClusterSize);
+        var kept = new List<byte>();
+        int next = region.OwnPointCount;
+        for (int c = 0; c < count; c++)
+        {
+            int size = region.ClusterSizes[c];
+            var points = new byte[size * R.PointSize];
+            for (int i = 0; i < size; i++)
+            {
+                var point = region.Points[next + i];
+                var target = points.AsSpan(i * R.PointSize, R.PointSize);
+                point.Source?.AsSpan(0, R.PointSize).CopyTo(target);
+                WritePoint(target, point.Values, indices);
+            }
+            next += size;
+            // The cluster's bytes, its point array pointed at the new points.
+            var cluster = data.AsSpan(at + c * R.ClusterSize, R.ClusterSize).ToArray();
+            SetArray(document, cluster, R.ClusterMyPoints, points, size, R.PointStructure);
+            if (size > 0)
+                kept.AddRange(cluster);
+        }
+        SetArray(document, root, R.RegionClusters, [.. kept], kept.Count / R.ClusterSize, 0);
     }
 
     // Block kinds of plain values (the type code stands for the structure).

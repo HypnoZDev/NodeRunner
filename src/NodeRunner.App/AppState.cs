@@ -1007,7 +1007,6 @@ internal sealed class AppState
         string region = point.Region?.Name ?? "";
         if (ScenarioDeleteEdit.Apply(set, point, L($"Supprimer le point de scénario {point.Index} ({region}.ymt)")) is not { } edit)
         {
-            Notify(L("Ce point fait partie d'un groupe (cluster) du fichier : il ne peut pas encore être supprimé."), warning: true);
             return;
         }
         History.Add(edit);

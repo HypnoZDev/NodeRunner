@@ -975,7 +975,6 @@ public static partial class English
         ("Ajoute un point de scénario au sol devant la caméra (un PNJ, un véhicule ou un animal y fait une activité), copie du point le plus proche. Choisissez ensuite son type dans Propriétés.",
             "Adds a scenario point on the ground in front of the camera (a ped, vehicle or animal does an activity there), a copy of the nearest point. Then choose its type in Properties."),
         ("Ajouter un point de scénario ({0}.ymt)", "Add a scenario point ({0}.ymt)"),
-        ("Ce point fait partie d'un groupe (cluster) du fichier : il ne peut pas encore être supprimé.", "This point belongs to a cluster of the file: it cannot be deleted yet."),
         ("Point de scénario supprimé de {0}.ymt. Ctrl+Z pour annuler.", "Scenario point deleted from {0}.ymt. Ctrl+Z to undo."),
         ("Supprimer le point de scénario {0} ({1}.ymt)", "Delete scenario point {0} ({1}.ymt)"),
         ("1 nœud de route sans aucun lien", "1 road node without any link"),

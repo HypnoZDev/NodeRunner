@@ -1304,6 +1304,9 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
 
             Widgets.PropertyText(point.Category == NodeRunner.Data.Scenarios.ScenarioCategory.Vehicle ? L("Véhicules") : L("Modèles"),
                 Name(point.ModelSetHash, L("tous")), L("Groupe de modèles (model set) qui peut apparaître ici."));
+            if (point.Region is { } owner && owner.GroupOf(point.Index) is var cluster and >= 0)
+                Widgets.PropertyText(L("Ensemble"), L($"groupe {cluster} ({owner.ClusterSizes[cluster]} points)"),
+                    L("Les points d'un ensemble (cluster) apparaissent tous en même temps (ex. un groupe de PNJ qui discutent)."));
             if (Name(point.GroupHash, "") is { Length: > 0 } group)
                 Widgets.PropertyText(L("Groupe"), group, L("Les points d'un groupe sont activés ou coupés ensemble (par un script)."));
             if (Name(point.InteriorHash, "") is { Length: > 0 } interior)

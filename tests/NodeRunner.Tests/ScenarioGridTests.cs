@@ -34,7 +34,7 @@ public class ScenarioGridTests
     public void Adding_and_deleting_renumbers_the_points_and_can_be_undone()
     {
         var set = new ScenarioSet();
-        var region = new ScenarioRegion { Name = "r", Points = [new ScenarioPoint { Position = Vector3.Zero }, new ScenarioPoint { Position = Vector3.One }], OwnPointCount = 1 };
+        var region = new ScenarioRegion { Name = "r", Points = [new ScenarioPoint { Position = Vector3.Zero }, new ScenarioPoint { Position = Vector3.One }], OwnPointCount = 1, ClusterSizes = [1] };
         foreach (var (p, i) in region.Points.Select((p, i) => (p, i)))
             (p.Region, p.Index) = (region, i);
         set.Regions.Add(region);
@@ -44,7 +44,10 @@ public class ScenarioGridTests
         Assert.Equal(2, region.Points[2].Index);
         var delete = NodeRunner.Editor.ScenarioDeleteEdit.Apply(set, region.Points[0], "supprimer")!;
         Assert.Equal(new Vector3(5, 5, 5), region.Points[0].Position);
-        Assert.Null(NodeRunner.Editor.ScenarioDeleteEdit.Apply(set, region.Points[^1], "groupe"));
+        var clustered = NodeRunner.Editor.ScenarioDeleteEdit.Apply(set, region.Points[^1], "groupe")!;
+        Assert.Equal((1, 1, 0), (region.Points.Count, region.OwnPointCount, region.ClusterSizes[0]));
+        clustered.Undo();
+        Assert.Equal((2, 1, 1), (region.Points.Count, region.OwnPointCount, region.ClusterSizes[0]));
         delete.Undo();
         add.Undo();
         Assert.Equal((2, 1), (region.Points.Count, region.OwnPointCount));

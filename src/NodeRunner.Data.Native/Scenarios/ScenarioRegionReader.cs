@@ -14,12 +14,12 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
 
     private const int RegionSize = 376;
     internal const int PointSize = 64;
-    private const int ClusterSize = 80;
+    internal const int ClusterSize = 80;
     private const int ArrayFieldSize = 16;
 
     // CScenarioPointRegion fields.
     internal const int RegionMyPoints = 8 + 16;  // Points (container) -> MyPoints
-    private const int RegionClusters = 264;
+    internal const int RegionClusters = 264;
     internal const int RegionChainNodes = 96;
     internal const int RegionChainEdges = 96 + 16;
     internal const int RegionChains = 96 + 32;
@@ -33,7 +33,7 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
     private const int RegionRequiredMaps = RegionTypeNames + 80;
 
     // CScenarioPointCluster fields.
-    private const int ClusterMyPoints = 0 + 16; // Points (container) -> MyPoints
+    internal const int ClusterMyPoints = 0 + 16; // Points (container) -> MyPoints
 
     // CScenarioPoint fields.
     internal const int PointType = 21;
@@ -70,7 +70,12 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
             point.FromFile = true;
             points.Add(point);
         }
-        return new ScenarioRegion { Name = name, Points = points, TypeHashes = names.Types, OwnPointCount = meta.ReadArray(region + RegionMyPoints, PointSize).Count };
+        var sizes = ClusterSizes(meta, region);
+        return new ScenarioRegion
+        {
+            Name = name, Points = points, TypeHashes = names.Types, OwnPointCount = meta.ReadArray(region + RegionMyPoints, PointSize).Count,
+            ClusterSizes = sizes,
+        };
     }
 
     internal static int Region(MetaResource meta)
@@ -105,6 +110,16 @@ public sealed class ScenarioRegionReader : IScenarioRegionReader
         meta.RequireStructure(PointStructure, PointSize, "CScenarioPoint");
         for (int i = 0; i < count; i++)
             offsets.Add(offset + i * PointSize);
+    }
+
+    // Number of points of each cluster.
+    internal static List<int> ClusterSizes(MetaResource meta, int region)
+    {
+        var (clusters, count) = meta.ReadArray(region + RegionClusters, ClusterSize);
+        var sizes = new List<int>(count);
+        for (int i = 0; i < count; i++)
+            sizes.Add(meta.ReadArray(clusters + i * ClusterSize + ClusterMyPoints, PointSize).Count);
+        return sizes;
     }
 
     // The type list of the region: offset of its first hash and count.

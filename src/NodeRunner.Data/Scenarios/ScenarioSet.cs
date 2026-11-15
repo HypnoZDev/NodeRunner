@@ -65,28 +65,29 @@ public sealed class ScenarioSet
             InteriorHash = template?.InteriorHash ?? 0,
             RequiredMapHash = template?.RequiredMapHash ?? 0,
         };
-        InsertPoint(region, Math.Clamp(index ?? region.OwnPointCount, 0, region.OwnPointCount), point, values);
+        InsertPoint(region, Math.Clamp(index ?? region.OwnPointCount, 0, region.OwnPointCount), -1, point, values);
         return point;
     }
 
     // Puts a deleted point back at its place.
-    public void InsertPoint(ScenarioRegion region, int index, ScenarioPoint point, ScenarioValues values)
+    public void InsertPoint(ScenarioRegion region, int index, int group, ScenarioPoint point, ScenarioValues values)
     {
-        region.Insert(index, point);
+        region.Insert(index, point, group);
         _changed.Add(region);
         SetValues(point, values);
     }
 
-    // Deletes one of a region's own points (those of its clusters stay); its index before the deletion, or -1.
-    public int DeletePoint(ScenarioPoint point)
+    // Deletes a point (of the region, or of one of its clusters); its index before the deletion and its group (-1: the
+    // region's own points, else the cluster), or null.
+    public (int Index, int Group)? DeletePoint(ScenarioPoint point)
     {
-        if (point.Region is not { } region || point.Index >= region.OwnPointCount || region.Points[point.Index] != point)
-            return -1;
+        if (point.Region is not { } region || point.Index >= region.Points.Count || region.Points[point.Index] != point)
+            return null;
         int index = point.Index;
-        region.RemoveAt(index);
+        int group = region.RemoveAt(index);
         _changed.Add(region);
         Revision++;
-        return index;
+        return (index, group);
     }
 
     // The point of a region closest to position (within maxDistance), or null.

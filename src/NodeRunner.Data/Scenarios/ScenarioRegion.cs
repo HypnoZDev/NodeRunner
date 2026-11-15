@@ -12,21 +12,50 @@ public sealed class ScenarioRegion
 
     public int OwnPointCount { get; set; }
 
+    // Number of points of each cluster, in order, after the region's own points (0 once all of a cluster's are deleted:
+    // the cluster is then left out of the file).
+    public List<int> ClusterSizes { get; init; } = [];
+
+    // Which part a point index falls in: -1 = the region's own points, else the cluster's number.
+    public int GroupOf(int index)
+    {
+        int end = OwnPointCount;
+        if (index < end)
+            return -1;
+        for (int c = 0; c < ClusterSizes.Count; c++)
+        {
+            end += ClusterSizes[c];
+            if (index < end)
+                return c;
+        }
+        return ClusterSizes.Count - 1;
+    }
+
     // Points added or deleted: the file is laid out again when saved (else its values are written in place).
     public bool Restructured { get; set; }
 
-    internal void Insert(int index, ScenarioPoint point)
+    // group: -1 = among the region's own points, else in that cluster.
+    internal void Insert(int index, ScenarioPoint point, int group)
     {
         _points.Insert(index, point);
-        OwnPointCount++;
+        if (group < 0)
+            OwnPointCount++;
+        else
+            ClusterSizes[group]++;
         Renumber(index);
     }
 
-    internal void RemoveAt(int index)
+    // The group the point was in.
+    internal int RemoveAt(int index)
     {
+        int group = GroupOf(index);
         _points.RemoveAt(index);
-        OwnPointCount--;
+        if (group < 0)
+            OwnPointCount--;
+        else
+            ClusterSizes[group]--;
         Renumber(index);
+        return group;
     }
 
     private void Renumber(int from)
