@@ -500,6 +500,30 @@ internal sealed class PathLinkAddCodec : EditCodec<PathLinkAddEdit>
     }
 }
 
+internal sealed class PathLinkLanesCodec : EditCodec<PathLinkLanesEdit>
+{
+    public override string Tag => "path-link-lanes";
+
+    protected override void Write(PathLinkLanesEdit edit, EditWriter w)
+    {
+        w.Write(edit.Node.Id.AreaId);
+        w.Write(edit.Node.Id.NodeId);
+        w.Write(edit.Other.Id.AreaId);
+        w.Write(edit.Other.Id.NodeId);
+        w.Write((byte)edit.LanesForward);
+        w.Write((byte)edit.LanesBackward);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var network = r.Context.Paths ?? throw new InvalidOperationException("No road network here.");
+        var node = PathNodeCodecs.Node(network, r);
+        var other = PathNodeCodecs.Node(network, r);
+        int forward = r.ReadByte(), backward = r.ReadByte();
+        return PathLinkLanesEdit.Apply(network, node, other, forward, backward, description) ?? throw new InvalidDataException("Path link lanes not changed here.");
+    }
+}
+
 internal static class PathNodeCodecs
 {
     public static void Write(EditWriter w, PathNodeValues v)

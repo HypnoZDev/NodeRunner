@@ -2578,9 +2578,35 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                     state.SelectedPathNode = target;
                 else if (target is null)
                     ImGui.TextColored(UiTheme.TextFaint, L($"{lanes} (zone non chargée)"));
+                if (target is not null && DrawLinkLanes(node, target, link, i, network))
+                    break;
             }
             Widgets.EndProperties();
         }
+    }
+
+    private static readonly string[] LaneCounts = ["0", "1", "2", "3", "4", "5", "6", "7"];
+
+    // Lanes of a link, towards its target and back; the link back gets them swapped. True when they changed (the
+    // links of the node were rebuilt).
+    private bool DrawLinkLanes(PathNode node, PathNode target, PathLink link, int index, PathNetwork network)
+    {
+        Widgets.Property(L("   Voies aller / retour"), L("Nombre de voies de ce nœud vers l'autre (aller) et de l'autre vers celui-ci (retour), 0 à 7.\nLe lien dans l'autre sens est réglé pareil (inversé). Annulable avec Ctrl+Z."));
+        int forward = link.LanesForward, backward = link.LanesBackward;
+        float width = Widgets.SplitWidth(2);
+        ImGui.SetNextItemWidth(width);
+        bool changed = ImGui.Combo($"##lanes_forward{index}", ref forward, LaneCounts, LaneCounts.Length);
+        ImGui.SameLine(0f, ImGui.GetStyle().ItemInnerSpacing.X);
+        ImGui.SetNextItemWidth(width);
+        changed |= ImGui.Combo($"##lanes_backward{index}", ref backward, LaneCounts, LaneCounts.Length);
+        if (!changed)
+            return false;
+        var edit = PathLinkLanesEdit.Apply(network, node, target, forward, backward,
+            L($"Voies du lien {node.Id.AreaId}:{node.Id.NodeId} - {target.Id.AreaId}:{target.Id.NodeId}"));
+        if (edit is null)
+            return false;
+        state.History.Add(edit);
+        return true;
     }
 
     private int? _densityDraft;

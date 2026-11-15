@@ -190,3 +190,33 @@ public sealed class PathLinkAddEdit : IPathNodeEdit
     public void Undo() => _network.Restore(_before);
     public void Redo() => _network.Restore(_after);
 }
+
+// The lanes between two linked nodes changed, both ways.
+public sealed class PathLinkLanesEdit : IPathNodeEdit
+{
+    private readonly PathNetwork _network;
+    private readonly PathAreasState _before, _after;
+
+    private PathLinkLanesEdit(PathNetwork network, PathNode node, PathNode other, int forward, int backward, PathAreasState before, PathAreasState after, string description)
+    {
+        _network = network;
+        (Node, Other, LanesForward, LanesBackward) = (node, other, forward, backward);
+        (_before, _after) = (before, after);
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => null;
+    public PathNode Node { get; }
+    public PathNode Other { get; }
+    public int LanesForward { get; }
+    public int LanesBackward { get; }
+
+    public static PathLinkLanesEdit? Apply(PathNetwork network, PathNode node, PathNode other, int lanesForward, int lanesBackward, string description) =>
+        network.SetLinkLanes(node, other, lanesForward, lanesBackward) is var (before, after)
+            ? new PathLinkLanesEdit(network, node, other, lanesForward, lanesBackward, before, after, description)
+            : null;
+
+    public void Undo() => _network.Restore(_before);
+    public void Redo() => _network.Restore(_after);
+}

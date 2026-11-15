@@ -233,6 +233,35 @@ public class PathNodeEditTests
     }
 
     [Fact]
+    public void Link_lanes_are_set_both_ways_keeping_the_other_bits()
+    {
+        var network = LinkedNetwork();
+        var first = network.GetNode(new(1, 0))!;
+        var other = network.GetNode(new(2, 0))!;
+        PathLinkAddEdit.Apply(network, first, other, 1, 1, "Relier");
+        var area1 = network.GetArea(1)!;
+        var area2 = network.GetArea(2)!;
+        var links = area1.Links.ToList();
+        int at = links.FindIndex(l => l.Target == other.Id);
+        links[at] = links[at] with { Flags2 = (byte)(links[at].Flags2 | 0x03) };
+        area1.Links = links;
+
+        var edit = PathLinkLanesEdit.Apply(network, first, other, 3, 0, "Voies")!;
+        var there = area1.LinksOf(first).Single(l => l.Target == other.Id);
+        var back = area2.LinksOf(other).Single(l => l.Target == first.Id);
+        Assert.Equal((3, 0), (there.LanesForward, there.LanesBackward));
+        Assert.True(there.IsShortcut && there.DontUseForNavigation);
+        Assert.Equal((0, 3), (back.LanesForward, back.LanesBackward));
+        Assert.Null(PathLinkLanesEdit.Apply(network, first, other, 3, 0, "pareil"));
+        Assert.Null(PathLinkLanesEdit.Apply(network, first, network.GetNode(new(1, 2))!, 1, 1, "pas relié"));
+
+        edit.Undo();
+        Assert.Equal(1, area2.LinksOf(other).Single(l => l.Target == first.Id).LanesForward);
+        edit.Redo();
+        Assert.Equal(3, area1.LinksOf(first).Single(l => l.Target == other.Id).LanesForward);
+    }
+
+    [Fact]
     public void A_node_is_added_in_a_new_area_but_not_outside_the_map()
     {
         var network = new PathNetwork();

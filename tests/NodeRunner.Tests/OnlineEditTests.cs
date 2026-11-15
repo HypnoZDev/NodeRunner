@@ -233,6 +233,7 @@ public class OnlineEditTests
         // Area 5 spans x -5632 to -5120, y -8192 to -7680.
         Share(PathNodeAddEdit.Apply(a.Paths, new Vector3(-5400, -8000, 4), false, node.Values, 0x55, node, 2, 1, "Ajouter un nœud")!);
         Share(PathLinkAddEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, 1, 1, "Relier deux nœuds")!);
+        Share(PathLinkLanesEdit.Apply(a.Paths, node, a.Paths.GetNode(new(5, 1))!, 3, 2, "Voies d'un lien")!);
 
         // A parking spot moved, turned and given a model.
         var spotBefore = a.Map.CarGenerators[0];

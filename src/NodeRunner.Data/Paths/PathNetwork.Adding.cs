@@ -66,6 +66,27 @@ public sealed partial class PathNetwork
         return (before, Done(touched));
     }
 
+    // Sets the lanes between two linked nodes: forward = from a towards b, backward = from b towards a; the link back,
+    // when there is one, gets them swapped. The other bits of the links are kept. Null when they are not linked or
+    // nothing changes.
+    public (PathAreasState Before, PathAreasState After)? SetLinkLanes(PathNode a, PathNode b, int lanesForward, int lanesBackward)
+    {
+        if (GetArea(a.Id.AreaId) is not { } areaA || GetArea(b.Id.AreaId) is not { } areaB || GetNode(a.Id) != a || GetNode(b.Id) != b)
+            return null;
+        static PathLink Set(PathLink link, int forward, int backward) =>
+            link with { Flags2 = (byte)((link.Flags2 & 0x03) | Lanes(forward, backward)) };
+        var there = areaA.LinksOf(a).Where(l => l.Target == b.Id).ToList();
+        var back = areaB.LinksOf(b).Where(l => l.Target == a.Id).ToList();
+        if (there.Count == 0 && back.Count == 0
+            || there.All(l => Set(l, lanesForward, lanesBackward) == l) && back.All(l => Set(l, lanesBackward, lanesForward) == l))
+            return null;
+        var touched = new[] { areaA, areaB }.Distinct().ToList();
+        var before = Capture(touched);
+        RebuildLinks(areaA, link => link.Target == b.Id ? Set(link, lanesForward, lanesBackward) : link, a);
+        RebuildLinks(areaB, link => link.Target == a.Id ? Set(link, lanesBackward, lanesForward) : link, b);
+        return (before, Done(touched));
+    }
+
     private static byte Lanes(int forward, int backward) => (byte)((Math.Clamp(forward, 0, 7) << 5) | (Math.Clamp(backward, 0, 7) << 2));
 
     private static void InsertLink(PathNodeArea area, PathNode node, PathLink link)
