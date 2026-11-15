@@ -2,6 +2,7 @@ using System.Numerics;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
+using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Gta4;
 
@@ -12,6 +13,9 @@ public sealed class Gta4Scene
     public required MapLibrary Library { get; init; }
 
     public required ModelCatalog Models { get; init; }
+
+    // Texture dictionaries (".wtd") by name, with the parents of the definitions ("txdp").
+    public required TextureCatalog Textures { get; init; }
 
     public static Gta4Scene Build(Gta4Map map, Gta4FileSystem files, Gta4Episode episode)
     {
@@ -64,10 +68,21 @@ public sealed class Gta4Scene
         {
             Library = MapLibrary.FromMaps(archetypes, maps),
             Models = ModelCatalog.FromFiles(drawables, Files(".wdd"), fragments),
+            Textures = TextureCatalogOf(Files(".wtd"), map.Definitions),
         };
     }
 
     private const uint LodInParentMap = 8;
+
+    // Files are in order of priority, the last one wins for a name.
+    private static TextureCatalog TextureCatalogOf(List<string> files, Gta4Definitions definitions)
+    {
+        var dictionaries = new Dictionary<uint, string>();
+        foreach (var path in files)
+            dictionaries[Joaat.Hash(Path.GetFileNameWithoutExtension(path))] = path;
+        var parents = definitions.TextureParents.ToDictionary(p => Joaat.Hash(p.Key), p => Joaat.Hash(p.Value));
+        return new TextureCatalog(dictionaries, parents);
+    }
 
     private static Archetype ToArchetype(Gta4ModelDef model, bool fragment) => new()
     {

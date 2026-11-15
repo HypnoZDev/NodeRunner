@@ -33,7 +33,13 @@ internal sealed class Gta4World : IDisposable
 
     public Gta4ModelReader ModelReader { get; }
 
-    public Gta4World() => ModelReader = new Gta4ModelReader(Files);
+    public Gta4TextureReader TextureReader { get; }
+
+    public Gta4World()
+    {
+        ModelReader = new Gta4ModelReader(Files);
+        TextureReader = new Gta4TextureReader(Files);
+    }
 
     public bool IsLoaded => !_busy && Folder is not null && _error is null;
 

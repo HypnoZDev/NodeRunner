@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Models;
+using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Gta4;
 
@@ -60,6 +61,8 @@ public static class Gta4Drawables
         }
     }
 
+    // Shader group: embedded texture dictionary at 4, shaders at 8.
+    private const int ShaderGroupTextures = 0x04;
     // Drawable: shader group at 8, bounds at 0x20 / 0x30, model lists of the 4 levels of detail at 0x40.
     private const int DrawableShaderGroup = 0x08, DrawableBoundsMin = 0x20, DrawableBoundsMax = 0x30, DrawableModels = 0x40;
     // Dictionary: hashes at 0x10, drawables at 0x18 (pointer arrays).
@@ -69,7 +72,8 @@ public static class Gta4Drawables
     {
         if (drawable < 0)
             return null;
-        var shaders = ReadShaders(res, res.Pointer(drawable + DrawableShaderGroup));
+        int group = res.Pointer(drawable + DrawableShaderGroup);
+        var shaders = ReadShaders(res, group);
         var meshes = new List<ModelMesh>();
         int lod = res.Pointer(drawable + DrawableModels);
         if (lod >= 0)
@@ -85,6 +89,7 @@ public static class Gta4Drawables
             BoundsMin = res.Vector(drawable + DrawableBoundsMin),
             BoundsMax = res.Vector(drawable + DrawableBoundsMax),
             Meshes = meshes,
+            EmbeddedTextures = group >= 0 ? Gta4Textures.ReadDictionary(res, res.Pointer(group + ShaderGroupTextures)) : new Dictionary<uint, TextureData>(),
         };
     }
 
@@ -111,8 +116,12 @@ public static class Gta4Drawables
     {
         int main = res.Pointer(FragmentDrawable);
         var meshes = new List<ModelMesh>();
+        var textures = new Dictionary<uint, TextureData>();
         if (ReadDrawable(res, main, nameHash) is { } body)
+        {
             meshes.AddRange(body.Meshes);
+            Merge(textures, body.EmbeddedTextures);
+        }
 
         int skeleton = main >= 0 ? res.Pointer(main + 0x0C) : -1;
         int matrices = skeleton >= 0 ? res.Pointer(skeleton + SkeletonMatrices) : -1;
@@ -124,6 +133,7 @@ public static class Gta4Drawables
             int child = res.Pointer(children + i * 4);
             if (child < 0 || ReadDrawable(res, res.Pointer(child + ChildDrawable), nameHash) is not { } piece)
                 continue;
+            Merge(textures, piece.EmbeddedTextures);
             int bone = res.UShort(child + ChildBone);
             var transform = matrices >= 0 && bone < bones ? Matrix(res, matrices + bone * 64) : Matrix4x4.Identity;
             meshes.AddRange(transform.IsIdentity ? piece.Meshes : piece.Meshes.Select(m => Transformed(m, transform)));
@@ -140,7 +150,13 @@ public static class Gta4Drawables
                 max = Vector3.Max(max, p);
             }
         }
-        return new ModelData { NameHash = nameHash, BoundsMin = min, BoundsMax = max, Meshes = meshes };
+        return new ModelData { NameHash = nameHash, BoundsMin = min, BoundsMax = max, Meshes = meshes, EmbeddedTextures = textures };
+    }
+
+    private static void Merge(Dictionary<uint, TextureData> into, IReadOnlyDictionary<uint, TextureData> textures)
+    {
+        foreach (var (hash, texture) in textures)
+            into.TryAdd(hash, texture);
     }
 
     // Bone matrix: three rows of axes then the position, each over 16 bytes.
@@ -193,7 +209,7 @@ public static class Gta4Drawables
                     continue;
                 int texture = res.Pointer(values + i * 4);
                 if (texture >= 0)
-                    diffuse = res.String(res.Pointer(texture + 0x14));
+                    diffuse = res.String(res.Pointer(texture + 0x14)) is { } name ? Gta4Textures.BareName(name) : null;
             }
             shaders.Add(new Shader(res.String(res.Pointer(shader + 0x44)), diffuse));
         }

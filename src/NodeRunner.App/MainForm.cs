@@ -555,7 +555,9 @@ internal sealed unsafe partial class MainForm : Form
         if (_state.IsGta4)
         {
             var gta4 = _state.Gta4;
-            _modelLayer.Update(gta4.Scene?.Library, gta4.Scene?.Models, gta4.ModelReader, () => null, _modelRenderer, camera.Position,
+            var scene4 = gta4.Scene;
+            _modelLayer.Update(scene4?.Library, scene4?.Models, gta4.ModelReader,
+                () => scene4 is null ? null : new TextureResolver(scene4.Textures, gta4.TextureReader), _modelRenderer, camera.Position,
                 settings.ViewDistanceMultiplier, hour, modelsEnabled);
         }
         else
