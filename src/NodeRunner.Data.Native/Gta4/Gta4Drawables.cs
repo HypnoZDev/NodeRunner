@@ -110,11 +110,13 @@ public static class Gta4Drawables
         return models;
     }
 
-    // Fragment: main drawable at 0xB4 (its skeleton at 0x0C: bone matrices at 0x10, bone count at 0x14), pieces at
+    // Fragment: main drawable at 0xB4 (its skeleton at 0x0C: bones at 0, matrices relative to the parent bone at 0x10,
+    // bone count at 0x14; bone of 0xE0 bytes: parent at 0x10), pieces at
     // 0xD4, piece count in bytes 0x1F3 / 0x1F6. Piece: bone at 0x0E, drawable at 0x90, modelled around its bone; the
     // pieces have no shader group, they use the main drawable's.
     private const int FragmentDrawable = 0xB4, FragmentChildren = 0xD4, FragmentChildCountA = 0x1F3, FragmentChildCountB = 0x1F6;
-    private const int ChildBone = 0x0E, ChildDrawable = 0x90, SkeletonMatrices = 0x10, SkeletonBoneCount = 0x14;
+    private const int ChildBone = 0x0E, ChildDrawable = 0x90, SkeletonBones = 0x00, SkeletonMatrices = 0x10, SkeletonBoneCount = 0x14;
+    private const int BoneSize = 0xE0, BoneParent = 0x10;
 
     public static ModelData? ReadFragment(Resource res, uint nameHash)
     {
@@ -131,9 +133,7 @@ public static class Gta4Drawables
             Merge(textures, body.EmbeddedTextures);
         }
 
-        int skeleton = main >= 0 ? res.Pointer(main + 0x0C) : -1;
-        int matrices = skeleton >= 0 ? res.Pointer(skeleton + SkeletonMatrices) : -1;
-        int bones = skeleton >= 0 ? res.UShort(skeleton + SkeletonBoneCount) : 0;
+        var bonePoses = BonePoses(res, main >= 0 ? res.Pointer(main + 0x0C) : -1);
         int children = res.Pointer(FragmentChildren);
         int count = res.Data.Length > FragmentChildCountB ? Math.Max(res.Data[FragmentChildCountA], res.Data[FragmentChildCountB]) : 0;
         for (int i = 0; i < count && children >= 0; i++)
@@ -143,7 +143,7 @@ public static class Gta4Drawables
                 continue;
             Merge(textures, piece.EmbeddedTextures);
             int bone = res.UShort(child + ChildBone);
-            var transform = matrices >= 0 && bone < bones ? Matrix(res, matrices + bone * 64) : Matrix4x4.Identity;
+            var transform = bone < bonePoses.Length ? bonePoses[bone] : Matrix4x4.Identity;
             meshes.AddRange(transform.IsIdentity ? piece.Meshes : piece.Meshes.Select(m => Transformed(m, transform)));
         }
         if (meshes.Count == 0)
@@ -165,6 +165,32 @@ public static class Gta4Drawables
     {
         foreach (var (hash, texture) in textures)
             into.TryAdd(hash, texture);
+    }
+
+    // Pose of each bone in the model: its matrix, relative to its parent, times the parent's pose.
+    private static Matrix4x4[] BonePoses(Resource res, int skeleton)
+    {
+        int matrices = skeleton >= 0 ? res.Pointer(skeleton + SkeletonMatrices) : -1;
+        int bones = skeleton >= 0 ? res.Pointer(skeleton + SkeletonBones) : -1;
+        int count = matrices >= 0 ? res.UShort(skeleton + SkeletonBoneCount) : 0;
+        var poses = new Matrix4x4[count];
+        var done = new bool[count];
+        for (int b = 0; b < count; b++)
+            Pose(b, 0);
+        return poses;
+
+        Matrix4x4 Pose(int b, int depth)
+        {
+            if (done[b])
+                return poses[b];
+            var local = Matrix(res, matrices + b * 64);
+            int parentAt = bones >= 0 ? res.Pointer(bones + b * BoneSize + BoneParent) : -1;
+            int parent = parentAt >= bones && bones >= 0 && (parentAt - bones) % BoneSize == 0 ? (parentAt - bones) / BoneSize : -1;
+            // A broken (looping) chain stops after a few steps.
+            poses[b] = parent >= 0 && parent < count && parent != b && depth < 64 ? local * Pose(parent, depth + 1) : local;
+            done[b] = true;
+            return poses[b];
+        }
     }
 
     // Bone matrix: three rows of axes then the position, each over 16 bytes.
