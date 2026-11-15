@@ -144,7 +144,9 @@ public static class Gta4Drawables
                 continue;
             Merge(textures, piece.EmbeddedTextures);
             int bone = res.UShort(child + ChildBone);
-            var transform = bone < bonePoses.Length ? bonePoses[bone] : Matrix4x4.Identity;
+            // The root bone's pieces are already in place: its matrix, sometimes turned (gb_playboytv01_main,
+            // bm_e2_plantpot1), would lay them on their side. The other bones' poses still include it.
+            var transform = bone > 0 && bone < bonePoses.Length ? bonePoses[bone] : Matrix4x4.Identity;
             meshes.AddRange(transform.IsIdentity ? piece.Meshes : piece.Meshes.Select(m => Transformed(m, transform)));
         }
         if (meshes.Count == 0)
@@ -286,6 +288,7 @@ public static class Gta4Drawables
         Normals = mesh.Normals.Select(n => Vector3.TransformNormal(n, transform) is var t && t.LengthSquared() > 1e-12f ? Vector3.Normalize(t) : n).ToArray(),
         TexCoords = mesh.TexCoords,
         Colors = mesh.Colors,
+        VertexColored = mesh.VertexColored,
         BakedLighting = mesh.BakedLighting,
         DarkeningDecal = mesh.DarkeningDecal,
         Terrain = mesh.Terrain,
@@ -428,16 +431,24 @@ public static class Gta4Drawables
         string? name = shader?.Name?.ToLowerInvariant();
         // The preset tells how the surface is blended ("gta_default" shaders are used with "gta_decal", "gta_alpha"...).
         string? preset = (shader?.Preset ?? shader?.Name)?.ToLowerInvariant();
+        // A TV screen ("script_rt", a white placeholder the game replaces with the channel's picture) is shown off: black.
+        bool screen = shader?.Diffuse is { } diffuse && diffuse.StartsWith(RenderTarget, StringComparison.OrdinalIgnoreCase);
+        if (screen)
+        {
+            Array.Fill(colors, new Vector4(ScreenOff, ScreenOff, ScreenOff, 1f));
+            preset = null;
+        }
         return new ModelMesh
         {
             Positions = positions,
             Normals = normals,
             TexCoords = texCoords,
             Colors = colors,
-            BakedLighting = true,
+            BakedLighting = !screen,
+            VertexColored = screen,
             DarkeningDecal = name == "gta_decal_dirt",
             Indices = triangles,
-            DiffuseTextureName = shader?.Diffuse,
+            DiffuseTextureName = screen ? null : shader?.Diffuse,
             ShaderHash = name is null ? 0 : Joaat.Hash(name),
             DiffuseColor = PaintSlotOf(name) is > 0 and var slot ? new Vector4(2f, slot, slot, 1f) : null,
             // A glass shader stays see-through whatever its preset (vehicle windows often use "gta_vehicle_lights").
@@ -456,6 +467,9 @@ public static class Gta4Drawables
             },
         };
     }
+
+    private const string RenderTarget = "script_rt";
+    private const float ScreenOff = 0.02f;
 
     // Vehicle paint shaders ("gta_vehicle_paint1" to 3, "_enveff" too) take colour n of the vehicle: marked as GTA V's
     // matDiffuseColor (2, n, n) does.
