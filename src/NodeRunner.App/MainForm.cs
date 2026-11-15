@@ -661,6 +661,8 @@ internal sealed unsafe partial class MainForm : Form
         DrawSelectionBox(lines, viewProjection);
         if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
+        if (_state.SelectedScenario is { } selectedScenario)
+            ScenarioLayer.DrawSelected(lines, selectedScenario, viewProjection, camera.Position);
         if (_state.SelectedOccluder is { } selectedOccluder)
             _occlusionLayer.DrawSelected(lines, selectedOccluder, viewProjection, camera.Position);
         if (_state.SelectedCarGenerator?.Spot is { } selectedSpot)
@@ -934,6 +936,15 @@ internal sealed unsafe partial class MainForm : Form
                 _state.LinkPathNodes(linkSource, node);
             _state.Select(null);
             _state.SelectedPathNode = node;
+            return;
+        }
+        // Scenario points, while one of their layers is shown: thin posts, picked within a few pixels.
+        if (!control && _state.World.Scenarios is { } scenarios
+            && ScenarioLayer.Pick(scenarios, viewProjection, _state.Camera.Position, new Vector2(click.X - scene.X, click.Y - scene.Y),
+                new Vector2(scene.Width, scene.Height), c => _state.IsLayerVisible(ScenarioLayer.LayerName(c))) is { } scenario)
+        {
+            _state.Select(null);
+            _state.SelectedScenario = scenario;
             return;
         }
         // Lights next, while their layer is shown: small points, picked within a few pixels.

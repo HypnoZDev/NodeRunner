@@ -80,6 +80,66 @@ internal sealed class ScenarioLayer : IDisposable
         }
     }
 
+    private const float PickPixels = 10f;
+    private const float PickDistance = 400f;
+
+    // The point closest to the mouse on screen (its post, within a few pixels), among the shown categories, or null.
+    public static ScenarioPoint? Pick(ScenarioSet set, Matrix4x4 viewProjection, Vector3 camera, Vector2 mouse, Vector2 viewSize,
+        Func<ScenarioCategory, bool> isVisible)
+    {
+        ScenarioPoint? best = null;
+        float bestScore = PickPixels * PickPixels;
+        foreach (var point in set.AllPoints)
+        {
+            if (Vector3.DistanceSquared(point.Position, camera) > PickDistance * PickDistance || !isVisible(point.Category))
+                continue;
+            // Anywhere along the post.
+            foreach (float z in (ReadOnlySpan<float>)[0.2f, 0.9f, PostHeight])
+            {
+                var clip = Vector4.Transform(new Vector4(point.Position + new Vector3(0, 0, z), 1f), viewProjection);
+                if (clip.W <= 0.1f)
+                    continue;
+                var screen = new Vector2((clip.X / clip.W * 0.5f + 0.5f) * viewSize.X, (0.5f - clip.Y / clip.W * 0.5f) * viewSize.Y);
+                float d = Vector2.DistanceSquared(screen, mouse);
+                if (d < bestScore)
+                {
+                    bestScore = d;
+                    best = point;
+                }
+            }
+        }
+        return best;
+    }
+
+    // The selected point over everything: a thicker post, its direction, and its radius when it has one.
+    public static void DrawSelected(ColorRenderer lines, ScenarioPoint point, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    {
+        var color = new Vector4(1f, 0.95f, 0.35f, 1f);
+        var p = point.Position;
+        const float side = 0.12f;
+        foreach (var offset in (ReadOnlySpan<Vector3>)[new(side, 0, 0), new(-side, 0, 0), new(0, side, 0), new(0, -side, 0)])
+            lines.AddLine(p + offset, p + offset + new Vector3(0, 0, PostHeight), color);
+        var arrowStart = p + new Vector3(0f, 0f, ArrowHeight);
+        var tip = arrowStart + point.Direction * ArrowLength * 1.6f;
+        lines.AddLine(arrowStart, tip, color);
+        var back = -point.Direction * 0.3f;
+        var across = new Vector3(-point.Direction.Y, point.Direction.X, 0f) * 0.2f;
+        lines.AddLine(tip, tip + back + across, color);
+        lines.AddLine(tip, tip + back - across, color);
+        if (point.Radius > 0)
+        {
+            const int segments = 40;
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = MathF.Tau * i / segments, a1 = MathF.Tau * (i + 1) / segments;
+                var lift = new Vector3(0, 0, 0.05f);
+                lines.AddLine(p + new Vector3(MathF.Cos(a0), MathF.Sin(a0), 0f) * point.Radius + lift,
+                    p + new Vector3(MathF.Cos(a1), MathF.Sin(a1), 0f) * point.Radius + lift, color);
+            }
+        }
+        lines.Flush(viewProjection, cameraPosition, onTop: true);
+    }
+
     private void DisposeMeshes()
     {
         for (int i = 0; i < _meshes.Length; i++)

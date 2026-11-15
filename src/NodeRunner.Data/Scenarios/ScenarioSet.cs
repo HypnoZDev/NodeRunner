@@ -55,8 +55,11 @@ public sealed class ScenarioSet
                     continue;
 
                 var region = reader.Read(data, name);
-                foreach (var point in region.Points)
+                region.Path = path;
+                foreach (var (point, index) in region.Points.Select((p, i) => (p, i)))
                 {
+                    point.Region = region;
+                    point.Index = index;
                     point.TypeName = typeNames.GetValueOrDefault(point.TypeHash);
                     point.Category = ScenarioCategories.FromTypeName(point.TypeName);
                 }

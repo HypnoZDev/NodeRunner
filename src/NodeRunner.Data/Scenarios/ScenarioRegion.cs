@@ -6,6 +6,9 @@ public sealed class ScenarioRegion
     public required string Name { get; init; }
 
     public required IReadOnlyList<ScenarioPoint> Points { get; init; }
+
+    // Path of the file in the game's archives.
+    public string? Path { get; set; }
 }
 
 // Decodes a scenario region file (.ymt in levels\gta5\scenario).

@@ -107,6 +107,8 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         }
         else if (state.SelectedPathNode is { } node && state.World.PathNetwork is { } network)
             DrawPathNode(node, network);
+        else if (state.SelectedScenario is { } scenario)
+            DrawScenario(scenario, state.World.Names ?? new HashNames());
         else if (state.SelectedOccluder is { } occluder)
             DrawOccluder(occluder);
         else if (state.SelectedCarGenerator is { Spot: { } spot } carGenerator)
@@ -1157,6 +1159,62 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
     }
 
     // Heading as in FiveM: degrees from north, counterclockwise (the front of a car is its Y axis).
+    private static readonly uint NoneHash = NodeRunner.Data.Hashing.Joaat.Hash("none");
+
+    // Heading of a scenario point in degrees, as the game counts it (0 = north, turning left).
+    private static float ScenarioHeading(NodeRunner.Data.Scenarios.ScenarioPoint point) =>
+        ((point.Heading * 180f / MathF.PI) % 360f + 360f) % 360f;
+
+    private void DrawScenario(NodeRunner.Data.Scenarios.ScenarioPoint point, HashNames names)
+    {
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ImGui.TextUnformatted(L($"{Icons.Users}  Point de scénario {point.Index}"));
+        ImGui.PopFont();
+        if (point.Region is { } region)
+        {
+            Widgets.Hint($"{Icons.File}  {region.Name}.ymt");
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort) && region.Path is { } path)
+                ImGui.SetTooltip(path);
+        }
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller au point")))
+            state.FocusOn(point.Position, 4f);
+        ImGui.SameLine();
+        string copied = state.FormatPosition(point.Position, ScenarioHeading(point));
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), copied))
+            ImGui.SetClipboardText(copied);
+
+        string Name(uint hash, string empty) => hash == 0 || hash == NoneHash ? empty : names.Describe(hash);
+        if (Widgets.Section(L("Scénario"), "scenario") && Widgets.BeginProperties("##scenario"))
+        {
+            Widgets.PropertyText(L("Type"), point.TypeName ?? names.Describe(point.TypeHash));
+            Widgets.PropertyText(L("Catégorie"), NodeRunner.App.World.ScenarioLayer.Label(point.Category));
+            Widgets.PropertyText(L("Cap"), $"{ScenarioHeading(point):0.0}°");
+            Widgets.PropertyText(L("Horaires"), point.StartHour == point.EndHour ? L("toute la journée") : L($"de {point.StartHour} h à {point.EndHour} h"));
+            Widgets.PropertyText(L("Probabilité"), point.Probability == 0 ? L("celle du type") : $"{point.Probability} %");
+            Widgets.PropertyText(point.Category == NodeRunner.Data.Scenarios.ScenarioCategory.Vehicle ? L("Véhicules") : L("Modèles"),
+                Name(point.ModelSetHash, L("tous")), L("Groupe de modèles (model set) qui peut apparaître ici."));
+            Widgets.PropertyText(L("Disponible"), point.Availability switch
+            {
+                1 => L("Online seulement"),
+                2 => L("solo seulement"),
+                _ => L("solo et Online"),
+            });
+            if (point.Radius > 0)
+                Widgets.PropertyText(L("Rayon"), $"{point.Radius} m");
+            if (point.TimeTillPedLeaves > 0)
+                Widgets.PropertyText(L("Le PNJ part après"), $"{point.TimeTillPedLeaves} s");
+            if (Name(point.GroupHash, "") is { Length: > 0 } group)
+                Widgets.PropertyText(L("Groupe"), group, L("Les points d'un groupe sont activés ou coupés ensemble (par un script)."));
+            if (Name(point.InteriorHash, "") is { Length: > 0 } interior)
+                Widgets.PropertyText(L("Intérieur"), interior);
+            if (Name(point.RequiredMapHash, "") is { Length: > 0 } map)
+                Widgets.PropertyText(L("YMAP requis"), map, L("Le point n'est utilisé que si ce fichier de carte est chargé."));
+            if (!Simple)
+                Widgets.PropertyText(L("Drapeaux"), $"0x{point.Flags:X8}");
+            Widgets.EndProperties();
+        }
+    }
+
     private static float CarHeading(CarGenerator spot) => ((spot.Angle * 180f / MathF.PI - 90f) % 360f + 360f) % 360f;
 
     private void DrawCarGenerator(CarGeneratorSelection selection, CarGenerator spot, HashNames names)

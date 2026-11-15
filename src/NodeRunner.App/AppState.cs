@@ -91,6 +91,21 @@ internal sealed class AppState
     private Data.Paths.PathNode? _selectedNode;
     private Data.Paths.PathNetwork? _selectedNodeNetwork;
 
+    // A scenario point selected in the 3D view (an object selection clears it). Forgotten when the scenarios are read
+    // again (map loading).
+    public Data.Scenarios.ScenarioPoint? SelectedScenario
+    {
+        get => _selectedScenarioSet == World.Scenarios ? _selectedScenario : null;
+        set
+        {
+            _selectedScenario = value;
+            _selectedScenarioSet = World.Scenarios;
+        }
+    }
+
+    private Data.Scenarios.ScenarioPoint? _selectedScenario;
+    private Data.Scenarios.ScenarioSet? _selectedScenarioSet;
+
     // A box or a mesh of an occluder map file selected in the 3D view (an object selection clears it). Forgotten when
     // the map is loaded again.
     public OccluderSelection? SelectedOccluder
@@ -207,6 +222,7 @@ internal sealed class AppState
         _selection.Clear();
         Gta4Selection = null;
         SelectedPathNode = null;
+        SelectedScenario = null;
         SelectedOccluder = null;
         SelectedCarGenerator = null;
         SelectedTimecycle = null;
