@@ -336,7 +336,7 @@ internal sealed class MainUi
             ProjectWindow.Open();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.O))
             OpenProjectRequested = true;
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E))
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E) && !_state.IsGta4)
             _exportWindow.Open();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Comma))
             _settingsWindow.Open();
@@ -375,14 +375,19 @@ internal sealed class MainUi
 
     private const float MenuBarPaddingY = 9f;
 
-    private static bool Menu(string label)
+    private static bool Menu(string label, bool enabled = true, string? disabledTip = null)
     {
         // Centred in the (taller) bar: ImGui would put the menus lower, with the bar's padding above.
         ImGui.SetCursorPosY((ImGui.GetWindowHeight() - ImGui.GetFrameHeight()) * 0.5f - 5f);
-        bool open = ImGui.BeginMenu(label);
+        bool open = ImGui.BeginMenu(label, enabled);
         WindowChrome.TrackItem();
+        if (!enabled && disabledTip is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(disabledTip);
         return open;
     }
+
+    // Projects, additions and exports are for GTA V (FiveM resources).
+    private static string Gta5OnlyTip => L("GTA V seulement : en GTA IV, la carte se consulte sans être modifiée.");
 
     private void DrawMenuBar()
     {
@@ -410,8 +415,10 @@ internal sealed class MainUi
             int toSave = _state.PendingSaveCount;
             if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), "Ctrl+S", false, toSave > 0))
                 SaveRequested = true;
-            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E"))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E", false, !_state.IsGta4))
                 _exportWindow.Open();
+            if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(Gta5OnlyTip);
             ImGui.Separator();
             if (ImGui.MenuItem(L("Quitter")))
                 ExitRequested = true;
@@ -460,13 +467,13 @@ internal sealed class MainUi
             ImGui.EndMenu();
         }
 
-        if (Menu(L("Projet")))
+        if (Menu(L("Projet"), !_state.IsGta4, Gta5OnlyTip))
         {
             DrawProjectContentItems();
             ImGui.EndMenu();
         }
 
-        if (Menu(L("Créer")))
+        if (Menu(L("Créer"), !_state.IsGta4, Gta5OnlyTip))
         {
             if (ImGui.MenuItem(L($"{Icons.Package}  Placer un prop de la bibliothèque...")))
                 ShowLibrary();

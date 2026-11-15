@@ -35,6 +35,11 @@ internal sealed unsafe class ProjectPanel(AppState state)
 
     private void DrawContent()
     {
+        if (state.IsGta4)
+        {
+            Widgets.Hint(L("Les projets sont pour GTA V : en GTA IV, la carte se consulte sans être modifiée."), wrap: true);
+            return;
+        }
         if (state.Project is not { } project)
         {
             Widgets.Hint(L("Aucun projet ouvert. Fichier > Nouveau projet, Ouvrir un projet ou Importer un mapping."), wrap: true);

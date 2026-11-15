@@ -7,8 +7,8 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
-// Scene explorer (docked on the left): the map files (.ymap) and their objects as a tree table, near the camera or
-// for the whole map, with a search by name.
+// Scene explorer (docked on the left): the map files (.ymap, or .wpl for GTA IV) and their objects as a tree table,
+// near the camera or for the whole map, with a search by name.
 internal sealed unsafe class ScenePanel(AppState state)
 {
     public const string Title = $"{Icons.ListTree}  Scène###Scène";
@@ -55,12 +55,12 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private void DrawContent()
     {
-        if (state.World.Maps is not { } library)
+        if ((state.IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps) is not { } library)
         {
-            Widgets.Hint(state.World.IsBusy ? L("Chargement de la carte...") : L("Aucune carte chargée."));
+            Widgets.Hint((state.IsGta4 ? state.Gta4.IsBusy : state.World.IsBusy) ? L("Chargement de la carte...") : L("Aucune carte chargée."));
             return;
         }
-        var names = state.World.Names ?? new HashNames();
+        var names = (state.IsGta4 ? state.Gta4.Scene?.Names : state.World.Names) ?? new HashNames();
         if (!ReferenceEquals(library, _library))
             Reset(library);
 
@@ -77,6 +77,22 @@ internal sealed unsafe class ScenePanel(AppState state)
         DrawFooter(library);
     }
 
+    // GTA IV: one object selected at a time, read only.
+    private MapEntity? Selected => state.IsGta4 ? state.Gta4Selection : state.Selection;
+
+    private bool IsSelected(MapEntity entity) => state.IsGta4 ? state.Gta4Selection == entity : state.IsSelected(entity);
+
+    private void SelectOne(MapEntity entity)
+    {
+        if (state.IsGta4)
+            state.Gta4Selection = entity;
+        else
+            state.Select(entity);
+    }
+
+    // Kind of map file: YMAP, or WPL for GTA IV.
+    private string FileKind => state.IsGta4 ? "WPL" : "YMAP";
+
     private void Reset(MapLibrary library)
     {
         _library = library;
@@ -91,13 +107,13 @@ internal sealed unsafe class ScenePanel(AppState state)
     private void DrawFilters(MapLibrary library, HashNames names)
     {
         int filter = _nearOnly ? 0 : 1;
-        if (Widgets.Segmented("scene_filter", Filters, ref filter, [L($"YMAP à moins de {NearRadius:0} m de la caméra"), L("Tous les YMAP chargés")]))
+        if (Widgets.Segmented("scene_filter", Filters, ref filter, [L($"{FileKind} à moins de {NearRadius:0} m de la caméra"), L($"Tous les {FileKind} chargés")]))
         {
             _nearOnly = filter == 0;
             _dirty = true;
         }
 
-        if (Widgets.SearchField("##scene_search", L("YMAP ou objet (ex. prop_tree)"), ref _search))
+        if (Widgets.SearchField("##scene_search", L($"{FileKind} ou objet (ex. {(state.IsGta4 ? "ag_bigandbushy" : "prop_tree")})"), ref _search))
         {
             _matches = _search.Trim().Length >= 2 ? Search(library, names, _search.Trim()) : null;
             _dirty = true;
@@ -143,7 +159,7 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private void RevealSelection()
     {
-        var selection = state.Selection;
+        var selection = Selected;
         if (selection == _revealed)
             return;
         _revealed = selection;
@@ -165,7 +181,7 @@ internal sealed unsafe class ScenePanel(AppState state)
         _builtAt = state.Camera.Position;
         _rows.Clear();
         var camera = Flat(state.Camera.Position);
-        var selectedMap = (state.Selection?.Interior ?? state.Selection)?.Map;
+        var selectedMap = (Selected?.Interior ?? Selected)?.Map;
 
         IEnumerable<MapData> maps = _matches is not null ? _matches.Keys : library.Maps;
         if (_nearOnly)
@@ -209,7 +225,7 @@ internal sealed unsafe class ScenePanel(AppState state)
         {
             int index = _revealMap is { } map
                 ? _rows.FindIndex(r => r.Entity is null && r.Map == map)
-                : _rows.FindIndex(r => r.Entity is not null && r.Entity == state.Selection);
+                : _rows.FindIndex(r => r.Entity is not null && r.Entity == Selected);
             _scrollToSelection = false;
             _revealMap = null;
             if (index >= 0)
@@ -239,7 +255,7 @@ internal sealed unsafe class ScenePanel(AppState state)
             | ImGuiTreeNodeFlags.OpenOnDoubleClick;
         if (!row.HasChildren)
             flags |= ImGuiTreeNodeFlags.Leaf;
-        if (entity is not null && state.IsSelected(entity))
+        if (entity is not null && IsSelected(entity))
             flags |= ImGuiTreeNodeFlags.Selected;
 
         float indent = row.Depth * ImGui.GetStyle().IndentSpacing;
@@ -262,12 +278,12 @@ internal sealed unsafe class ScenePanel(AppState state)
         else if (entity is not null && ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             // Ctrl+click adds the object to the selection or removes it.
-            bool control = ImGui.GetIO().KeyCtrl;
+            bool control = ImGui.GetIO().KeyCtrl && !state.IsGta4;
             if (control)
                 state.ToggleSelect(entity);
             else
-                state.Select(entity);
-            _revealed = state.Selection; // Already visible: no scrolling.
+                SelectOne(entity);
+            _revealed = Selected; // Already visible: no scrolling.
             if (!control && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
                 state.FocusOn(entity);
         }
@@ -277,7 +293,7 @@ internal sealed unsafe class ScenePanel(AppState state)
         DrawContextMenu(row, names);
 
         ImGui.TableNextColumn();
-        ImGui.TextDisabled(entity is null ? (row.Map.IsScripted ? L("YMAP script") : "YMAP") : TypeName(entity));
+        ImGui.TextDisabled(entity is null ? (row.Map.IsScripted ? L("YMAP script") : FileKind) : TypeName(entity));
         ImGui.TableNextColumn();
         if (entity is null)
             RightAligned($"{row.Map.KeptEntities.Count()}");
@@ -307,7 +323,7 @@ internal sealed unsafe class ScenePanel(AppState state)
         {
             if (ImGui.MenuItem(L($"{Icons.Crosshair}  Aller à l'objet")))
             {
-                state.Select(entity);
+                SelectOne(entity);
                 state.FocusOn(entity);
             }
             ImGui.Separator();
@@ -319,6 +335,12 @@ internal sealed unsafe class ScenePanel(AppState state)
                 CopyText(position);
             if (ImGui.MenuItem(L($"{Icons.MapPinned}  Copier position et cap : {withHeading}")))
                 CopyText(withHeading);
+            // GTA IV is read only: nothing more.
+            if (state.IsGta4)
+            {
+                ImGui.EndPopup();
+                return;
+            }
             if (state.IsSelected(entity) && state.SelectedEntities.Count is var selected and > 1
                 && ImGui.MenuItem(L($"{Icons.MapPinned}  Copier les {selected} objets sélectionnés (liste {PositionText.FormatName(state.CopyFormat)})")))
                 CopyText(state.FormatSelection());
@@ -346,10 +368,10 @@ internal sealed unsafe class ScenePanel(AppState state)
     {
         int maps = _rows.Count(r => r.Entity is null);
         string text = _matches is not null
-            ? L($"{maps} YMAP trouvé(s), {_matchCount} objet(s){(_matchCount >= MaxSearchMatches ? L(" (limite atteinte)") : "")}")
+            ? L($"{maps} {FileKind} trouvé(s), {_matchCount} objet(s){(_matchCount >= MaxSearchMatches ? L(" (limite atteinte)") : "")}")
             : _nearOnly
-                ? L($"{maps} YMAP proches sur {library.Maps.Count}")
-                : L($"{library.Maps.Count} YMAP, {library.EntityCount} objets");
+                ? L($"{maps} {FileKind} proches sur {library.Maps.Count}")
+                : L($"{library.Maps.Count} {FileKind}, {library.EntityCount} objets");
         if (state.SelectedEntities.Count is var selected and > 0)
             text += L($" · {selected} sélectionné(s)");
         // Thin line under the list, then the count.

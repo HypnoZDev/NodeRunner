@@ -61,11 +61,14 @@ public sealed class Gta4Scene
                     ChildCount = children,
                 });
             }
+            var (min, max) = Extents(entities, map.Definitions);
             maps.Add((new MapData
             {
                 NameHash = Joaat.Hash(file.Path),
                 ParentHash = !isMain && file.LodFile is { } lodFile ? Joaat.Hash(lodFile.Path) : 0,
                 Entities = entities,
+                EntitiesExtentsMin = min,
+                EntitiesExtentsMax = max,
             }, file.Path));
         }
 
@@ -80,6 +83,22 @@ public sealed class Gta4Scene
     }
 
     private const uint LodInParentMap = 8;
+
+    // Space taken by the objects of a file: their positions widened by the radius of their models.
+    private static (Vector3 Min, Vector3 Max) Extents(List<MapEntity> entities, Gta4Definitions definitions)
+    {
+        if (entities.Count == 0)
+            return (Vector3.Zero, Vector3.Zero);
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        foreach (var entity in entities)
+        {
+            float radius = definitions.Find(entity.ArchetypeHash)?.SphereRadius ?? 0f;
+            min = Vector3.Min(min, entity.Position - new Vector3(radius));
+            max = Vector3.Max(max, entity.Position + new Vector3(radius));
+        }
+        return (min, max);
+    }
 
     private static HashNames NamesOf(Gta4Definitions definitions)
     {

@@ -33,7 +33,11 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
     {
         DropInScene();
         bool visible = ImGui.Begin(L(Title), ref open);
-        if (visible)
+        if (visible && state.IsGta4)
+        {
+            Widgets.Hint(L("La bibliothèque place des props dans un projet GTA V : indisponible en GTA IV."), wrap: true);
+        }
+        else if (visible)
         {
             Update();
             DrawToolbar();
