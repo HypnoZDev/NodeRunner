@@ -163,10 +163,13 @@ internal sealed class ModelLayer : IDisposable
     }
     private readonly HashSet<string> _errorSet = new();
 
-    public void Update(WorldLoader loader, ModelRenderer renderer, Vector3 cameraPosition, float distanceMultiplier, int hour, bool enabled) =>
-        Update(loader.Maps, loader.Models, loader.ModelReader,
-            () => loader.Textures is { } textures && loader.TextureReader is { } textureReader ? new TextureResolver(textures, textureReader) : null,
+    public void Update(WorldLoader loader, ModelRenderer renderer, Vector3 cameraPosition, float distanceMultiplier, int hour, bool enabled)
+    {
+        var (maps, models, reader, textures, textureReader) = loader.ModelSources();
+        Update(maps, models, reader,
+            () => textures is not null && textureReader is not null ? new TextureResolver(textures, textureReader) : null,
             renderer, cameraPosition, distanceMultiplier, hour, enabled);
+    }
 
     // Models of another map (GTA IV): its objects, model files and reader, and the textures if any.
     public void Update(MapLibrary? maps, ModelCatalog? models, IModelReader? reader, Func<TextureResolver?> textures,

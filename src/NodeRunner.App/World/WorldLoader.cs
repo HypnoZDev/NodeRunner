@@ -213,6 +213,14 @@ internal sealed class WorldLoader : IDisposable
 
     public RpfFileSystem? Files => _files;
 
+    // What drawing the models needs, read together: a load publishes these one after the other, and a reader taken
+    // in between would keep a map without its model or texture reader.
+    public (MapLibrary? Maps, ModelCatalog? Models, IModelReader? ModelReader, TextureCatalog? Textures, ITextureReader? TextureReader) ModelSources()
+    {
+        lock (_lock)
+            return (Maps, Models, ModelReader, Textures, TextureReader);
+    }
+
     public MapSelection Selection { get; private set; }
 
     private HashSet<string>? _hiddenScriptedMaps;
