@@ -12,7 +12,8 @@ internal static class ScenarioFileSaver
         if (world.Files is not { } files || world.Scenarios is not { } set)
             return;
         Directory.CreateDirectory(folder);
-        foreach (var region in regions)
+        var list = regions.ToList();
+        foreach (var region in list)
         {
             string name = region.Name + ".ymt";
             try
@@ -42,6 +43,35 @@ internal static class ScenarioFileSaver
             {
                 report.Errors.Add($"{name} : {ex.Message}");
             }
+        }
+        SaveManifest(files, list, folder, report);
+    }
+
+    // The game loads a region only inside its box of sp_manifest.ymt: grown to hold the points, next to the regions
+    // (from the copy already in the folder when there is one).
+    private static void SaveManifest(NodeRunner.Data.FileSystem.IGameFileSystem files, List<ScenarioRegion> regions, string folder, MapFileSaver.Report report)
+    {
+        var bounds = regions.Where(r => r.Points.Count > 0).Select(r => (r.Name,
+            r.Points.Aggregate(new System.Numerics.Vector3(float.MaxValue), (m, p) => System.Numerics.Vector3.Min(m, p.Position)),
+            r.Points.Aggregate(new System.Numerics.Vector3(float.MinValue), (m, p) => System.Numerics.Vector3.Max(m, p.Position)))).ToList();
+        if (bounds.Count == 0)
+            return;
+        string target = Path.Combine(folder, ScenarioManifest.FileName);
+        try
+        {
+            var source = File.Exists(target) ? File.ReadAllBytes(target)
+                : ScenarioManifest.GamePaths.Select(files.ReadFile).FirstOrDefault(d => d is { Length: > 0 })
+                  ?? throw new InvalidDataException(L("fichier du jeu introuvable"));
+            if (ScenarioManifest.Grow(source, bounds) is not { } grown)
+                return;
+            string temporary = target + ".tmp";
+            File.WriteAllBytes(temporary, grown);
+            File.Move(temporary, target, overwrite: true);
+            report.Saved.Add(ScenarioManifest.FileName);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            report.Errors.Add($"{ScenarioManifest.FileName} : {ex.Message}");
         }
     }
 

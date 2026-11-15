@@ -988,13 +988,10 @@ internal sealed class AppState
         flatForward = flatForward.LengthSquared() > 1e-6f ? System.Numerics.Vector3.Normalize(flatForward) : System.Numerics.Vector3.UnitY;
         var position = from is null ? Camera.Position + flatForward * 15f : from.Position + new System.Numerics.Vector3(-flatForward.Y, flatForward.X, 0) * 2f;
         position = position with { Z = GroundHeightAt(position) ?? from?.Position.Z ?? Camera.Position.Z - 10f };
-        // Regions are streamed around their points: far from any, the new one might never be loaded.
-        var template = from ?? set.Nearest(position, 500f);
+        // The region of the nearest point (its box in sp_manifest.ymt is grown when saved).
+        var template = from ?? set.Nearest(position);
         if (template?.Region is not { } region)
-        {
-            Notify(L("Aucun point de scénario à moins de 500 m : rapprochez-vous d'une zone qui en a."), warning: true);
             return;
-        }
         var values = template.Values with { Position = position };
         var edit = ScenarioAddEdit.Apply(set, region, values, template, L($"Ajouter un point de scénario ({region.Name}.ymt)"));
         History.Add(edit);
