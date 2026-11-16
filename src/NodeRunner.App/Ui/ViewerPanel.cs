@@ -634,7 +634,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (!ImGui.IsItemHovered())
             return;
         // Model workshop: a click without moving the mouse picks a piece.
-        if (_workshopWasShown && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
+        if (_workshopWasShown && _workshopFor == Viewer.Item && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
             && Matrix4x4.Invert(Viewer.LastViewProjection, out var inverse))
         {
             var at = (io.MousePos - ImGui.GetItemRectMin()) / size;
@@ -750,15 +750,25 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private void DrawWorkshopTab(ViewerItem item)
     {
+        float width = ImGui.GetContentRegionAvail().X;
+        Widgets.Hint(L("Modifiez le modèle sans quitter NodeRunner. Cliquez sur un morceau dans l'image : il s'entoure de rouge. ")
+            + L("Ctrl+clic : en ajouter ou en retirer un autre. Tourner la vue reste possible (cliquer-glisser)."), wrap: true);
+        // While the map reloads (after a change of the model), its models are not readable: the tool waits.
+        if (_reopen is not null || state.World.IsBusy || state.World.Models is null)
+        {
+            _workshop = null;
+            _workshopFor = null;
+            Viewer.OverlayEdges.Clear();
+            Widgets.Hint(L($"{Icons.LoaderCircle}  Rechargement de la carte..."), wrap: true);
+            return;
+        }
         if (_workshopFor != item)
         {
             _workshopFor = item;
             (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
             _workshopRevision = -1;
+            Viewer.OverlayEdges.Clear();
         }
-        float width = ImGui.GetContentRegionAvail().X;
-        Widgets.Hint(L("Modifiez le modèle sans quitter NodeRunner. Cliquez sur un morceau dans l'image : il s'entoure de rouge. ")
-            + L("Ctrl+clic : en ajouter ou en retirer un autre. Tourner la vue reste possible (cliquer-glisser)."), wrap: true);
         if (_workshop is not { } tool)
         {
             Widgets.Hint(_workshopError ?? L("Modèle 3D introuvable."), wrap: true);
@@ -811,6 +821,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (_reopen is not var (item, reader) || state.World.ModelReader == reader || state.World.IsBusy || state.World.Maps is null)
             return;
         _reopen = null;
+        _workshopFor = null;
         Viewer.Model.Close();
         if (item.Kind == ViewerKind.Object && Library?.GetArchetype(item.ArchetypeHash) is { } archetype && Models?.Locate(archetype) is { } location)
             Open(item with { Location = location });

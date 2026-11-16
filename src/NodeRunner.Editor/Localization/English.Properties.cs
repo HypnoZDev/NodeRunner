@@ -500,6 +500,7 @@ public static partial class English
         ("Passage", "Clearance"),
         ("Morceaux du modèle", "Model pieces"),
         ("Atelier", "Workshop"),
+        ("{0}  Rechargement de la carte...", "{0}  Reloading the map..."),
         ("Bientôt ici : déplacer un morceau, changer une texture.", "Coming here: moving a piece, changing a texture."),
         ("Modifiez le modèle sans quitter NodeRunner. Cliquez sur un morceau dans l'image : il s'entoure de rouge. ",
             "Change the model without leaving NodeRunner. Click a piece in the image: it gets a red outline. "),
