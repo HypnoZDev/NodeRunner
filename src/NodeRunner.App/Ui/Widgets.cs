@@ -199,9 +199,12 @@ internal static class Widgets
 
     public static bool Button(string label, string? tooltip = null, float width = 0f, bool enabled = true)
     {
+        string shown = FitButton(label, width, out string? whole);
         ImGui.BeginDisabled(!enabled);
-        bool clicked = ImGui.Button(label, new Vector2(width, 0));
+        bool clicked = ImGui.Button(shown, new Vector2(width, 0));
         ImGui.EndDisabled();
+        if (whole is not null)
+            tooltip = tooltip is null ? whole : $"{whole}\n{tooltip}";
         if (tooltip is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(tooltip);
         return clicked;
@@ -209,13 +212,32 @@ internal static class Widgets
 
     public static bool PrimaryButton(string label, float width = 0f)
     {
+        string shown = FitButton(label, width, out string? whole);
         ImGui.PushStyleColor(ImGuiCol.Button, UiTheme.Accent);
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, UiTheme.AccentHovered);
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, UiTheme.Accent);
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1f, 1f, 1f, 1f));
-        bool clicked = ImGui.Button(label, new Vector2(width, 0));
+        bool clicked = ImGui.Button(shown, new Vector2(width, 0));
         ImGui.PopStyleColor(4);
+        if (whole is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(whole);
         return clicked;
+    }
+
+    // A button's label shortened with "…" when the button is too narrow for it (same ImGui id); whole is then the
+    // full text, for the tooltip.
+    private static string FitButton(string label, float width, out string? whole)
+    {
+        whole = null;
+        if (width <= 0f)
+            return label;
+        int id = label.IndexOf("##", StringComparison.Ordinal);
+        string text = id >= 0 ? label[..id] : label;
+        float room = width - ImGui.GetStyle().FramePadding.X * 2f;
+        if (text.Length == 0 || ImGui.CalcTextSize(text).X <= room)
+            return label;
+        whole = text;
+        return Fit(text, room) + "###" + label;
     }
 
     // Row of a layer list, clickable as a whole: colour dot, label, grey count, and an eye on the right.
@@ -267,7 +289,11 @@ internal static class Widgets
         ImGui.TableNextRow();
         ImGui.TableNextColumn();
         ImGui.AlignTextToFramePadding();
-        ImGui.TextColored(UiTheme.TextMuted, label);
+        // A label too long for its column ends with "…"; the tooltip then gives it whole.
+        string shown = Fit(label, ImGui.GetContentRegionAvail().X);
+        ImGui.TextColored(UiTheme.TextMuted, shown);
+        if (shown != label)
+            tooltip = tooltip is null ? label : $"{label}\n{tooltip}";
         if (tooltip is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(tooltip);
         ImGui.TableNextColumn();
