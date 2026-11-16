@@ -166,6 +166,8 @@ internal static class PsoDocument
                 return Pointer(c, U32(data, at)) is { } p ? ReadStructure(c, "value", c.Blocks[p.Block].Type, p.Offset, depth + 1) : null;
             return ReadStructure(c, "value", field.Reference, at, depth + 1);
         }
+        if (field.Type == FieldType.Map)
+            return ReadMap(c, field, at, depth);
         if (field.Type != FieldType.Array)
             return null;
 
@@ -213,6 +215,46 @@ internal static class PsoDocument
         }
         return array;
     }
+
+    // Fixed names of the two fields of a map pair (not hashes of words).
+    private const uint KeyField = 1620616462;
+    private const uint ItemField = 104834034;
+
+    // Map (atBinaryMap): pairs stored as structures of one block, each with a Key (a name hash) and an Item; written as
+    // <Item key="...">. Two layouts: 0x01000000, then the pairs pointer at 0x08 and their count at 0x10; or the count
+    // at 0x02 and the pointer at 0x10.
+    private static XElement ReadMap(Context c, Field field, int at, int depth)
+    {
+        var data = c.Data;
+        var map = new XElement("value");
+        if (field.Subtype != 1 || at + 24 > data.Length)
+            return map;
+        bool first = U32(data, at) == 0x01000000;
+        int count = BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(first ? at + 16 : at + 2));
+        if (count == 0 || PairPointer(c, data, first ? at + 8 : at + 16) is not { } pairs)
+            return map;
+        var block = c.Blocks[pairs.Block];
+        if (!c.Structures.TryGetValue(block.Type, out var pair))
+            return map;
+        var key = pair.Fields.FirstOrDefault(f => f.Name == KeyField);
+        var item = pair.Fields.FirstOrDefault(f => f.Name == ItemField);
+        if (key.Name == 0 || item.Name == 0 || pair.Length <= 0)
+            return map;
+        int end = Math.Min(block.Offset + block.Length, data.Length);
+        for (int i = 0, o = pairs.Offset; i < count && o + pair.Length <= end; i++, o += pair.Length)
+        {
+            if (ReadField(c, pair, item, o + item.Offset, depth + 1) is not { } value)
+                continue;
+            value.Name = "Item";
+            value.SetAttributeValue("key", ReadString(c, key, o + key.Offset) ?? "");
+            map.Add(value);
+        }
+        return map;
+    }
+
+    // A pointer stored in 8 bytes: its value in the first 4 or, failing that, the last 4.
+    private static (int Block, int Offset)? PairPointer(Context c, byte[] data, int at) =>
+        Pointer(c, U32(data, at)) ?? Pointer(c, U32(data, at + 4));
 
     private static string? ReadString(Context c, Field field, int at)
     {
