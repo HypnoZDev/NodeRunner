@@ -1,5 +1,5 @@
 using System.Numerics;
-using NodeRunner.Editor;
+using NodeRunner.Data.Models;
 using Xunit;
 
 namespace NodeRunner.Tests;

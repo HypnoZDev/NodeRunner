@@ -352,6 +352,43 @@ internal sealed class CollisionMoveCodec : EditCodec<CollisionMoveEdit>
     }
 }
 
+internal sealed class CollisionOpeningCodec : EditCodec<CollisionOpeningEdit>
+{
+    public override string Tag => "collision-opening";
+
+    protected override void Write(CollisionOpeningEdit edit, EditWriter w) => WriteOpenings(edit, w);
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var openings = ReadOpenings(r);
+        var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
+        var edit = new CollisionOpeningEdit(edits, description, openings);
+        edit.Redo();
+        return edit;
+    }
+
+    public static void WriteOpenings(CollisionOpeningEdit edit, EditWriter w) =>
+        w.WriteList(edit.Openings, o =>
+        {
+            w.Write(o.Path);
+            w.WriteList(o.Opening.Bottom, w.Write);
+            w.WriteList(o.Opening.Normal, w.Write);
+            w.Write(o.Opening.Width);
+            w.Write(o.Opening.Height);
+            w.Write(o.Opening.Depth);
+        });
+
+    public static List<(string, CollisionOpening)> ReadOpenings(EditReader r) => r.ReadList(() =>
+    {
+        string path = r.ReadString();
+        var bottom = r.ReadList(r.ReadFloat);
+        var normal = r.ReadList(r.ReadFloat);
+        if (bottom.Count != 3 || normal.Count != 3)
+            throw new InvalidDataException("Collision opening: 3 numbers expected.");
+        return (path, new CollisionOpening([.. bottom], [.. normal], r.ReadFloat(), r.ReadFloat(), r.ReadFloat()));
+    });
+}
+
 internal sealed class PathNodeMoveCodec : EditCodec<PathNodeMoveEdit>
 {
     public override string Tag => "path-node-move";

@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace NodeRunner.Editor;
+namespace NodeRunner.Data.Models;
 
 // A door-sized hole through a wall: a vertical rectangle (its bottom middle, the side it faces), crossing the wall over
 // Depth on both sides of the rectangle. Model or world space, the same as the triangles it cuts.
@@ -78,15 +78,21 @@ public static class WallOpening
     private const float SidewaysInset = 0.01f;
     private const float MinArea = 1e-6f;
 
-    public static MeshCut Cut(Vector3[] positions, IReadOnlyList<ushort> indices, Opening opening)
+    public static MeshCut Cut(IReadOnlyList<Vector3> positions, IReadOnlyList<ushort> indices, Opening opening) =>
+        Cut(positions, indices.Count / 3, i => indices[i], opening);
+
+    public static MeshCut Cut(IReadOnlyList<Vector3> positions, IReadOnlyList<int> indices, Opening opening) =>
+        Cut(positions, indices.Count / 3, i => indices[i], opening);
+
+    private static MeshCut Cut(IReadOnlyList<Vector3> positions, int triangles, Func<int, int> index, Opening opening)
     {
         var cut = new MeshCut([], [], []);
         float hw = opening.Width * 0.5f;
         float height = opening.Height;
-        for (int t = 0; t * 3 + 2 < indices.Count; t++)
+        for (int t = 0; t < triangles; t++)
         {
-            int i0 = indices[t * 3], i1 = indices[t * 3 + 1], i2 = indices[t * 3 + 2];
-            if (i0 == i1 || i1 == i2 || i0 == i2 || Math.Max(i0, Math.Max(i1, i2)) >= positions.Length)
+            int i0 = index(t * 3), i1 = index(t * 3 + 1), i2 = index(t * 3 + 2);
+            if (i0 == i1 || i1 == i2 || i0 == i2 || Math.Max(i0, Math.Max(i1, i2)) >= positions.Count || Math.Min(i0, Math.Min(i1, i2)) < 0)
                 continue;
             var a = opening.Local(positions[i0]);
             var b = opening.Local(positions[i1]);

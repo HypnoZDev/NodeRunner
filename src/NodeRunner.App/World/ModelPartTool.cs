@@ -1,6 +1,7 @@
 using System.Numerics;
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Models;
 using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Models;
 using NodeRunner.Data.Native.Textures;

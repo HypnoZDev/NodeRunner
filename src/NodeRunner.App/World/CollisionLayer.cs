@@ -314,9 +314,7 @@ internal sealed class CollisionLayer : IDisposable
     }
 
     // A copy, read by the background thread while the interface may change the original.
-    private CollisionFileEdit? Snapshot(string path) => _edits?.For(path) is { } edit
-        ? new CollisionFileEdit { Removed = [.. edit.Removed], Materials = new(edit.Materials), Moves = [.. edit.Moves] }
-        : null;
+    private CollisionFileEdit? Snapshot(string path) => _edits?.For(path)?.Copy();
 
     private void ApplyEdits(ColorRenderer renderer, CollisionEdits edits)
     {

@@ -68,6 +68,26 @@ public sealed class CollisionEdit : IEdit
     }
 }
 
+// Door-sized openings cut through collision files (one per file, in the file's space).
+public sealed class CollisionOpeningEdit(CollisionEdits edits, string description, IReadOnlyList<(string Path, CollisionOpening Opening)> openings) : IEdit
+{
+    public string Description { get; } = description;
+    public MapEntity? Subject => null;
+    public IReadOnlyList<(string Path, CollisionOpening Opening)> Openings { get; } = openings;
+
+    public void Redo()
+    {
+        foreach (var (path, opening) in Openings)
+            edits.AddOpening(path, opening);
+    }
+
+    public void Undo()
+    {
+        foreach (var (path, opening) in Openings.Reverse())
+            edits.RemoveOpening(path, opening);
+    }
+}
+
 // Collision polygons moved or turned (one move per file, in the file's space).
 public sealed class CollisionMoveEdit : IEdit
 {

@@ -12,9 +12,11 @@ public interface ICollisionWriter
     // streamed; null if the file does not exist.
     byte[]? RemovePolygons(string path, IReadOnlySet<int> polygons);
 
-    // The game's file with new materials for some polygons, polygons moved, then without the removed ones (all
-    // numbered as in Polygons), as a complete .ybn file; null if the file does not exist.
-    byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove> moves);
+    // The game's file with new materials for some polygons, polygons moved, without the removed ones (all numbered as
+    // in Polygons), then with door-sized openings cut through it (file space), as a complete .ybn file; null if the
+    // file does not exist.
+    byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove> moves,
+        IReadOnlyList<Models.Opening>? openings = null);
 
     // The file's collision with these polygons moved, as it will be written (polygons keep their numbers).
     CollisionMesh? ReadMoved(string path, IReadOnlyList<CollisionMove> moves);

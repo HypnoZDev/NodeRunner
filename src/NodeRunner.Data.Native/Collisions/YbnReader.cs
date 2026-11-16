@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using NodeRunner.Data.Collisions;
 using NodeRunner.Data.FileSystem;
+using NodeRunner.Data.Models;
 using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Collisions;
@@ -70,19 +71,20 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     }
 
     public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
-        IReadOnlyList<CollisionMove> moves)
+        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Opening>? openings = null)
     {
         if (_files.ReadFile(path) is not { } data)
             return null;
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
-        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves);
+        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves, openings);
         return ResourceFile.Write(header with { SystemFlags = systemFlags }, content);
     }
 
-    // The decompressed file with new materials, polygons moved, then without the removed polygons; when it grew, its
-    // pages become a single page large enough (offsets are unchanged: pages follow each other).
+    // The decompressed file with new materials, polygons moved, without the removed polygons, then with the openings cut
+    // (file space); when it grew, its pages become a single page large enough (offsets are unchanged: pages follow each
+    // other).
     public static (byte[] Content, uint SystemFlags) Edit(byte[] data, uint systemFlags, IReadOnlySet<int> removed,
-        IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null)
+        IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null, IReadOnlyList<Opening>? openings = null)
     {
         var copy = (byte[])data.Clone();
         if (materials.Count > 0)
@@ -98,6 +100,16 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
             file.Move(moves ?? []);
             int polygon = 0;
             file.Remove(0, removed, ref polygon); // also rebuilds the search trees of the moved geometries
+        }
+        foreach (var opening in openings ?? [])
+        {
+            var planned = new BoundsFile(copy);
+            var cut = planned.PlanOpening(opening);
+            if (cut.Count == 0)
+                continue;
+            copy = planned.WithAppended();
+            int polygon = 0;
+            new BoundsFile(copy).Remove(0, cut, ref polygon);
         }
 
         int pagesSize = Archives.ResourcePages.Size(systemFlags);

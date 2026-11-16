@@ -46,8 +46,20 @@ public sealed record CollisionMove(int[] Polygons, float[] Matrix)
     }
 }
 
+// A door-sized opening cut through the triangles of a collision file (file space), kept as plain numbers.
+public sealed record CollisionOpening(float[] Bottom, float[] Normal, float Width, float Height, float Depth)
+{
+    public static CollisionOpening Of(Models.Opening o) =>
+        new([o.Bottom.X, o.Bottom.Y, o.Bottom.Z], [o.Normal.X, o.Normal.Y, o.Normal.Z], o.Width, o.Height, o.Depth);
+
+    [JsonIgnore]
+    public Models.Opening Value => new(At(Bottom), At(Normal), Width, Height, Depth);
+
+    private static Vector3 At(float[] v) => v.Length == 3 ? new(v[0], v[1], v[2]) : Vector3.UnitY;
+}
+
 // Changes made by hand to one collision file: polygons moved, removed and given new materials, numbered as in the game's
-// file (CollisionMesh.Polygons), so they can be applied again to the original at any time.
+// file (CollisionMesh.Polygons), so they can be applied again to the original at any time; then openings cut through it.
 public sealed class CollisionFileEdit
 {
     public HashSet<int> Removed { get; init; } = [];
@@ -58,12 +70,70 @@ public sealed class CollisionFileEdit
     // In the order they were made.
     public List<CollisionMove> Moves { get; init; } = [];
 
-    [JsonIgnore]
-    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Moves.Count == 0;
+    // Cut after every other change, in the order they were made.
+    public List<CollisionOpening> Openings { get; init; } = [];
 
-    // The mesh as the game will see it: polygons moved, removed ones left out, new materials applied. withMoves false:
-    // the mesh is already moved (read from the moved file, exact even for the round shapes sharing a moved corner).
+    [JsonIgnore]
+    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Moves.Count == 0 && Openings.Count == 0;
+
+    public CollisionFileEdit Copy() => new() { Removed = [.. Removed], Materials = new(Materials), Moves = [.. Moves], Openings = [.. Openings] };
+
+    // The mesh as the game will see it: polygons moved, removed ones left out, new materials applied, openings cut (the
+    // pieces left around them have no polygon number). withMoves false: the mesh is already moved (read from the moved
+    // file, exact even for the round shapes sharing a moved corner).
     public CollisionMesh Apply(CollisionMesh mesh, bool withMoves = true)
+    {
+        var result = ApplyChanges(mesh, withMoves);
+        foreach (var opening in Openings)
+            result = Cut(result, opening.Value);
+        return result;
+    }
+
+    private static CollisionMesh Cut(CollisionMesh mesh, Models.Opening opening)
+    {
+        var cut = Models.WallOpening.Cut(mesh.Vertices, mesh.Indices, opening);
+        if (cut.IsEmpty)
+            return mesh;
+        var removed = cut.Removed.ToHashSet();
+        var vertices = mesh.Vertices.ToList();
+        var indices = new List<int>(mesh.Indices.Count + cut.Indices.Count);
+        var materials = new List<byte>(mesh.Materials.Count + cut.Indices.Count / 3);
+        var polygons = new List<int>(mesh.Polygons.Count + cut.Indices.Count / 3);
+        bool numbered = mesh.Polygons.Count == mesh.TriangleCount;
+        for (int t = 0; t < mesh.TriangleCount; t++)
+        {
+            if (removed.Contains(t))
+                continue;
+            indices.AddRange([mesh.Indices[t * 3], mesh.Indices[t * 3 + 1], mesh.Indices[t * 3 + 2]]);
+            materials.Add(mesh.Materials[t]);
+            if (numbered)
+                polygons.Add(mesh.Polygons[t]);
+        }
+        int first = vertices.Count;
+        foreach (var (t, w) in cut.Vertices)
+        {
+            vertices.Add(mesh.Vertices[mesh.Indices[t * 3]] * w.X + mesh.Vertices[mesh.Indices[t * 3 + 1]] * w.Y
+                + mesh.Vertices[mesh.Indices[t * 3 + 2]] * w.Z);
+        }
+        for (int k = 0; k + 2 < cut.Indices.Count; k += 3)
+        {
+            indices.AddRange([first + cut.Indices[k], first + cut.Indices[k + 1], first + cut.Indices[k + 2]]);
+            materials.Add(mesh.Materials[cut.Vertices[cut.Indices[k]].Triangle]);
+            if (numbered)
+                polygons.Add(-1);
+        }
+        return new CollisionMesh
+        {
+            BoundsMin = mesh.BoundsMin,
+            BoundsMax = mesh.BoundsMax,
+            Vertices = vertices,
+            Indices = indices,
+            Materials = materials,
+            Polygons = polygons,
+        };
+    }
+
+    private CollisionMesh ApplyChanges(CollisionMesh mesh, bool withMoves)
     {
         bool move = withMoves && Moves.Count > 0;
         if ((Removed.Count == 0 && Materials.Count == 0 && !move) || mesh.Polygons.Count != mesh.TriangleCount)
@@ -153,6 +223,19 @@ public sealed class CollisionEdits
     {
         if (_files.TryGetValue(path, out var edit) && edit.Moves.LastIndexOf(move) is var i and >= 0)
             edit.Moves.RemoveAt(i);
+        Changed(path);
+    }
+
+    public void AddOpening(string path, CollisionOpening opening)
+    {
+        Get(path).Openings.Add(opening);
+        Changed(path);
+    }
+
+    public void RemoveOpening(string path, CollisionOpening opening)
+    {
+        if (_files.TryGetValue(path, out var edit) && edit.Openings.FindLastIndex(o => ReferenceEquals(o, opening)) is var i and >= 0)
+            edit.Openings.RemoveAt(i);
         Changed(path);
     }
 
