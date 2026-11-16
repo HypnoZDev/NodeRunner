@@ -193,7 +193,7 @@ internal sealed class ModelPartTool
     }
 
     // Changes made in memory and not saved yet, last one last: the file changed and how to undo it.
-    private enum ChangeKind { Removed, Moved, Texture, Duplicated, Added }
+    private enum ChangeKind { Removed, Moved, Texture, Duplicated, Added, Opening }
 
     private sealed record Change(ChangeKind Kind, string File, Action Undo);
     private readonly List<Change> _changes = [];
@@ -202,7 +202,7 @@ internal sealed class ModelPartTool
     private readonly Dictionary<string, (ResourceHeader Header, byte[] Content)> _dictionaries = new(StringComparer.OrdinalIgnoreCase);
 
     public int ChangeCount => _changes.Count;
-    public int RemovedCount => _changes.Count(c => c.Kind == ChangeKind.Removed);
+    public int RemovedCount => _changes.Count(c => c.Kind is ChangeKind.Removed or ChangeKind.Opening);
     public int MovedCount => _changes.Count(c => c.Kind == ChangeKind.Moved);
     public int TextureChangeCount => _changes.Count(c => c.Kind == ChangeKind.Texture);
     public int DuplicatedCount => _changes.Count(c => c.Kind is ChangeKind.Duplicated or ChangeKind.Added);
@@ -478,6 +478,92 @@ internal sealed class ModelPartTool
                 textures[texture] = textures.GetValueOrDefault(texture) + group.Count();
         }
         return new CopiedPiece(name, textures.OrderByDescending(t => t.Value).Select(t => t.Key).FirstOrDefault(), vertices, [.. indices]);
+    }
+
+    // The point of the detailed version under the ray (model space) and the normal of its triangle (towards the ray).
+    public (Vector3 Point, Vector3 Normal)? HitPoint(Vector3 localOrigin, Vector3 localDirection)
+    {
+        if (ModelParts.Hit(_meshes, localOrigin, localDirection) is not { } found)
+            return null;
+        var (p, idx) = _meshes[found.Triangle.Mesh];
+        int t = found.Triangle.Triangle * 3;
+        var normal = Vector3.Cross(p[idx[t + 1]] - p[idx[t]], p[idx[t + 2]] - p[idx[t]]);
+        if (normal.LengthSquared() < 1e-12f)
+            return null;
+        normal = Vector3.Normalize(normal);
+        if (Vector3.Dot(normal, localDirection) > 0)
+            normal = -normal;
+        return (localOrigin + localDirection * found.Distance, normal);
+    }
+
+    // An opening placed where the ray meets a wall of the model: its bottom on the floor or ground in front of the wall
+    // when the model has one within reach, otherwise centred on the point. Null when the ray meets no wall.
+    public Opening? PlaceOpening(Vector3 localOrigin, Vector3 localDirection, float width, float height)
+    {
+        if (HitPoint(localOrigin, localDirection) is not { } hit)
+            return null;
+        float? floor = null;
+        var flat = Vector3.Normalize(new Vector3(hit.Normal.X, hit.Normal.Y, 0) + new Vector3(0, 0, 1e-6f));
+        if (HitPoint(hit.Point + flat * 0.3f + new Vector3(0, 0, 0.2f), -Vector3.UnitZ) is { } below
+            && hit.Point.Z - below.Point.Z <= height && below.Normal.Z > 0.7f)
+            floor = below.Point.Z;
+        return Opening.At(hit.Point, hit.Normal, width, height, floor);
+    }
+
+    // Cuts an opening through every version of the model in memory (the wall around it keeps its texture); the file is
+    // written by Save. Returns the triangles cut in the detailed version, or an error message.
+    public (int Cut, string? Error) CutOpening(Opening opening)
+    {
+        var hides = new List<(int IndicesAt, int Triangle)>();
+        var additions = new List<DrawableAppend.Addition>();
+        int cutShown = 0;
+        foreach (var geometry in _all)
+        {
+            var cut = WallOpening.Cut(geometry.Positions, geometry.Indices, opening);
+            if (cut.IsEmpty)
+                continue;
+            if (_shown.Contains(geometry))
+                cutShown += cut.Removed.Count;
+            hides.AddRange(cut.Removed.Select(t => (geometry.IndicesAt, t)));
+            if (cut.Indices.Count == 0)
+                continue;
+            if (geometry.Vertices is not { } stored || geometry.VertexAt < 0)
+                return (0, L("Les sommets de ce modèle sont dans un format que NodeRunner ne sait pas encore modifier."));
+            var buffer = _content.AsSpan(geometry.VertexAt, geometry.VertexCount * geometry.Stride);
+            var bytes = new byte[cut.Vertices.Count * geometry.Stride];
+            for (int i = 0; i < cut.Vertices.Count; i++)
+            {
+                var (t, weights) = cut.Vertices[i];
+                stored.Blend(buffer, geometry.Indices[t * 3], geometry.Indices[t * 3 + 1], geometry.Indices[t * 3 + 2], weights)
+                    .CopyTo(bytes, i * geometry.Stride);
+            }
+            additions.Add(new DrawableAppend.Addition(geometry, bytes, [.. cut.Indices.Select(i => (ushort)i)]));
+        }
+        if (hides.Count == 0)
+            return (0, L("Rien à percer à cet endroit : placez l'ouverture sur un mur du modèle."));
+
+        var (header, content) = (_header, _content);
+        var before = DrawablePatch.HideTriangles(content, hides);
+        if (additions.Count > 0)
+        {
+            try
+            {
+                (_header, _content) = DrawableAppend.Apply(header, content, _systemKept, _all, additions);
+            }
+            catch (InvalidDataException ex)
+            {
+                DrawablePatch.Restore(content, before);
+                return (0, ex.Message);
+            }
+        }
+        _changes.Add(new Change(ChangeKind.Opening, Path, () =>
+        {
+            (_header, _content) = (header, content);
+            DrawablePatch.Restore(content, before);
+        }));
+        Refresh();
+        Clear();
+        return (cutShown, null);
     }
 
     // Adds new vertices and triangles to the model in memory; the new triangles of the detailed version become the chosen

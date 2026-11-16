@@ -194,6 +194,31 @@ public sealed class DrawableReader : IModelReader
                 new Vector4(Vector3.TransformNormal(Xyz(tangent), Bone), tangent.W));
         }
 
+        // A new vertex mixing three vertices of the geometry (weights adding up to 1): every value it stores (position,
+        // directions, colours, texture coordinates) is mixed; what cannot be written is taken from the heaviest one.
+        public byte[] Blend(ReadOnlySpan<byte> vertexBuffer, int a, int b, int c, Vector3 weights)
+        {
+            int heaviest = weights.X >= weights.Y && weights.X >= weights.Z ? a : weights.Y >= weights.Z ? b : c;
+            var bytes = vertexBuffer.Slice(heaviest * Stride, Stride).ToArray();
+            for (int component = 0; component < 16; component++)
+            {
+                if (!_declaration.Has(component) || component is BlendWeightsComponent or BlendIndicesComponent)
+                    continue;
+                var mixed = _declaration.Read(vertexBuffer, a * Stride, component) * weights.X
+                    + _declaration.Read(vertexBuffer, b * Stride, component) * weights.Y
+                    + _declaration.Read(vertexBuffer, c * Stride, component) * weights.Z;
+                if (Array.IndexOf(DirectionComponents, component) >= 0)
+                {
+                    var kept = _declaration.Read(vertexBuffer, heaviest * Stride, component);
+                    var direction = Xyz(mixed);
+                    direction = direction.LengthSquared() > 1e-12f ? Vector3.Normalize(direction) * Xyz(kept).Length() : Xyz(kept);
+                    mixed = new Vector4(direction, kept.W);
+                }
+                _declaration.WriteValue(bytes, 0, component, mixed);
+            }
+            return bytes;
+        }
+
         // New vertices in this geometry's layout: copies of the template vertex (bones, other values) given these values.
         // Null when the bone cannot be undone.
         public byte[]? Make(ReadOnlySpan<byte> template, IReadOnlyList<VertexValues> vertices)

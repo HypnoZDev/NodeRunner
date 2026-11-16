@@ -8,6 +8,7 @@ using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
 using NodeRunner.Data.Native.Models;
+using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
 
@@ -75,6 +76,23 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private int _workshopRevision = -1;
     private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
+
+    // Opening cut through a wall: placed by a click on the model (while _openingPlacing), then moved by exact values
+    // (right, up) and sized before the cut.
+    private bool _openingPlacing;
+    private Opening? _openingPlaced;
+    private Vector2 _openingShift;
+    private float _openingWidth = Opening.DefaultWidth, _openingHeight = Opening.DefaultHeight, _openingDepth = Opening.DefaultDepth;
+
+    private Opening? CurrentOpening => _openingPlaced is { } o
+        ? o with
+        {
+            Bottom = o.Bottom + o.Right * _openingShift.X + new Vector3(0, 0, _openingShift.Y),
+            Width = _openingWidth,
+            Height = _openingHeight,
+            Depth = _openingDepth,
+        }
+        : null;
 
     // Image being converted for a texture of the workshop (on a background thread).
     private sealed record TextureJob(ModelPartTool Tool, string Source, uint NameHash, byte[]? Pixels, string? Note, string? Error)
@@ -699,7 +717,20 @@ internal sealed unsafe class ViewerPanel(AppState state)
             var far = Vector4.Transform(new Vector4(cx, cy, 0.5f, 1f), inverse);
             var from = new Vector3(near.X, near.Y, near.Z) / near.W;
             var to = new Vector3(far.X, far.Y, far.Z) / far.W;
-            tool.ClickModel(from - Viewer.ModelOffset, Vector3.Normalize(to - from), io.KeyCtrl);
+            if (_openingPlacing)
+            {
+                if (tool.PlaceOpening(from - Viewer.ModelOffset, Vector3.Normalize(to - from), _openingWidth, _openingHeight) is { } opening)
+                {
+                    _openingPlaced = opening;
+                    _openingShift = Vector2.Zero;
+                    _openingPlacing = false;
+                    _workshopRevision = -1;
+                }
+                else
+                    state.Notify(L("Cliquez sur un mur du modèle (une surface debout, pas un sol ni un toit)."), warning: true);
+            }
+            else
+                tool.ClickModel(from - Viewer.ModelOffset, Vector3.Normalize(to - from), io.KeyCtrl);
         }
         if (io.MouseWheel != 0)
             Viewer.Distance = Math.Clamp(Viewer.Distance * MathF.Pow(0.88f, io.MouseWheel), Viewer.MinDistance, Viewer.MaxDistance);
@@ -823,6 +854,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 state.Notify(L($"Modifications de {Path.GetFileName(dropped.Path)} non enregistrées : abandonnées."), warning: true);
             _workshopFor = item;
             _addMaterial = -1;
+            _openingPlaced = null;
+            _openingPlacing = false;
             _changedSources.Clear();
             (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
             _workshopRevision = -1;
@@ -838,6 +871,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _workshopRevision = tool.Revision;
             Viewer.OverlayEdges.Clear();
             Viewer.OverlayEdges.AddRange(tool.Edges());
+            if (CurrentOpening is { } opening)
+                Viewer.OverlayEdges.AddRange(opening.Edges());
         }
         ImGui.Spacing();
         if (Widgets.BeginProperties("workshop"))
@@ -922,9 +957,70 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _reopen = (item, state.World.ModelReader);
             _workshopFor = null;
         }
+        DrawWorkshopOpening(item, tool, width);
         DrawWorkshopAdd(item, tool, width);
         ImGui.Spacing();
         DrawWorkshopTextures(item, tool, width);
+    }
+
+    // An opening through a wall (a door painted on the building): the triangles inside the rectangle go, those across its
+    // sides are cut so the rest of the wall keeps its texture.
+    private void DrawWorkshopOpening(ViewerItem item, ModelPartTool tool, float width)
+    {
+        ImGui.Spacing();
+        ImGui.SeparatorText(L("Percer une ouverture"));
+        Widgets.Hint(L("Pour une porte dessinée sur un mur : découpe un trou de la taille d'une porte, le reste du mur garde sa texture. ")
+            + L("« Placer », puis cliquez sur le mur dans l'image (le bas se pose sur le sol devant le mur quand le modèle en a un)."), wrap: true);
+        if (_openingPlacing)
+        {
+            Widgets.Hint(L($"{Icons.MousePointer}  Cliquez sur le mur dans l'image (Échap : annuler)."), wrap: true);
+            if (ImGui.IsKeyPressed(ImGuiKey.Escape) || Widgets.Button(L("Annuler"), null, width))
+                _openingPlacing = false;
+        }
+        else if (Widgets.Button(L($"{Icons.Crosshair}  Placer l'ouverture"),
+                L("Le clic suivant dans l'image pose l'ouverture sur le mur cliqué, face à vous."), width))
+            _openingPlacing = true;
+
+        ImGui.SetNextItemWidth(width * 0.6f);
+        bool changed = ImGui.DragFloat(L("Largeur (m)"), ref _openingWidth, 0.01f, 0.3f, 20f, "%.2f");
+        ImGui.SetNextItemWidth(width * 0.6f);
+        changed |= ImGui.DragFloat(L("Hauteur (m)"), ref _openingHeight, 0.01f, 0.5f, 20f, "%.2f");
+        ImGui.SetNextItemWidth(width * 0.6f);
+        changed |= ImGui.DragFloat(L("Profondeur (m)"), ref _openingDepth, 0.01f, 0.05f, 5f, "%.2f");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("Jusqu'où la découpe traverse le mur, devant et derrière le rectangle : assez pour l'épaisseur du mur ")
+                + L("et un renfoncement de porte, pas plus (sinon elle touche ce qui est derrière)."));
+        _openingWidth = Math.Clamp(_openingWidth, 0.3f, 20f);
+        _openingHeight = Math.Clamp(_openingHeight, 0.5f, 20f);
+        _openingDepth = Math.Clamp(_openingDepth, 0.05f, 5f);
+        if (_openingPlaced is not null)
+        {
+            ImGui.SetNextItemWidth(width * 0.6f);
+            changed |= ImGui.DragFloat2(L("Décalage (droite, haut)"), ref _openingShift, 0.01f, -20f, 20f, "%.2f");
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Déplace l'ouverture le long du mur (mètres) depuis l'endroit cliqué."));
+        }
+        if (changed)
+            _workshopRevision = -1;
+
+        ImGui.BeginDisabled(CurrentOpening is null);
+        bool cut = Widgets.PrimaryButton(L($"{Icons.DoorOpen}  Percer"), width);
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Découpe le modèle et ses versions simplifiées. La collision du bâtiment n'est pas encore percée par cet outil."));
+        if (cut && CurrentOpening is { } opening)
+        {
+            var (count, error) = tool.CutOpening(opening);
+            if (error is not null)
+                state.Notify(error, warning: true);
+            else
+            {
+                _openingPlaced = null;
+                ShowWorkshopChanges(item, tool);
+                state.Notify(L($"Ouverture percée ({Widgets.Count(count)} triangles découpés) : « Enregistrer le modèle » pour l'écrire."));
+            }
+            _workshopRevision = -1;
+        }
     }
 
     // Adding a piece: a simple shape or the piece copied from a model, with the material of a part of this model.
