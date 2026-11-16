@@ -35,8 +35,6 @@ internal sealed class ModelPartTool
     private readonly string _extension;
     private readonly HashSet<MeshTriangle> _selected = [];
 
-    // The object of the map the tool was opened on, null when opened on a model alone (model workshop).
-    public MapEntity? Entity { get; private init; }
     public string Path { get; }
 
     public int SelectedCount => _selected.Count;
@@ -70,8 +68,7 @@ internal sealed class ModelPartTool
     {
         if (world.Maps?.GetArchetype(entity.ArchetypeHash) is not { } archetype || world.Models?.Locate(archetype) is not { } location)
             return (null, L("Modèle 3D introuvable."));
-        var (tool, error) = Open(location, world);
-        return (tool is null ? null : new ModelPartTool(tool.Path, tool._modelHash, tool._header, tool._content, tool._all) { Entity = entity }, error);
+        return Open(location, world);
     }
 
     public static (ModelPartTool? Tool, string? Error) Open(Data.Models.ModelLocation location, WorldLoader world)
@@ -91,14 +88,6 @@ internal sealed class ModelPartTool
         {
             return (null, ex.Message);
         }
-    }
-
-    // Click on the map: the ray in world space, through the object's placement.
-    public bool Click(Vector3 origin, Vector3 direction, bool add)
-    {
-        if (Entity is null || !Matrix4x4.Invert(Entity.Transform, out var toModel))
-            return false;
-        return ClickModel(Vector3.Transform(origin, toModel), Vector3.TransformNormal(direction, toModel), add);
     }
 
     // Click: the piece under the ray (model space) replaces the selection, or is added / removed with add.
@@ -718,20 +707,5 @@ internal sealed class ModelPartTool
         {
             return L($"Enregistrement impossible : {ex.Message}");
         }
-    }
-
-    // Map tool: removes the chosen piece and writes the file at once.
-    public (bool Done, string Message) Apply(AppState state)
-    {
-        if (_selected.Count == 0)
-            return (false, L("Cliquez d'abord sur le morceau à retirer."));
-        var (count, farther) = RemoveSelected();
-        var (done, message) = Save(state);
-        if (!done)
-            return (false, message);
-        string fileName = System.IO.Path.GetFileName(Path);
-        return (true, farther > 0
-            ? L($"{count} triangles retirés de {fileName} (+ {farther} dans ses versions simplifiées). Rechargement de la carte...")
-            : L($"{count} triangles retirés de {fileName}. Rechargement de la carte..."));
     }
 }

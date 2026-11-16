@@ -548,9 +548,6 @@ internal sealed partial class AppState
     public NodeRunner.Data.Maps.MapEntity? WorkshopEntity { get; set; }
     public bool WorkshopShowsMap { get; set; }
 
-    // While a piece of a model is being picked for removal: clicks in the 3D view go to it.
-    public ModelPartTool? PartTool { get; set; }
-
     // Doors opened in the 3D view (display only).
     public DoorAnimator OpenDoors { get; } = new();
 

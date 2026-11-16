@@ -389,13 +389,6 @@ internal sealed unsafe partial class MainForm
                     lines.AddBox(tuning.TriggerBoxMin, tuning.TriggerBoxMax, transform, DoorTriggerColor);
             }
         }
-        // The piece of the model about to be removed.
-        if (!_state.IsGta4 && _state.PartTool is { SelectedCount: > 0, Entity: { } partEntity } partTool)
-        {
-            var at = partEntity.Transform;
-            foreach (var (from, to) in partTool.Edges())
-                lines.AddLine(Vector3.Transform(from, at), Vector3.Transform(to, at), DoorBlockedColor);
-        }
         // The opening about to be cut through a building, and the room behind it.
         if (!_state.IsGta4 && _state.OpeningTool is { Current: { } opening } openingTool)
         {

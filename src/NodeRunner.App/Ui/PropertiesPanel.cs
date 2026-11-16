@@ -88,8 +88,6 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                 DrawPlacement(entity, library, names);
             if (!Simple && Widgets.Section(L("Fichiers"), "files"))
                 DrawFiles(entity, library, names);
-            if (state.PartTool is { } partTool && partTool.Entity != entity)
-                state.PartTool = null;
             if (state.OpeningTool is { } openingTool && openingTool.Building != entity)
                 state.OpeningTool = null;
             if (!entity.IsInterior && entity.Interior is null && !Doors.IsDoor(names.TryGet(entity.ArchetypeHash))
@@ -288,50 +286,19 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         ImGui.Dummy(new Vector2(0, 2));
     }
 
-    // Removing a piece of the object's model (a logo, a sign) without leaving NodeRunner.
+    // Changing the object's model (removing a logo, moving a piece, a texture...) is done in the model workshop.
     private void DrawModelParts(MapEntity entity, MapLibrary library)
     {
         float width = ImGui.GetContentRegionAvail().X;
-        if (state.PartTool is not { } tool)
-        {
-            if (Widgets.Button(L($"{Icons.Trash}  Retirer un morceau du modèle..."),
-                    L("Pour enlever un logo, une affiche, un objet dessiné dans le modèle d'une pièce ou d'un bâtiment : ")
-                    + L("cliquez ensuite sur le morceau dans la vue 3D. Le fichier du modèle est réécrit sans ce morceau, ")
-                    + L("dans le dossier stream du projet. Toutes les copies de cet objet changent."), width))
-            {
-                var (opened, error) = ModelPartTool.Open(entity, state.World);
-                if (opened is null)
-                    state.Notify(error ?? L("Modèle 3D introuvable."), warning: true);
-                else
-                {
-                    state.PartTool = opened;
-                    state.Notify(L("Cliquez sur le morceau à retirer dans la vue 3D (Ctrl+clic pour en ajouter un autre, Échap pour arrêter)."));
-                }
-            }
-            if (Widgets.Button(L($"{Icons.Box}  Ouvrir dans l'atelier de modèle"),
-                    L("Le modèle seul, en grand, dans un onglet Atelier à côté de la carte (aussi : double-clic sur l'objet)."), width))
-                state.WorkshopRequest = entity;
-            if (library.GetArchetype(entity.ArchetypeHash) is { } type && state.World.Models?.Locate(type) is { } location
-                && ModelPartTool.ChangedFile(state, location.Path) is not null
-                && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
-                    L("Annule tous les morceaux retirés de ce modèle (le fichier d'avant est remis)."), width))
-                state.Notify(ModelPartTool.Restore(state, location.Path));
-            return;
-        }
-        Widgets.Hint(tool.SelectedCount == 0
-            ? L("Cliquez sur le morceau à retirer dans la vue 3D. Ctrl+clic : en ajouter ou en retirer un autre. Échap : arrêter.")
-            : L($"Morceau choisi : {tool.SelectedCount} triangles (en rouge). Ctrl+clic pour en ajouter ou en retirer un autre."), wrap: true);
-        if (tool.SelectedCount > 0 && Widgets.Button(L($"{Icons.Trash}  Retirer ce morceau"),
-                L("Réécrit le fichier du modèle sans ces triangles (dans le dossier stream du projet), puis recharge la carte. ")
-                + L("Le bouton « Remettre le modèle d'origine » annule."), width))
-        {
-            var (done, message) = tool.Apply(state);
-            state.Notify(message, warning: !done);
-            if (done)
-                state.PartTool = null;
-        }
-        if (Widgets.Button(L("Arrêter"), L("Quitte le choix du morceau sans rien changer (Échap)."), width))
-            state.PartTool = null;
+        if (Widgets.Button(L($"{Icons.Box}  Ouvrir dans l'atelier de modèle"),
+                L("Le modèle seul, en grand, dans un onglet Atelier à côté de la carte (aussi : double-clic sur l'objet) : ")
+                + L("retirer, déplacer ou ajouter des morceaux, changer ses textures."), width))
+            state.WorkshopRequest = entity;
+        if (library.GetArchetype(entity.ArchetypeHash) is { } type && state.World.Models?.Locate(type) is { } location
+            && ModelPartTool.ChangedFile(state, location.Path) is not null
+            && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
+                L("Annule tous les changements de ce modèle (le fichier d'avant est remis)."), width))
+            state.Notify(ModelPartTool.Restore(state, location.Path));
     }
 
     private void DrawPlacement(MapEntity entity, MapLibrary library, HashNames names)

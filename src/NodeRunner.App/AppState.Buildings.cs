@@ -26,7 +26,6 @@ internal sealed partial class AppState
             Notify(error ?? L("Modèle 3D introuvable."), warning: true);
             return;
         }
-        PartTool = null;
         var tool = new BuildingOpeningTool(building, model)
         {
             Name = InteriorCreation.SuggestName(World.Names?.TryGet(building.ArchetypeHash) ?? Project?.ResourceName ?? "mlo", IsFreeInteriorName),
