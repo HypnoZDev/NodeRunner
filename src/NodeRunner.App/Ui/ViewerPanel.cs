@@ -61,6 +61,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private string? _workshopError;
     private ViewerItem? _workshopFor;
     private bool _workshopShown;
+    private bool _workshopWasShown; // At the previous frame: the view is drawn before the tabs.
     private int _workshopRevision = -1;
     private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
@@ -123,7 +124,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.PopStyleVar();
         Viewer.RequestedSize = Vector2.Zero; // Set again below while the view is visible.
         ReopenChangedModel();
-        bool workshopWasShown = _workshopShown;
+        _workshopWasShown = _workshopShown;
         _workshopShown = false;
         if (visible)
         {
@@ -150,7 +151,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             }
         }
         ImGui.End();
-        if (!_workshopShown && workshopWasShown && Viewer.OverlayEdges.Count > 0)
+        if (!_workshopShown && _workshopWasShown && Viewer.OverlayEdges.Count > 0)
         {
             Viewer.OverlayEdges.Clear();
             _workshopRevision = -1;
@@ -633,7 +634,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (!ImGui.IsItemHovered())
             return;
         // Model workshop: a click without moving the mouse picks a piece.
-        if (_workshopShown && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
+        if (_workshopWasShown && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
             && Matrix4x4.Invert(Viewer.LastViewProjection, out var inverse))
         {
             var at = (io.MousePos - ImGui.GetItemRectMin()) / size;
