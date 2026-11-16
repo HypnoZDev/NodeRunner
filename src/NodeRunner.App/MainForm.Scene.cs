@@ -37,7 +37,7 @@ internal sealed unsafe partial class MainForm
     // The map's objects around the workshop's model, placed in the model's own space (null: not asked for).
     private List<(GpuModel Model, Matrix4x4 Transform)>? WorkshopSurroundings()
     {
-        if (!_state.WorkshopShown || !_state.WorkshopShowsMap || _state.WorkshopEntity is not { } entity
+        if (!(_state.WorkshopCoversMap || _state.WorkshopOpen && _state.WorkshopDetached) || !_state.WorkshopShowsMap || _state.WorkshopEntity is not { } entity
             || !Matrix4x4.Invert(entity.Transform, out var toModel))
             return null;
         float radius = _state.WorkshopViewer.Radius * 2f + WorkshopMapRadius;

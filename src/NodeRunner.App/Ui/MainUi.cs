@@ -298,7 +298,7 @@ internal sealed class MainUi
         _resetLayout = false;
         _workspaceTabs.Draw();
         // The map's handles and overlays only while the map is shown.
-        if (!_state.WorkshopShown)
+        if (!_state.WorkshopCoversMap)
         {
             _presence.Draw();
             _gizmo.Update(blocked: _searchPalette.IsOpen);

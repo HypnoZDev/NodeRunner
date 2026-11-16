@@ -534,6 +534,10 @@ internal sealed partial class AppState
     // Model workshop in a tab beside the map: open, shown in place of the 3D view, brought to the front at the next frame.
     public bool WorkshopOpen { get; set; }
     public bool WorkshopShown { get; set; }
+
+    // The workshop in its own window (another screen) instead of a tab; while a tab, whether it covers the 3D view.
+    public bool WorkshopDetached { get; set; }
+    public bool WorkshopCoversMap { get; set; }
     public bool WorkshopFront { get; set; }
 
     // A map object whose model is to open in the workshop.

@@ -375,7 +375,7 @@ internal sealed unsafe partial class MainForm : Form
         graphics.BeginFrame(BackgroundColor);
         graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
         // The workshop tab covers the 3D view: only the map's loading goes on.
-        if (_state.WorkshopShown)
+        if (_state.WorkshopCoversMap)
             LoadWorld();
         else
             DrawWorld(_lineRenderer!, scene);

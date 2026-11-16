@@ -208,6 +208,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         state.WorkshopViewer.Model.Close();
         state.WorkshopOpen = false;
         state.WorkshopShown = false;
+        state.WorkshopCoversMap = false;
         state.WorkshopEntity = null;
         _workshopCovers = [];
     }

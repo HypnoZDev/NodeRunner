@@ -4,12 +4,14 @@ using ImGuiNET;
 namespace NodeRunner.App.Ui;
 
 // Tabs above the 3D view while the model workshop is open: "Map" (the 3D view) and the workshop, shown in its place.
+// As an option the workshop goes into its own window (to put on another screen), the map staying in the main one.
 internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
 {
     private const ImGuiWindowFlags BarFlags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings
         | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollWithMouse;
 
     private bool _confirmClose;
+    private bool _detachedActive; // Detached: the workshop window was the last one used (not the map).
 
     // After the dock space: takes the top of the 3D view for the tabs, then the workshop covers the rest when chosen.
     public void Draw()
@@ -19,6 +21,13 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         if (!state.WorkshopOpen)
         {
             state.WorkshopShown = false;
+            state.WorkshopCoversMap = false;
+            return;
+        }
+        if (state.WorkshopDetached)
+        {
+            DrawDetached();
+            DrawConfirmClose();
             return;
         }
 
@@ -38,7 +47,7 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
             state.WorkshopFront = false;
             if (TabItem(L($"{Icons.Map}  Carte###tab_map"), null, ImGuiTabItemFlags.None))
             {
-                state.WorkshopShown = false;
+                state.WorkshopShown = state.WorkshopCoversMap = false;
                 ImGui.EndTabItem();
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
@@ -49,7 +58,7 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
                 | (viewer.WorkshopChanged ? ImGuiTabItemFlags.UnsavedDocument : ImGuiTabItemFlags.None);
             if (TabItem(L($"{Icons.Box}  Atelier : {viewer.WorkshopName ?? L("modèle")}###tab_workshop"), &open, flags))
             {
-                state.WorkshopShown = true;
+                state.WorkshopShown = state.WorkshopCoversMap = true;
                 ImGui.EndTabItem();
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
@@ -57,12 +66,14 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
                     ? L("Le modèle en cours de modification (● : modifications pas encore enregistrées)")
                     : L("Le modèle en cours de modification"));
             if (!open)
+                AskClose();
+            if (ImGui.TabItemButton(L($"{Icons.Monitor}  Détacher"), ImGuiTabItemFlags.Trailing))
             {
-                if (viewer.WorkshopChanged)
-                    _confirmClose = true;
-                else
-                    viewer.CloseWorkshop();
+                state.WorkshopDetached = true;
+                state.WorkshopFront = true;
             }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("L'Atelier dans sa propre fenêtre, à poser sur un autre écran ; la carte reste ici."));
             ImGui.EndTabBar();
         }
         ImGui.End();
@@ -71,6 +82,52 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
 
         if (state.WorkshopShown && state.WorkshopOpen)
             DrawWorkshop();
+    }
+
+    private void AskClose()
+    {
+        if (viewer.WorkshopChanged)
+            _confirmClose = true;
+        else
+            viewer.CloseWorkshop();
+    }
+
+    // Detached: the workshop in a window of its own (it can leave NodeRunner's window), the map shown as usual.
+    // Properties and Scene follow the last one used: the workshop window, or the map (a click in the 3D view).
+    private void DrawDetached()
+    {
+        state.WorkshopCoversMap = false;
+        ImGui.SetNextWindowSize(new Vector2(1100f, 750f), ImGuiCond.FirstUseEver);
+        if (state.WorkshopFront)
+        {
+            state.WorkshopFront = false;
+            ImGui.SetNextWindowFocus();
+        }
+        bool open = true;
+        var flags = ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
+            | (viewer.WorkshopChanged ? ImGuiWindowFlags.UnsavedDocument : ImGuiWindowFlags.None);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
+        bool visible = ImGui.Begin(L($"{Icons.Box}  Atelier : {viewer.WorkshopName ?? L("modèle")}###workshop_window"), ref open, flags);
+        ImGui.PopStyleVar();
+        if (visible)
+        {
+            if (Widgets.Button(L($"{Icons.Map}  Rattacher"), L("Remet l'Atelier en onglet à côté de la carte.")))
+            {
+                state.WorkshopDetached = false;
+                state.WorkshopFront = true;
+            }
+            ImGui.SameLine();
+            viewer.DrawWorkshop();
+        }
+        bool focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
+        ImGui.End();
+        if (focused)
+            _detachedActive = true;
+        else if (!ImGui.IsWindowFocused(ImGuiFocusedFlags.AnyWindow))
+            _detachedActive = false;
+        state.WorkshopShown = _detachedActive;
+        if (!open)
+            AskClose();
     }
 
     // The workshop over the 3D view, below the tabs.
