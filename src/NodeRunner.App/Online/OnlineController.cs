@@ -64,19 +64,58 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     // The game's own files (the project and the library props it uses are sent with it).
     public string Fingerprint => state.World.Maps is { } maps ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount - maps.LooseArchetypeCount}" : "";
 
+    // Limits of the host's project once extracted (it travels as one message of at most Connection.MaxFrame).
+    private const long MaxProjectBytes = 8L << 30;
+    private const int MaxProjectFiles = 100_000;
+
+    private static void DeleteFolder(string folder)
+    {
+        if (Directory.Exists(folder))
+            Directory.Delete(folder, recursive: true);
+    }
+
     public void OpenSnapshot(SessionSnapshot snapshot)
     {
-        string folder = Path.Combine(state.ProjectsFolder, "Online", MapProject.ToFolderName(snapshot.ProjectName));
+        string online = Path.Combine(state.ProjectsFolder, "Online");
+        string folder = Path.Combine(online, MapProject.ToFolderName(snapshot.ProjectName));
+        // Extracted beside it first: the previous copy is replaced only by a complete one.
+        string incoming = Path.Combine(online, ".incoming"), previous = Path.Combine(online, ".previous");
         try
         {
-            if (Directory.Exists(folder))
-                Directory.Delete(folder, recursive: true);
-            Directory.CreateDirectory(folder);
+            DeleteFolder(incoming);
             using (var zip = new MemoryStream(snapshot.ProjectZip, writable: false))
-                ZipFile.ExtractToDirectory(zip, folder);
+                SafeZip.Extract(zip, incoming, MaxProjectBytes, MaxProjectFiles);
+            DeleteFolder(previous);
+            if (Directory.Exists(folder))
+                Directory.Move(folder, previous);
+            try
+            {
+                Directory.Move(incoming, folder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (Directory.Exists(previous))
+                    Directory.Move(previous, folder);
+                throw;
+            }
+            try
+            {
+                DeleteFolder(previous);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Removed at the next session.
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            try
+            {
+                DeleteFolder(incoming);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
             Session?.End(L($"Impossible d'écrire le projet de l'hôte ({folder}) : {ex.Message}"));
             return;
         }
