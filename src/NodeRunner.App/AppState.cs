@@ -531,8 +531,13 @@ internal sealed partial class AppState
 
     public CollisionQuery CollisionQuery { get; } = new();
 
-    // The model viewer shows its workshop tab at its next frame.
-    public bool ShowModelWorkshop { get; set; }
+    // Model workshop in a tab beside the map: open, shown in place of the 3D view, brought to the front at the next frame.
+    public bool WorkshopOpen { get; set; }
+    public bool WorkshopShown { get; set; }
+    public bool WorkshopFront { get; set; }
+
+    // A map object type whose model is to open in the workshop.
+    public uint? WorkshopRequest { get; set; }
 
     // While a piece of a model is being picked for removal: clicks in the 3D view go to it.
     public ModelPartTool? PartTool { get; set; }

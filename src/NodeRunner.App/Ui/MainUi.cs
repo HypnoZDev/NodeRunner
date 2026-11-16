@@ -32,6 +32,7 @@ internal sealed class MainUi
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
+        _workspaceTabs = new WorkspaceTabs(state, _viewerPanel);
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
@@ -124,6 +125,7 @@ internal sealed class MainUi
     private readonly ViewportOverlay _viewportOverlay;
     private readonly ExportWindow _exportWindow;
     private readonly ViewerPanel _viewerPanel;
+    private readonly WorkspaceTabs _workspaceTabs;
     private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
@@ -232,6 +234,8 @@ internal sealed class MainUi
                 ImGui.SetClipboardText(_state.FormatPosition(entity.Position, FiveMFormat.Heading(entity)));
             if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
                 OpenInViewer(entity.ArchetypeHash);
+            if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic")))
+                _state.WorkshopRequest = entity.ArchetypeHash;
             ImGui.Separator();
             if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"), "Ctrl+C"))
                 _state.CopySelection();
@@ -267,6 +271,12 @@ internal sealed class MainUi
     public void Draw()
     {
         _state.Online.Update();
+        _viewerPanel.BeginFrame();
+        if (_state.WorkshopRequest is { } workshopModel)
+        {
+            _state.WorkshopRequest = null;
+            _viewerPanel.OpenWorkshop(workshopModel);
+        }
         HandleShortcuts();
         DrawMenuBar();
         // The bars first: the panels and the 3D view share what is left of the window.
@@ -274,12 +284,17 @@ internal sealed class MainUi
         _statusBar.Draw();
         DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title, LibraryPanel.Title);
         _resetLayout = false;
-        _presence.Draw();
-        _gizmo.Update(blocked: _searchPalette.IsOpen);
-        _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
-        _roomGizmo.Update(blocked: _searchPalette.IsOpen);
-        _collisionGizmo.Update(blocked: _searchPalette.IsOpen);
-        _viewportOverlay.Draw();
+        _workspaceTabs.Draw();
+        // The map's handles and overlays only while the map is shown.
+        if (!_state.WorkshopShown)
+        {
+            _presence.Draw();
+            _gizmo.Update(blocked: _searchPalette.IsOpen);
+            _roomHover.Update(blocked: _searchPalette.IsOpen || IsGizmoHovered || IsGizmoDragging);
+            _roomGizmo.Update(blocked: _searchPalette.IsOpen);
+            _collisionGizmo.Update(blocked: _searchPalette.IsOpen);
+            _viewportOverlay.Draw();
+        }
         if (_showLayers) DrawLayersWindow();
         if (_showScene) _scenePanel.Draw(ref _showScene);
         if (_showLibrary) _libraryPanel.Draw(ref _showLibrary);
@@ -293,7 +308,6 @@ internal sealed class MainUi
             ImGui.SetWindowFocus(L(LibraryPanel.Title));
         }
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
-        else _state.Viewer.RequestedSize = Vector2.Zero;
         if (_showAbout) DrawAboutWindow();
         _exportWindow.Draw();
         ProjectWindow.Draw();
@@ -323,7 +337,9 @@ internal sealed class MainUi
             SaveRequested = true;
         if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || IsGizmoDragging || _state.PendingDeletion is not null)
             return;
-        if (ImGui.IsKeyPressed(ImGuiKey.Delete, false))
+        // While the workshop is shown, the keys that edit the map do nothing.
+        bool map = !_state.WorkshopShown;
+        if (map && ImGui.IsKeyPressed(ImGuiKey.Delete, false))
         {
             if (_state.Tool == TransformTool.Collision)
                 _state.DeleteSelectedCollision();
@@ -346,7 +362,7 @@ internal sealed class MainUi
             else
                 _state.RequestDelete();
         }
-        if (ImGui.IsKeyPressed(ImGuiKey.End, false))
+        if (map && ImGui.IsKeyPressed(ImGuiKey.End, false))
             _state.PutSelectionOnGround();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.N))
             ProjectWindow.Open();
@@ -362,6 +378,8 @@ internal sealed class MainUi
             ToggleViewer();
         if (ImGui.IsKeyPressed(ImGuiKey.F3, false))
             _showArchives = !_showArchives;
+        if (!map)
+            return;
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.C))
             _state.CopySelection();
         else if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.V) && _state.Copied.Count > 0)

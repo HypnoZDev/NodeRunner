@@ -25,6 +25,8 @@ internal sealed unsafe partial class MainForm
     // focused panel unless the mouse is over the 3D view.
     private bool KeysOnSceneView()
     {
+        if (_state.WorkshopShown)
+            return false;
         if (!ImGui.IsWindowFocused(ImGuiFocusedFlags.AnyWindow))
             return true;
         if (ImGui.GetIO().WantCaptureMouse || !_surface.Focused)
@@ -32,13 +34,16 @@ internal sealed unsafe partial class MainForm
         return SceneViewport().Contains(_surface.PointToClient(Cursor.Position));
     }
 
+    // Starts loading when a game folder is found or changed, then builds the GPU data once it is ready.
+    private void LoadWorld() =>
+        _state.World.Load(_state.IsGta4 ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
+
     private void DrawWorld(ColorRenderer lines, Rectangle scene)
     {
         var camera = _state.Camera;
         var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
 
-        // Start loading when a game folder is found or changed, then build the GPU data once it is ready.
-        _state.World.Load(_state.IsGta4 ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
+        LoadWorld();
 
         // Sky behind everything, then opaque models, then the translucent navmesh, then lines.
         var settings = _state.Settings;

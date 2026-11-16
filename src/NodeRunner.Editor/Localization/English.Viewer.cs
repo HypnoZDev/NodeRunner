@@ -283,5 +283,28 @@ public static partial class English
         ("Véhicules de GTA IV", "GTA IV vehicles"),
         ("Eau de GTA IV", "GTA IV water"),
         ("oui, type {0}", "yes, type {0}"),
+
+        // Workshop tab beside the map
+        ("{0}  Carte###tab_map", "{0}  Map###tab_map"),
+        ("{0}  Atelier : {1}###tab_workshop", "{0}  Workshop: {1}###tab_workshop"),
+        ("La carte en 3D", "The map in 3D"),
+        ("Le modèle en cours de modification", "The model being edited"),
+        ("Le modèle en cours de modification (● : modifications pas encore enregistrées)",
+            "The model being edited (●: changes not saved yet)"),
+        ("Les modifications de {0} ne sont pas enregistrées.", "The changes to {0} are not saved."),
+        ("Fermer l'Atelier les abandonne (le fichier et la carte restent comme avant).",
+            "Closing the Workshop drops them (the file and the map stay as before)."),
+        ("Abandonner et fermer", "Drop and close"),
+        ("Continuer à modifier", "Keep editing"),
+        ("Enregistrez ou abandonnez d'abord les modifications de {0} (onglet Atelier).",
+            "First save or drop the changes to {0} (Workshop tab)."),
+        ("Modifier dans l'Atelier", "Edit in the Workshop"),
+        ("{0}  Modifier dans l'Atelier", "{0}  Edit in the Workshop"),
+        ("Ouvre ce modèle en grand dans un onglet Atelier à côté de la carte : retirer, déplacer, ajouter des morceaux, changer ses textures.",
+            "Opens this model large in a Workshop tab beside the map: remove, move, add pieces, change its textures."),
+        ("{0}  Modifier le modèle (Atelier)", "{0}  Edit the model (Workshop)"),
+        ("Double-clic", "Double-click"),
+        ("Double-clic sur un objet", "Double-click an object"),
+        ("Modifier son modèle dans l'onglet Atelier", "Edit its model in the Workshop tab"),
     ];
 }

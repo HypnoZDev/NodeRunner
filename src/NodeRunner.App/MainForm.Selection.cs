@@ -125,7 +125,8 @@ internal sealed unsafe partial class MainForm
 
     private Point? _doorClick;
 
-    // Double click on a door: opens or closes it in the view; on anything else, an ordinary click.
+    // Double click on a door: opens or closes it in the view; on the selected object: its model in the workshop; on
+    // anything else, an ordinary click.
     private void ToggleClickedDoor(Rectangle scene)
     {
         if (_doorClick is not { } click || _modelRenderer is null || _pickBuffer is null)
@@ -134,12 +135,19 @@ internal sealed unsafe partial class MainForm
         if (!_state.IsGta4 && _state.PartTool is null && _state.OpeningTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
         {
             var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
-            if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } door
-                && Doors.IsDoor(names.TryGet(door.ArchetypeHash)))
+            if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } picked)
             {
-                _state.Select(door);
-                _state.ToggleDoors([door]);
-                return;
+                if (Doors.IsDoor(names.TryGet(picked.ArchetypeHash)))
+                {
+                    _state.Select(picked);
+                    _state.ToggleDoors([picked]);
+                    return;
+                }
+                if (picked == _state.Selection)
+                {
+                    _state.WorkshopRequest = picked.ArchetypeHash;
+                    return;
+                }
             }
         }
         _pickRequest = (click, false);

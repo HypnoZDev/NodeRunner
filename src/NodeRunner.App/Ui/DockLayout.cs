@@ -32,6 +32,14 @@ internal static unsafe partial class DockLayout
         SceneArea = FindSceneArea(id, viewport);
     }
 
+    // A bar along the top of the 3D view (the tabs): the scene starts below it.
+    public static void ReserveTop(float height)
+    {
+        var (position, size) = SceneArea;
+        height = Math.Min(height, size.Y - 1f);
+        SceneArea = (position + new Vector2(0, height), size - new Vector2(0, height));
+    }
+
     private static void BuildDefault(uint id, Vector2 size, string leftTop, string leftBottom, string rightTop, string rightBottom, string bottom)
     {
         igDockBuilderRemoveNode(id);

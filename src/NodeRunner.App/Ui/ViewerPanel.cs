@@ -25,7 +25,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private static VehiclePaintSlot[] PaintSlots => VehiclePaintColors.Slots;
     private static int[] DefaultPaint => VehiclePaintColors.Default;
 
-    private ModelViewer Viewer => state.Viewer;
+    // The catalogue's model, or the workshop's while its tab is drawn.
+    private ModelViewer Viewer => _inWorkshop ? state.WorkshopViewer : state.Viewer;
+    private bool _inWorkshop;
 
     // The model viewer shows the game NodeRunner runs on: GTA V, or GTA IV (game or episode chosen).
     private bool IsGta4 => state.IsGta4;
@@ -61,8 +63,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private ModelPartTool? _workshop;
     private string? _workshopError;
     private ViewerItem? _workshopFor;
-    private bool _workshopShown;
-    private bool _workshopWasShown; // At the previous frame: the view is drawn before the tabs.
     private readonly WorkshopGizmo _gizmo = new();
     private Vector3 _moveBy, _turnBy; // Exact move of the chosen piece: metres, degrees.
 
@@ -115,17 +115,109 @@ internal sealed unsafe class ViewerPanel(AppState state)
     // A type as read from its file (it may not be the one the loaded map uses).
     public bool OpenArchetype(Archetype archetype)
     {
-        if (Models?.Locate(archetype) is not { } location)
+        if (ItemOf(archetype) is not { } item)
             return false;
-        uint archetypeHash = archetype.NameHash;
-        string name = Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
-        if (IsGta4 && !name.StartsWith("0x", StringComparison.Ordinal))
-            name = name.ToLowerInvariant();
-        Open(new ViewerItem(name, ViewerKind.Object, location));
+        Open(item);
         _filter = 1;
         _search = "";
         _scrollToItem = true;
         return true;
+    }
+
+    private ViewerItem? ItemOf(Archetype archetype)
+    {
+        if (Models?.Locate(archetype) is not { } location)
+            return null;
+        uint archetypeHash = archetype.NameHash;
+        string name = Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        if (IsGta4 && !name.StartsWith("0x", StringComparison.Ordinal))
+            name = name.ToLowerInvariant();
+        return new ViewerItem(name, ViewerKind.Object, location);
+    }
+
+    // ---- Workshop tab (beside the map) ----
+
+    public string? WorkshopName => state.WorkshopViewer.Item?.Name;
+
+    public bool WorkshopChanged => _workshop is { ChangeCount: > 0 } && _workshopFor is not null && _workshopFor == state.WorkshopViewer.Item;
+
+    // The model of a map object type in the workshop tab.
+    public void OpenWorkshop(uint archetypeHash)
+    {
+        if (IsGta4)
+            return;
+        if (Library?.GetArchetype(archetypeHash) is not { } archetype || ItemOf(archetype) is not { } item)
+        {
+            state.Notify(L("Modèle introuvable pour ce type (aucun fichier .ydr / .ydd / .yft de ce nom)"), warning: true);
+            return;
+        }
+        OpenWorkshop(item);
+    }
+
+    private void OpenWorkshop(ViewerItem item)
+    {
+        state.WorkshopFront = true;
+        var viewer = state.WorkshopViewer;
+        if (state.WorkshopOpen && viewer.Item == item)
+            return;
+        if (WorkshopChanged)
+        {
+            state.Notify(L($"Enregistrez ou abandonnez d'abord les modifications de {viewer.Item!.Name} (onglet Atelier)."), warning: true);
+            return;
+        }
+        CloseWorkshop();
+        viewer.Open(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
+        state.WorkshopOpen = true;
+    }
+
+    // Closes the workshop tab; its changes not saved are dropped.
+    public void CloseWorkshop()
+    {
+        _workshop = null;
+        _workshopFor = null;
+        _reopen = null;
+        _openingPlaced = null;
+        _openingPlacing = false;
+        _gizmo.Cancel();
+        state.WorkshopViewer.OverlayEdges.Clear();
+        state.WorkshopViewer.Model.Close();
+        state.WorkshopOpen = false;
+        state.WorkshopShown = false;
+    }
+
+    // Once per frame, before the viewer and the workshop are drawn: each view asks for its image again while shown.
+    public void BeginFrame()
+    {
+        state.Viewer.RequestedSize = Vector2.Zero;
+        state.WorkshopViewer.RequestedSize = Vector2.Zero;
+        _inWorkshop = true;
+        ReopenChangedModel();
+        _inWorkshop = false;
+    }
+
+    // The workshop tab: the model large, its tools on the right.
+    public void DrawWorkshop()
+    {
+        _inWorkshop = true;
+        try
+        {
+            float spacing = ImGui.GetStyle().ItemSpacing.X;
+            float viewWidth = Math.Max(200f, ImGui.GetContentRegionAvail().X - InspectorWidth - spacing);
+            if (ImGui.BeginChild("##workshop_view", new Vector2(viewWidth, 0), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+                DrawView();
+            ImGui.EndChild();
+            ImGui.SameLine();
+            if (ImGui.BeginChild("##workshop_tools", Vector2.Zero, ImGuiChildFlags.None))
+            {
+                if (Viewer.Item is { } item)
+                    DrawWorkshopTab(item);
+            }
+            ImGui.EndChild();
+        }
+        finally
+        {
+            _inWorkshop = false;
+        }
     }
 
     public void OpenFile(string path)
@@ -162,10 +254,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
         bool visible = ImGui.Begin(L(Title), ref open);
         ImGui.PopStyleVar();
-        Viewer.RequestedSize = Vector2.Zero; // Set again below while the view is visible.
-        ReopenChangedModel();
-        _workshopWasShown = _workshopShown;
-        _workshopShown = false;
         if (visible)
         {
             UpdateCatalog();
@@ -191,11 +279,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
             }
         }
         ImGui.End();
-        if (!_workshopShown && _workshopWasShown && Viewer.OverlayEdges.Count > 0)
-        {
-            Viewer.OverlayEdges.Clear();
-            _workshopRevision = -1;
-        }
     }
 
     private void UpdateCatalog()
@@ -660,7 +743,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     // Model workshop: handles on the chosen piece; the piece is moved when the mouse is released.
     private void UpdateWorkshopGizmo(Vector2 min, Vector2 size)
     {
-        if (!_workshopWasShown || _workshopFor != Viewer.Item || Viewer.Item is not { } item
+        if (!_inWorkshop || _workshopFor != Viewer.Item || Viewer.Item is not { } item
             || _workshop is not { SelectionCenter: { } pivot } tool)
         {
             _gizmo.Cancel();
@@ -706,7 +789,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (!ImGui.IsItemHovered())
             return;
         // Model workshop: a click without moving the mouse picks a piece.
-        if (!gizmo && _workshopWasShown && _workshopFor == Viewer.Item && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
+        if (!gizmo && _inWorkshop && _workshopFor == Viewer.Item && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
             && Matrix4x4.Invert(Viewer.LastViewProjection, out var inverse))
         {
             var at = (io.MousePos - ImGui.GetItemRectMin()) / size;
@@ -748,9 +831,18 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.SetTooltip(L($"Fichier : {item.Location.Path}")
                 + (Viewer.MissingTextureCount > 0 ? L($"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}") : ""));
 
-        bool canPlace = item.Kind == ViewerKind.Object && !IsGta4 && state.World.Maps is not null;
-        float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f);
+        bool canPlace = item.Kind == ViewerKind.Object && !IsGta4 && state.World.Maps is not null && !_inWorkshop;
+        bool canEdit = !IsGta4 && item.Kind != ViewerKind.Ped && !_inWorkshop;
+        float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
+            + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
+        if (canEdit)
+        {
+            if (Widgets.Button(L($"{Icons.Box}  Modifier dans l'Atelier"),
+                    L("Ouvre ce modèle en grand dans un onglet Atelier à côté de la carte : retirer, déplacer, ajouter des morceaux, changer ses textures.")))
+                OpenWorkshop(item);
+            ImGui.SameLine();
+        }
         if (canPlace)
         {
             if (Widgets.PrimaryButton(L($"{Icons.MapPinned}  Placer")))
@@ -787,14 +879,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Scroll("parts", DrawPartsTab);
             ImGui.EndTabItem();
         }
-        var workshopFlags = state.ShowModelWorkshop ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
-        state.ShowModelWorkshop = false;
-        if (!IsGta4 && item.Kind != ViewerKind.Ped && TabItem(L("Atelier"), workshopFlags))
-        {
-            _workshopShown = true;
-            Scroll("workshop", () => DrawWorkshopTab(item));
-            ImGui.EndTabItem();
-        }
         if (ImGui.BeginTabItem(L("Textures")))
         {
             Scroll("textures", DrawTexturesTab);
@@ -819,16 +903,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.EndTabItem();
         }
         ImGui.EndTabBar();
-    }
-
-    // A tab without a close button that can be brought to the front.
-    private static bool TabItem(string label, ImGuiTabItemFlags flags)
-    {
-        int length = System.Text.Encoding.UTF8.GetByteCount(label);
-        var bytes = stackalloc byte[length + 1];
-        System.Text.Encoding.UTF8.GetBytes(label, new Span<byte>(bytes, length));
-        bytes[length] = 0;
-        return ImGuiNative.igBeginTabItem(bytes, null, flags) != 0;
     }
 
     // ---- Model workshop ----
