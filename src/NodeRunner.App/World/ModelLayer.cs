@@ -764,6 +764,7 @@ internal sealed class ModelLayer : IDisposable
         while (_results.TryDequeue(out var result))
             result.Dispose();
         _visible = new List<VisibleEntity>();
+        _building = null; // Still running on the previous map: its result is dropped.
         _builtCenter = new Vector2(float.NaN);
         Errors.Clear();
         _errorSet.Clear();
