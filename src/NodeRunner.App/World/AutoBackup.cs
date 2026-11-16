@@ -229,18 +229,41 @@ internal sealed class AutoBackup
                 return null; // Another map, DLC or version of NodeRunner: kept for when it matches.
             var date = DateTime.FromBinary(reader.ReadInt64());
             int count = reader.ReadInt32();
+            // Each change takes at least 5 bytes (description and message lengths).
+            if (count < 0 || count > (stream.Length - stream.Position) / 5)
+                throw new InvalidDataException();
             var messages = new List<byte[]>(count);
             var descriptions = new List<string>(count);
             for (int i = 0; i < count; i++)
             {
                 descriptions.Add(reader.ReadString());
-                messages.Add(reader.ReadBytes(reader.ReadInt32()));
+                int length = reader.ReadInt32();
+                if (length < 0 || length > stream.Length - stream.Position)
+                    throw new InvalidDataException();
+                messages.Add(reader.ReadBytes(length));
             }
             return count > 0 ? new Recovery(file, date, messages, descriptions) : null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or EndOfStreamException or FormatException)
+        catch (Exception ex) when (ex is EndOfStreamException or FormatException or InvalidDataException or ArgumentException)
+        {
+            KeepDamaged(file);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    // A damaged copy is set aside rather than overwritten by the next one.
+    private static void KeepDamaged(string file)
+    {
+        try
+        {
+            File.Move(file, file + ".damaged", overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 }
