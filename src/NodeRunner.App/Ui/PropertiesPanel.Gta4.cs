@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using ImGuiNET;
-using NodeRunner.Data.Maps;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
