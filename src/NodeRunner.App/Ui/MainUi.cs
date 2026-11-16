@@ -41,7 +41,7 @@ internal sealed class MainUi
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
-        _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
+        _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer) { Commands = PaletteCommands };
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap, OpenTypeInViewer);
         _projectPanel = new ProjectPanel(state);
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true, () => SaveSoloPackRequested = true);
@@ -70,6 +70,57 @@ internal sealed class MainUi
         _deleteWindow = new DeleteWindow(state);
         _interiorWindow = new InteriorWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
+    }
+
+    // What the search palette (Ctrl+K) can run besides finding things: the usual actions, by name.
+    private IReadOnlyList<PaletteCommand> PaletteCommands()
+    {
+        bool gta5 = !_state.IsGta4;
+        var settings = _state.Settings;
+        void Hour(float hour)
+        {
+            settings.TimeOfDay = hour;
+            _state.SaveSettings();
+        }
+        return
+        [
+            new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", "Ctrl+S", () => SaveRequested = true, gta5),
+            new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", "Ctrl+E", _exportWindow.Open, gta5),
+            new(Icons.FolderOpen, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), gta5),
+            new(Icons.FolderOpen, L("Ouvrir un projet"), "open", "Ctrl+O", () => OpenProjectRequested = true, gta5),
+            new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", "Ctrl+Z", _state.Undo, gta5),
+            new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", "Ctrl+Y", _state.Redo, gta5),
+            new(Icons.MousePointer, L("Outil Sélection"), "select choisir", "1", () => _state.Tool = TransformTool.Select, gta5),
+            new(Icons.Move, L("Outil Déplacer"), "move bouger", "2", () => _state.Tool = TransformTool.Move, gta5),
+            new(Icons.Rotate, L("Outil Tourner"), "rotate rotation pivoter", "3", () => _state.Tool = TransformTool.Rotate, gta5),
+            new(Icons.Scale, L("Outil Échelle"), "scale taille agrandir", "4", () => _state.Tool = TransformTool.Scale, gta5),
+            new(Icons.Layers, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, gta5),
+            new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", L("Fin"), _state.PutSelectionOnGround, gta5 && _state.Selection is not null),
+            new(Icons.Box, L("Modifier le modèle sélectionné dans l'Atelier"), "atelier workshop morceau texture percer", L("Double-clic"),
+                () => _state.WorkshopRequest = _state.Selection, gta5 && _state.Selection is not null),
+            new(Icons.Grid, L("Afficher ou masquer la grille au sol"), "grid quadrillage", "G", () =>
+            {
+                settings.ShowGrid = !settings.ShowGrid;
+                _state.SaveSettings();
+            }),
+            new(Icons.Sunrise, L("Heure : aube"), "matin jour time", "", () => Hour(6.5f)),
+            new(Icons.Sun, L("Heure : midi"), "jour time", "", () => Hour(13f)),
+            new(Icons.Sunset, L("Heure : soir"), "coucher time", "", () => Hour(19f)),
+            new(Icons.Moon, L("Heure : nuit"), "night time", "", () => Hour(23f)),
+            new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", "F2", ToggleViewer),
+            new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
+            new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
+            new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
+            new(Icons.Settings, L("Ouvrir les paramètres d'affichage"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
+            new(Icons.Info, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
+            new(Icons.ListTree, L("Afficher le panneau Scène"), "objets liste panel", "", () => _showScene = true),
+            new(Icons.Layers, L("Afficher le panneau Calques"), "layers panel", "", () => _showLayers = true),
+            new(Icons.SlidersHorizontal, L("Afficher le panneau Propriétés"), "properties panel", "", () => _showProperties = true),
+            new(Icons.Activity, L("Afficher le panneau État"), "status panel", "", () => _showStatus = true),
+            new(Icons.FolderOpen, L("Afficher le panneau Projet"), "project fichiers panel", "", ShowProjectPanel, gta5),
+            new(Icons.Monitor, L("Remettre la disposition des panneaux par défaut"), "layout reset fenêtres", "", () => _resetLayout = true),
+            new(Icons.Info, L("À propos de NodeRunner Studio"), "about version crédits", "", () => _showAbout = true),
+        ];
     }
 
     private void OpenInViewer(uint archetypeHash)

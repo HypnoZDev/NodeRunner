@@ -19,10 +19,16 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private const int MaxMaps = 6;
     private const int MaxTypes = 6;
 
-    private enum Kind { Position, Object, Map, Type }
+    private const int MaxCommands = 6;
+
+    private enum Kind { Position, Object, Map, Type, Command }
+
+    // The commands of the interface the palette can run (Save, Export, a tool, a panel...), given by the main interface.
+    public Func<IReadOnlyList<PaletteCommand>>? Commands { get; set; }
 
     private sealed record Result(Kind Kind, string Icon, string Label, string Detail, int Score)
     {
+        public Action? Run { get; init; }
         public MapEntity? Entity { get; init; }
         public MapData? Map { get; init; }
         public uint Type { get; init; }
@@ -155,8 +161,9 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         {
             Widgets.Hint(state.IsGta4 ? L("Exemples : ag_bigandbushy · manhat01 · 0xA9BC5D05 · -200, 500, 20")
                 : L("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9"), wrap: true);
+            Widgets.Hint(L("Ou une commande : exporter, grille, atelier, paramètres... ( > pour les voir toutes)"), wrap: true);
             if (Library is null)
-                Widgets.Hint(IsBusy ? L("Carte en cours de chargement : seules les positions sont disponibles.") : L("Aucune carte chargée."), wrap: true);
+                Widgets.Hint(IsBusy ? L("Carte en cours de chargement : seules les positions et les commandes sont disponibles.") : L("Aucune carte chargée."), wrap: true);
         }
         else if (query.Length < 2)
             Widgets.Hint(L("Tape au moins 2 caractères."));
@@ -284,7 +291,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         ImGui.GetWindowDrawList().AddLine(new Vector2(ImGui.GetWindowPos().X, p.Y), new Vector2(ImGui.GetWindowPos().X + ImGui.GetWindowWidth(), p.Y), Widgets.Col(UiTheme.Divider));
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.PushFont(UiTheme.SmallFont);
-        ImGui.TextColored(UiTheme.TextFaint, L("↑ ↓  choisir     Entrée  y aller     Ctrl+Entrée  visionneuse     Échap  fermer"));
+        ImGui.TextColored(UiTheme.TextFaint, L("↑ ↓  choisir     Entrée  y aller ou lancer     Ctrl+Entrée  visionneuse     >  toutes les commandes     Échap  fermer"));
         ImGui.PopFont();
     }
 
@@ -300,6 +307,14 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         _scrollToIndex = true;
 
         string query = _query.Trim();
+        // ">" lists the commands alone (all of them when nothing follows).
+        bool onlyCommands = query.StartsWith('>');
+        if (onlyCommands)
+            query = query[1..].Trim();
+        if ((onlyCommands || query.Length >= 2) && FindCommands(query, onlyCommands ? int.MaxValue : MaxCommands) is { Count: > 0 } commands)
+            AddGroup(L("Commandes"), commands);
+        if (onlyCommands)
+            return;
         if (Coordinates.TryParse(query) is { } coordinates)
             AddGroup(L("Position"), [PositionResult(coordinates)]);
 
@@ -320,6 +335,40 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             foreach (var group in groups.Where(g => g.Results.Count > 0).OrderBy(g => g.Results.Min(r => r.Score)))
                 AddGroup(group.Title, group.Results);
         }
+    }
+
+    // Commands whose name or keywords hold every word typed (accents and case ignored), best matches first.
+    private List<Result> FindCommands(string query, int max)
+    {
+        if (Commands?.Invoke() is not { } all)
+            return [];
+        string[] words = Plain(query).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var found = new List<(PaletteCommand Command, int Score)>();
+        foreach (var command in all)
+        {
+            if (!command.Enabled)
+                continue;
+            string name = Plain(command.Name), keywords = Plain(command.Keywords);
+            if (!words.All(w => name.Contains(w, StringComparison.Ordinal) || keywords.Contains(w, StringComparison.Ordinal)))
+                continue;
+            int score = words.Length == 0 ? 3 : name.StartsWith(words[0], StringComparison.Ordinal) ? 1 : words.All(w => name.Contains(w, StringComparison.Ordinal)) ? 2 : 3;
+            found.Add((command, score));
+        }
+        return found.OrderBy(f => f.Score).Take(max)
+            .Select(f => new Result(Kind.Command, f.Command.Icon, f.Command.Name, f.Command.Shortcut, f.Score) { Run = f.Command.Run })
+            .ToList();
+    }
+
+    // Lower case without accents, to compare what is typed.
+    private static string Plain(string text)
+    {
+        var builder = new System.Text.StringBuilder(text.Length);
+        foreach (char c in text.Normalize(System.Text.NormalizationForm.FormD))
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                builder.Append(char.ToLowerInvariant(c));
+        }
+        return builder.ToString();
     }
 
     private void AddGroup(string title, List<Result> results)
@@ -470,6 +519,9 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         _open = false;
         switch (result.Kind)
         {
+            case Kind.Command:
+                result.Run?.Invoke();
+                break;
             case Kind.Position when result.Position is { } c:
                 var target = c.ToVector3(GroundEstimate(c));
                 state.LookFromAbove(target, c.HeadingDirection);
@@ -521,3 +573,6 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private static string MapName(MapEntity entity) =>
         (entity.Interior ?? entity).Map?.FilePath is { } path ? Path.GetFileNameWithoutExtension(path) : "?";
 }
+
+// A command the search palette can run: its name, other words to find it by, its shortcut (shown on the right).
+internal sealed record PaletteCommand(string Icon, string Name, string Keywords, string Shortcut, Action Run, bool Enabled = true);
