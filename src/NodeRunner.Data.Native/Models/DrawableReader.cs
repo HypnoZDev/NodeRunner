@@ -98,6 +98,81 @@ public sealed class DrawableReader : IModelReader
         return models;
     }
 
+    // A geometry as stored in the file, for tools that change it: its detail level (0 = high), where its triangle indices
+    // are in the resource data, its vertex positions in the model (placed on their bone like the drawn meshes) and its
+    // indices.
+    public sealed record StoredGeometry(int Level, int IndicesAt, Vector3[] Positions, ushort[] Indices);
+
+    // Every geometry of every detail level of one model of the file (the drawable for .ydr and .yft, the one named
+    // nameHash for .ydd).
+    public static List<StoredGeometry> StoredGeometries(ReadOnlySpan<byte> data, ResourceHeader header, string extension, uint nameHash)
+    {
+        var res = Open(data, header);
+        var found = new List<StoredGeometry>();
+        int d;
+        Matrix4x4[]? pose;
+        switch (extension.ToLowerInvariant())
+        {
+            case ".ydr":
+                d = 0;
+                pose = SkeletonPose(res, 0);
+                break;
+            case ".yft":
+                d = Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
+                pose = FragmentPose(res) ?? SkeletonPose(res, d);
+                break;
+            case ".ydd":
+                int hashCount = res.UInt16(0x28);
+                int drawableCount = res.UInt16(0x38);
+                int hashes = res.ResolveArray(res.UInt64(0x20), hashCount, 4, "noms des modèles");
+                int pointers = res.ResolveArray(res.UInt64(0x30), drawableCount, 8, "modèles");
+                d = -1;
+                for (int i = 0; i < hashCount && i < drawableCount; i++)
+                {
+                    if (res.UInt32(hashes + i * 4) == nameHash)
+                        d = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
+                }
+                pose = SkeletonPose(res, d);
+                break;
+            default:
+                return found;
+        }
+        if (d < 0 || (res.UInt64(d + ModelsPointer) == 0 && res.UInt64(d + ModelsHigh) == 0))
+            return found;
+        for (int level = 0; level < 4; level++)
+        {
+            if (ModelList(res, res.UInt64(d + ModelsHigh + level * 8)) is not { } models)
+                continue;
+            foreach (int model in models)
+            {
+                if (model < 0)
+                    continue;
+                uint binding = res.UInt32(model + SkeletonBinding);
+                bool skinned = ((binding >> 8) & 0xFF) != 0;
+                int bone = (int)(binding >> 24);
+                var boneTransform = !skinned && pose is not null && bone < pose.Length ? pose[bone] : Matrix4x4.Identity;
+                int count = res.UInt16(model + GeometriesCount);
+                int geometries = res.ResolveArray(res.UInt64(model + GeometriesPointer), count, 8, "géométries");
+                for (int i = 0; i < count; i++)
+                {
+                    int geometry = Block(res, res.UInt64(geometries + i * 8), GeometryLength);
+                    if (geometry < 0 || Buffers(res, geometry) is not { } buffers)
+                        continue;
+                    var (declaration, vertexAt, vertexLength, vertexCount, indicesAt, indexCount) = buffers;
+                    var vertexBytes = res.Bytes(vertexAt, vertexLength);
+                    var positions = new Vector3[vertexCount];
+                    for (int v = 0; v < vertexCount; v++)
+                        positions[v] = Vector3.Transform(Xyz(declaration.Read(vertexBytes, v * declaration.Stride, PositionComponent)), boneTransform);
+                    var indices = new ushort[indexCount - indexCount % 3];
+                    for (int k = 0; k < indices.Length; k++)
+                        indices[k] = res.UInt16(indicesAt + k * 2);
+                    found.Add(new StoredGeometry(level, indicesAt, positions, indices));
+                }
+            }
+        }
+        return found;
+    }
+
     // Versions of GTA V Enhanced (.ydr / .ydd and .yft; 165 and 162 in the original release).
     public const int EnhancedDrawableVersion = 159;
     public const int EnhancedFragmentVersion = 171;
@@ -422,7 +497,11 @@ public sealed class DrawableReader : IModelReader
     private const int TexCoordComponent = 6;
     private const int SecondTexCoordComponent = 7;
 
-    private static ModelMesh? ConvertGeometry(ResourceData res, int g, Shader? shader, List<Shader?> shaders)
+    // Where a geometry's vertices and indices are in the data, null when it has nothing to draw.
+    private readonly record struct GeometryBuffers(VertexDeclaration Declaration, int VertexAt, int VertexLength, int VertexCount,
+        int IndicesAt, int IndexCount);
+
+    private static GeometryBuffers? Buffers(ResourceData res, int g)
     {
         // Vertex buffer: 0x08 stride, 0x10 data, 0x18 count, 0x20 second copy of the data, 0x30 declaration.
         // Enhanced: 0x08 count, 0x0C stride, 0x18 data, 0x38 declaration.
@@ -443,7 +522,8 @@ public sealed class DrawableReader : IModelReader
         var declaration = enhanced
             ? VertexDeclaration.Enhanced(res, declarationOffset, bufferStride)
             : VertexDeclaration.Original(res.UInt32(declarationOffset), res.UInt16(declarationOffset + 4), res.UInt64(declarationOffset + 8));
-        ReadOnlySpan<byte> bytes = count * bufferStride == 0 ? [] : res.Bytes(res.ResolveArray(dataPointer, (long)count * bufferStride, 1, "sommets"), count * bufferStride);
+        int vertexLength = count * bufferStride;
+        int vertexAt = vertexLength == 0 ? 0 : res.ResolveArray(dataPointer, vertexLength, 1, "sommets");
 
         // Index buffer: 0x08 count, 0x10 indices (16 bits); Enhanced: indices at 0x18.
         int indexBuffer = Block(res, res.UInt64(g + 0x38), enhanced ? 0x40 : 0x60);
@@ -453,7 +533,21 @@ public sealed class DrawableReader : IModelReader
         ulong indicesPointer = res.UInt64(indexBuffer + (enhanced ? 0x18 : 0x10));
         if (indexCount == 0 || indicesPointer == 0)
             return null;
-        ReadOnlySpan<byte> indexBytes = res.Bytes(res.ResolveArray(indicesPointer, indexCount, 2, "indices"), indexCount * 2);
+        int indicesAt = res.ResolveArray(indicesPointer, indexCount, 2, "indices");
+
+        int stride = declaration.Stride;
+        if (count == 0 || stride == 0 || (long)count * stride > vertexLength)
+            return null;
+        return new GeometryBuffers(declaration, vertexAt, vertexLength, count, indicesAt, indexCount);
+    }
+
+    private static ModelMesh? ConvertGeometry(ResourceData res, int g, Shader? shader, List<Shader?> shaders)
+    {
+        if (Buffers(res, g) is not { } found)
+            return null;
+        var (declaration, vertexAt, vertexLength, count, indicesAt, indexCount) = found;
+        ReadOnlySpan<byte> bytes = res.Bytes(vertexAt, vertexLength);
+        ReadOnlySpan<byte> indexBytes = res.Bytes(indicesAt, indexCount * 2);
 
         if (shader is not null && HiddenShaders.Contains(shader.Name))
             return null;
@@ -463,8 +557,6 @@ public sealed class DrawableReader : IModelReader
             return null;
 
         int stride = declaration.Stride;
-        if (count == 0 || stride == 0 || (long)count * stride > bytes.Length)
-            return null;
 
         var positions = new Vector3[count];
         var normals = new Vector3[count];

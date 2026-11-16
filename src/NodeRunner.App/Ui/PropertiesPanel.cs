@@ -82,6 +82,10 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                 DrawPlacement(entity, library, names);
             if (!Simple && Widgets.Section(L("Fichiers"), "files"))
                 DrawFiles(entity, library, names);
+            if (state.PartTool is { } partTool && partTool.Entity != entity)
+                state.PartTool = null;
+            if (!Simple && Widgets.Section(L("Morceaux du modèle"), "model_parts"))
+                DrawModelParts(entity, library);
             if (!Simple && Doors.IsDoor(names.TryGet(entity.ArchetypeHash)) && library.GetArchetype(entity.ArchetypeHash) is { } doorType
                 && Widgets.Section(L("Porte"), "door"))
                 DrawDoor(entity, doorType, names);
@@ -274,6 +278,49 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
     }
 
     private (MapEntity Entity, int Structure, int Revision, MapLibrary Library, List<MapEntity> Doors)? _doors;
+
+    // Removing a piece of the object's model (a logo, a sign) without leaving NodeRunner.
+    private void DrawModelParts(MapEntity entity, MapLibrary library)
+    {
+        float width = ImGui.GetContentRegionAvail().X;
+        if (state.PartTool is not { } tool)
+        {
+            if (Widgets.Button(L($"{Icons.Trash}  Retirer un morceau du modèle..."),
+                    L("Pour enlever un logo, une affiche, un objet dessiné dans le modèle d'une pièce ou d'un bâtiment : ")
+                    + L("cliquez ensuite sur le morceau dans la vue 3D. Le fichier du modèle est réécrit sans ce morceau, ")
+                    + L("dans le dossier stream du projet. Toutes les copies de cet objet changent."), width))
+            {
+                var (opened, error) = ModelPartTool.Open(entity, state.World);
+                if (opened is null)
+                    state.Notify(error ?? L("Modèle 3D introuvable."), warning: true);
+                else
+                {
+                    state.PartTool = opened;
+                    state.Notify(L("Cliquez sur le morceau à retirer dans la vue 3D (Ctrl+clic pour en ajouter un autre, Échap pour arrêter)."));
+                }
+            }
+            if (library.GetArchetype(entity.ArchetypeHash) is { } type && state.World.Models?.Locate(type) is { } location
+                && ModelPartTool.ChangedFile(state, location.Path) is not null
+                && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
+                    L("Annule tous les morceaux retirés de ce modèle (le fichier d'avant est remis)."), width))
+                state.Notify(ModelPartTool.Restore(state, location.Path));
+            return;
+        }
+        Widgets.Hint(tool.SelectedCount == 0
+            ? L("Cliquez sur le morceau à retirer dans la vue 3D. Ctrl+clic : en ajouter ou en retirer un autre. Échap : arrêter.")
+            : L($"Morceau choisi : {tool.SelectedCount} triangles (en rouge). Ctrl+clic pour en ajouter ou en retirer un autre."), wrap: true);
+        if (tool.SelectedCount > 0 && Widgets.Button(L($"{Icons.Trash}  Retirer ce morceau"),
+                L("Réécrit le fichier du modèle sans ces triangles (dans le dossier stream du projet), puis recharge la carte. ")
+                + L("Le bouton « Remettre le modèle d'origine » annule."), width))
+        {
+            var (done, message) = tool.Apply(state);
+            state.Notify(message, warning: !done);
+            if (done)
+                state.PartTool = null;
+        }
+        if (Widgets.Button(L("Arrêter"), L("Quitte le choix du morceau sans rien changer (Échap)."), width))
+            state.PartTool = null;
+    }
 
     // Selects the doors of the selected building or interior, ready for Suppr.
     private void DrawDoor(MapEntity entity, Archetype archetype, HashNames names)

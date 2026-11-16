@@ -507,6 +507,9 @@ internal sealed class AppState
 
     public CollisionQuery CollisionQuery { get; } = new();
 
+    // While a piece of a model is being picked for removal: clicks in the 3D view go to it.
+    public ModelPartTool? PartTool { get; set; }
+
     // Doors opened in the 3D view (display only).
     public DoorAnimator OpenDoors { get; } = new();
 

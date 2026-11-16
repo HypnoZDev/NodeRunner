@@ -867,6 +867,11 @@ internal sealed unsafe partial class MainForm : Form
         _surface.KeyDown += (_, e) =>
         {
             // Escape during a drag puts the object back (TransformGizmo) instead of deselecting.
+            if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.PartTool is not null)
+            {
+                _state.PartTool = null;
+                return;
+            }
             if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && !_ui.IsGizmoDragging)
             {
                 _state.Select(null);
@@ -930,7 +935,7 @@ internal sealed unsafe partial class MainForm : Form
         if (_doorClick is not { } click || _modelRenderer is null || _pickBuffer is null)
             return;
         _doorClick = null;
-        if (!_state.IsGta4 && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
+        if (!_state.IsGta4 && _state.PartTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
         {
             var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
             if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } door
@@ -953,6 +958,21 @@ internal sealed unsafe partial class MainForm : Form
             return;
 
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
+        // Picking a piece of a model: the click goes to the tool.
+        if (_state.PartTool is { } partTool && !_state.IsGta4)
+        {
+            if (Matrix4x4.Invert(viewProjection, out var inverse))
+            {
+                float cx = (click.X - scene.X + 0.5f) / scene.Width * 2f - 1f, cy = 1f - (click.Y - scene.Y + 0.5f) / scene.Height * 2f;
+                var near = Vector4.Transform(new Vector4(cx, cy, 0f, 1f), inverse);
+                var far = Vector4.Transform(new Vector4(cx, cy, 1f, 1f), inverse);
+                var from = new Vector3(near.X, near.Y, near.Z) / near.W;
+                var to = new Vector3(far.X, far.Y, far.Z) / far.W;
+                if (!partTool.Click(from, Vector3.Normalize(to - from), control))
+                    _state.Notify(L("Aucun morceau de ce modèle sous la souris."), warning: true);
+            }
+            return;
+        }
         // GTA IV: one object at a time, read only.
         if (_state.IsGta4)
         {
@@ -1179,6 +1199,13 @@ internal sealed unsafe partial class MainForm : Form
                 if (tuning is { HasTriggerBox: true })
                     lines.AddBox(tuning.TriggerBoxMin, tuning.TriggerBoxMax, transform, DoorTriggerColor);
             }
+        }
+        // The piece of the model about to be removed.
+        if (!_state.IsGta4 && _state.PartTool is { SelectedCount: > 0 } partTool)
+        {
+            var at = partTool.Entity.Transform;
+            foreach (var (from, to) in partTool.Edges())
+                lines.AddLine(Vector3.Transform(from, at), Vector3.Transform(to, at), DoorBlockedColor);
         }
         lines.Flush(viewProjection, _state.Camera.Position, onTop: true);
     }
