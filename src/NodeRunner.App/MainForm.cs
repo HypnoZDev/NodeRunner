@@ -363,6 +363,7 @@ internal sealed unsafe partial class MainForm : Form
 
         // The viewer's image first (it binds its own target), for the interface drawn below.
         _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
+        _state.WorkshopViewer.Surroundings = WorkshopSurroundings();
         _state.WorkshopViewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         _state.Thumbnails.Render(_modelRenderer!, imguiRenderer, graphics, _state.World);
         var scene = SceneViewport();

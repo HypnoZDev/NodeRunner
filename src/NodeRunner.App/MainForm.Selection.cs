@@ -145,7 +145,7 @@ internal sealed unsafe partial class MainForm
                 }
                 if (picked == _state.Selection)
                 {
-                    _state.WorkshopRequest = picked.ArchetypeHash;
+                    _state.WorkshopRequest = picked;
                     return;
                 }
             }

@@ -88,6 +88,11 @@ internal sealed class ModelViewer : IDisposable
     public Vector3 ModelOffset { get; private set; }
     public int HighlightedMesh { get; set; } = -1;
 
+    // Objects of the map drawn in grey around the model, placed in the model's own space (null: none).
+    public IReadOnlyList<(GpuModel Model, Matrix4x4 Transform)>? Surroundings { get; set; }
+
+    private static readonly Vector3 SurroundingsTint = new(0.55f);
+
     public Vector2 RequestedSize { get; set; }
     public IntPtr ImageId => _imageId;
 
@@ -257,6 +262,15 @@ internal sealed class ModelViewer : IDisposable
             renderer.Untextured = Shading == ViewerShading.Clay;
             renderer.Begin(ModelPass.Solid);
             renderer.Draw(model, world, viewProjection, Vector3.One);
+            if (Surroundings is { Count: > 0 } around && !capture)
+            {
+                // Grey and without textures: the map is there to place the model, not to be looked at.
+                bool untextured = renderer.Untextured;
+                renderer.Untextured = true;
+                foreach (var (other, transform) in around)
+                    renderer.Draw(other, transform * world, viewProjection, SurroundingsTint);
+                renderer.Untextured = untextured;
+            }
             renderer.Begin(ModelPass.Translucent);
             renderer.Draw(model, world, viewProjection, Vector3.One);
             if (Edges && Shading != ViewerShading.Wireframe)

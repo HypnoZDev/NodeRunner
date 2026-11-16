@@ -141,25 +141,29 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     public bool WorkshopChanged => _workshop is { ChangeCount: > 0 } && _workshopFor is not null && _workshopFor == state.WorkshopViewer.Item;
 
-    // The model of a map object type in the workshop tab.
-    public void OpenWorkshop(uint archetypeHash)
+    // The model of a map object in the workshop tab.
+    public void OpenWorkshop(MapEntity entity)
     {
         if (IsGta4)
             return;
-        if (Library?.GetArchetype(archetypeHash) is not { } archetype || ItemOf(archetype) is not { } item)
+        if (Library?.GetArchetype(entity.ArchetypeHash) is not { } archetype || ItemOf(archetype) is not { } item)
         {
             state.Notify(L("Modèle introuvable pour ce type (aucun fichier .ydr / .ydd / .yft de ce nom)"), warning: true);
             return;
         }
-        OpenWorkshop(item);
+        OpenWorkshop(item, entity);
     }
 
-    private void OpenWorkshop(ViewerItem item)
+    private void OpenWorkshop(ViewerItem item, MapEntity? entity = null)
     {
         state.WorkshopFront = true;
         var viewer = state.WorkshopViewer;
         if (state.WorkshopOpen && viewer.Item == item)
+        {
+            if (entity is not null && entity != state.WorkshopEntity)
+                SetWorkshopEntity(entity);
             return;
+        }
         if (WorkshopChanged)
         {
             state.Notify(L($"Enregistrez ou abandonnez d'abord les modifications de {viewer.Item!.Name} (onglet Atelier)."), warning: true);
@@ -168,7 +172,28 @@ internal sealed unsafe class ViewerPanel(AppState state)
         CloseWorkshop();
         viewer.Open(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
         state.WorkshopOpen = true;
+        SetWorkshopEntity(entity);
     }
+
+    // Other objects of the map placed where the model is (a fix laid over it, a copy): on the map they may hide parts
+    // of it, alone in the workshop they don't.
+    private List<string> _workshopCovers = [];
+
+    private void SetWorkshopEntity(MapEntity? entity)
+    {
+        state.WorkshopEntity = entity;
+        _workshopCovers = [];
+        if (entity is null || state.World.Maps is not { } maps)
+            return;
+        var at = entity.Position;
+        _workshopCovers = maps.EntitiesAround(new Vector2(at.X, at.Y), 2f)
+            .Where(e => e != entity && !e.IsDeleted && e.ArchetypeHash != entity.ArchetypeHash && Vector3.Distance(e.Position, at) < CoverDistance)
+            .Select(e => Names?.Describe(e.ArchetypeHash) ?? $"0x{e.ArchetypeHash:X8}")
+            .Distinct()
+            .ToList();
+    }
+
+    private const float CoverDistance = 0.5f; // Metres between the two objects' origins.
 
     // Closes the workshop tab; its changes not saved are dropped.
     public void CloseWorkshop()
@@ -183,6 +208,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         state.WorkshopViewer.Model.Close();
         state.WorkshopOpen = false;
         state.WorkshopShown = false;
+        state.WorkshopEntity = null;
+        _workshopCovers = [];
     }
 
     // Once per frame, before the viewer and the workshop are drawn: each view asks for its image again while shown.
@@ -209,6 +236,14 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.SameLine();
             if (ImGui.BeginChild("##workshop_tools", Vector2.Zero, ImGuiChildFlags.None))
             {
+                if (_workshopCovers.Count > 0)
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Warning);
+                    ImGui.TextWrapped(L($"{Icons.TriangleAlert}  Sur la carte, {string.Join(", ", _workshopCovers)} est posé au même endroit que ce modèle et peut en cacher une partie : ")
+                        + L("ce que vous voyez ici seul n'est pas forcément visible en jeu. Bouton « Carte autour » pour les voir ensemble."));
+                    ImGui.PopStyleColor();
+                    ImGui.Spacing();
+                }
                 if (Viewer.Item is { } item)
                     DrawWorkshopTab(item);
             }
@@ -619,6 +654,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (Widgets.IconButton(Icons.Sun, "viewer_light", L("Lumière : réglages"), active: !Viewer.LightFollowsCamera))
             ImGui.OpenPopup("##viewer_light_popup");
         DrawLightPopup();
+        if (_inWorkshop)
+        {
+            ImGui.SameLine(0, 2);
+            bool canShow = state.WorkshopEntity is not null;
+            if (Widgets.IconButton(Icons.Map, "workshop_map", canShow
+                    ? L("Carte autour : les objets voisins de la carte, en gris, à leur place autour du modèle")
+                    : L("Carte autour : seulement pour un modèle ouvert depuis un objet de la carte (double-clic, clic droit, Propriétés)"),
+                    enabled: canShow, active: canShow && state.WorkshopShowsMap))
+                state.WorkshopShowsMap = !state.WorkshopShowsMap;
+        }
         Widgets.ToolbarSeparator();
 
         if (Widgets.ToolbarButton(Icons.Camera, L("Vue"), L("Vues prédéfinies et champ de vision"), enabled))

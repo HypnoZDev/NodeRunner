@@ -536,8 +536,13 @@ internal sealed partial class AppState
     public bool WorkshopShown { get; set; }
     public bool WorkshopFront { get; set; }
 
-    // A map object type whose model is to open in the workshop.
-    public uint? WorkshopRequest { get; set; }
+    // A map object whose model is to open in the workshop.
+    public NodeRunner.Data.Maps.MapEntity? WorkshopRequest { get; set; }
+
+    // The map object the workshop's model was opened from (null: from the viewer), and whether the map around it is
+    // drawn in grey in the workshop.
+    public NodeRunner.Data.Maps.MapEntity? WorkshopEntity { get; set; }
+    public bool WorkshopShowsMap { get; set; }
 
     // While a piece of a model is being picked for removal: clicks in the 3D view go to it.
     public ModelPartTool? PartTool { get; set; }

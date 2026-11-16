@@ -301,7 +301,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             }
             if (Widgets.Button(L($"{Icons.Box}  Ouvrir dans l'atelier de modèle"),
                     L("Le modèle seul, en grand, dans un onglet Atelier à côté de la carte (aussi : double-clic sur l'objet)."), width))
-                state.WorkshopRequest = entity.ArchetypeHash;
+                state.WorkshopRequest = entity;
             if (library.GetArchetype(entity.ArchetypeHash) is { } type && state.World.Models?.Locate(type) is { } location
                 && ModelPartTool.ChangedFile(state, location.Path) is not null
                 && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),

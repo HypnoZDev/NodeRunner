@@ -354,6 +354,20 @@ internal sealed class ModelLayer : IDisposable
         DrawnTriangleCount = triangles;
     }
 
+    // The objects already loaded within radius of center, but except (the model workshop draws them around its model).
+    public List<(GpuModel Model, Matrix4x4 Transform)> LoadedAround(Vector3 center, float radius, MapEntity except)
+    {
+        var result = new List<(GpuModel, Matrix4x4)>();
+        foreach (var entity in _visible)
+        {
+            if (entity.Entity == except || entity.Entity.IsDeleted || entity.Slot is not { Loaded: true, Model: { } model }
+                || Vector3.Distance(entity.SphereCenter, center) - entity.SphereRadius > radius)
+                continue;
+            result.Add((model, entity.Transform));
+        }
+        return result;
+    }
+
     // Draws the objects around the camera into the sun's shadow images, also those off screen (their shadow may fall
     // in view).
     public void DrawShadows(ModelRenderer renderer, ShadowMaps shadows)

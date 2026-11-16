@@ -34,6 +34,21 @@ internal sealed unsafe partial class MainForm
         return SceneViewport().Contains(_surface.PointToClient(Cursor.Position));
     }
 
+    // The map's objects around the workshop's model, placed in the model's own space (null: not asked for).
+    private List<(GpuModel Model, Matrix4x4 Transform)>? WorkshopSurroundings()
+    {
+        if (!_state.WorkshopShown || !_state.WorkshopShowsMap || _state.WorkshopEntity is not { } entity
+            || !Matrix4x4.Invert(entity.Transform, out var toModel))
+            return null;
+        float radius = _state.WorkshopViewer.Radius * 2f + WorkshopMapRadius;
+        var around = _modelLayer.LoadedAround(entity.Position, radius, entity);
+        for (int i = 0; i < around.Count; i++)
+            around[i] = (around[i].Model, around[i].Transform * toModel);
+        return around;
+    }
+
+    private const float WorkshopMapRadius = 60f; // Metres around the model, beyond its own size.
+
     // Starts loading when a game folder is found or changed, then builds the GPU data once it is ready.
     private void LoadWorld() =>
         _state.World.Load(_state.IsGta4 ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);

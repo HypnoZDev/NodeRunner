@@ -235,7 +235,7 @@ internal sealed class MainUi
             if (ImGui.MenuItem(L($"{Icons.Box}  Voir le modèle dans la visionneuse")))
                 OpenInViewer(entity.ArchetypeHash);
             if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic")))
-                _state.WorkshopRequest = entity.ArchetypeHash;
+                _state.WorkshopRequest = entity;
             ImGui.Separator();
             if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"), "Ctrl+C"))
                 _state.CopySelection();
