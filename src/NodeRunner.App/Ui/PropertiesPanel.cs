@@ -452,11 +452,17 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             if (Widgets.Link($"{names.Describe(interior.ArchetypeHash)}##interior", L("Sélectionner l'intérieur")))
                 state.Select(interior);
             if (entity.Definition is not null && library.GetArchetype(interior.ArchetypeHash) is { Kind: ArchetypeKind.Interior } mlo)
+            {
                 RoomChoice(entity, interior, mlo);
-            else if (entity.InteriorRoom >= 0)
-                Widgets.PropertyText(L("Salle"), entity.InteriorRoom == 0 ? L("0 (limbo, vue de l'extérieur)") : $"{entity.InteriorRoom}");
-            if (entity.InteriorPortal >= 0)
-                Widgets.PropertyText(L("Attaché au portail"), $"{entity.InteriorPortal}");
+                PortalChoice(entity, mlo);
+            }
+            else
+            {
+                if (entity.InteriorRoom >= 0)
+                    Widgets.PropertyText(L("Salle"), entity.InteriorRoom == 0 ? L("0 (limbo, vue de l'extérieur)") : $"{entity.InteriorRoom}");
+                if (entity.InteriorPortal >= 0)
+                    Widgets.PropertyText(L("Attaché au portail"), $"{entity.InteriorPortal}");
+            }
             if (interior.EntitySets.Count > 0)
                 EntitySetChoice(entity, interior, names);
         }

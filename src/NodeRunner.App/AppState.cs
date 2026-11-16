@@ -424,6 +424,28 @@ internal sealed partial class AppState
         Notify(L($"{what} : dans {target}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S)."));
     }
 
+    // Attaches the selected objects of the main selection's interior to a portal (in no room, as in the game's files),
+    // or takes them off it (-1: back to the room around them), in every copy of the interior.
+    public void SetSelectionPortal(int portal)
+    {
+        if (World.Maps is not { } library || Selection?.Interior is not { } instance
+            || library.GetArchetype(instance.ArchetypeHash) is not { Kind: Data.Maps.ArchetypeKind.Interior } archetype
+            || portal < -1 || portal >= archetype.InteriorPortals.Count)
+            return;
+        var objects = SelectedEntities.Where(e => e.Interior == instance && e.Definition is not null && e.InteriorPortal != portal).ToList();
+        if (objects.Count == 0)
+            return;
+        var places = objects.Select(e => portal >= 0 ? (-1, portal)
+            : (Math.Max(0, Adding.RoomAt(instance, archetype, e.Position + new System.Numerics.Vector3(0, 0, RoomProbeHeight))), -1)).ToList();
+        string what = objects.Count == 1 ? World.Names?.Describe(objects[0].ArchetypeHash) ?? "l'objet" : $"{objects.Count} objets";
+        var edit = EntityPortalEdit.Apply(library, objects, places, portal >= 0 ? L($"Rattacher {what} au portail {portal}") : L($"Détacher {what} de son portail"));
+        History.Add(edit);
+        SelectAll(edit.Selection);
+        Notify(portal >= 0
+            ? L($"{what} : rattaché(s) au portail {portal}, dans toutes les copies de l'intérieur (enregistré dans son .ytyp au Ctrl+S).")
+            : L($"{what} : détaché(s) du portail, rangé(s) dans la salle autour."));
+    }
+
     // Gives the selected objects another type (model), same place; objects of interiors are left out.
     public void SetSelectionArchetype(uint archetypeHash)
     {

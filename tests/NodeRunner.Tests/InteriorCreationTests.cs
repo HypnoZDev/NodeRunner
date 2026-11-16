@@ -99,6 +99,32 @@ public class InteriorCreationTests
     }
 
     [Fact]
+    public void A_door_attached_to_its_portal_is_in_no_room()
+    {
+        var (library, _, edit) = Created();
+        var archetype = library.GetArchetype(edit.Interior.ArchetypeHash)!;
+        var door = library.AddToInterior(edit.Interior, new MapEntity
+        {
+            ArchetypeHash = 777, Position = new Vector3(0.6f, -3, 0), StoredRotation = Quaternion.Identity, InteriorRoom = 1,
+            LodDistance = 50, LodLevel = LodLevel.OrphanHd,
+        });
+
+        var attach = EntityPortalEdit.Apply(library, [door], [(-1, 0)], "attach");
+        Assert.Equal((-1, 0), (door.InteriorRoom, door.InteriorPortal));
+        var written = new YtypWriter().Build(YtypWriterTests.Sample(), Name, [archetype], null);
+        var read = new YtypReader().Read(written.Content).Archetypes.Single().InteriorEntities.Single();
+        Assert.Equal((-1, 0), (read.InteriorRoom, read.InteriorPortal));
+
+        // Online: the same change on the other computer.
+        var codecs = EditCodecs.ForEditor();
+        var message = codecs.Encode(attach, library);
+        attach.Undo();
+        Assert.Equal((1, -1), (door.InteriorRoom, door.InteriorPortal));
+        Assert.IsType<EntityPortalEdit>(codecs.Apply(message, new EditContext { Library = library }));
+        Assert.Equal((-1, 0), (door.InteriorRoom, door.InteriorPortal));
+    }
+
+    [Fact]
     public void Places_the_interior_in_the_project_map()
     {
         var (library, map, edit) = Created();

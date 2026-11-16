@@ -131,6 +131,54 @@ public sealed class EntityRoomEdit : IEdit
     }
 }
 
+// Objects of an interior attached to a portal (a door: hides the rooms behind it when closed) or taken off it, in every
+// instance of the interior. Attached, an object is in no room, as in the game's files; taken off, it goes to the room
+// given.
+public sealed class EntityPortalEdit : IEdit
+{
+    private readonly MapLibrary _library;
+    private readonly MapEntity[] _placed;
+    private readonly (int Room, int Portal)[] _before;
+    private readonly (int Room, int Portal)[] _after;
+
+    private EntityPortalEdit(MapLibrary library, MapEntity[] placed, (int, int)[] after, string description)
+    {
+        _library = library;
+        _placed = placed;
+        _before = [.. placed.Select(p => (p.InteriorRoom, p.InteriorPortal))];
+        _after = after;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => _placed[^1];
+    public IEnumerable<MapEntity> Entities => _placed;
+    public IReadOnlyList<MapEntity> Selection => _placed;
+
+    public IReadOnlyList<(int Room, int Portal)> Places => _after;
+
+    public static EntityPortalEdit Apply(MapLibrary library, IReadOnlyList<MapEntity> placed, IReadOnlyList<(int Room, int Portal)> places, string description)
+    {
+        if (placed.Count == 0 || places.Count != placed.Count)
+            throw new ArgumentException("One place per object expected.", nameof(places));
+        var edit = new EntityPortalEdit(library, [.. placed], [.. places], description);
+        edit.Redo();
+        return edit;
+    }
+
+    public void Undo()
+    {
+        for (int i = _placed.Length - 1; i >= 0; i--)
+            _library.SetEntityPlace(_placed[i], _before[i].Room, _before[i].Portal);
+    }
+
+    public void Redo()
+    {
+        for (int i = 0; i < _placed.Length; i++)
+            _library.SetEntityPlace(_placed[i], _after[i].Room, _after[i].Portal);
+    }
+}
+
 // A room or portal added to an interior or removed from it (objects and other portals renumbered), in every instance.
 public sealed class InteriorLayoutEdit(MapLibrary library, MapEntity interior, InteriorLayout before, InteriorLayout after, string description,
     bool isPortal, int index, bool added) : IEdit, IInteriorEdit

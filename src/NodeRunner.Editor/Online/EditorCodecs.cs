@@ -139,6 +139,28 @@ internal sealed class EntityRoomCodec : EditCodec<EntityRoomEdit>
     }
 }
 
+internal sealed class EntityPortalCodec : EditCodec<EntityPortalEdit>
+{
+    public override string Tag => "entity-portal";
+
+    protected override void Write(EntityPortalEdit edit, EditWriter w)
+    {
+        w.WriteEntities(edit.Selection);
+        w.WriteList(edit.Places, p =>
+        {
+            w.Write(p.Room);
+            w.Write(p.Portal);
+        });
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var placed = r.ReadEntities();
+        var places = r.ReadList(() => (r.ReadInt(), r.ReadInt()));
+        return EntityPortalEdit.Apply(r.Context.Library, placed, places, description);
+    }
+}
+
 internal sealed class ArchetypeCodec : EditCodec<ArchetypeEdit>
 {
     public override string Tag => "archetype";

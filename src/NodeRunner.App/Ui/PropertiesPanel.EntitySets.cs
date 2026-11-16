@@ -27,7 +27,8 @@ internal sealed partial class PropertiesPanel
         }
 
         int around = Adding.RoomAt(interior, mlo, entity.Position + new Vector3(0, 0, 0.3f));
-        if (around > 0 && around != entity.InteriorRoom)
+        // A door attached to a portal is in no room, as in the game's files.
+        if (around > 0 && around != entity.InteriorRoom && entity.InteriorPortal < 0)
         {
             Widgets.Property("");
             ImGui.TextColored(UiTheme.Warning, L($"{Icons.TriangleAlert} Posé dans {RoomLabel(mlo, around)}"));
@@ -35,6 +36,25 @@ internal sealed partial class PropertiesPanel
                 ImGui.SetTooltip(L("L'objet est dans la boîte d'une autre salle : en jeu, il peut disparaître. Choisir « Automatique » ")
                     + L("dans la liste pour le ranger dans la salle où il se trouve."));
         }
+    }
+
+    // The portal an object of an interior is attached to (a door: the rooms behind are hidden while it is closed, with
+    // the portal's setting "Se ferme avec la porte").
+    private void PortalChoice(MapEntity entity, Archetype mlo)
+    {
+        Widgets.Property(L("Attaché au portail"), L("Pour une porte : la rattacher au portail de son ouverture. Avec le réglage du portail ")
+            + L("« Se ferme avec la porte », le jeu ne dessine pas les salles derrière la porte fermée. ")
+            + L("Rattachée, la porte n'est dans aucune salle, comme dans les fichiers du jeu."));
+        string Label(int p) => p < 0 ? L("Aucun") : L($"Portail {p} ({RoomLabel(mlo, mlo.InteriorPortals[p].RoomFrom)} → {RoomLabel(mlo, mlo.InteriorPortals[p].RoomTo)})");
+        int current = entity.InteriorPortal < mlo.InteriorPortals.Count ? entity.InteriorPortal : -1;
+        if (!ImGui.BeginCombo("##entity_portal", Label(current), ImGuiComboFlags.HeightLarge))
+            return;
+        for (int p = -1; p < mlo.InteriorPortals.Count; p++)
+        {
+            if (ImGui.Selectable($"{Label(p)}##portal{p}", p == current) && p != current)
+                state.SetSelectionPortal(p);
+        }
+        ImGui.EndCombo();
     }
 
     // The entity set holding an object of an interior, to change: the object goes into another set or out of its set.

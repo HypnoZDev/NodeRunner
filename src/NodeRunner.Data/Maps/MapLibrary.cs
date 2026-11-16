@@ -241,6 +241,22 @@ public sealed class MapLibrary
         RoomVersion++;
     }
 
+    // Puts an object of an interior in a room and attaches it to a portal (-1 = none for both), in every instance. In
+    // the game's files a door attached to a portal is in no room.
+    public void SetEntityPlace(MapEntity placed, int room, int portal)
+    {
+        var definition = placed.Definition ?? throw new ArgumentException("Not an object of an interior.", nameof(placed));
+        if (placed.Interior is not { } instance)
+            throw new ArgumentException("Not an object of an interior.", nameof(placed));
+        var archetype = InteriorArchetype(instance.ArchetypeHash);
+        if (room < -1 || room >= archetype.InteriorRooms.Count)
+            throw new ArgumentOutOfRangeException(nameof(room));
+        if (portal < -1 || portal >= archetype.InteriorPortals.Count)
+            throw new ArgumentOutOfRangeException(nameof(portal));
+        definition.SetInteriorPlace(room, portal);
+        RoomVersion++;
+    }
+
     // Rooms, portals and the room and portal of each object of an interior (to undo adding or removing one).
     public InteriorLayout GetLayout(uint interiorHash)
     {
