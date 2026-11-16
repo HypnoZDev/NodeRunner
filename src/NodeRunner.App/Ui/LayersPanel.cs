@@ -84,6 +84,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         {
             foreach (var category in ScenarioLayer.Categories)
                 LayerRow(ScenarioLayer.LayerName(category), ScenarioLayer.Color(category), ScenarioLayer.Label(category), Widgets.Count(scenarioLayer.Count(category)));
+            DrawScenarioLife();
         }
 
         if (LayerSection(L("Navmesh"), "navmesh", NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer)))
@@ -169,6 +170,28 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
 
         if (Widgets.Section(L("Cartes de mission (scripts)"), "scripted", defaultOpen: false))
             DrawScriptedMaps();
+    }
+
+    private void DrawScenarioLife()
+    {
+        bool life = state.Settings.ScenarioLife;
+        if (ImGui.Checkbox(L("Simulation de vie"), ref life))
+        {
+            state.Settings.ScenarioLife = life;
+            state.SaveSettings();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(L($"Pose un PNJ, un animal ou un véhicule immobile sur chaque point que le jeu utiliserait à l'heure affichée, à moins de {ScenarioLife.Radius:0} m ")
+                + L($"(horaires, probabilité, solo ou Online selon la version de la carte ; {ScenarioLife.MaxShown} au plus, les plus proches). ")
+                + L("Le jeu tire au sort à chaque fois : ce n'est qu'un exemple. Changez l'heure pour voir la ville vivre."));
+        if (!life)
+            return;
+        var simulation = state.ScenarioLife;
+        int hour = (int)state.Settings.TimeOfDay % 24;
+        ImGui.SameLine();
+        Widgets.Hint(simulation.IsLoading
+            ? L($"{simulation.Shown} / {simulation.Active} à {hour} h (chargement...)")
+            : L($"{simulation.Shown} à {hour} h"));
     }
 
     private bool LayerSection(string title, string id, IEnumerable<string> layers, bool defaultOpen = true)

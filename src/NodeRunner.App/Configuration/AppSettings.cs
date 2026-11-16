@@ -107,6 +107,9 @@ public sealed class AppSettings
     // Objects hidden behind the occluders are not drawn, as in the game.
     public bool OcclusionPreview { get; set; }
 
+    // Peds, animals and vehicles shown on the scenario points the game would use at the hour shown.
+    public bool ScenarioLife { get; set; }
+
     public int Anisotropy { get; set; } = 8;
 
     // Save folder of the versions before projects: turned into a project at start-up (MigrateSaveFolder), then

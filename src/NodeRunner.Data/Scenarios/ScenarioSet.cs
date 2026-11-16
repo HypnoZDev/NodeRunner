@@ -41,6 +41,12 @@ public sealed class ScenarioSet
 
     public uint TypeVehicleModelSet(uint typeHash) => _typeModelSets.GetValueOrDefault(typeHash).Vehicles;
 
+    // Chance from 0 to 1 that the game uses a point of this type when the point leaves it to its type (scenarios.meta:
+    // SpawnProbability).
+    private Dictionary<uint, float> _typeProbabilities = new();
+
+    public float TypeSpawnProbability(uint typeHash) => _typeProbabilities.GetValueOrDefault(typeHash, 1f);
+
     public void SetValues(ScenarioPoint point, ScenarioValues values)
     {
         point.Values = values;
@@ -115,7 +121,7 @@ public sealed class ScenarioSet
     // name) put in their place. Unreadable files are reported in errors.
     public ScenarioSet WithSavedRegions(IGameFileSystem files, IScenarioRegionReader reader, IReadOnlyDictionary<string, byte[]> saved, List<string> errors)
     {
-        var set = new ScenarioSet { _typeNames = _typeNames, _typeModelSets = _typeModelSets };
+        var set = new ScenarioSet { _typeNames = _typeNames, _typeModelSets = _typeModelSets, _typeProbabilities = _typeProbabilities };
         set.Errors.AddRange(Errors);
         foreach (var region in Regions)
         {
@@ -167,7 +173,7 @@ public sealed class ScenarioSet
     public static ScenarioSet Load(IGameFileSystem files, IScenarioRegionReader reader, IProgress<string>? progress = null)
     {
         var set = new ScenarioSet();
-        set._typeNames = LoadTypeNames(files, set.Errors, set._typeModelSets);
+        set._typeNames = LoadTypeNames(files, set.Errors, set._typeModelSets, set._typeProbabilities);
 
         var chosen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files.EnumerateFiles(".ymt"))
@@ -205,7 +211,7 @@ public sealed class ScenarioSet
     }
 
     private static Dictionary<uint, string> LoadTypeNames(IGameFileSystem files, List<string> errors,
-        Dictionary<uint, (uint Peds, uint Vehicles)> typeModelSets)
+        Dictionary<uint, (uint Peds, uint Vehicles)> typeModelSets, Dictionary<uint, float> typeProbabilities)
     {
         var names = new Dictionary<uint, string>();
         foreach (var path in ScenarioInfoFiles)
@@ -247,6 +253,10 @@ public sealed class ScenarioSet
                             ? (known.Peds == 0 ? Joaat.Hash(set) : known.Peds, known.Vehicles)
                             : (known.Peds, known.Vehicles == 0 ? Joaat.Hash(set) : known.Vehicles);
                     }
+                    if (xml.Name == "SpawnProbability" && lastName.TryGetValue(xml.Depth, out uint spawnType)
+                        && float.TryParse(xml.GetAttribute("value"), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float probability))
+                        typeProbabilities.TryAdd(spawnType, Math.Clamp(probability, 0f, 1f));
                     xml.Read();
                 }
             }

@@ -215,6 +215,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Viewer.Dispose();
         _state.SpotPreview.Dispose();
         _state.ScenarioPreview.Dispose();
+        _state.ScenarioLife.Dispose();
         _modelRenderer?.Dispose();
         _modelRenderer = null;
         _skyRenderer?.Dispose();

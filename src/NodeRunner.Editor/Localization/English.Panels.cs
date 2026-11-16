@@ -292,5 +292,14 @@ public static partial class English
         ("Véhicules garés (car generators)", "Parked vehicles (car generators)"),
         ("Places de véhicules", "Vehicle spots"),
         ("Places à moins de {0} m où le jeu peut garer un véhicule ; la flèche montre l'avant. Cliquez sur une place pour voir ses détails.", "Spots within {0} m where the game may park a vehicle; the arrow shows the front. Click a spot to see its details."),
+        ("Simulation de vie", "Life simulation"),
+        ("Pose un PNJ, un animal ou un véhicule immobile sur chaque point que le jeu utiliserait à l'heure affichée, à moins de {0} m ",
+            "Puts a still ped, animal or vehicle on each point the game would use at the hour shown, within {0} m "),
+        ("(horaires, probabilité, solo ou Online selon la version de la carte ; {0} au plus, les plus proches). ",
+            "(hours, probability, story mode or Online depending on the map version; at most {0}, the nearest). "),
+        ("Le jeu tire au sort à chaque fois : ce n'est qu'un exemple. Changez l'heure pour voir la ville vivre.",
+            "The game draws lots every time: this is only an example. Change the hour to see the city live."),
+        ("{0} / {1} à {2} h (chargement...)", "{0} / {1} at {2}:00 (loading...)"),
+        ("{0} à {1} h", "{0} at {1}:00"),
     ];
 }
