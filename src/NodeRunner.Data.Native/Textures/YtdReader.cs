@@ -39,6 +39,9 @@ public sealed class YtdReader : ITextureReader
 
     // Texture (grcTexturePC), 0x90 bytes.
     private const int NamePointer = 0x28;
+    private const int Unknown32Offset = 0x32;
+    private const int UsageOffset = 0x40;
+    private const int ExtraFlagsOffset = 0x48;
     private const int WidthOffset = 0x50;
     private const int HeightOffset = 0x52;
     private const int StrideOffset = 0x56;
@@ -80,6 +83,47 @@ public sealed class YtdReader : ITextureReader
         var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags)) { Enhanced = header.Version == EnhancedVersion };
         return LocateDictionary(res, 0);
     }
+
+    // The whole .ytd written again, with the texture of the same name hash replaced (its size and levels may differ).
+    // Original release only. Returns the complete file.
+    public static byte[] Rebuild(byte[] data, ResourceHeader header, TextureData replacement)
+    {
+        if (header.Version == EnhancedVersion)
+            throw new InvalidDataException("Les dictionnaires de textures de GTA V Enhanced ne peuvent pas encore être réécrits.");
+        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags));
+        int count = res.UInt16(TexturesCount);
+        int list = res.ResolveArray(res.UInt64(TexturesPointer), count, 8, "liste des textures");
+        var textures = new List<XmlTexture>();
+        bool replaced = false;
+        for (int i = 0; i < count; i++)
+        {
+            ulong pointer = res.UInt64(list + i * 8);
+            if (pointer == 0)
+                continue;
+            int t = res.ResolveArray(pointer, 1, TextureLength, "texture");
+            // Every texture is kept: one that cannot be read whole would be lost.
+            if (LocateTexture(res, t) is not { Packed: true } stored || res.Text(res.UInt64(t + NamePointer), "nom de texture") is not { } name)
+                throw new InvalidDataException("Ce dictionnaire contient une texture que NodeRunner ne sait pas réécrire.");
+            bool same = stored.NameHash == replacement.NameHash;
+            replaced |= same;
+            textures.Add(new XmlTexture
+            {
+                Data = Named(same ? replacement : stored.Read(data), name),
+                Unknown32 = res.UInt16(t + Unknown32Offset),
+                UsageData = res.UInt32(t + UsageOffset),
+                ExtraFlags = res.UInt32(t + ExtraFlagsOffset),
+            });
+        }
+        if (!replaced)
+            throw new InvalidDataException($"Texture {replacement.Name} absente du dictionnaire.");
+        return YtdBuilder.Build(textures);
+    }
+
+    // The texture under the name written in the file (stored names are lower case).
+    private static TextureData Named(TextureData t, string name) => new()
+    {
+        NameHash = t.NameHash, Name = name, Width = t.Width, Height = t.Height, MipLevels = t.MipLevels, Format = t.Format, Data = t.Data,
+    };
 
     internal static List<StoredTexture> LocateDictionary(ResourceData res, int offset)
     {

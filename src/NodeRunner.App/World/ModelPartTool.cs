@@ -4,6 +4,7 @@ using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Models;
 using NodeRunner.Data.Native.Textures;
+using NodeRunner.Data.Textures;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
@@ -254,6 +255,28 @@ internal sealed class ModelPartTool
             return error;
         var before = texture.Write(content, pixels);
         _changes.Add(new Change(ChangeKind.Texture, Same(source, Path) ? Path : source, () => texture.Restore(content, before)));
+        return null;
+    }
+
+    // Gives a texture of a .ytd another size (from TextureImport.Resize): the dictionary is written again whole, in
+    // memory; the file is written by Save. Returns an error message, or null.
+    public string? ResizeTexture(WorldLoader world, string source, TextureData resized)
+    {
+        if (Same(source, Path))
+            return L("Cette texture est dans le fichier du modèle : sa taille ne peut pas encore changer (seulement celles des .ytd).");
+        if (FindTexture(world, source, resized.NameHash, out var error) is null)
+            return error;
+        var old = _dictionaries[source];
+        try
+        {
+            var (header, content) = Data.Native.Resources.ResourceFile.Read(YtdReader.Rebuild(old.Content, old.Header, resized));
+            _dictionaries[source] = (header, content);
+        }
+        catch (InvalidDataException ex)
+        {
+            return ex.Message;
+        }
+        _changes.Add(new Change(ChangeKind.Texture, source, () => _dictionaries[source] = old));
         return null;
     }
 

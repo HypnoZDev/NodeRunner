@@ -41,6 +41,46 @@ internal static class TextureImport
         return (TextureCodec.Encode(rgba, target.Width, target.Height, target.Format, target.MipLevels), note);
     }
 
+    // The texture at another size (same format; levels follow the size: one more each time it doubles).
+    public static TextureData Resize(TextureData texture, int width, int height)
+    {
+        if (!TextureCodec.CanDecode(texture.Format))
+            throw new InvalidDataException(L($"Les textures {texture.Format} ne peuvent pas encore changer de taille."));
+        var rgba = Resize(TextureCodec.Decode(texture), texture.Width, texture.Height, width, height);
+        int levels = LevelsFor(texture, width, height);
+        return new TextureData
+        {
+            NameHash = texture.NameHash,
+            Name = texture.Name,
+            Width = width,
+            Height = height,
+            MipLevels = levels,
+            Format = texture.Format,
+            Data = TextureCodec.Encode(rgba, width, height, texture.Format, levels),
+        };
+    }
+
+    public static int LevelsFor(TextureData texture, int width, int height)
+    {
+        int steps = (int)MathF.Round(MathF.Log2((float)width / texture.Width));
+        // Compressed levels stop at 4 pixels (one block), as in the game's files.
+        int smallest = TextureLayout.IsBlockCompressed(texture.Format) ? 4 : 1;
+        int most = 1;
+        while (Math.Min(width, height) >> most >= smallest)
+            most++;
+        return Math.Clamp(texture.MipLevels + steps, 1, most);
+    }
+
+    // Bytes of the texture at this size, every level included.
+    public static long Bytes(TextureData texture, int width, int height)
+    {
+        long total = 0;
+        int levels = LevelsFor(texture, width, height);
+        for (int i = 0; i < levels; i++)
+            total += TextureLayout.Pitch(texture.Format, Math.Max(1, width >> i), Math.Max(1, height >> i)).SlicePitch;
+        return total;
+    }
+
     // Writes the texture as an image: .dds keeps it exactly (every level, its format), .png its largest level.
     public static void Export(TextureData texture, string file)
     {

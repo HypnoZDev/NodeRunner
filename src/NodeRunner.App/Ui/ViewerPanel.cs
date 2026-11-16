@@ -69,7 +69,14 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private bool _captureTransparent;
 
     // Image being converted for a texture of the workshop (on a background thread).
-    private sealed record TextureJob(ModelPartTool Tool, string Source, uint NameHash, byte[]? Pixels, string? Note, string? Error);
+    private sealed record TextureJob(ModelPartTool Tool, string Source, uint NameHash, byte[]? Pixels, string? Note, string? Error)
+    {
+        // The texture at its new size (size change instead of a new image).
+        public Data.Textures.TextureData? Resized { get; init; }
+    }
+
+    // The texture whose size is being chosen (popup), read from its file.
+    private (ModelPartTool Tool, string Source, Data.Textures.TextureData Texture)? _resizing;
     private Task<TextureJob>? _textureJob;
     // Texture dictionaries of the open model already changed in the project (asked once per model).
     private readonly Dictionary<string, bool> _changedSources = new(StringComparer.OrdinalIgnoreCase);
@@ -920,12 +927,16 @@ internal sealed unsafe class ViewerPanel(AppState state)
             var job = done.Result;
             if (job.Tool != tool)
                 state.Notify(L("Texture non remplacée : le modèle a changé pendant la conversion."), warning: true);
-            else if ((job.Error ?? tool.ReplaceTexture(state.World, job.Source, job.NameHash, job.Pixels!)) is { } error)
+            else if ((job.Error ?? (job.Resized is { } resized ? tool.ResizeTexture(state.World, job.Source, resized)
+                         : tool.ReplaceTexture(state.World, job.Source, job.NameHash, job.Pixels!))) is { } error)
                 state.Notify(error, warning: true);
             else
             {
                 ShowWorkshopChanges(item, tool);
-                state.Notify(job.Note is null ? L("Texture remplacée (pas encore enregistrée).") : L($"Texture remplacée (pas encore enregistrée). {job.Note}"));
+                if (job.Resized is { } done2)
+                    state.Notify(L($"Texture {done2.Name} passée en {done2.Width} x {done2.Height} (pas encore enregistrée)."));
+                else
+                    state.Notify(job.Note is null ? L("Texture remplacée (pas encore enregistrée).") : L($"Texture remplacée (pas encore enregistrée). {job.Note}"));
             }
         }
         if (!Widgets.Section(L("Textures"), "workshop_textures"))
@@ -961,15 +972,32 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 ImGui.SetTooltip(texture.Source);
 
             uint hash = Joaat.Hash(texture.Name);
-            float half = (width - ImGui.GetStyle().ItemSpacing.X) / 2f;
+            float third = (width - ImGui.GetStyle().ItemSpacing.X * 2f) / 3f;
             if (Widgets.Button(L($"{Icons.FolderOpen}  Remplacer..."),
                     embedded ? L("Choisir l'image qui remplace cette texture.")
                         : L($"Choisir l'image qui remplace cette texture. Elle est dans {Path.GetFileName(texture.Source)} : tous les objets qui utilisent ce dictionnaire changent."),
-                    half, enabled: _textureJob is null))
+                    third, enabled: _textureJob is null))
                 AskTextureImage(tool, texture.Source, hash, texture.Name);
             ImGui.SameLine();
-            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Exporter..."), L("Enregistrer cette texture en .png (pour la retoucher) ou en .dds (format du jeu)."), half))
+            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Exporter..."), L("Enregistrer cette texture en .png (pour la retoucher) ou en .dds (format du jeu)."), third))
                 AskTextureExport(tool, texture.Source, hash);
+            ImGui.SameLine();
+            bool canResize = !embedded && Data.Native.Textures.TextureCodec.CanDecode(texture.Format);
+            if (Widgets.Button(L("Taille..."),
+                    embedded ? L("Texture rangée dans le fichier du modèle : sa taille ne peut pas encore changer (seulement celles des .ytd).")
+                    : !canResize ? L($"Les textures {texture.Format} ne peuvent pas encore changer de taille.")
+                    : L("Réduire ou agrandir cette texture. La réduire allège le .ytd (mémoire, limite de taille de FiveM)."),
+                    third, enabled: canResize && _textureJob is null))
+            {
+                if (tool.FindTexture(state.World, texture.Source, hash, out var error) is var (stored, content))
+                {
+                    _resizing = (tool, texture.Source, stored.Read(content));
+                    ImGui.OpenPopup("##texture_size");
+                }
+                else
+                    state.Notify(error ?? L("Texture introuvable dans son fichier."), warning: true);
+            }
+            DrawTextureSizePopup();
             if (!embedded && ChangedSource(texture.Source)
                 && Widgets.Button(L($"{Icons.Undo}  Remettre le dictionnaire d'origine"),
                     L($"Annule toutes les textures remplacées dans {Path.GetFileName(texture.Source)} (le fichier d'avant est remis)."), width))
@@ -981,6 +1009,51 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.Spacing();
             ImGui.PopID();
         }
+    }
+
+    // Sizes offered for a texture: halves and doubles keeping its shape, then the change is made on a background thread.
+    private void DrawTextureSizePopup()
+    {
+        if (!ImGui.BeginPopup("##texture_size"))
+            return;
+        if (_resizing is not var (tool, source, texture))
+        {
+            ImGui.EndPopup();
+            return;
+        }
+        ImGui.TextColored(UiTheme.TextMuted, L($"{texture.Name} · {texture.Format}"));
+        ImGui.Separator();
+        bool blocks = Data.Textures.TextureLayout.IsBlockCompressed(texture.Format);
+        for (int k = 2; k >= -5; k--)
+        {
+            int w = k >= 0 ? texture.Width << k : texture.Width >> -k;
+            int h = k >= 0 ? texture.Height << k : texture.Height >> -k;
+            if (w < 4 || h < 4 || Math.Max(w, h) > Math.Max(4096, Math.Max(texture.Width, texture.Height))
+                || (blocks && (w % 4 != 0 || h % 4 != 0)))
+                continue;
+            string label = L($"{w} x {h}  ·  {FormatSize(TextureImport.Bytes(texture, w, h))}");
+            if (k == 0)
+                label += L("  (actuelle)");
+            if (ImGui.Selectable(label, k == 0, k == 0 ? ImGuiSelectableFlags.Disabled : ImGuiSelectableFlags.None))
+            {
+                _textureJob = Task.Run(() =>
+                {
+                    try
+                    {
+                        var resized = TextureImport.Resize(texture, w, h);
+                        return new TextureJob(tool, source, resized.NameHash, null, null, null) { Resized = resized };
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        return new TextureJob(tool, source, texture.NameHash, null, null, ex.Message);
+                    }
+                });
+                _resizing = null;
+            }
+        }
+        ImGui.Separator();
+        Widgets.Hint(L("Agrandir ne rend pas l'image plus nette : à faire avant de la remplacer par une image plus grande."), wrap: false);
+        ImGui.EndPopup();
     }
 
     private bool ChangedSource(string source)
