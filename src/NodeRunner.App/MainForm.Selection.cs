@@ -63,6 +63,11 @@ internal sealed unsafe partial class MainForm
                 _state.PartTool = null;
                 return;
             }
+            if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.OpeningTool is not null)
+            {
+                _state.OpeningTool = null;
+                return;
+            }
             if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && !_ui.IsGizmoDragging)
             {
                 _state.Select(null);
@@ -126,7 +131,7 @@ internal sealed unsafe partial class MainForm
         if (_doorClick is not { } click || _modelRenderer is null || _pickBuffer is null)
             return;
         _doorClick = null;
-        if (!_state.IsGta4 && _state.PartTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
+        if (!_state.IsGta4 && _state.PartTool is null && _state.OpeningTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
         {
             var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
             if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } door
@@ -149,8 +154,8 @@ internal sealed unsafe partial class MainForm
             return;
 
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
-        // Picking a piece of a model: the click goes to the tool.
-        if (_state.PartTool is { } partTool && !_state.IsGta4)
+        // Picking a piece of a model, or the wall of a building to open: the click goes to the tool.
+        if ((_state.PartTool is not null || _state.OpeningTool is not null) && !_state.IsGta4)
         {
             if (Matrix4x4.Invert(viewProjection, out var inverse))
             {
@@ -159,8 +164,13 @@ internal sealed unsafe partial class MainForm
                 var near = Vector4.Transform(new Vector4(cx, cy, 1f, 1f), inverse);
                 var far = Vector4.Transform(new Vector4(cx, cy, 0.5f, 1f), inverse);
                 var from = new Vector3(near.X, near.Y, near.Z) / near.W;
-                var to = new Vector3(far.X, far.Y, far.Z) / far.W;
-                if (!partTool.Click(from, Vector3.Normalize(to - from), control))
+                var direction = Vector3.Normalize(new Vector3(far.X, far.Y, far.Z) / far.W - from);
+                if (_state.OpeningTool is { } openingTool)
+                {
+                    if (!openingTool.Click(from, direction, _state.GroundHeightAt))
+                        _state.Notify(L("Cliquez sur un mur de ce bâtiment (une surface debout de son modèle)."), warning: true);
+                }
+                else if (!_state.PartTool!.Click(from, direction, control))
                     _state.Notify(L("Aucun morceau de ce modèle sous la souris."), warning: true);
             }
             return;

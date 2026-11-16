@@ -81,6 +81,11 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                 DrawFiles(entity, library, names);
             if (state.PartTool is { } partTool && partTool.Entity != entity)
                 state.PartTool = null;
+            if (state.OpeningTool is { } openingTool && openingTool.Building != entity)
+                state.OpeningTool = null;
+            if (!entity.IsInterior && entity.Interior is null && !Doors.IsDoor(names.TryGet(entity.ArchetypeHash))
+                && Widgets.Section(L("Intérieur derrière une porte"), "building_opening", defaultOpen: state.OpeningTool is not null))
+                DrawBuildingOpening(entity, library, names);
             if (!Simple && Widgets.Section(L("Morceaux du modèle"), "model_parts"))
                 DrawModelParts(entity, library);
             if (!Simple && Doors.IsDoor(names.TryGet(entity.ArchetypeHash)) && library.GetArchetype(entity.ArchetypeHash) is { } doorType

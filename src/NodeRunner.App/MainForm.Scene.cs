@@ -365,6 +365,15 @@ internal sealed unsafe partial class MainForm
             foreach (var (from, to) in partTool.Edges())
                 lines.AddLine(Vector3.Transform(from, at), Vector3.Transform(to, at), DoorBlockedColor);
         }
+        // The opening about to be cut through a building, and the room behind it.
+        if (!_state.IsGta4 && _state.OpeningTool is { Current: { } opening } openingTool)
+        {
+            foreach (var (from, to) in opening.Edges())
+                lines.AddLine(from, to, DoorBlockedColor);
+            var plan = Editor.BuildingOpening.Make(opening, openingTool.RoomSize);
+            var room = Matrix4x4.CreateFromQuaternion(plan.Orientation) * Matrix4x4.CreateTranslation(plan.Position);
+            lines.AddBox(plan.Room.BoundsMin, plan.Room.BoundsMax, room, DoorArcColor);
+        }
         lines.Flush(viewProjection, _state.Camera.Position, onTop: true);
     }
 

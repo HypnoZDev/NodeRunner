@@ -137,6 +137,21 @@ internal sealed partial class PropertiesPanel
     private string _doorQuery = "";
     private (MapLibrary Library, (uint Hash, string Name, float Width, float Height, DoorKind Kind)[] Types)? _doorTypes;
 
+    // The door types of the game and of the project (read once per map library).
+    private (uint Hash, string Name, float Width, float Height, DoorKind Kind)[] DoorTypes(MapLibrary library, HashNames names)
+    {
+        if (_doorTypes is not { } cache || cache.Library != library)
+        {
+            var types = library.GetArchetypeHashes()
+                .Select(h => (Hash: h, Name: names.TryGet(h), Type: library.GetArchetype(h)!))
+                .Where(t => t.Type.Kind == ArchetypeKind.Base && Doors.IsDoor(t.Name))
+                .Select(t => (t.Hash, t.Name!, t.Type.BoundsMax.X - t.Type.BoundsMin.X, t.Type.BoundsMax.Z - t.Type.BoundsMin.Z, DoorShape.Of(t.Type, t.Name).Kind))
+                .ToArray();
+            _doorTypes = cache = (library, types);
+        }
+        return cache.Types;
+    }
+
     // Another door model for the selected doors, the closest widths first.
     private void DoorChoice(MapEntity entity, Archetype archetype, HashNames names)
     {
@@ -153,21 +168,13 @@ internal sealed partial class PropertiesPanel
             _doorQuery = "";
             ImGui.SetKeyboardFocusHere();
         }
-        if (_doorTypes is not { } cache || cache.Library != library)
-        {
-            var types = library.GetArchetypeHashes()
-                .Select(h => (Hash: h, Name: names.TryGet(h), Type: library.GetArchetype(h)!))
-                .Where(t => t.Type.Kind == ArchetypeKind.Base && Doors.IsDoor(t.Name))
-                .Select(t => (t.Hash, t.Name!, t.Type.BoundsMax.X - t.Type.BoundsMin.X, t.Type.BoundsMax.Z - t.Type.BoundsMin.Z, DoorShape.Of(t.Type, t.Name).Kind))
-                .ToArray();
-            _doorTypes = cache = (library, types);
-        }
+        var types = DoorTypes(library, names);
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##door_query", L("Filtrer (ex. v_ilev, garage)"), ref _doorQuery, 64);
         ImGui.Separator();
         float width = archetype.BoundsMax.X - archetype.BoundsMin.X;
         string query = _doorQuery.Trim();
-        var matches = cache.Types.Where(t => t.Hash != entity.ArchetypeHash && (query.Length == 0 || t.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
+        var matches = types.Where(t => t.Hash != entity.ArchetypeHash && (query.Length == 0 || t.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(t => MathF.Abs(t.Width - width)).ThenBy(t => t.Name, StringComparer.Ordinal).Take(MaxTypeChoices).ToList();
         if (matches.Count == 0)
             ImGui.TextDisabled(L("Aucune porte trouvée."));
