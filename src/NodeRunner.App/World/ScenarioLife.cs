@@ -36,6 +36,7 @@ internal sealed class ScenarioLife : IDisposable
         public ScenarioClip? Clip;
         public Matrix4x4[]? Pose;
         public bool Posed;
+        public bool Seated;
         // The object in its hand, this frame (null while read or for none).
         public GpuModel? Prop;
 
@@ -171,6 +172,7 @@ internal sealed class ScenarioLife : IDisposable
         {
             spawn.Posed = spawn.Slot.Model.Model is { IsSkinned: true }
                 && ScenarioClips.Pose(spawn.Slot.Model.Data, spawn.Clip?.Clip, spawn.Phase, ref spawn.Pose);
+            spawn.Seated = spawn.Posed && ScenarioClips.Seated(spawn.Slot.Model.Data, spawn.Pose);
         }
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
@@ -182,7 +184,7 @@ internal sealed class ScenarioLife : IDisposable
                 var kind = spawn.Slot.Item.Kind;
                 renderer.VehiclePaint = kind == ViewerKind.Vehicle ? spawn.Paint : null;
                 renderer.BonePose = spawn.Posed ? spawn.Pose : null;
-                var placement = ScenarioPreview.Placement(spawn.Slot.Model, kind, spawn.Point);
+                var placement = ScenarioPreview.Placement(spawn.Slot.Model, kind, spawn.Point, spawn.Seated);
                 renderer.Draw(model, placement, viewProjection, Vector3.One);
                 if (spawn.Posed && spawn.Prop is { } prop && ScenarioClips.Hand(spawn.Slot.Model.Data, spawn.Pose, spawn.Clip!.LeftHand) is { } hand)
                 {
@@ -210,7 +212,7 @@ internal sealed class ScenarioLife : IDisposable
             if (spawn.Point == skip || spawn.Slot.Model.Model is not { } model)
                 continue;
             renderer.BonePose = spawn.Posed ? spawn.Pose : null;
-            renderer.DrawPick(model, ScenarioPreview.Placement(spawn.Slot.Model, spawn.Slot.Item.Kind, spawn.Point), viewProjection, (uint)(i + 1));
+            renderer.DrawPick(model, ScenarioPreview.Placement(spawn.Slot.Model, spawn.Slot.Item.Kind, spawn.Point, spawn.Seated), viewProjection, (uint)(i + 1));
         }
         renderer.BonePose = null;
         uint number = buffer.Read(x, y);

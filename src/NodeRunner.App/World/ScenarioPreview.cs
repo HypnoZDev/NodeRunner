@@ -101,9 +101,9 @@ internal sealed class ScenarioPreview : IDisposable
     {
         if (_model.Model is not { } model || _model.Item is not { } item)
             return;
-        var world = Placement(_model, item.Kind, point);
         renderer.VehiclePaint = item.Kind == ViewerKind.Vehicle ? _paint : null;
         bool posed = model.IsSkinned && ScenarioClips.Pose(_model.Data, Clip?.Clip, 0f, ref _pose);
+        var world = Placement(_model, item.Kind, point, posed && ScenarioClips.Seated(_model.Data, _pose));
         var hand = posed && _prop is not null ? ScenarioClips.Hand(_model.Data, _pose, Clip!.LeftHand) : null;
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
@@ -121,12 +121,15 @@ internal sealed class ScenarioPreview : IDisposable
     }
 
     // Peds and vehicles face +Y in their model; a ped stays on its root bone (between its feet), a vehicle is centred.
-    public static Matrix4x4 Placement(PreviewModel model, ViewerKind kind, ScenarioPoint point)
+    // Standing models have their feet on the point; a seated ped has its root bone there, as the game puts it (the
+    // point of a seat is on the seat, and its clip keeps the hips just above the root).
+    public static Matrix4x4 Placement(PreviewModel model, ViewerKind kind, ScenarioPoint point, bool seated)
     {
         var min = model.BoundsMin;
         var max = model.BoundsMax;
         var centre = kind == ViewerKind.Vehicle ? new Vector2((min.X + max.X) / 2, (min.Y + max.Y) / 2) : Vector2.Zero;
-        return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, -min.Z)
+        bool onRoot = seated && kind == ViewerKind.Ped && point.Category == ScenarioCategory.PedSeated;
+        return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, onRoot ? 0f : -min.Z)
                * Matrix4x4.CreateRotationZ(point.Heading)
                * Matrix4x4.CreateTranslation(point.Position);
     }

@@ -163,6 +163,22 @@ internal sealed class ScenarioClips : IDisposable
         return bone < 0 ? null : skeleton.BindPose[bone] * pose[bone];
     }
 
+    private const ushort LeftFoot = 14201;
+    private const ushort RightFoot = 52301;
+
+    // Whether a pose has the feet well above where a standing ped has them (sitting on a seat, a wall, the ground).
+    public static bool Seated(ModelData? data, Matrix4x4[]? pose)
+    {
+        if (data?.Skeleton is not { } skeleton || pose is null || pose.Length != skeleton.Count)
+            return false;
+        int root = skeleton.IndexOf(0), left = skeleton.IndexOf(LeftFoot), right = skeleton.IndexOf(RightFoot);
+        if (root < 0 || left < 0 || right < 0)
+            return false;
+        float Z(int bone) => (skeleton.BindPose[bone] * pose[bone]).Translation.Z;
+        // Standing: feet about 0.93 m below the root; sitting on a chair 0.43 m, on a wall 0.34 m.
+        return MathF.Min(Z(left), Z(right)) > Z(root) - 0.65f;
+    }
+
     public void Dispose()
     {
         foreach (var prop in _props.Values)
