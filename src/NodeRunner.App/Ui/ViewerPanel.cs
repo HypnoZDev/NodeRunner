@@ -846,8 +846,20 @@ internal sealed unsafe class ViewerPanel(AppState state)
             tool.RemoveSelected();
             ShowWorkshopChanges(item, tool);
         }
+        if (Widgets.Button(L($"{Icons.Copy}  Dupliquer ce morceau"),
+                L("Ajoute une copie du morceau au même endroit (avec ses versions simplifiées) et la choisit :\ndéplacez-la ensuite avec les poignées ou les valeurs ci-dessous."),
+                width, enabled: tool.SelectedCount > 0))
+        {
+            if (tool.DuplicateSelected() is { } error)
+                state.Notify(error, warning: true);
+            else
+            {
+                ShowWorkshopChanges(item, tool);
+                state.Notify(L("Copie ajoutée au même endroit : déplacez-la avec les poignées (elle est choisie)."));
+            }
+        }
         if (Widgets.Button(L($"{Icons.Undo}  Annuler la dernière modification"),
-                L("Remet le dernier morceau retiré ou déplacé, ou la dernière texture remplacée (pas encore enregistrés)."),
+                L("Remet le dernier morceau retiré, déplacé ou dupliqué, ou la dernière texture remplacée (pas encore enregistrés)."),
                 width, enabled: tool.ChangeCount > 0))
         {
             tool.UndoLast();
@@ -874,7 +886,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Écrit le fichier du modèle dans le dossier stream du projet, puis recharge la carte une seule fois.\n")
                     + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule ensuite."));
-            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés ou déplacés et les textures remplacées depuis le dernier enregistrement."), width))
+            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés, déplacés ou dupliqués et les textures remplacées depuis le dernier enregistrement."), width))
             {
                 _workshopFor = null;
                 Viewer.Reload(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
@@ -882,7 +894,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         else if (ModelPartTool.ChangedFile(state, tool.Path) is not null
             && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
-                L("Annule tous les changements de ce modèle : morceaux retirés ou déplacés (le fichier d'avant est remis)."), width))
+                L("Annule tous les changements de ce modèle : morceaux retirés, déplacés ou dupliqués (le fichier d'avant est remis)."), width))
         {
             state.Notify(ModelPartTool.Restore(state, tool.Path));
             _reopen = (item, state.World.ModelReader);

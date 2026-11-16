@@ -18,8 +18,13 @@ internal sealed class ModelPartTool
     private const int MaxEdges = 30000;
     private const float BoxMargin = 0.02f;
 
-    private readonly ResourceHeader _header;
-    private readonly byte[] _content;
+    private ResourceHeader _header;
+    private byte[] _content;
+    // Length of the system pages of the file as read: pieces added later go after it (DrawableAppend).
+    private readonly int _systemKept;
+    // Triangles of the simpler versions that belong to the chosen piece (a copy made by DuplicateSelected, in the same
+    // place as its original): used instead of the triangles found in the piece's box. Null otherwise.
+    private List<(int GeometryAt, int Triangle)>? _farther;
     private List<DrawableReader.StoredGeometry> _all;
     private List<DrawableReader.StoredGeometry> _shown;
     private List<(Vector3[] Positions, ushort[] Indices)> _meshes;
@@ -43,6 +48,7 @@ internal sealed class ModelPartTool
         _modelHash = modelHash;
         _header = header;
         _content = content;
+        _systemKept = DrawableAppend.SystemLength(header);
         _extension = System.IO.Path.GetExtension(path);
         (_all, _shown, _meshes) = Split(all);
     }
@@ -107,6 +113,7 @@ internal sealed class ModelPartTool
         var hit = found.Triangle;
         var (positions, indices) = _meshes[hit.Mesh];
         var piece = ModelParts.Connected(positions, indices, hit.Triangle).Select(t => new MeshTriangle(hit.Mesh, t)).ToList();
+        _farther = null;
         if (!add)
             _selected.Clear();
         if (add && piece.All(_selected.Contains))
@@ -119,6 +126,7 @@ internal sealed class ModelPartTool
     public void Clear()
     {
         _selected.Clear();
+        _farther = null;
         Revision++;
     }
 
@@ -182,7 +190,7 @@ internal sealed class ModelPartTool
     }
 
     // Changes made in memory and not saved yet, last one last: the file changed and how to undo it.
-    private enum ChangeKind { Removed, Moved, Texture }
+    private enum ChangeKind { Removed, Moved, Texture, Duplicated }
 
     private sealed record Change(ChangeKind Kind, string File, Action Undo);
     private readonly List<Change> _changes = [];
@@ -194,6 +202,7 @@ internal sealed class ModelPartTool
     public int RemovedCount => _changes.Count(c => c.Kind == ChangeKind.Removed);
     public int MovedCount => _changes.Count(c => c.Kind == ChangeKind.Moved);
     public int TextureChangeCount => _changes.Count(c => c.Kind == ChangeKind.Texture);
+    public int DuplicatedCount => _changes.Count(c => c.Kind == ChangeKind.Duplicated);
 
     public ResourceHeader Header => _header;
 
@@ -299,6 +308,16 @@ internal sealed class ModelPartTool
     private List<(DrawableReader.StoredGeometry Geometry, int Triangle)> ChosenTriangles(out int farther)
     {
         var triangles = _selected.Select(s => (Geometry: _shown[s.Mesh], s.Triangle)).ToList();
+        if (_farther is not null)
+        {
+            foreach (var (at, t) in _farther)
+            {
+                if (_all.FirstOrDefault(g => g.GeometryAt == at) is { } geometry && t * 3 + 2 < geometry.Indices.Length)
+                    triangles.Add((geometry, t));
+            }
+            farther = _farther.Count;
+            return triangles;
+        }
         var (min, max) = SelectionBox();
         min -= new Vector3(BoxMargin);
         max += new Vector3(BoxMargin);
@@ -359,6 +378,52 @@ internal sealed class ModelPartTool
         return null;
     }
 
+    // Adds a copy of the chosen piece (and of the same place of the simpler versions) in the same place, in memory; the
+    // copy becomes the chosen piece, to be moved. Returns an error message, or null.
+    public string? DuplicateSelected()
+    {
+        if (_selected.Count == 0)
+            return null;
+        var triangles = ChosenTriangles(out _);
+        var additions = triangles.GroupBy(t => t.Geometry.GeometryAt)
+            .Select(g => DrawableAppend.Copy(_content, g.First().Geometry, g.Select(t => t.Triangle).Distinct()))
+            .ToList();
+        var (header, content) = (_header, _content);
+        try
+        {
+            (_header, _content) = DrawableAppend.Apply(header, content, _systemKept, _all, additions);
+        }
+        catch (InvalidDataException ex)
+        {
+            return ex.Message;
+        }
+        _changes.Add(new Change(ChangeKind.Duplicated, Path, () => (_header, _content) = (header, content)));
+        Refresh();
+
+        // The copies are the last triangles of their geometries.
+        _selected.Clear();
+        var farther = new List<(int, int)>();
+        foreach (var a in additions)
+        {
+            int added = a.Indices.Length / 3;
+            int mesh = _shown.FindIndex(g => g.GeometryAt == a.Geometry.GeometryAt);
+            var geometry = mesh >= 0 ? _shown[mesh] : _all.FirstOrDefault(g => g.GeometryAt == a.Geometry.GeometryAt);
+            if (geometry is null)
+                continue;
+            int count = geometry.Indices.Length / 3;
+            for (int t = count - added; t < count; t++)
+            {
+                if (mesh >= 0)
+                    _selected.Add(new MeshTriangle(mesh, t));
+                else
+                    farther.Add((geometry.GeometryAt, t));
+            }
+        }
+        _farther = farther;
+        Revision++;
+        return null;
+    }
+
     // Undoes the last change made in memory (a piece removed, a texture replaced).
     public bool UndoLast()
     {
@@ -401,11 +466,13 @@ internal sealed class ModelPartTool
             if (WriteFile(state, path, header, content) is { } error)
                 return (false, error);
         }
-        int pieces = RemovedCount, moved = MovedCount, textures = TextureChangeCount;
+        int pieces = RemovedCount, moved = MovedCount, textures = TextureChangeCount, copies = DuplicatedCount;
         _changes.Clear();
         _dictionaries.Clear();
         state.World.RequestMapReload();
         string names = string.Join(", ", files.Select(f => System.IO.Path.GetFileName(f.Path)));
+        if (copies > 0)
+            return (true, L($"{names} enregistré(s) ({copies} copie(s), {pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
         return (true, moved == 0 && textures == 0 ? L($"{names} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte...")
             : moved == 0 ? L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {textures} texture(s) remplacée(s)). Rechargement de la carte...")
             : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));

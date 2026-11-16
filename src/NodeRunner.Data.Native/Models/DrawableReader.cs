@@ -111,6 +111,14 @@ public sealed class DrawableReader : IModelReader
 
         // The drawable's bounding sphere: its centre, the radius 12 bytes after; -1 when none.
         public int SphereAt { get; init; } = -1;
+
+        // Where the geometry, its vertex buffer and its index buffer are; where its vertices are and their size.
+        public int GeometryAt { get; init; } = -1;
+        public int VertexBufferAt { get; init; } = -1;
+        public int IndexBufferAt { get; init; } = -1;
+        public int VertexAt { get; init; } = -1;
+        public int Stride { get; init; }
+        public int VertexCount => Positions.Length;
     }
 
     // Where a geometry's vertices are in the data and how they are stored.
@@ -216,6 +224,11 @@ public sealed class DrawableReader : IModelReader
                             : null,
                         Boxes = [.. held],
                         SphereAt = d + BoundsCenterOffset,
+                        GeometryAt = geometry,
+                        VertexBufferAt = Block(res, res.UInt64(geometry + 0x18), 0x40),
+                        IndexBufferAt = Block(res, res.UInt64(geometry + 0x38), 0x40),
+                        VertexAt = vertexAt,
+                        Stride = declaration.Stride,
                     });
                 }
             }
