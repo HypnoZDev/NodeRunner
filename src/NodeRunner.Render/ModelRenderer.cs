@@ -80,6 +80,42 @@ PS_INPUT VS(VS_INPUT input)
     return output;
 }
 
+// Models bent by a skeleton: each bone's matrix (default pose -> animated), as 3 rows giving x, y and z.
+cbuffer Bones : register(b3)
+{
+    float4 BoneRows[765];
+};
+struct VS_SKIN_INPUT
+{
+    float3 pos : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 color : COLOR0;
+    float4 weights : COLOR1; float2 maskUv : TEXCOORD1;
+    uint4 bones : BLENDINDICES; float4 boneWeights : BLENDWEIGHT;
+};
+
+PS_INPUT VSSkinned(VS_SKIN_INPUT input)
+{
+    VS_INPUT v;
+    v.pos = input.pos; v.normal = input.normal; v.uv = input.uv; v.color = input.color;
+    v.weights = input.weights; v.maskUv = input.maskUv;
+    // No weight: a mesh that follows no bone stays as it is.
+    if (dot(input.boneWeights, 1.0f) > 0.001f)
+    {
+        float4 p = float4(input.pos, 1.0f);
+        float3 pos = 0.0f, normal = 0.0f;
+        [unroll] for (int k = 0; k < 4; k++)
+        {
+            uint b = min(input.bones[k], 254u) * 3u;
+            float w = input.boneWeights[k];
+            pos += w * float3(dot(BoneRows[b], p), dot(BoneRows[b + 1], p), dot(BoneRows[b + 2], p));
+            normal += w * float3(dot(BoneRows[b].xyz, input.normal), dot(BoneRows[b + 1].xyz, input.normal),
+                dot(BoneRows[b + 2].xyz, input.normal));
+        }
+        v.pos = pos;
+        v.normal = normal;
+    }
+    return VS(v);
+}
+
 // 1 in the sun, 0 in the shade of something closer to the sun; 1 beyond the shadow distance (faded in).
 float SunShadow(float3 world, float3 n)
 {
@@ -270,6 +306,20 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 
     internal static int VertexSize => sizeof(ModelVertex);
 
+    // Second vertex stream of skinned models: 4 bone numbers (one byte each) and their weights (0 to 255).
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct SkinVertex(uint bones, uint weights)
+    {
+        public readonly uint Bones = bones;
+        public readonly uint Weights = weights;
+    }
+
+    public const int MaxBones = 255;
+
+    // Bones of the skinned model drawn next (ModelData.Skeleton order, see SkeletonAnimator): vertex in the default
+    // pose -> animated, in the model. Null: drawn in its default pose.
+    public Matrix4x4[]? BonePose { get; set; }
+
     public SceneLighting Lighting { get; set; } = SceneLighting.Neutral;
 
     public Vector3 CameraPosition { get; set; }
@@ -301,6 +351,11 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11PixelShader _pickCutoutPixelShader;
     private readonly ID3D11PixelShader _pickTranslucentPixelShader;
     private readonly ID3D11InputLayout _inputLayout;
+    private readonly ID3D11VertexShader _skinnedVertexShader;
+    private readonly ID3D11InputLayout _skinnedInputLayout;
+    private readonly ID3D11Buffer _boneBuffer;
+    private readonly float[] _boneRows = new float[MaxBones * 12];
+    private bool _skinnedBound;
     private readonly ID3D11Buffer _frameBuffer;
     private readonly ID3D11Buffer _objectBuffer;
     private readonly ID3D11Buffer _shadowConstantBuffer;
@@ -346,6 +401,18 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             new("TEXCOORD", 1, Format.R32G32_Float, 40, 0),
         ];
         _inputLayout = device.CreateInputLayout(layout, vsBytecode.Span);
+
+        ReadOnlyMemory<byte> skinnedBytecode = Compiler.Compile(ShaderSource, "VSSkinned", "models", "vs_5_0");
+        _skinnedVertexShader = device.CreateVertexShader(skinnedBytecode.Span);
+        InputElementDescription[] skinnedLayout =
+        [
+            .. layout,
+            new("BLENDINDICES", 0, Format.R8G8B8A8_UInt, 0, 1),
+            new("BLENDWEIGHT", 0, Format.R8G8B8A8_UNorm, 4, 1),
+        ];
+        _skinnedInputLayout = device.CreateInputLayout(skinnedLayout, skinnedBytecode.Span);
+        _boneBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)(MaxBones * 48), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
 
         _frameBuffer = device.CreateBuffer(new BufferDescription(
             (uint)sizeof(FrameConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
@@ -514,13 +581,28 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             x += mesh.Indices.Length;
         }
 
+        var skin = Skin(model, vertexCount);
         var vertexBuffer = _device.CreateBuffer(vertices,
             new BufferDescription((uint)(vertices.Length * sizeof(ModelVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
         ID3D11Buffer indexBuffer;
+        ID3D11Buffer? skinBuffer = null;
         try
         {
             indexBuffer = _device.CreateBuffer(indices,
                 new BufferDescription((uint)(indices.Length * sizeof(ushort)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
+            if (skin is not null)
+            {
+                try
+                {
+                    skinBuffer = _device.CreateBuffer(skin,
+                        new BufferDescription((uint)(skin.Length * sizeof(SkinVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
+                }
+                catch
+                {
+                    indexBuffer.Dispose();
+                    throw;
+                }
+            }
         }
         catch
         {
@@ -528,7 +610,33 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             throw;
         }
         return new PreparedModel(vertexBuffer, indexBuffer, ranges.ToArray(), indexCount / 3,
-            (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L);
+            (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L + (skin?.Length ?? 0) * (long)sizeof(SkinVertex), skinBuffer);
+    }
+
+    // Bones of each vertex, in the order of the vertex buffer; null when no mesh follows a skeleton (or one too big).
+    private static SkinVertex[]? Skin(ModelData model, int vertexCount)
+    {
+        if (model.Skeleton is not { Count: > 0 and <= MaxBones } || !model.Meshes.Any(m => m.BoneIndices is not null))
+            return null;
+        var skin = new SkinVertex[vertexCount];
+        int v = 0;
+        foreach (var mesh in model.Meshes)
+        {
+            if (mesh.Indices.Length == 0 || mesh.Positions.Length == 0)
+                continue;
+            for (int i = 0; i < mesh.Positions.Length; i++, v++)
+            {
+                if (mesh.BoneIndices is { } bones && mesh.BoneWeights is { } weights && i < bones.Length && i < weights.Length)
+                    skin[v] = new SkinVertex(bones[i], PackWeights(weights[i]));
+            }
+        }
+        return skin;
+    }
+
+    private static uint PackWeights(Vector4 w)
+    {
+        static uint Byte(float x) => (uint)Math.Clamp(MathF.Round(x * 255f), 0f, 255f);
+        return Byte(w.X) | Byte(w.Y) << 8 | Byte(w.Z) << 16 | Byte(w.W) << 24;
     }
 
     // Puts the textures on a prepared model (on the drawing thread); the model then owns its buffers.
@@ -545,7 +653,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
                 r.DarkeningDecal);
         }
-        return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize);
+        return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
+        {
+            SkinBuffer = prepared.TakeSkinBuffer(),
+        };
     }
 
     // Sets the shaders and states shared by every model.
@@ -556,6 +667,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_vertexShader);
+        _skinnedBound = false;
         BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
@@ -610,6 +722,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_vertexShader);
+        _skinnedBound = false;
         BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
@@ -748,8 +861,38 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _constants = new ObjectConstants { World = world, Tint = new Vector4(tint, 1f), PickId = pickId };
         WriteConstants();
 
+        bool skinned = model.SkinBuffer is not null && BonePose is not null;
+        if (skinned != _skinnedBound)
+        {
+            _context.IASetInputLayout(skinned ? _skinnedInputLayout : _inputLayout);
+            _context.VSSetShader(skinned ? _skinnedVertexShader : _vertexShader);
+            _skinnedBound = skinned;
+        }
+        if (skinned)
+        {
+            WriteBones(BonePose!);
+            _context.IASetVertexBuffer(1, model.SkinBuffer!, (uint)sizeof(SkinVertex));
+        }
         _context.IASetVertexBuffer(0, model.VertexBuffer, (uint)sizeof(ModelVertex));
         _context.IASetIndexBuffer(model.IndexBuffer, Format.R16_UInt, 0);
+    }
+
+    private void WriteBones(Matrix4x4[] pose)
+    {
+        int count = Math.Min(pose.Length, MaxBones);
+        var rows = _boneRows;
+        for (int b = 0; b < count; b++)
+        {
+            ref readonly var m = ref pose[b];
+            int o = b * 12;
+            rows[o] = m.M11; rows[o + 1] = m.M21; rows[o + 2] = m.M31; rows[o + 3] = m.M41;
+            rows[o + 4] = m.M12; rows[o + 5] = m.M22; rows[o + 6] = m.M32; rows[o + 7] = m.M42;
+            rows[o + 8] = m.M13; rows[o + 9] = m.M23; rows[o + 10] = m.M33; rows[o + 11] = m.M43;
+        }
+        var map = _context.Map(_boneBuffer, 0, MapMode.WriteDiscard);
+        new ReadOnlySpan<float>(rows, 0, count * 12).CopyTo(new Span<float>((void*)map.DataPointer, MaxBones * 12));
+        _context.Unmap(_boneBuffer, 0);
+        _context.VSSetConstantBuffer(3, _boneBuffer);
     }
 
     private bool _frameWritten;
@@ -805,6 +948,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _shadowDepthStencilState.Dispose();
         _shadowCutoutPixelShader.Dispose();
         _inputLayout.Dispose();
+        _skinnedInputLayout.Dispose();
+        _skinnedVertexShader.Dispose();
+        _boneBuffer.Dispose();
         _pickTranslucentPixelShader.Dispose();
         _pickCutoutPixelShader.Dispose();
         _pickOpaquePixelShader.Dispose();
@@ -848,6 +994,11 @@ public sealed class GpuModel : IDisposable
 
     internal ID3D11Buffer VertexBuffer { get; }
     internal ID3D11Buffer IndexBuffer { get; }
+
+    // Bones of each vertex (SkinVertex), for a model that follows a skeleton; null otherwise.
+    internal ID3D11Buffer? SkinBuffer { get; init; }
+
+    public bool IsSkinned => SkinBuffer is not null;
     internal Part[] Parts { get; }
     internal bool HasTranslucentParts { get; }
 
@@ -861,6 +1012,7 @@ public sealed class GpuModel : IDisposable
     {
         VertexBuffer.Dispose();
         IndexBuffer.Dispose();
+        SkinBuffer?.Dispose();
     }
 }
 
@@ -874,11 +1026,14 @@ public sealed class PreparedModel : IDisposable
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;
+    private ID3D11Buffer? _skinBuffer;
 
-    internal PreparedModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Range[] ranges, int triangleCount, long byteSize)
+    internal PreparedModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Range[] ranges, int triangleCount, long byteSize,
+        ID3D11Buffer? skinBuffer = null)
     {
         _vertexBuffer = vertexBuffer;
         _indexBuffer = indexBuffer;
+        _skinBuffer = skinBuffer;
         Ranges = ranges;
         TriangleCount = triangleCount;
         ByteSize = byteSize;
@@ -896,9 +1051,12 @@ public sealed class PreparedModel : IDisposable
     internal ID3D11Buffer TakeIndexBuffer() => Interlocked.Exchange(ref _indexBuffer, null)
         ?? throw new InvalidOperationException("Model already finished.");
 
+    internal ID3D11Buffer? TakeSkinBuffer() => Interlocked.Exchange(ref _skinBuffer, null);
+
     public void Dispose()
     {
         Interlocked.Exchange(ref _vertexBuffer, null)?.Dispose();
         Interlocked.Exchange(ref _indexBuffer, null)?.Dispose();
+        Interlocked.Exchange(ref _skinBuffer, null)?.Dispose();
     }
 }

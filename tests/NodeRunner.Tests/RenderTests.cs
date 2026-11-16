@@ -122,6 +122,53 @@ public class RenderTests(SoftwareDevice gpu)
     }
 
     [Fact]
+    public void SkinnedModel_FollowsItsBones()
+    {
+        using var renderer = new ModelRenderer(gpu.Device, gpu.Context);
+        using var target = new RenderTarget(gpu.Device, gpu.Context);
+        var cube = Cube();
+        var mesh = cube.Meshes[0];
+        var skinned = new ModelData
+        {
+            NameHash = 1, BoundsMin = cube.BoundsMin, BoundsMax = cube.BoundsMax,
+            Meshes =
+            [
+                new ModelMesh
+                {
+                    Positions = mesh.Positions, Normals = mesh.Normals, TexCoords = mesh.TexCoords, Colors = mesh.Colors,
+                    Indices = mesh.Indices, VertexColored = true,
+                    BoneIndices = new uint[mesh.Positions.Length],
+                    BoneWeights = Enumerable.Repeat(Vector4.UnitX, mesh.Positions.Length).ToArray(),
+                },
+            ],
+            Skeleton = new SkeletonData
+            {
+                Tags = [0], Parents = [-1], Rotations = [Quaternion.Identity], Translations = [Vector3.Zero], Scales = [Vector3.One],
+                BindPose = [Matrix4x4.Identity],
+            },
+        };
+        using var model = renderer.Upload(skinned, [[]])!;
+        Assert.True(model.IsSkinned);
+
+        bool CentreDrawn(Matrix4x4[]? pose)
+        {
+            target.Begin(Size, Size, new Vector4(0f, 0f, 0f, 1f));
+            renderer.CameraPosition = CameraPosition;
+            renderer.BonePose = pose;
+            renderer.Begin(ModelPass.Solid);
+            renderer.Draw(model, Matrix4x4.Identity, ViewProjection(), Vector3.One);
+            var centre = Pixel(target.ReadPixels(), Size / 2, Size / 2);
+            return centre.B + centre.G + centre.R > 30;
+        }
+
+        Assert.True(CentreDrawn(null));
+        Assert.True(CentreDrawn([Matrix4x4.Identity]));
+        // The bone moved 10 m up: the cube leaves the middle of the view.
+        Assert.False(CentreDrawn([Matrix4x4.CreateTranslation(0f, 0f, 10f)]));
+        renderer.BonePose = null;
+    }
+
+    [Fact]
     public void Click_FindsTheObjectUnderThePixel()
     {
         using var renderer = new ModelRenderer(gpu.Device, gpu.Context);
