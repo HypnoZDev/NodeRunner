@@ -181,8 +181,9 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
             state.SaveSettings();
         }
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(L($"Pose un PNJ, un animal ou un véhicule immobile sur chaque point que le jeu utiliserait à l'heure affichée, à moins de {ScenarioLife.Radius:0} m ")
+            ImGui.SetTooltip(L($"Pose un PNJ, un animal ou un véhicule sur chaque point que le jeu utiliserait à l'heure affichée, à moins de {ScenarioLife.Radius:0} m ")
                 + L($"(horaires, probabilité, solo ou Online selon la version de la carte ; {ScenarioLife.MaxShown} au plus, les plus proches). ")
+                + L("Les PNJ et animaux jouent en boucle l'animation de leur scénario (fumer, boire, s'asseoir...). ")
                 + L("Le jeu tire au sort à chaque fois : ce n'est qu'un exemple. Changez l'heure pour voir la ville vivre."));
         if (!life)
             return;

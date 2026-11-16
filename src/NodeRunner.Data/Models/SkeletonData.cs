@@ -82,9 +82,15 @@ public static class SkeletonAnimator
     public static void Pose(SkeletonData skeleton, AnimationClip? clip, float time, Span<Matrix4x4> skin)
     {
         int count = skeleton.Count;
-        var rotations = skeleton.Rotations.ToArray();
-        var translations = skeleton.Translations.ToArray();
-        var scales = skeleton.Scales.ToArray();
+        // Run for many peds each frame: working copies on the stack.
+        bool small = count <= 256;
+        Span<Quaternion> rotations = small ? stackalloc Quaternion[count] : new Quaternion[count];
+        Span<Vector3> translations = small ? stackalloc Vector3[count] : new Vector3[count];
+        Span<Vector3> scales = small ? stackalloc Vector3[count] : new Vector3[count];
+        Span<Matrix4x4> world = small ? stackalloc Matrix4x4[count] : new Matrix4x4[count];
+        skeleton.Rotations.CopyTo(rotations);
+        skeleton.Translations.CopyTo(translations);
+        skeleton.Scales.CopyTo(scales);
         if (clip is not null)
         {
             foreach (var part in clip.Parts)
@@ -120,7 +126,6 @@ public static class SkeletonAnimator
             }
         }
 
-        var world = new Matrix4x4[count];
         var inverse = skeleton.InverseBindPose;
         foreach (int bone in skeleton.ParentsFirst)
         {

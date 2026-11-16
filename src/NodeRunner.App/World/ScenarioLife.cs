@@ -1,4 +1,5 @@
 using System.Numerics;
+using NodeRunner.Data.Models;
 using NodeRunner.Data.Scenarios;
 using NodeRunner.Render;
 
@@ -25,7 +26,20 @@ internal sealed class ScenarioLife : IDisposable
         public long LastUsed;
     }
 
-    private sealed record Spawn(ScenarioPoint Point, Slot Slot, Vector3[]? Paint);
+    private sealed class Spawn(ScenarioPoint point, Slot slot, Vector3[]? paint, int variant)
+    {
+        public readonly ScenarioPoint Point = point;
+        public readonly Slot Slot = slot;
+        public readonly Vector3[]? Paint = paint;
+        public readonly int Variant = variant;
+        // The clip a ped or animal plays (null while read, or none), and where its bones are this frame.
+        public AnimationClip? Clip;
+        public Matrix4x4[]? Pose;
+        public bool Posed;
+
+        // Shift in the clip, so that neighbours do not move together.
+        public float Phase => (Variant & 0xFFFF) / 65535f * 60f;
+    }
 
     private readonly Dictionary<string, Slot> _slots = new();
     private List<Spawn> _spawns = [];
@@ -41,8 +55,8 @@ internal sealed class ScenarioLife : IDisposable
     public int Shown { get; private set; }
     public bool IsLoading { get; private set; }
 
-    public void Update(WorldLoader world, ModelRenderer renderer, Vector3 camera, int hour, bool online, Func<ScenarioCategory, bool> isVisible,
-        bool enabled)
+    public void Update(WorldLoader world, ModelRenderer renderer, ScenarioClips clips, Vector3 camera, int hour, bool online,
+        Func<ScenarioCategory, bool> isVisible, bool enabled)
     {
         if (!enabled || world.Scenarios is not { } scenarios || world.Models is null)
         {
@@ -81,8 +95,11 @@ internal sealed class ScenarioLife : IDisposable
                 slot.Opened = true;
                 loading++;
             }
-            if (slot.Model.Model is not null)
-                shown++;
+            if (slot.Model.Model is not { } model)
+                continue;
+            shown++;
+            if (spawn.Clip is null && model.IsSkinned && slot.Item.Kind == ViewerKind.Ped)
+                spawn.Clip = clips.Get(world, spawn.Point.TypeHash, slot.Item.Name, spawn.Variant);
         }
         Shown = shown;
         IsLoading = _spawns.Any(s => !s.Slot.Opened || s.Slot.Model.IsLoading);
@@ -126,7 +143,9 @@ internal sealed class ScenarioLife : IDisposable
             else if (!used.Contains(slot) && used.Count >= MaxModels)
                 continue;
             used.Add(slot);
-            spawns.Add(new Spawn(point, slot, choice.Paint));
+            // A point still shown keeps its clip and pose.
+            var kept = _spawns.Find(s => s.Point == point && s.Slot == slot);
+            spawns.Add(kept ?? new Spawn(point, slot, choice.Paint, variant));
         }
         _spawns = spawns;
 
@@ -145,6 +164,11 @@ internal sealed class ScenarioLife : IDisposable
     {
         if (Shown == 0)
             return;
+        foreach (var spawn in _spawns)
+        {
+            spawn.Posed = spawn.Point != skip && spawn.Slot.Model.Model is { IsSkinned: true }
+                && ScenarioClips.Pose(spawn.Slot.Model.Data, spawn.Clip, spawn.Phase, ref spawn.Pose);
+        }
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
             renderer.Begin(pass);
@@ -154,10 +178,12 @@ internal sealed class ScenarioLife : IDisposable
                     continue;
                 var kind = spawn.Slot.Item.Kind;
                 renderer.VehiclePaint = kind == ViewerKind.Vehicle ? spawn.Paint : null;
+                renderer.BonePose = spawn.Posed ? spawn.Pose : null;
                 renderer.Draw(model, ScenarioPreview.Placement(spawn.Slot.Model, kind, spawn.Point), viewProjection, Vector3.One);
             }
         }
         renderer.VehiclePaint = null;
+        renderer.BonePose = null;
     }
 
     private void Clear()

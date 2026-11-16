@@ -19,13 +19,17 @@ internal sealed class ScenarioPreview : IDisposable
     public string? Error => _model.Error;
     public ScenarioModelSource? Source { get; private set; }
 
-    public void Update(WorldLoader world, ModelRenderer renderer, ScenarioPoint? point)
+    // The clip the ped or animal plays (null while read, or none).
+    public AnimationClip? Clip { get; private set; }
+    private Matrix4x4[]? _pose;
+
+    public void Update(WorldLoader world, ModelRenderer renderer, ScenarioClips clips, ScenarioPoint? point)
     {
         if (point is null || world.Scenarios is null || world.Models is null)
         {
             if (_model.Item is not null)
                 _model.Close();
-            (_item, _for, Source) = (null, null, null);
+            (_item, _for, Source, Clip) = (null, null, null, null);
             return;
         }
         // Chosen again only when the point or its type changes, not while it is moved.
@@ -34,6 +38,7 @@ internal sealed class ScenarioPreview : IDisposable
         {
             _for = key;
             _item = Choose(world, point);
+            Clip = null;
         }
         if (_item is null)
         {
@@ -43,6 +48,8 @@ internal sealed class ScenarioPreview : IDisposable
         }
         _model.Open(_item, world);
         _model.Update(renderer);
+        if (Clip is null && _model.Model is { IsSkinned: true } && _item.Kind == ViewerKind.Ped)
+            Clip = clips.Get(world, point.TypeHash, _item.Name, Variant(point));
     }
 
     private ViewerItem? Choose(WorldLoader world, ScenarioPoint point)
@@ -94,11 +101,13 @@ internal sealed class ScenarioPreview : IDisposable
             return;
         var world = Placement(_model, item.Kind, point);
         renderer.VehiclePaint = item.Kind == ViewerKind.Vehicle ? _paint : null;
+        renderer.BonePose = model.IsSkinned && ScenarioClips.Pose(_model.Data, Clip, 0f, ref _pose) ? _pose : null;
         renderer.Begin(ModelPass.Solid);
         renderer.Draw(model, world, viewProjection, Vector3.One);
         renderer.Begin(ModelPass.Translucent);
         renderer.Draw(model, world, viewProjection, Vector3.One);
         renderer.VehiclePaint = null;
+        renderer.BonePose = null;
     }
 
     // Peds and vehicles face +Y in their model; a ped stays on its root bone (between its feet), a vehicle is centred.
