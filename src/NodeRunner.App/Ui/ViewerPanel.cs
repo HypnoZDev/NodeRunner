@@ -62,6 +62,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private ViewerItem? _workshopFor;
     private bool _workshopShown;
     private bool _workshopWasShown; // At the previous frame: the view is drawn before the tabs.
+    private readonly WorkshopGizmo _gizmo = new();
+    private Vector3 _moveBy, _turnBy; // Exact move of the chosen piece: metres, degrees.
     private int _workshopRevision = -1;
     private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
@@ -410,6 +412,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             drawList.AddImage(Viewer.ImageId, min, max);
         else
             drawList.AddRectFilled(min, max, Widgets.Col(UiTheme.Field));
+        UpdateWorkshopGizmo(min, size);
         HandleMouse(size);
 
         // Name, make and class, then loading / error, over the top-left corner of the image.
@@ -622,10 +625,41 @@ internal sealed unsafe class ViewerPanel(AppState state)
         state.Notify(result.Error ? L($"Capture impossible : {result.Text}") : L($"Image enregistrée : {result.Text}"), result.Error);
     }
 
+    // Model workshop: handles on the chosen piece; the piece is moved when the mouse is released.
+    private void UpdateWorkshopGizmo(Vector2 min, Vector2 size)
+    {
+        if (!_workshopWasShown || _workshopFor != Viewer.Item || Viewer.Item is not { } item
+            || _workshop is not { SelectionCenter: { } pivot } tool)
+        {
+            _gizmo.Cancel();
+            return;
+        }
+        var move = _gizmo.Update(min, size, Viewer.LastViewProjection, Viewer.ModelOffset, Viewer.FieldOfViewDegrees, pivot,
+            ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem));
+        if (_gizmo.Preview is { } preview)
+        {
+            Viewer.OverlayEdges.Clear();
+            Viewer.OverlayEdges.AddRange(tool.Edges(preview));
+            _workshopRevision = -1;
+        }
+        if (move is { } done)
+            MoveWorkshopPiece(item, tool, done);
+    }
+
+    private void MoveWorkshopPiece(ViewerItem item, ModelPartTool tool, Matrix4x4 move)
+    {
+        if (tool.MoveSelected(move) is { } error)
+            state.Notify(error, warning: true);
+        else
+            ShowWorkshopChanges(item, tool);
+        _workshopRevision = -1;
+    }
+
     private void HandleMouse(Vector2 size)
     {
         var io = ImGui.GetIO();
-        if (ImGui.IsItemActive())
+        bool gizmo = _gizmo.IsDragging || _gizmo.IsHovered || _gizmo.JustReleased;
+        if (ImGui.IsItemActive() && !gizmo)
         {
             if (ImGui.IsMouseDragging(ImGuiMouseButton.Left, 0f))
             {
@@ -640,7 +674,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (!ImGui.IsItemHovered())
             return;
         // Model workshop: a click without moving the mouse picks a piece.
-        if (_workshopWasShown && _workshopFor == Viewer.Item && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
+        if (!gizmo && _workshopWasShown && _workshopFor == Viewer.Item && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
             && Matrix4x4.Invert(Viewer.LastViewProjection, out var inverse))
         {
             var at = (io.MousePos - ImGui.GetItemRectMin()) / size;
@@ -806,7 +840,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ShowWorkshopChanges(item, tool);
         }
         if (Widgets.Button(L($"{Icons.Undo}  Annuler la dernière modification"),
-                L("Remet le dernier morceau retiré ou la dernière texture remplacée (pas encore enregistrés)."),
+                L("Remet le dernier morceau retiré ou déplacé, ou la dernière texture remplacée (pas encore enregistrés)."),
                 width, enabled: tool.ChangeCount > 0))
         {
             tool.UndoLast();
@@ -814,6 +848,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
             tool.Clear();
+        if (tool.SelectedCount > 0)
+            DrawWorkshopMove(item, tool, width);
         if (tool.ChangeCount > 0)
         {
             ImGui.Spacing();
@@ -831,7 +867,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Écrit le fichier du modèle dans le dossier stream du projet, puis recharge la carte une seule fois.\n")
                     + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule ensuite."));
-            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés et les textures remplacées depuis le dernier enregistrement."), width))
+            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés ou déplacés et les textures remplacées depuis le dernier enregistrement."), width))
             {
                 _workshopFor = null;
                 Viewer.Reload(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
@@ -839,7 +875,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         else if (ModelPartTool.ChangedFile(state, tool.Path) is not null
             && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
-                L("Annule tous les morceaux retirés de ce modèle (le fichier d'avant est remis)."), width))
+                L("Annule tous les changements de ce modèle : morceaux retirés ou déplacés (le fichier d'avant est remis)."), width))
         {
             state.Notify(ModelPartTool.Restore(state, tool.Path));
             _reopen = (item, state.World.ModelReader);
@@ -847,8 +883,32 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         ImGui.Spacing();
         DrawWorkshopTextures(item, tool, width);
+    }
+
+    // Moving the chosen piece by exact values (the handles in the image do the same with the mouse).
+    private void DrawWorkshopMove(ViewerItem item, ModelPartTool tool, float width)
+    {
         ImGui.Spacing();
-        Widgets.Hint(L("Bientôt ici : déplacer un morceau."), wrap: true);
+        ImGui.SeparatorText(L("Déplacer le morceau"));
+        Widgets.Hint(L("Tirez les flèches dans l'image pour le déplacer sur un axe, le point du milieu pour le glisser à plat, ")
+            + L("l'anneau pour le tourner. Ctrl : par pas de 5 cm ou 15°. Échap : annuler."), wrap: true);
+        ImGui.SetNextItemWidth(width * 0.6f);
+        ImGui.DragFloat3(L("Décalage (m)"), ref _moveBy, 0.005f, -100f, 100f, "%.3f");
+        ImGui.SetNextItemWidth(width * 0.6f);
+        ImGui.DragFloat3(L("Rotation (°)"), ref _turnBy, 0.5f, -360f, 360f, "%.1f");
+        bool any = _moveBy != Vector3.Zero || _turnBy != Vector3.Zero;
+        if (Widgets.Button(L($"{Icons.Move}  Appliquer"), L("Décale puis tourne le morceau autour de son centre (axes du modèle)."), width, enabled: any)
+            && tool.SelectionCenter is { } pivot)
+        {
+            const float ToRadians = MathF.PI / 180f;
+            var move = Matrix4x4.CreateTranslation(-pivot)
+                * Matrix4x4.CreateRotationX(_turnBy.X * ToRadians)
+                * Matrix4x4.CreateRotationY(_turnBy.Y * ToRadians)
+                * Matrix4x4.CreateRotationZ(_turnBy.Z * ToRadians)
+                * Matrix4x4.CreateTranslation(pivot + _moveBy);
+            MoveWorkshopPiece(item, tool, move);
+            _moveBy = _turnBy = Vector3.Zero;
+        }
     }
 
     // The textures of the model: replaced by an image (converted to the texture's size and format), or exported.

@@ -101,7 +101,63 @@ public sealed class DrawableReader : IModelReader
     // A geometry as stored in the file, for tools that change it: its detail level (0 = high), where its triangle indices
     // are in the resource data, its vertex positions in the model (placed on their bone like the drawn meshes) and its
     // indices.
-    public sealed record StoredGeometry(int Level, int IndicesAt, Vector3[] Positions, ushort[] Indices);
+    public sealed record StoredGeometry(int Level, int IndicesAt, Vector3[] Positions, ushort[] Indices)
+    {
+        // Its vertices, to move them; null when their layout cannot be written.
+        public StoredVertices? Vertices { get; init; }
+
+        // Boxes holding it (its own, its model's, the drawable's): where each minimum is, the maximum 16 bytes after.
+        public int[] Boxes { get; init; } = [];
+
+        // The drawable's bounding sphere: its centre, the radius 12 bytes after; -1 when none.
+        public int SphereAt { get; init; } = -1;
+    }
+
+    // Where a geometry's vertices are in the data and how they are stored.
+    public sealed class StoredVertices
+    {
+        private readonly VertexDeclaration _declaration;
+
+        internal StoredVertices(VertexDeclaration declaration, int at, int secondAt, int count, Matrix4x4 bone)
+        {
+            _declaration = declaration;
+            At = at;
+            SecondAt = secondAt;
+            Count = count;
+            Bone = bone;
+        }
+
+        public int At { get; }
+
+        // A second copy of the vertices kept by the file, -1 when none.
+        public int SecondAt { get; }
+
+        public int Count { get; }
+        public int Stride => _declaration.Stride;
+
+        // From the vertices' own space to the model's (the bone they are placed on).
+        public Matrix4x4 Bone { get; }
+
+        // Moves and turns one vertex (matrix in the vertices' own space): position, normal, tangent and binormal.
+        public void Transform(Span<byte> vertexBuffer, int vertex, Matrix4x4 move)
+        {
+            int start = vertex * Stride;
+            var p = _declaration.Read(vertexBuffer, start, PositionComponent);
+            _declaration.Write(vertexBuffer, start, PositionComponent, new Vector4(Vector3.Transform(Xyz(p), move), p.W));
+            foreach (int component in DirectionComponents)
+            {
+                if (!_declaration.Has(component) || !_declaration.CanWrite(component))
+                    continue;
+                var d = _declaration.Read(vertexBuffer, start, component);
+                var turned = Vector3.TransformNormal(Xyz(d), move);
+                if (turned.LengthSquared() > 1e-12f)
+                    turned = Vector3.Normalize(turned) * Xyz(d).Length();
+                _declaration.Write(vertexBuffer, start, component, new Vector4(turned, d.W));
+            }
+        }
+
+        private static readonly int[] DirectionComponents = [NormalComponent, TangentComponent, BinormalComponent];
+    }
 
     // Every geometry of every detail level of one model of the file (the drawable for .ydr and .yft, the one named
     // nameHash for .ydd).
@@ -129,12 +185,23 @@ public sealed class DrawableReader : IModelReader
                 var boneTransform = !skinned && pose is not null && bone < pose.Length ? pose[bone] : Matrix4x4.Identity;
                 int count = res.UInt16(model + GeometriesCount);
                 int geometries = res.ResolveArray(res.UInt64(model + GeometriesPointer), count, 8, "géométries");
+                // Model boxes: one for the whole model, then one per geometry when there are several.
+                int boxCount = count > 1 ? count + 1 : 1;
+                ulong boxesPointer = res.UInt64(model + ModelBoundsPointer);
+                int boxes = boxesPointer == 0 ? -1 : res.ResolveArray(boxesPointer, boxCount, BoxLength, "boîtes");
                 for (int i = 0; i < count; i++)
                 {
                     int geometry = Block(res, res.UInt64(geometries + i * 8), GeometryLength);
                     if (geometry < 0 || Buffers(res, geometry) is not { } buffers)
                         continue;
                     var (declaration, vertexAt, vertexLength, vertexCount, indicesAt, indexCount) = buffers;
+                    var held = new List<int> { d + BoundsMinOffset };
+                    if (boxes >= 0)
+                    {
+                        held.Add(boxes);
+                        if (count > 1)
+                            held.Add(boxes + (i + 1) * BoxLength);
+                    }
                     var vertexBytes = res.Bytes(vertexAt, vertexLength);
                     var positions = new Vector3[vertexCount];
                     for (int v = 0; v < vertexCount; v++)
@@ -142,7 +209,14 @@ public sealed class DrawableReader : IModelReader
                     var indices = new ushort[indexCount - indexCount % 3];
                     for (int k = 0; k < indices.Length; k++)
                         indices[k] = res.UInt16(indicesAt + k * 2);
-                    found.Add(new StoredGeometry(level, indicesAt, positions, indices));
+                    found.Add(new StoredGeometry(level, indicesAt, positions, indices)
+                    {
+                        Vertices = declaration.CanWrite(PositionComponent)
+                            ? new StoredVertices(declaration, vertexAt, buffers.SecondVertexAt, vertexCount, boneTransform)
+                            : null,
+                        Boxes = [.. held],
+                        SphereAt = d + BoundsCenterOffset,
+                    });
                 }
             }
         }
@@ -195,7 +269,10 @@ public sealed class DrawableReader : IModelReader
     // Drawable (rmcDrawable), at least 0xA8 bytes.
     private const int DrawableLength = 0xA8;
     private const int ShaderGroupPointer = 0x10;
+    private const int BoundsCenterOffset = 0x20;
     private const int BoundsMinOffset = 0x30;
+    private const int ModelBoundsPointer = 0x18;
+    private const int BoxLength = 0x20;
     private const int BoundsMaxOffset = 0x40;
     private const int ModelsHigh = 0x50; // then medium, low and very low, 8 bytes apart
     private const int ModelsPointer = 0xA0;
@@ -508,10 +585,16 @@ public sealed class DrawableReader : IModelReader
     private const int SecondColorComponent = 5;
     private const int TexCoordComponent = 6;
     private const int SecondTexCoordComponent = 7;
+    private const int TangentComponent = 14;
+    private const int BinormalComponent = 15;
 
     // Where a geometry's vertices and indices are in the data, null when it has nothing to draw.
     private readonly record struct GeometryBuffers(VertexDeclaration Declaration, int VertexAt, int VertexLength, int VertexCount,
-        int IndicesAt, int IndexCount);
+        int IndicesAt, int IndexCount)
+    {
+        // A second copy of the vertices (original release), -1 when none.
+        public int SecondVertexAt { get; init; } = -1;
+    }
 
     private static GeometryBuffers? Buffers(ResourceData res, int g)
     {
@@ -550,7 +633,11 @@ public sealed class DrawableReader : IModelReader
         int stride = declaration.Stride;
         if (count == 0 || stride == 0 || (long)count * stride > vertexLength)
             return null;
-        return new GeometryBuffers(declaration, vertexAt, vertexLength, count, indicesAt, indexCount);
+        int secondAt = -1;
+        ulong secondPointer = enhanced ? 0 : res.UInt64(buffer + 0x20);
+        if (secondPointer != 0 && secondPointer != dataPointer)
+            secondAt = res.ResolveArray(secondPointer, vertexLength, 1, "sommets");
+        return new GeometryBuffers(declaration, vertexAt, vertexLength, count, indicesAt, indexCount) { SecondVertexAt = secondAt };
     }
 
     private static ModelMesh? ConvertGeometry(ResourceData res, int g, Shader? shader, List<Shader?> shaders)
@@ -681,7 +768,7 @@ public sealed class DrawableReader : IModelReader
 
     // Where each vertex component (numbered as in the original release: 0 position, 3 normal, 4 and 5 colours, 6 to 13
     // texture coordinates...) is in a vertex, and how it is stored.
-    private sealed class VertexDeclaration
+    internal sealed class VertexDeclaration
     {
         private const int Components = 16;
         private readonly int[] _offsets = new int[Components];
@@ -772,6 +859,39 @@ public sealed class DrawableReader : IModelReader
                 11 => Packed(bytes, o),
                 _ => Vector4.Zero,
             };
+        }
+
+        // Storage types Write knows: float3, float4, half4, packed 10-10-10-2.
+        public bool CanWrite(int component) => Has(component) && _types[component] is 3 or 6 or 7 or 11;
+
+        public void Write(Span<byte> bytes, int vertexStart, int component, Vector4 value)
+        {
+            if (!CanWrite(component))
+                return;
+            int o = vertexStart + _offsets[component];
+            switch (_types[component])
+            {
+                case 6:
+                case 7:
+                    BinaryPrimitives.WriteSingleLittleEndian(bytes[o..], value.X);
+                    BinaryPrimitives.WriteSingleLittleEndian(bytes[(o + 4)..], value.Y);
+                    BinaryPrimitives.WriteSingleLittleEndian(bytes[(o + 8)..], value.Z);
+                    if (_types[component] == 7)
+                        BinaryPrimitives.WriteSingleLittleEndian(bytes[(o + 12)..], value.W);
+                    break;
+                case 3:
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[o..], (Half)value.X);
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[(o + 2)..], (Half)value.Y);
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[(o + 4)..], (Half)value.Z);
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[(o + 6)..], (Half)value.W);
+                    break;
+                case 11:
+                    static uint Unsigned(float x) => (uint)Math.Clamp(MathF.Round((x + 1f) * 0.5f * 1023f), 0f, 1023f);
+                    uint packed = Unsigned(value.X) | (Unsigned(value.Y) << 10) | (Unsigned(value.Z) << 20)
+                        | ((uint)Math.Clamp(MathF.Round(value.W * 3f), 0f, 3f) << 30);
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes[o..], packed);
+                    break;
+            }
         }
 
         private static float F(ReadOnlySpan<byte> b, int at) => at + 4 <= b.Length ? BinaryPrimitives.ReadSingleLittleEndian(b[at..]) : 0f;

@@ -19,9 +19,10 @@ internal sealed class ModelPartTool
 
     private readonly ResourceHeader _header;
     private readonly byte[] _content;
-    private readonly List<DrawableReader.StoredGeometry> _all;
-    private readonly List<DrawableReader.StoredGeometry> _shown;
-    private readonly List<(Vector3[] Positions, ushort[] Indices)> _meshes;
+    private List<DrawableReader.StoredGeometry> _all;
+    private List<DrawableReader.StoredGeometry> _shown;
+    private List<(Vector3[] Positions, ushort[] Indices)> _meshes;
+    private readonly string _extension;
     private readonly HashSet<MeshTriangle> _selected = [];
 
     // The object of the map the tool was opened on, null when opened on a model alone (model workshop).
@@ -41,10 +42,16 @@ internal sealed class ModelPartTool
         _modelHash = modelHash;
         _header = header;
         _content = content;
-        _all = all;
+        _extension = System.IO.Path.GetExtension(path);
+        (_all, _shown, _meshes) = Split(all);
+    }
+
+    private static (List<DrawableReader.StoredGeometry>, List<DrawableReader.StoredGeometry>, List<(Vector3[], ushort[])>) Split(
+        List<DrawableReader.StoredGeometry> all)
+    {
         int level = all.Min(g => g.Level);
-        _shown = all.Where(g => g.Level == level).ToList();
-        _meshes = _shown.Select(g => (g.Positions, g.Indices)).ToList();
+        var shown = all.Where(g => g.Level == level).ToList();
+        return (all, shown, shown.Select(g => (g.Positions, g.Indices)).ToList());
     }
 
     // The tool for this object's model, or an error message.
@@ -114,16 +121,17 @@ internal sealed class ModelPartTool
         Revision++;
     }
 
-    // Edges of the selected triangles, in the model's space.
-    public IEnumerable<(Vector3 From, Vector3 To)> Edges()
+    // Edges of the selected triangles, in the model's space (moved by preview while the piece is dragged).
+    public IEnumerable<(Vector3 From, Vector3 To)> Edges(Matrix4x4? preview = null)
     {
         int edges = 0;
+        var m = preview ?? Matrix4x4.Identity;
         foreach (var (mesh, t) in _selected)
         {
             var (p, idx) = _meshes[mesh];
-            var a = p[idx[t * 3]];
-            var b = p[idx[t * 3 + 1]];
-            var c = p[idx[t * 3 + 2]];
+            var a = Vector3.Transform(p[idx[t * 3]], m);
+            var b = Vector3.Transform(p[idx[t * 3 + 1]], m);
+            var c = Vector3.Transform(p[idx[t * 3 + 2]], m);
             yield return (a, b);
             yield return (b, c);
             yield return (c, a);
@@ -173,15 +181,18 @@ internal sealed class ModelPartTool
     }
 
     // Changes made in memory and not saved yet, last one last: the file changed and how to undo it.
-    private sealed record Change(bool Texture, string File, Action Undo);
+    private enum ChangeKind { Removed, Moved, Texture }
+
+    private sealed record Change(ChangeKind Kind, string File, Action Undo);
     private readonly List<Change> _changes = [];
 
     // Texture dictionaries (.ytd) read for a change of their textures, by path.
     private readonly Dictionary<string, (ResourceHeader Header, byte[] Content)> _dictionaries = new(StringComparer.OrdinalIgnoreCase);
 
     public int ChangeCount => _changes.Count;
-    public int RemovedCount => _changes.Count(c => !c.Texture);
-    public int TextureChangeCount => _changes.Count(c => c.Texture);
+    public int RemovedCount => _changes.Count(c => c.Kind == ChangeKind.Removed);
+    public int MovedCount => _changes.Count(c => c.Kind == ChangeKind.Moved);
+    public int TextureChangeCount => _changes.Count(c => c.Kind == ChangeKind.Texture);
 
     public ResourceHeader Header => _header;
 
@@ -242,7 +253,7 @@ internal sealed class ModelPartTool
         if (FindTexture(world, source, nameHash, out var error) is not var (texture, content))
             return error;
         var before = texture.Write(content, pixels);
-        _changes.Add(new Change(true, Same(source, Path) ? Path : source, () => texture.Restore(content, before)));
+        _changes.Add(new Change(ChangeKind.Texture, Same(source, Path) ? Path : source, () => texture.Restore(content, before)));
         return null;
     }
 
@@ -252,19 +263,23 @@ internal sealed class ModelPartTool
     {
         if (_selected.Count == 0)
             return (0, 0);
+        var triangles = ChosenTriangles(out int farther);
+        var before = DrawablePatch.HideTriangles(_content, triangles.Select(t => (t.Geometry.IndicesAt, t.Triangle)));
+        _changes.Add(new Change(ChangeKind.Removed, Path, () => DrawablePatch.Restore(_content, before)));
+        Refresh();
+        int count = _selected.Count;
+        Clear();
+        return (count, farther);
+    }
+
+    // The chosen triangles, and those of the simpler versions of the model (seen from farther away) in the same place.
+    private List<(DrawableReader.StoredGeometry Geometry, int Triangle)> ChosenTriangles(out int farther)
+    {
         var triangles = _selected.Select(s => (Geometry: _shown[s.Mesh], s.Triangle)).ToList();
-        // The simpler versions of the model (seen from farther away): their triangles in the same place.
-        var (min, max) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
-        foreach (var group in _selected.GroupBy(s => s.Mesh))
-        {
-            var (positions, indices) = _meshes[group.Key];
-            var box = ModelParts.Box(positions, indices, group.Select(s => s.Triangle));
-            min = Vector3.Min(min, box.Min);
-            max = Vector3.Max(max, box.Max);
-        }
+        var (min, max) = SelectionBox();
         min -= new Vector3(BoxMargin);
         max += new Vector3(BoxMargin);
-        int farther = 0;
+        farther = 0;
         foreach (var geometry in _all.Where(g => !_shown.Contains(g)))
         {
             foreach (int t in ModelParts.Inside(geometry.Positions, geometry.Indices, min, max))
@@ -273,12 +288,52 @@ internal sealed class ModelPartTool
                 farther++;
             }
         }
-        var before = DrawablePatch.HideTriangles(_content, triangles.Select(t => (t.Geometry.IndicesAt, t.Triangle)));
-        _changes.Add(new Change(false, Path, () => DrawablePatch.Restore(_content, before)));
-        Sync();
-        int count = _selected.Count;
-        Clear();
-        return (count, farther);
+        return triangles;
+    }
+
+    private (Vector3 Min, Vector3 Max) SelectionBox()
+    {
+        var (min, max) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
+        foreach (var group in _selected.GroupBy(s => s.Mesh))
+        {
+            var (positions, indices) = _meshes[group.Key];
+            var box = ModelParts.Box(positions, indices, group.Select(s => s.Triangle));
+            min = Vector3.Min(min, box.Min);
+            max = Vector3.Max(max, box.Max);
+        }
+        return (min, max);
+    }
+
+    // The middle of the chosen piece (model space), null when nothing is chosen.
+    public Vector3? SelectionCenter
+    {
+        get
+        {
+            if (_selected.Count == 0)
+                return null;
+            var (min, max) = SelectionBox();
+            return (min + max) * 0.5f;
+        }
+    }
+
+    // Moves and turns the chosen piece (and the same place of the simpler versions) in memory; the piece stays chosen.
+    // Returns an error message, or null.
+    public string? MoveSelected(Matrix4x4 move)
+    {
+        if (_selected.Count == 0 || move.IsIdentity)
+            return null;
+        var parts = ChosenTriangles(out _)
+            .GroupBy(t => t.Geometry)
+            .Select(g => (g.Key, (IReadOnlyCollection<int>)g
+                .SelectMany(t => new[] { g.Key.Indices[t.Triangle * 3], g.Key.Indices[t.Triangle * 3 + 1], g.Key.Indices[t.Triangle * 3 + 2] })
+                .Select(i => (int)i).ToHashSet()))
+            .ToList();
+        if (DrawablePatch.MoveVertices(_content, parts, move) is not { } before)
+            return L("Les sommets de ce modèle sont dans un format que NodeRunner ne sait pas encore modifier.");
+        _changes.Add(new Change(ChangeKind.Moved, Path, () => DrawablePatch.Restore(_content, before)));
+        Refresh();
+        Revision++;
+        return null;
     }
 
     // Undoes the last change made in memory (a piece removed, a texture replaced).
@@ -286,22 +341,23 @@ internal sealed class ModelPartTool
     {
         if (_changes.Count == 0)
             return false;
-        _changes[^1].Undo();
+        var last = _changes[^1];
+        last.Undo();
         _changes.RemoveAt(_changes.Count - 1);
-        Sync();
-        Clear();
+        if (last.Kind == ChangeKind.Texture)
+            return true;
+        Refresh();
+        if (last.Kind == ChangeKind.Moved)
+            Revision++;
+        else
+            Clear();
         return true;
     }
 
-    // The triangles as the data now holds them (emptied ones are not picked any more).
-    private void Sync()
-    {
-        foreach (var geometry in _all)
-        {
-            for (int k = 0; k < geometry.Indices.Length; k++)
-                geometry.Indices[k] = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(_content.AsSpan(geometry.IndicesAt + k * 2));
-        }
-    }
+    // The geometries as the data now holds them (emptied triangles are not picked any more, moved pieces are where they
+    // went).
+    private void Refresh() =>
+        (_all, _shown, _meshes) = Split(DrawableReader.StoredGeometries(_content, _header, _extension, _modelHash));
 
     // Writes the changed files (the model, its texture dictionaries) into the project's stream folder, and reloads the
     // map once.
@@ -322,13 +378,14 @@ internal sealed class ModelPartTool
             if (WriteFile(state, path, header, content) is { } error)
                 return (false, error);
         }
-        int pieces = RemovedCount, textures = TextureChangeCount;
+        int pieces = RemovedCount, moved = MovedCount, textures = TextureChangeCount;
         _changes.Clear();
         _dictionaries.Clear();
         state.World.RequestMapReload();
         string names = string.Join(", ", files.Select(f => System.IO.Path.GetFileName(f.Path)));
-        return (true, textures == 0 ? L($"{names} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte...")
-            : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
+        return (true, moved == 0 && textures == 0 ? L($"{names} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte...")
+            : moved == 0 ? L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {textures} texture(s) remplacée(s)). Rechargement de la carte...")
+            : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
     }
 
     // One file into the project's stream folder; an error message, or null.
