@@ -658,7 +658,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             ImGui.SameLine(0, 2);
             bool canShow = state.WorkshopEntity is not null;
-            if (Widgets.IconButton(Icons.Map, "workshop_map", canShow
+            if (Widgets.ToolbarButton(Icons.Map, L("Carte autour"), canShow
                     ? L("Carte autour : les objets voisins de la carte, en gris, à leur place autour du modèle")
                     : L("Carte autour : seulement pour un modèle ouvert depuis un objet de la carte (double-clic, clic droit, Propriétés)"),
                     enabled: canShow, active: canShow && state.WorkshopShowsMap))

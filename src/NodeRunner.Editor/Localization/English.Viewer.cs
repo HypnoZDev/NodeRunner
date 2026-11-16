@@ -305,6 +305,7 @@ public static partial class English
         ("{0}  Modifier le modèle (Atelier)", "{0}  Edit the model (Workshop)"),
         ("Double-clic", "Double-click"),
         ("Double-clic sur un objet", "Double-click an object"),
+        ("Carte autour", "Map around"),
         ("Carte autour : les objets voisins de la carte, en gris, à leur place autour du modèle",
             "Map around: the neighbouring objects of the map, in grey, in their place around the model"),
         ("Carte autour : seulement pour un modèle ouvert depuis un objet de la carte (double-clic, clic droit, Propriétés)",
