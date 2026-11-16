@@ -83,6 +83,9 @@ public sealed class ModelCatalog
         return new ModelCatalog { _drawables = Index(drawables), _dictionaries = Index(dictionaries), _fragments = Index(fragments) };
     }
 
+    // The drawable file (.ydr) of a model, by the hash of its name.
+    public string? DrawablePath(uint nameHash) => _drawables.GetValueOrDefault(nameHash);
+
     // The fragment file (.yft) of a model, by the hash of its name (a vehicle: its spawn name).
     public string? FragmentPath(uint nameHash) => _fragments.GetValueOrDefault(nameHash);
 

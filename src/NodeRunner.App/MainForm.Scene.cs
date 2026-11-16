@@ -87,6 +87,7 @@ internal sealed unsafe partial class MainForm
 
         // The ped, animal or vehicle of the selected scenario point.
         var previewPoint = _state.SelectedScenario is { } point && _state.IsLayerVisible(ScenarioLayer.LayerName(point.Category)) ? point : null;
+        _state.ScenarioClips.Update(_modelRenderer);
         _state.ScenarioPreview.Update(_state.World, _modelRenderer, _state.ScenarioClips, previewPoint);
         if (previewPoint is not null)
             _state.ScenarioPreview.Draw(_modelRenderer, previewPoint, viewProjection);

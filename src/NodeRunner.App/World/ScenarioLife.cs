@@ -33,9 +33,11 @@ internal sealed class ScenarioLife : IDisposable
         public readonly Vector3[]? Paint = paint;
         public readonly int Variant = variant;
         // The clip a ped or animal plays (null while read, or none), and where its bones are this frame.
-        public AnimationClip? Clip;
+        public ScenarioClip? Clip;
         public Matrix4x4[]? Pose;
         public bool Posed;
+        // The object in its hand, this frame (null while read or for none).
+        public GpuModel? Prop;
 
         // Shift in the clip, so that neighbours do not move together.
         public float Phase => (Variant & 0xFFFF) / 65535f * 60f;
@@ -100,6 +102,7 @@ internal sealed class ScenarioLife : IDisposable
             shown++;
             if (spawn.Clip is null && model.IsSkinned && slot.Item.Kind == ViewerKind.Ped)
                 spawn.Clip = clips.Get(world, spawn.Point.TypeHash, slot.Item.Name, spawn.Variant);
+            spawn.Prop = spawn.Clip?.Prop is { } prop ? clips.PropModel(world, prop) : null;
         }
         Shown = shown;
         IsLoading = _spawns.Any(s => !s.Slot.Opened || s.Slot.Model.IsLoading);
@@ -167,7 +170,7 @@ internal sealed class ScenarioLife : IDisposable
         foreach (var spawn in _spawns)
         {
             spawn.Posed = spawn.Point != skip && spawn.Slot.Model.Model is { IsSkinned: true }
-                && ScenarioClips.Pose(spawn.Slot.Model.Data, spawn.Clip, spawn.Phase, ref spawn.Pose);
+                && ScenarioClips.Pose(spawn.Slot.Model.Data, spawn.Clip?.Clip, spawn.Phase, ref spawn.Pose);
         }
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
@@ -179,7 +182,13 @@ internal sealed class ScenarioLife : IDisposable
                 var kind = spawn.Slot.Item.Kind;
                 renderer.VehiclePaint = kind == ViewerKind.Vehicle ? spawn.Paint : null;
                 renderer.BonePose = spawn.Posed ? spawn.Pose : null;
-                renderer.Draw(model, ScenarioPreview.Placement(spawn.Slot.Model, kind, spawn.Point), viewProjection, Vector3.One);
+                var placement = ScenarioPreview.Placement(spawn.Slot.Model, kind, spawn.Point);
+                renderer.Draw(model, placement, viewProjection, Vector3.One);
+                if (spawn.Posed && spawn.Prop is { } prop && ScenarioClips.Hand(spawn.Slot.Model.Data, spawn.Pose, spawn.Clip!.LeftHand) is { } hand)
+                {
+                    renderer.BonePose = null;
+                    renderer.Draw(prop, hand * placement, viewProjection, Vector3.One);
+                }
             }
         }
         renderer.VehiclePaint = null;

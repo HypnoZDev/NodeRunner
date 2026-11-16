@@ -3,11 +3,16 @@ using System.Xml;
 using System.Xml.Linq;
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Hashing;
+using NodeRunner.Data.Models;
 
 namespace NodeRunner.Data.Scenarios;
 
 // A clip set (clip_sets.ymt, clip_sets.xml of the packs): the clip dictionary (.ycd) its clips come from, by name hash.
 public sealed record ClipSet(uint Dictionary, IReadOnlyList<uint> Clips);
+
+// What a ped plays on a scenario point: a clip (by hashes of its .ycd and its name) and the object it holds (model
+// name, lowercase), in the right hand unless LeftHand.
+public sealed record ScenarioClipChoice(uint Dictionary, uint Clip, string? Prop, bool LeftHand);
 
 public interface IClipSetReader
 {
@@ -25,12 +30,21 @@ public sealed class ScenarioAnimations
         @"common.rpf\data\ai\scenarios.meta",
     ];
 
+    // Objects held in a hand (propsets.meta: CIGARETTES, PHONES, COFFEECUPS...).
+    private static readonly string[] PropSetFiles =
+    [
+        @"update\update.rpf\common\data\ai\propsets.meta",
+        @"common.rpf\data\ai\propsets.meta",
+    ];
+
     private static readonly uint BaseClip = Joaat.Hash("base");
 
-    private sealed record Variant(float Probability, bool? Male, bool Excluded, uint ClipSet);
+    // PropSet: hash of the objects it holds, 0 for none.
+    private sealed record Variant(float Probability, bool? Male, bool Excluded, uint ClipSet, uint PropSet, bool LeftHand);
 
     private readonly Dictionary<uint, List<Variant>> _types = new();
     private readonly Dictionary<uint, ClipSet> _clipSets = new();
+    private ModelSets _propSets = ModelSets.Empty;
 
     public static readonly ScenarioAnimations Empty = new();
 
@@ -74,6 +88,22 @@ public sealed class ScenarioAnimations
                 animations.Errors.Add($"{path} : {ex.Message}");
             }
         }
+
+        // The first file found (the update's replaces the base game's).
+        foreach (var path in PropSetFiles)
+        {
+            if (content.ReadFile(path) is not { } data)
+                continue;
+            try
+            {
+                animations._propSets = ModelSets.Parse(data);
+            }
+            catch (InvalidDataException ex)
+            {
+                animations.Errors.Add($"{path} : {ex.Message}");
+            }
+            break;
+        }
         return animations;
     }
 
@@ -90,8 +120,13 @@ public sealed class ScenarioAnimations
             var variants = new List<Variant>();
             foreach (var anims in group.Element("ConditionalAnims")?.Elements("Item") ?? [])
             {
-                var clipSet = anims.Element("BaseAnims")?.Elements("Item").Select(i => i.Element("ClipSet")?.Value.Trim())
-                    .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+                string propSet = anims.Element("PropSet")?.Value.Trim() ?? "";
+                bool holding = propSet.Length > 0;
+                // The base clip set made for a ped holding the object or not (HasProp / HasNoProp), else the first.
+                var bases = (anims.Element("BaseAnims")?.Elements("Item") ?? [])
+                    .Select(i => (Name: i.Element("ClipSet")?.Value.Trim(), Item: i)).Where(b => !string.IsNullOrEmpty(b.Name)).ToList();
+                var clipSet = bases.Where(b => HoldsProp(b.Item) is not { } wants || wants == holding).Select(b => b.Name).FirstOrDefault()
+                    ?? bases.Select(b => b.Name).FirstOrDefault();
                 if (clipSet is null)
                     continue;
                 bool? male = null;
@@ -113,16 +148,35 @@ public sealed class ScenarioAnimations
                 }
                 float probability = float.TryParse(anims.Element("Probability")?.Attribute("value")?.Value, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out float p) ? Math.Max(p, 0f) : 1f;
-                variants.Add(new Variant(probability, male, excluded, Joaat.Hash(clipSet)));
+                bool left = (anims.Element("Flags")?.Value ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Contains("SpawnPropInLeftHand", StringComparer.OrdinalIgnoreCase);
+                variants.Add(new Variant(probability, male, excluded, Joaat.Hash(clipSet), holding ? Joaat.Hash(propSet) : 0, left));
             }
             if (variants.Count > 0)
                 _types[type] = variants;
         }
     }
 
-    // Clip dictionary (.ycd name hash) and clip of a ped on a point of this type; seed picks among the variants (the
-    // same seed gives the same one). Null when the type has no animation.
-    public (uint Dictionary, uint Clip)? Choose(uint typeHash, bool male, int seed)
+    // Whether a base clip set is for a ped holding its object (true), not holding it (false), or either (null).
+    private static bool? HoldsProp(XElement item)
+    {
+        foreach (var condition in item.Element("Conditions")?.Elements("Item") ?? [])
+        {
+            bool result = string.Equals(condition.Element("Result")?.Value.Trim(), "True", StringComparison.OrdinalIgnoreCase);
+            switch (condition.Attribute("type")?.Value)
+            {
+                case "CScenarioConditionHasProp":
+                    return result;
+                case "CScenarioConditionHasNoProp":
+                    return !result;
+            }
+        }
+        return null;
+    }
+
+    // Clip dictionary (.ycd name hash) and clip of a ped on a point of this type, with the object it holds; seed picks
+    // among the variants (the same seed gives the same one). Null when the type has no animation.
+    public ScenarioClipChoice? Choose(uint typeHash, bool male, int seed)
     {
         if (!_types.TryGetValue(typeHash, out var variants))
             return null;
@@ -149,11 +203,14 @@ public sealed class ScenarioAnimations
             pick = usable[(int)(Mix((uint)seed) % (uint)usable.Count)];
         }
 
+        var props = pick.PropSet == 0 ? [] : _propSets.ModelsOf(pick.PropSet);
+        string? prop = props.Count == 0 ? null : props[(int)(Mix((uint)seed ^ 0x51ED27u) % (uint)props.Count)];
+
         // A clip set missing from the tables: the dictionary is named after it.
         if (!_clipSets.TryGetValue(pick.ClipSet, out var set) || set.Dictionary == 0)
-            return (pick.ClipSet, BaseClip);
+            return new ScenarioClipChoice(pick.ClipSet, BaseClip, prop, pick.LeftHand);
         uint clip = set.Clips.Contains(BaseClip) || set.Clips.Count == 0 ? BaseClip : set.Clips[0];
-        return (set.Dictionary, clip);
+        return new ScenarioClipChoice(set.Dictionary, clip, prop, pick.LeftHand);
     }
 
     private static uint Mix(uint h)

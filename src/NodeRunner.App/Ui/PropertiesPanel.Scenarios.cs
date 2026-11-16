@@ -167,8 +167,13 @@ internal sealed partial class PropertiesPanel
                 Widgets.PropertyText(L("Aperçu"), shown,
                     L("Modèle du jeu affiché sur le point dans la vue 3D, pour juger la place et le sens. Le jeu peut en choisir un autre."));
                 if (preview.ModelName is not null && point.Category != NodeRunner.Data.Scenarios.ScenarioCategory.Vehicle)
-                    Widgets.PropertyText(L("Animation"), preview.Clip is { } clip ? state.ScenarioClips.Describe(clip) : L("aucune (pose de base)"),
+                {
+                    Widgets.PropertyText(L("Animation"), preview.Clip is { } clip ? state.ScenarioClips.Describe(clip.Clip) : L("aucune (pose de base)"),
                         L("Clip joué en boucle par le modèle de l'aperçu, choisi comme le jeu d'après le type de scénario (scenarios.meta) et le sexe du PNJ."));
+                    if (preview.Clip?.Prop is { } prop)
+                        Widgets.PropertyText(L("Objet tenu"), preview.Clip.LeftHand ? L($"{prop} (main gauche)") : L($"{prop} (main droite)"),
+                            L("Objet que le jeu met dans la main du PNJ pour cette animation (PropSet de scenarios.meta, propsets.meta)."));
+                }
             }
             if (point.Region is { } owner && owner.GroupOf(point.Index) is var cluster and >= 0)
                 Widgets.PropertyText(L("Ensemble"), L($"groupe {cluster} ({owner.ClusterSizes[cluster]} points)"),

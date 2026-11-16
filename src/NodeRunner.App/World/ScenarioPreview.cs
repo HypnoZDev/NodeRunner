@@ -20,8 +20,9 @@ internal sealed class ScenarioPreview : IDisposable
     public ScenarioModelSource? Source { get; private set; }
 
     // The clip the ped or animal plays (null while read, or none).
-    public AnimationClip? Clip { get; private set; }
+    public ScenarioClip? Clip { get; private set; }
     private Matrix4x4[]? _pose;
+    private GpuModel? _prop;
 
     public void Update(WorldLoader world, ModelRenderer renderer, ScenarioClips clips, ScenarioPoint? point)
     {
@@ -50,6 +51,7 @@ internal sealed class ScenarioPreview : IDisposable
         _model.Update(renderer);
         if (Clip is null && _model.Model is { IsSkinned: true } && _item.Kind == ViewerKind.Ped)
             Clip = clips.Get(world, point.TypeHash, _item.Name, Variant(point));
+        _prop = Clip?.Prop is { } prop ? clips.PropModel(world, prop) : null;
     }
 
     private ViewerItem? Choose(WorldLoader world, ScenarioPoint point)
@@ -101,11 +103,19 @@ internal sealed class ScenarioPreview : IDisposable
             return;
         var world = Placement(_model, item.Kind, point);
         renderer.VehiclePaint = item.Kind == ViewerKind.Vehicle ? _paint : null;
-        renderer.BonePose = model.IsSkinned && ScenarioClips.Pose(_model.Data, Clip, 0f, ref _pose) ? _pose : null;
-        renderer.Begin(ModelPass.Solid);
-        renderer.Draw(model, world, viewProjection, Vector3.One);
-        renderer.Begin(ModelPass.Translucent);
-        renderer.Draw(model, world, viewProjection, Vector3.One);
+        bool posed = model.IsSkinned && ScenarioClips.Pose(_model.Data, Clip?.Clip, 0f, ref _pose);
+        var hand = posed && _prop is not null ? ScenarioClips.Hand(_model.Data, _pose, Clip!.LeftHand) : null;
+        foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
+        {
+            renderer.Begin(pass);
+            renderer.BonePose = posed ? _pose : null;
+            renderer.Draw(model, world, viewProjection, Vector3.One);
+            if (hand is { } placed)
+            {
+                renderer.BonePose = null;
+                renderer.Draw(_prop!, placed * world, viewProjection, Vector3.One);
+            }
+        }
         renderer.VehiclePaint = null;
         renderer.BonePose = null;
     }
