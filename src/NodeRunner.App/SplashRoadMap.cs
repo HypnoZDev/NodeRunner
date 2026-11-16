@@ -12,9 +12,6 @@ namespace NodeRunner.App;
 // moving lights. Bitmaps are in pixels, everything else in design units.
 internal sealed class SplashRoadMap : IDisposable
 {
-    private static readonly Color Road = Color.FromArgb(0x4C, 0x8D, 0xFF);
-    private static readonly Color Highway = Color.FromArgb(0x5F, 0xD3, 0xFF);
-
     public required Bitmap Roads { get; init; }
     public required Bitmap Glow { get; init; }
     public required RectangleF Bounds { get; init; }
@@ -24,7 +21,7 @@ internal sealed class SplashRoadMap : IDisposable
     public required int NodeCount { get; init; }
     public required double Kilometres { get; init; }
 
-    public static SplashRoadMap? Build(PathNetwork network, RectangleF area, float scale)
+    public static SplashRoadMap? Build(PathNetwork network, RectangleF area, float scale, Color road, Color highwayColor)
     {
         var index = new Dictionary<PathNodeId, int>();
         var positions = new List<Vector2>();
@@ -54,11 +51,11 @@ internal sealed class SplashRoadMap : IDisposable
                 }
             }
         }
-        return Build(positions, highway, links, area, scale);
+        return Build(positions, highway, links, area, scale, road, highwayColor);
     }
 
     // GTA IV roads: vehicle nodes without the boat routes; wide roads stand out (no motorway flag known).
-    public static SplashRoadMap? Build(IReadOnlyList<Gta4PathArea> areas, RectangleF area, float scale)
+    public static SplashRoadMap? Build(IReadOnlyList<Gta4PathArea> areas, RectangleF area, float scale, Color road, Color highway)
     {
         var byArea = areas.ToDictionary(a => a.Index);
         var index = new Dictionary<(int, int), int>();
@@ -90,11 +87,11 @@ internal sealed class SplashRoadMap : IDisposable
         var major = new bool[positions.Count];
         foreach (var (a, b, m) in links.Where(l => l.Major))
             major[a] = major[b] = true;
-        return Build(positions, [.. major], links, area, scale);
+        return Build(positions, [.. major], links, area, scale, road, highway);
     }
 
     private static SplashRoadMap? Build(List<Vector2> positions, List<bool> highway, List<(int A, int B, bool Major)> links,
-        RectangleF area, float scale)
+        RectangleF area, float scale, Color road, Color highwayColor)
     {
         if (positions.Count < 100)
             return null;
@@ -152,8 +149,8 @@ internal sealed class SplashRoadMap : IDisposable
             g.SmoothingMode = SmoothingMode.AntiAlias;
             float k = s * scale;
             PointF ToPixel(Vector2 p) => new((p.X - minX) * k, (maxY - p.Y) * k);
-            using var minor = new Pen(Color.FromArgb(70, Road), 0.6f * scale);
-            using var major = new Pen(Color.FromArgb(235, Highway), 1.1f * scale);
+            using var minor = new Pen(Color.FromArgb(70, road), 0.6f * scale);
+            using var major = new Pen(Color.FromArgb(235, highwayColor), 1.1f * scale);
             foreach (var (a, b, _) in segments.Where(x => !x.Major))
                 g.DrawLine(minor, ToPixel(positions[a]), ToPixel(positions[b]));
             foreach (var (a, b, _) in segments.Where(x => x.Major))

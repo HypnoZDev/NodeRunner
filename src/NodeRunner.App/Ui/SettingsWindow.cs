@@ -396,7 +396,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     ImGui.EndCombo();
                 }
 
-                Widgets.Property(L("Couleur d'accent"), L("Couleur des boutons principaux, de la sélection, des liens et des cases cochées. Bleu = couleur d'origine."));
+                Widgets.Property(L("Couleur d'accent"), L("Couleur des boutons principaux, de la sélection, des liens et des cases cochées. Bleu = couleur d'origine. En GTA IV, la couleur suit le jeu ou l'épisode ouvert."));
                 foreach (var (name, rgb) in UiTheme.Accents)
                 {
                     var color = UiTheme.Rgb(rgb);
@@ -407,9 +407,9 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.Text);
                     if (ImGui.ColorButton($"{name}##accent_{rgb:X6}", color, ImGuiColorEditFlags.NoTooltip, new Vector2(22f, 22f)))
                     {
+                        // The main window glides to it (GTA V only: GTA IV has its own colours).
                         settings.AccentColor = rgb;
                         state.SaveSettings();
-                        UiTheme.SetAccent(rgb, applyNextFrame: true);
                     }
                     ImGui.PopStyleColor();
                     ImGui.PopStyleVar();
@@ -551,7 +551,6 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         var settings = state.Settings;
         settings.ResetDisplaySettings();
         Loc.Current = settings.InterfaceLanguage;
-        UiTheme.SetAccent(settings.AccentColor, applyNextFrame: true);
         state.SaveSettings();
         state.Notify(L("Réglages d'origine remis (la carte graphique et la transparence changent au prochain démarrage)."));
     }

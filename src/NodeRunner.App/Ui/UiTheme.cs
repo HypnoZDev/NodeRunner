@@ -54,11 +54,48 @@ internal static unsafe class UiTheme
     public static void SetAccent(uint rgb, bool applyNextFrame = false)
     {
         _applyPending |= applyNextFrame;
-        var color = Rgb(rgb);
+        _accentTarget = rgb;
+        _accentBlend = 1f;
+        SetAccentColor(Rgb(rgb));
+    }
+
+    private static void SetAccentColor(Vector4 color)
+    {
         var white = Vector4.One;
         Accent = color;
         AccentHovered = Vector4.Lerp(color, white, 0.18f) with { W = 1f };
         AccentText = Vector4.Lerp(color, white, 0.38f) with { W = 1f };
+    }
+
+    // GTA V keeps the accent of the settings; GTA IV and each of its episodes have their own.
+    public static uint GameAccent(Configuration.GameKind game, Data.Native.Gta4.Gta4Episode episode, uint settingsAccent) =>
+        game != Configuration.GameKind.Gta4 ? settingsAccent : episode switch
+        {
+            Data.Native.Gta4.Gta4Episode.LostAndDamned => 0xF42015,
+            Data.Native.Gta4.Gta4Episode.BalladOfGayTony => 0xFF79AE,
+            _ => 0xBCA764,
+        };
+
+    private const float AccentTransition = 0.6f; // Seconds.
+    private static uint _accentTarget = DefaultAccent;
+    private static Vector4 _accentFrom;
+    private static float _accentBlend = 1f;
+
+    // Called once per frame, before the frame starts: glides the accent towards rgb when it changes.
+    public static void FollowAccent(uint rgb, float deltaTime)
+    {
+        if (rgb != _accentTarget)
+        {
+            _accentTarget = rgb;
+            _accentFrom = Accent;
+            _accentBlend = 0f;
+        }
+        if (_accentBlend >= 1f)
+            return;
+        _accentBlend = Math.Min(1f, _accentBlend + Math.Clamp(deltaTime, 0f, 0.05f) / AccentTransition);
+        float k = _accentBlend * _accentBlend * (3f - 2f * _accentBlend);
+        SetAccentColor(Vector4.Lerp(_accentFrom, Rgb(rgb), k));
+        Apply();
     }
     public static readonly Vector4 Success = Rgb(0x5BD08A);
     public static readonly Vector4 Warning = Rgb(0xF2B657);

@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
+using NodeRunner.Data.Native.Gta4;
 
 namespace NodeRunner.App;
 
@@ -17,8 +18,40 @@ namespace NodeRunner.App;
 // itself after a few seconds).
 internal sealed partial class SplashForm : Form
 {
-    private static readonly Color Accent = Color.FromArgb(0x4C, 0x8D, 0xFF);
-    private static readonly Color AccentLight = Color.FromArgb(0x5F, 0xD3, 0xFF);
+    // Shades of the screen, from the accent of the game shown: the original blue for GTA V, the colour of GTA IV or of
+    // the episode otherwise.
+    private readonly record struct Palette(Color Accent, Color Light, Color Pale, Color Deep, Color Shine, Color Glow, Color Glow2, Color Tint)
+    {
+        public static readonly Palette Blue = new(Color.FromArgb(0x4C, 0x8D, 0xFF), Color.FromArgb(0x5F, 0xD3, 0xFF), Color.FromArgb(0x9C, 0xC4, 0xFF),
+            Color.FromArgb(0x24, 0x4F, 0xC0), Color.FromArgb(0xE8, 0xF6, 0xFF), Color.FromArgb(0x2A, 0x5B, 0xD7), Color.FromArgb(0x6A, 0x3B, 0xC9),
+            Color.FromArgb(0x14, 0x1E, 0x3A));
+
+        public static Palette Of(uint rgb)
+        {
+            if (rgb == Ui.UiTheme.DefaultAccent)
+                return Blue;
+            var a = Color.FromArgb((int)(rgb >> 16) & 0xFF, (int)(rgb >> 8) & 0xFF, (int)rgb & 0xFF);
+            return new(a, Mix(a, Color.White, 0.35f), Mix(a, Color.White, 0.55f), Mix(a, Color.Black, 0.45f), Mix(a, Color.White, 0.88f),
+                Mix(a, Color.Black, 0.2f), Mix(a, Background, 0.45f), Mix(Background, a, 0.1f));
+        }
+
+        public static Palette Lerp(Palette a, Palette b, float k) => new(Mix(a.Accent, b.Accent, k), Mix(a.Light, b.Light, k), Mix(a.Pale, b.Pale, k),
+            Mix(a.Deep, b.Deep, k), Mix(a.Shine, b.Shine, k), Mix(a.Glow, b.Glow, k), Mix(a.Glow2, b.Glow2, k), Mix(a.Tint, b.Tint, k));
+    }
+
+    private static Color Mix(Color a, Color b, float k) => Color.FromArgb(
+        (int)(a.R + (b.R - a.R) * k + 0.5f), (int)(a.G + (b.G - a.G) * k + 0.5f), (int)(a.B + (b.B - a.B) * k + 0.5f));
+
+    private const float ColorChangeTime = 0.75f; // Seconds for a change of game colour to sweep the screen.
+    private Palette _palette, _paletteFrom;
+    private uint _paletteRgb, _paletteFromRgb;
+    private float _paletteAt = -10f;
+    private PointF _paletteOrigin;
+    private readonly Dictionary<uint, Bitmap> _backgrounds = [];
+    private readonly Gta4Episode _gta4Episode;
+    private Color Accent => _palette.Accent;
+    private Color AccentLight => _palette.Light;
+
     private static readonly Color Background = Color.FromArgb(0x0A, 0x0E, 0x18);
     private const double Timeout = 180.0; // Seconds: never keep the user waiting on a stuck loading.
     private const double ModelsTimeout = 30.0; // Seconds for the 3D models: the rest loads in the main window.
@@ -79,7 +112,6 @@ internal sealed partial class SplashForm : Form
     private readonly Font _statusFont = new("Segoe UI", 12f, GraphicsUnit.Pixel);
     private readonly Font _smallFont = new("Segoe UI", 10f, GraphicsUnit.Pixel);
     private readonly float _scale;
-    private readonly Bitmap _background;
 
     private readonly GraphicsPath _monoNr, _monoS;
     private readonly List<(PointF[] Points, float[] Distances)> _monoTraces;
@@ -103,14 +135,18 @@ internal sealed partial class SplashForm : Form
     private double? _modelsStart;
 
     // choose: null when the game is already loading; otherwise called once with the game picked on this screen.
-    public SplashForm(WorldLoader world, Gta4World gta4, Func<float>? preloadModels, GameKind game, Action<GameKind>? choose)
+    // gta4Episode: the episode that GTA IV would open.
+    public SplashForm(WorldLoader world, Gta4World gta4, Func<float>? preloadModels, GameKind game, Gta4Episode gta4Episode, Action<GameKind>? choose)
     {
         _world = world;
         _gta4 = gta4;
         _preloadModels = preloadModels;
         _game = game;
+        _gta4Episode = gta4Episode;
         _choose = choose;
         _chosen = choose is null;
+        _paletteRgb = _paletteFromRgb = GameAccent();
+        _palette = _paletteFrom = Palette.Of(_paletteRgb);
         KeyPreview = true;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
@@ -167,7 +203,6 @@ internal sealed partial class SplashForm : Form
         (_titleNode, _titleNodeBounds) = PlacedText("NodeRunner", 46f, Gutter, 134f);
         (_titleStudio, _titleStudioBounds) = PlacedText("Studio", 46f, Gutter, 186f);
 
-        _background = DrawBackground(Design, _scale);
         (_links, _nodes) = Network();
         var random = new Random();
         _particles = Enumerable.Range(0, 46).Select(_ => ((float)random.NextDouble() * Design.Width, (float)random.NextDouble() * Design.Height,
@@ -192,6 +227,7 @@ internal sealed partial class SplashForm : Form
         double now = _clock.Elapsed.TotalSeconds;
         if (Opacity < 1.0)
             Opacity = Math.Min(1.0, EaseOut(Phase((float)now, 0f, 0.3f)));
+        FollowPalette();
         if (!_chosen)
         {
             if (!_choiceTouched && now >= ChoiceFrom + ChoiceDelay)
@@ -228,6 +264,38 @@ internal sealed partial class SplashForm : Form
         // The bar glides towards the real progress, never backwards.
         _shownProgress = Math.Max(_shownProgress, _shownProgress + (target - _shownProgress) * 0.12f);
         Invalidate();
+    }
+
+    // GTA IV: its loader may fall back to the base game when the saved episode is no longer installed.
+    private uint GameAccent() => _game != GameKind.Gta4 ? Ui.UiTheme.DefaultAccent
+        : Ui.UiTheme.GameAccent(GameKind.Gta4, _chosen && _gta4.Folder is not null ? _gta4.Episode : _gta4Episode, Ui.UiTheme.DefaultAccent);
+
+    // A change of game colour sweeps the screen in a circle from the button of the game (or from the centre).
+    private void FollowPalette()
+    {
+        uint rgb = GameAccent();
+        float t = Now;
+        if (rgb != _paletteRgb)
+        {
+            _paletteFrom = _palette;
+            _paletteFromRgb = _paletteRgb;
+            _paletteRgb = rgb;
+            _paletteAt = t;
+            var button = _game == GameKind.Gta4 ? Gta4Button : Gta5Button;
+            _paletteOrigin = _choose is not null && (!_chosen || t < _chosenAt + 0.3f)
+                ? new PointF(button.X + button.Width / 2f, button.Y + button.Height / 2f)
+                : new PointF(Design.Width / 2f, Design.Height / 2f);
+            BackgroundOf(rgb);
+        }
+        float change = Phase(t, _paletteAt, _paletteAt + ColorChangeTime);
+        _palette = change >= 1f ? Palette.Of(_paletteRgb) : Palette.Lerp(_paletteFrom, Palette.Of(_paletteRgb), EaseInOut(change));
+    }
+
+    private Bitmap BackgroundOf(uint rgb)
+    {
+        if (!_backgrounds.TryGetValue(rgb, out var bitmap))
+            _backgrounds[rgb] = bitmap = DrawBackground(Design, _scale, Palette.Of(rgb));
+        return bitmap;
     }
 
     private void Choose(GameKind game)
@@ -284,10 +352,11 @@ internal sealed partial class SplashForm : Form
     {
         Func<SplashRoadMap?>? build = null;
         float scale = _scale;
+        var colors = Palette.Of(_paletteRgb);
         if (_game == GameKind.Gta4 && _gta4.PathAreas is { } areas)
-            build = () => SplashRoadMap.Build(areas, Gta4MapArea, scale);
+            build = () => SplashRoadMap.Build(areas, Gta4MapArea, scale, colors.Accent, colors.Light);
         else if (_game == GameKind.Gta5 && _world.PathNetwork is { } network)
-            build = () => SplashRoadMap.Build(network, MapArea, scale);
+            build = () => SplashRoadMap.Build(network, MapArea, scale, colors.Accent, colors.Light);
         if (_mapTask is null && build is not null)
         {
             _mapTask = Task.Run(() =>
@@ -358,8 +427,21 @@ internal sealed partial class SplashForm : Form
     {
         var g = e.Graphics;
         float t = Now;
-        g.DrawImage(_background, new Rectangle(0, 0, _background.Width, _background.Height));
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        var background = BackgroundOf(_paletteRgb);
+        var whole = new Rectangle(0, 0, background.Width, background.Height);
+        float change = Phase(t, _paletteAt, _paletteAt + ColorChangeTime);
+        if (change < 1f)
+        {
+            // The new colour spreads in a circle over the old one.
+            g.DrawImage(BackgroundOf(_paletteFromRgb), whole);
+            using var circle = Circle(new PointF(_paletteOrigin.X * _scale, _paletteOrigin.Y * _scale), SweepRadius(change) * _scale);
+            g.SetClip(circle);
+            g.DrawImage(background, whole);
+            g.ResetClip();
+        }
+        else
+            g.DrawImage(background, whole);
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
         float reveal = _map is null ? 0f : Phase(t, _mapStart, _mapStart + RevealTime);
@@ -378,11 +460,41 @@ internal sealed partial class SplashForm : Form
         DrawMonogram(g, t);
         DrawTitle(g, t);
         DrawFlash(g, t);
+        DrawSweep(g, t);
 
         float text = Phase(t, TextFrom, TextFrom + 0.45f);
         if (text > 0f)
             DrawTexts(g, text, reveal);
         DrawChoice(g, t);
+    }
+
+    private float SweepRadius(float change)
+    {
+        float far = new[] { new PointF(0f, 0f), new PointF(Design.Width, 0f), new PointF(0f, Design.Height), new PointF(Design.Width, Design.Height) }
+            .Max(c => MathF.Sqrt((c.X - _paletteOrigin.X) * (c.X - _paletteOrigin.X) + (c.Y - _paletteOrigin.Y) * (c.Y - _paletteOrigin.Y)));
+        return far * EaseInOut(change);
+    }
+
+    // Front of a change of game colour: a bright ring with a soft glow, and a faint flash of the new colour.
+    private void DrawSweep(Graphics g, float t)
+    {
+        float change = Phase(t, _paletteAt, _paletteAt + ColorChangeTime);
+        if (change <= 0f || change >= 1f)
+            return;
+        float radius = SweepRadius(change);
+        var o = _paletteOrigin;
+        float fade = 1f - change;
+        var color = Palette.Of(_paletteRgb);
+        using (var glow = new Pen(Color.FromArgb((int)(60 * fade), color.Light), 14f))
+            g.DrawEllipse(glow, o.X - radius, o.Y - radius, radius * 2f, radius * 2f);
+        using (var pen = new Pen(Color.FromArgb((int)(220 * fade), color.Shine), 1.6f))
+            g.DrawEllipse(pen, o.X - radius, o.Y - radius, radius * 2f, radius * 2f);
+        float flash = 1f - Phase(t, _paletteAt, _paletteAt + 0.3f);
+        if (flash > 0f)
+        {
+            using var brush = new SolidBrush(Color.FromArgb((int)(28 * flash), color.Light));
+            g.FillRectangle(brush, 0, 0, Design.Width, Design.Height);
+        }
     }
 
     // The two game buttons where the loading bar will be, with the countdown; faded out once a game is picked.
@@ -445,7 +557,7 @@ internal sealed partial class SplashForm : Form
 
     // Roman numeral in layers: a dark outer outline, a light inner one, then the fill (the accent gradient with a
     // shine across the middle when selected, dark otherwise). unit: one design unit in the numeral's own scale.
-    private static void DrawNumeral(Graphics g, GraphicsPath numeral, bool selected, Func<int, int> alpha, float unit)
+    private void DrawNumeral(Graphics g, GraphicsPath numeral, bool selected, Func<int, int> alpha, float unit)
     {
         var b = numeral.GetBounds();
         using (var outer = new Pen(Color.FromArgb(alpha(0xFF), 0x06, 0x0A, 0x14), 4.2f * unit) { LineJoin = LineJoin.Miter })
@@ -458,7 +570,7 @@ internal sealed partial class SplashForm : Form
             {
                 InterpolationColors = new ColorBlend
                 {
-                    Colors = [Color.FromArgb(alpha(0xFF), Accent), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), 0xE8, 0xF6, 0xFF), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), 0x24, 0x4F, 0xC0)],
+                    Colors = [Color.FromArgb(alpha(0xFF), Accent), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), _palette.Shine), Color.FromArgb(alpha(0xFF), AccentLight), Color.FromArgb(alpha(0xFF), _palette.Deep)],
                     Positions = [0f, 0.42f, 0.5f, 0.58f, 1f],
                 },
             };
@@ -602,7 +714,7 @@ internal sealed partial class SplashForm : Form
                 continue;
             float size = r * (pop < 1f ? 1f + (1f - pop) * 1.5f : 1f);
             int alpha = (int)(Fade(p.X) * 200f * visible * pop);
-            using var brush = new SolidBrush(Color.FromArgb(Math.Clamp(alpha, 0, 255), 0x9C, 0xC4, 0xFF));
+            using var brush = new SolidBrush(Color.FromArgb(Math.Clamp(alpha, 0, 255), _palette.Pale));
             g.FillEllipse(brush, p.X - size, p.Y - size, size * 2f, size * 2f);
         }
     }
@@ -718,7 +830,7 @@ internal sealed partial class SplashForm : Form
         }
     }
 
-    private static void DrawWiped(Graphics g, float t, float from, GraphicsPath path, RectangleF bounds, RectangleF? gradient)
+    private void DrawWiped(Graphics g, float t, float from, GraphicsPath path, RectangleF bounds, RectangleF? gradient)
     {
         float wipe = EaseOut(Phase(t, from, from + WipeTime));
         if (wipe <= 0f)
@@ -956,19 +1068,19 @@ internal sealed partial class SplashForm : Form
     private static float Fade(float x) => Math.Clamp((x / Design.Width - 0.42f) / 0.25f, 0f, 1f);
 
     // Still part of the background, drawn once: gradient, glows and a faint grid of dots.
-    private static Bitmap DrawBackground(Size size, float scale)
+    private static Bitmap DrawBackground(Size size, float scale, Palette palette)
     {
         var bitmap = new Bitmap((int)(size.Width * scale), (int)(size.Height * scale), PixelFormat.Format32bppPArgb);
         using var g = Graphics.FromImage(bitmap);
         g.ScaleTransform(scale, scale);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new Rectangle(Point.Empty, size);
-        using (var background = new LinearGradientBrush(bounds, Background, Color.FromArgb(0x14, 0x1E, 0x3A), 35f))
+        using (var background = new LinearGradientBrush(bounds, Background, palette.Tint, 35f))
             g.FillRectangle(background, bounds);
-        Glow(g, new RectangleF(size.Width * 0.45f, -size.Height * 0.55f, size.Width * 0.9f, size.Height * 1.3f), Color.FromArgb(110, 0x2A, 0x5B, 0xD7));
-        Glow(g, new RectangleF(size.Width * 0.62f, size.Height * 0.35f, size.Width * 0.6f, size.Height * 0.9f), Color.FromArgb(60, 0x6A, 0x3B, 0xC9));
-        Glow(g, new RectangleF(-size.Width * 0.2f, size.Height * 0.1f, size.Width * 0.7f, size.Height * 0.8f), Color.FromArgb(40, 0x2A, 0x5B, 0xD7));
-        using var dot = new SolidBrush(Color.FromArgb(16, 0x9C, 0xC4, 0xFF));
+        Glow(g, new RectangleF(size.Width * 0.45f, -size.Height * 0.55f, size.Width * 0.9f, size.Height * 1.3f), Color.FromArgb(110, palette.Glow));
+        Glow(g, new RectangleF(size.Width * 0.62f, size.Height * 0.35f, size.Width * 0.6f, size.Height * 0.9f), Color.FromArgb(60, palette.Glow2));
+        Glow(g, new RectangleF(-size.Width * 0.2f, size.Height * 0.1f, size.Width * 0.7f, size.Height * 0.8f), Color.FromArgb(40, palette.Glow));
+        using var dot = new SolidBrush(Color.FromArgb(16, palette.Pale));
         for (float y = 12f; y < size.Height; y += 24f)
             for (float x = 12f; x < size.Width; x += 24f)
                 g.FillRectangle(dot, x, y, 1f, 1f);
@@ -1010,7 +1122,8 @@ internal sealed partial class SplashForm : Form
         {
             _disposed = true;
             _timer.Dispose();
-            _background.Dispose();
+            foreach (var bitmap in _backgrounds.Values)
+                bitmap.Dispose();
             _monoNr.Dispose();
             _monoS.Dispose();
             _titleNode.Dispose();

@@ -69,7 +69,7 @@ internal static class Program
                 bool offer = hasGta5 && hasGta4;
                 if (!offer)
                     Start(game);
-                using var splash = new SplashForm(state.World, state.Gta4, main.PreloadModels, game, offer ? Start : null);
+                using var splash = new SplashForm(state.World, state.Gta4, main.PreloadModels, game, settings.Gta4Episode, offer ? Start : null);
                 Application.Run(splash);
                 // Closed before a choice (Alt+F4): the highlighted game.
                 if (!started)
