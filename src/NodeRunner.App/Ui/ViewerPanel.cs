@@ -7,6 +7,7 @@ using NodeRunner.App.World;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
+using NodeRunner.Data.Native.Models;
 
 namespace NodeRunner.App.Ui;
 
@@ -64,6 +65,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private bool _workshopWasShown; // At the previous frame: the view is drawn before the tabs.
     private readonly WorkshopGizmo _gizmo = new();
     private Vector3 _moveBy, _turnBy; // Exact move of the chosen piece: metres, degrees.
+
+    // Adding a piece in the workshop: shape (0 cube, 1 flat, 2 the copied piece), material, size, texture repeated each
+    // metre. The copied piece is kept from one model to the next.
+    private int _addShape, _addMaterial = -1;
+    private Vector3 _addSize = Vector3.One;
+    private bool _addPerMetre = true;
+    private static CopiedPiece? _copiedPiece;
     private int _workshopRevision = -1;
     private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
@@ -814,6 +822,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             if (_workshop is { ChangeCount: > 0 } dropped && _workshopFor is not null)
                 state.Notify(L($"Modifications de {Path.GetFileName(dropped.Path)} non enregistrées : abandonnées."), warning: true);
             _workshopFor = item;
+            _addMaterial = -1;
             _changedSources.Clear();
             (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
             _workshopRevision = -1;
@@ -858,6 +867,19 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 state.Notify(L("Copie ajoutée au même endroit : déplacez-la avec les poignées (elle est choisie)."));
             }
         }
+        if (Widgets.Button(L($"{Icons.Copy}  Copier pour un autre modèle"),
+                L("Garde ce morceau pour l'ajouter à un autre modèle : ouvrez l'autre modèle dans l'atelier, puis « Ajouter un morceau »."),
+                width, enabled: tool.SelectedCount > 0))
+        {
+            if (tool.CopySelected(item.Name) is { } piece)
+            {
+                _copiedPiece = piece;
+                _addShape = 2;
+                state.Notify(L($"Morceau copié ({Widgets.Count(piece.Indices.Length / 3)} triangles) : ouvrez un autre modèle dans l'atelier pour l'ajouter."));
+            }
+            else
+                state.Notify(L("Les sommets de ce modèle sont dans un format que NodeRunner ne sait pas encore modifier."), warning: true);
+        }
         if (Widgets.Button(L($"{Icons.Undo}  Annuler la dernière modification"),
                 L("Remet le dernier morceau retiré, déplacé ou dupliqué, ou la dernière texture remplacée (pas encore enregistrés)."),
                 width, enabled: tool.ChangeCount > 0))
@@ -900,8 +922,80 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _reopen = (item, state.World.ModelReader);
             _workshopFor = null;
         }
+        DrawWorkshopAdd(item, tool, width);
         ImGui.Spacing();
         DrawWorkshopTextures(item, tool, width);
+    }
+
+    // Adding a piece: a simple shape or the piece copied from a model, with the material of a part of this model.
+    private void DrawWorkshopAdd(ViewerItem item, ModelPartTool tool, float width)
+    {
+        ImGui.Spacing();
+        ImGui.SeparatorText(L("Ajouter un morceau"));
+        var materials = tool.Materials;
+        if (materials.Count == 0)
+            return;
+        string[] shapes = _copiedPiece is { } copied
+            ? [L("Cube"), L("Plan (au sol)"), L($"Morceau copié de {copied.Source} ({Widgets.Count(copied.Indices.Length / 3)} triangles)")]
+            : [L("Cube"), L("Plan (au sol)")];
+        _addShape = Math.Clamp(_addShape, 0, shapes.Length - 1);
+        ImGui.SetNextItemWidth(width * 0.6f);
+        ImGui.Combo(L("Forme"), ref _addShape, shapes, shapes.Length);
+
+        // Default material: the one with the copied piece's texture, otherwise the biggest part.
+        if (_addMaterial < 0 || _addMaterial >= materials.Count)
+        {
+            int same = _copiedPiece?.Texture is { } wanted ? materials.ToList().FindIndex(m => m.Texture == wanted) : -1;
+            _addMaterial = same >= 0 ? same : materials.Select((m, i) => (m.Triangles, i)).Max().i;
+        }
+        string Label(int i) => L($"Partie {i + 1} : {materials[i].Texture ?? L("sans texture")}");
+        ImGui.SetNextItemWidth(width * 0.6f);
+        if (ImGui.BeginCombo(L("Matière"), Label(_addMaterial)))
+        {
+            for (int i = 0; i < materials.Count; i++)
+            {
+                if (ImGui.Selectable(Label(i), i == _addMaterial))
+                    _addMaterial = i;
+            }
+            ImGui.EndCombo();
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("Le morceau ajouté prend la matière (shader et textures) de cette partie du modèle."));
+
+        if (_addShape < 2)
+        {
+            ImGui.SetNextItemWidth(width * 0.6f);
+            ImGui.DragFloat3(L("Taille (m)"), ref _addSize, 0.01f, 0.01f, 100f, "%.2f");
+            _addSize = Vector3.Clamp(_addSize, new Vector3(0.01f), new Vector3(100f));
+            ImGui.Checkbox(L("Texture répétée chaque mètre"), ref _addPerMetre);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Coché : la texture se répète comme sur un mur ou un sol. Décoché : une fois sur chaque face (logo, affiche)."));
+        }
+        else
+        {
+            Widgets.Hint(L("Le morceau garde sa forme et ses coordonnées de texture, mais prend la matière choisie ici : ")
+                + L("ses propres textures ne viennent pas avec lui."), wrap: true);
+        }
+        if (Widgets.Button(L($"{Icons.Box}  Ajouter"),
+                L("Ajoute le morceau au milieu du morceau choisi (ou du modèle) et le choisit : déplacez-le ensuite avec les poignées."),
+                width))
+        {
+            var at = tool.PlacePoint;
+            var (vertices, indices) = _addShape switch
+            {
+                0 => DrawableAppend.Cube(at, _addSize, _addPerMetre),
+                1 => DrawableAppend.Plane(at, new Vector2(_addSize.X, _addSize.Y), _addPerMetre),
+                _ => (_copiedPiece!.Vertices.Select(v => v with { Position = v.Position + at }).ToList(), _copiedPiece.Indices),
+            };
+            if (tool.AddPiece(_addMaterial, vertices, indices) is { } error)
+                state.Notify(error, warning: true);
+            else
+            {
+                ShowWorkshopChanges(item, tool);
+                state.Notify(L("Morceau ajouté : déplacez-le avec les poignées (il est choisi)."));
+            }
+            _workshopRevision = -1;
+        }
     }
 
     // Moving the chosen piece by exact values (the handles in the image do the same with the mouse).

@@ -9,6 +9,9 @@ using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
+// A piece copied from a model (values in model space around its middle), to add to another one.
+internal sealed record CopiedPiece(string Source, string? Texture, List<DrawableReader.VertexValues> Vertices, ushort[] Indices);
+
 // Removes pieces of an object's model (a logo, a sign...): a click in the 3D view picks the piece under the mouse (its
 // triangles touching each other), then the model file is written again with those triangles emptied. Nothing else of
 // the file changes. Its textures can also be replaced (in the model file, or in its .ytd), in place. The files go to
@@ -190,7 +193,7 @@ internal sealed class ModelPartTool
     }
 
     // Changes made in memory and not saved yet, last one last: the file changed and how to undo it.
-    private enum ChangeKind { Removed, Moved, Texture, Duplicated }
+    private enum ChangeKind { Removed, Moved, Texture, Duplicated, Added }
 
     private sealed record Change(ChangeKind Kind, string File, Action Undo);
     private readonly List<Change> _changes = [];
@@ -202,7 +205,7 @@ internal sealed class ModelPartTool
     public int RemovedCount => _changes.Count(c => c.Kind == ChangeKind.Removed);
     public int MovedCount => _changes.Count(c => c.Kind == ChangeKind.Moved);
     public int TextureChangeCount => _changes.Count(c => c.Kind == ChangeKind.Texture);
-    public int DuplicatedCount => _changes.Count(c => c.Kind == ChangeKind.Duplicated);
+    public int DuplicatedCount => _changes.Count(c => c.Kind is ChangeKind.Duplicated or ChangeKind.Added);
 
     public ResourceHeader Header => _header;
 
@@ -388,6 +391,101 @@ internal sealed class ModelPartTool
         var additions = triangles.GroupBy(t => t.Geometry.GeometryAt)
             .Select(g => DrawableAppend.Copy(_content, g.First().Geometry, g.Select(t => t.Triangle).Distinct()))
             .ToList();
+        return Append(additions, [], ChangeKind.Duplicated);
+    }
+
+    // The materials a piece can be added with: the geometries of the detailed version (number in the list of meshes).
+    public IReadOnlyList<(int Mesh, string? Texture, int Triangles)> Materials =>
+        [.. _shown.Select((g, i) => (i, g.Texture, g.Indices.Length / 3))];
+
+    // Where an added piece goes: the middle of the chosen piece, or of the model.
+    public Vector3 PlacePoint
+    {
+        get
+        {
+            if (SelectionCenter is { } center)
+                return center;
+            var (min, max) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
+            foreach (var g in _shown)
+            {
+                foreach (var p in g.Positions)
+                {
+                    min = Vector3.Min(min, p);
+                    max = Vector3.Max(max, p);
+                }
+            }
+            return min.X <= max.X ? (min + max) * 0.5f : Vector3.Zero;
+        }
+    }
+
+    // Adds a new piece (model space) with the material of a geometry of the detailed version, and with the same material
+    // in the simpler versions when they have it; it becomes the chosen piece. Returns an error message, or null.
+    public string? AddPiece(int mesh, IReadOnlyList<DrawableReader.VertexValues> vertices, ushort[] indices)
+    {
+        if (mesh < 0 || mesh >= _shown.Count || vertices.Count == 0)
+            return null;
+        var target = _shown[mesh];
+        var geometries = new List<DrawableReader.StoredGeometry> { target };
+        if (target.ShaderIndex >= 0)
+        {
+            geometries.AddRange(_all.Where(g => g.Level != target.Level && g.ShaderIndex == target.ShaderIndex)
+                .GroupBy(g => g.Level).Select(l => l.First()));
+        }
+        var additions = new List<DrawableAppend.Addition>();
+        foreach (var g in geometries)
+        {
+            if (DrawableAppend.Make(_content, g, vertices, indices) is { } addition)
+                additions.Add(addition);
+            else if (g == target)
+                return L("Les sommets de ce modèle sont dans un format que NodeRunner ne sait pas encore modifier.");
+        }
+        return Append(additions, [.. vertices.Select(v => v.Position)], ChangeKind.Added);
+    }
+
+    // The chosen piece as values (model space, around its middle), to add it to another model; null when nothing is
+    // chosen or its vertices cannot be read.
+    public CopiedPiece? CopySelected(string name)
+    {
+        if (_selected.Count == 0 || SelectionCenter is not { } center)
+            return null;
+        var vertices = new List<DrawableReader.VertexValues>();
+        var indices = new List<ushort>();
+        var textures = new Dictionary<string, int>();
+        foreach (var group in _selected.GroupBy(s => s.Mesh))
+        {
+            var g = _shown[group.Key];
+            if (g.Vertices is not { } stored)
+                return null;
+            var buffer = _content.AsSpan(g.VertexAt, g.VertexCount * g.Stride);
+            var map = new Dictionary<int, ushort>();
+            foreach (var (_, t) in group)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    int v = g.Indices[t * 3 + k];
+                    if (!map.TryGetValue(v, out ushort at))
+                    {
+                        if (vertices.Count >= ushort.MaxValue)
+                            return null;
+                        var values = stored.Read(buffer, v);
+                        map[v] = at = (ushort)vertices.Count;
+                        vertices.Add(values with { Position = values.Position - center });
+                    }
+                    indices.Add(at);
+                }
+            }
+            if (g.Texture is { } texture)
+                textures[texture] = textures.GetValueOrDefault(texture) + group.Count();
+        }
+        return new CopiedPiece(name, textures.OrderByDescending(t => t.Value).Select(t => t.Key).FirstOrDefault(), vertices, [.. indices]);
+    }
+
+    // Adds new vertices and triangles to the model in memory; the new triangles of the detailed version become the chosen
+    // piece, those of the simpler versions go with it.
+    private string? Append(List<DrawableAppend.Addition> additions, IReadOnlyCollection<Vector3> grow, ChangeKind kind)
+    {
+        if (additions.Count == 0)
+            return null;
         var (header, content) = (_header, _content);
         try
         {
@@ -397,7 +495,9 @@ internal sealed class ModelPartTool
         {
             return ex.Message;
         }
-        _changes.Add(new Change(ChangeKind.Duplicated, Path, () => (_header, _content) = (header, content)));
+        foreach (var a in additions)
+            DrawableAppend.Grow(_content, a.Geometry, grow);
+        _changes.Add(new Change(kind, Path, () => (_header, _content) = (header, content)));
         Refresh();
 
         // The copies are the last triangles of their geometries.
@@ -472,7 +572,7 @@ internal sealed class ModelPartTool
         state.World.RequestMapReload();
         string names = string.Join(", ", files.Select(f => System.IO.Path.GetFileName(f.Path)));
         if (copies > 0)
-            return (true, L($"{names} enregistré(s) ({copies} copie(s), {pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
+            return (true, L($"{names} enregistré(s) ({copies} morceau(x) ajouté(s) ou dupliqué(s), {pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
         return (true, moved == 0 && textures == 0 ? L($"{names} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte...")
             : moved == 0 ? L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {textures} texture(s) remplacée(s)). Rechargement de la carte...")
             : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));

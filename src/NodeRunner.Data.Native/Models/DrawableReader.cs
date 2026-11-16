@@ -119,7 +119,14 @@ public sealed class DrawableReader : IModelReader
         public int VertexAt { get; init; } = -1;
         public int Stride { get; init; }
         public int VertexCount => Positions.Length;
+
+        // Its material: the shader's number in the drawable, and the name of its main texture (null when none).
+        public int ShaderIndex { get; init; } = -1;
+        public string? Texture { get; init; }
     }
+
+    // A vertex given by its values (model space), to write it in a geometry's layout.
+    public readonly record struct VertexValues(Vector3 Position, Vector3 Normal, Vector2 TexCoord, Vector4 Color, Vector4 Tangent);
 
     // Where a geometry's vertices are in the data and how they are stored.
     public sealed class StoredVertices
@@ -165,6 +172,48 @@ public sealed class DrawableReader : IModelReader
         }
 
         private static readonly int[] DirectionComponents = [NormalComponent, TangentComponent, BinormalComponent];
+
+        // The values of vertex v (model space), in the vertex data of the geometry.
+        public VertexValues Read(ReadOnlySpan<byte> vertexBuffer, int v)
+        {
+            int start = v * Stride;
+            var tangent = _declaration.Read(vertexBuffer, start, TangentComponent);
+            var uv = _declaration.Read(vertexBuffer, start, TexCoordComponent);
+            return new VertexValues(
+                Vector3.Transform(Xyz(_declaration.Read(vertexBuffer, start, PositionComponent)), Bone),
+                Vector3.TransformNormal(Xyz(_declaration.Read(vertexBuffer, start, NormalComponent)), Bone),
+                new Vector2(uv.X, uv.Y),
+                _declaration.Has(ColorComponent) ? _declaration.Read(vertexBuffer, start, ColorComponent) : Vector4.One,
+                new Vector4(Vector3.TransformNormal(Xyz(tangent), Bone), tangent.W));
+        }
+
+        // New vertices in this geometry's layout: copies of the template vertex (bones, other values) given these values.
+        // Null when the bone cannot be undone.
+        public byte[]? Make(ReadOnlySpan<byte> template, IReadOnlyList<VertexValues> vertices)
+        {
+            if (template.Length < Stride || !Matrix4x4.Invert(Bone, out var toBone))
+                return null;
+            var bytes = new byte[vertices.Count * Stride];
+            var span = bytes.AsSpan();
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                var v = vertices[i];
+                int start = i * Stride;
+                template[..Stride].CopyTo(span[start..]);
+                _declaration.Write(span, start, PositionComponent, new Vector4(Vector3.Transform(v.Position, toBone), 1f));
+                var normal = Vector3.TransformNormal(v.Normal, toBone);
+                normal = normal.LengthSquared() > 1e-12f ? Vector3.Normalize(normal) : Vector3.UnitZ;
+                _declaration.Write(span, start, NormalComponent, new Vector4(normal, 0f));
+                var tangent = Vector3.TransformNormal(new Vector3(v.Tangent.X, v.Tangent.Y, v.Tangent.Z), toBone);
+                tangent = tangent.LengthSquared() > 1e-12f ? Vector3.Normalize(tangent) : Vector3.UnitX;
+                float side = v.Tangent.W < 0 ? -1f : 1f;
+                _declaration.Write(span, start, TangentComponent, new Vector4(tangent, side));
+                _declaration.Write(span, start, BinormalComponent, new Vector4(Vector3.Cross(normal, tangent) * side, 0f));
+                _declaration.WriteValue(span, start, TexCoordComponent, new Vector4(v.TexCoord, 0f, 0f));
+                _declaration.WriteValue(span, start, ColorComponent, v.Color);
+            }
+            return bytes;
+        }
     }
 
     // Every geometry of every detail level of one model of the file (the drawable for .ydr and .yft, the one named
@@ -179,6 +228,7 @@ public sealed class DrawableReader : IModelReader
         var pose = extension.Equals(".yft", StringComparison.OrdinalIgnoreCase)
             ? FragmentPose(res) ?? SkeletonPose(res, d)
             : SkeletonPose(res, d);
+        var shaders = Shaders(res, d);
         for (int level = 0; level < 4; level++)
         {
             if (ModelList(res, res.UInt64(d + ModelsHigh + level * 8)) is not { } models)
@@ -197,11 +247,15 @@ public sealed class DrawableReader : IModelReader
                 int boxCount = count > 1 ? count + 1 : 1;
                 ulong boxesPointer = res.UInt64(model + ModelBoundsPointer);
                 int boxes = boxesPointer == 0 ? -1 : res.ResolveArray(boxesPointer, boxCount, BoxLength, "boîtes");
+                ulong mappingPointer = res.UInt64(model + ShaderMappingPointer);
+                int mapping = mappingPointer == 0 ? -1 : res.ResolveArray(mappingPointer, count, 2, "shaders des géométries");
                 for (int i = 0; i < count; i++)
                 {
                     int geometry = Block(res, res.UInt64(geometries + i * 8), GeometryLength);
                     if (geometry < 0 || Buffers(res, geometry) is not { } buffers)
                         continue;
+                    int shaderIndex = mapping >= 0 ? res.UInt16(mapping + i * 2) : -1;
+                    var shader = shaderIndex >= 0 && shaderIndex < shaders.Count ? shaders[shaderIndex] : null;
                     var (declaration, vertexAt, vertexLength, vertexCount, indicesAt, indexCount) = buffers;
                     var held = new List<int> { d + BoundsMinOffset };
                     if (boxes >= 0)
@@ -229,6 +283,8 @@ public sealed class DrawableReader : IModelReader
                         IndexBufferAt = Block(res, res.UInt64(geometry + 0x38), 0x40),
                         VertexAt = vertexAt,
                         Stride = declaration.Stride,
+                        ShaderIndex = shaderIndex,
+                        Texture = shader?.Textures.GetValueOrDefault(DiffuseSamplerHash),
                     });
                 }
             }
@@ -271,6 +327,8 @@ public sealed class DrawableReader : IModelReader
                 return -1;
         }
     }
+
+    private static readonly uint DiffuseSamplerHash = Joaat.Hash("diffusesampler");
 
     // Versions of GTA V Enhanced (.ydr / .ydd and .yft; 165 and 162 in the original release).
     public const int EnhancedDrawableVersion = 159;
@@ -872,6 +930,35 @@ public sealed class DrawableReader : IModelReader
                 11 => Packed(bytes, o),
                 _ => Vector4.Zero,
             };
+        }
+
+        // Like Write, plus texture coordinates and colours (half2, float2, colour).
+        public void WriteValue(Span<byte> bytes, int vertexStart, int component, Vector4 value)
+        {
+            if (!Has(component))
+                return;
+            int o = vertexStart + _offsets[component];
+            switch (_types[component])
+            {
+                case 1:
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[o..], (Half)value.X);
+                    BinaryPrimitives.WriteHalfLittleEndian(bytes[(o + 2)..], (Half)value.Y);
+                    break;
+                case 5:
+                    BinaryPrimitives.WriteSingleLittleEndian(bytes[o..], value.X);
+                    BinaryPrimitives.WriteSingleLittleEndian(bytes[(o + 4)..], value.Y);
+                    break;
+                case 9:
+                    static byte Byte(float x) => (byte)Math.Clamp(MathF.Round(x * 255f), 0f, 255f);
+                    bytes[o] = Byte(value.X);
+                    bytes[o + 1] = Byte(value.Y);
+                    bytes[o + 2] = Byte(value.Z);
+                    bytes[o + 3] = Byte(value.W);
+                    break;
+                default:
+                    Write(bytes, vertexStart, component, value);
+                    break;
+            }
         }
 
         // Storage types Write knows: float3, float4, half4, packed 10-10-10-2.

@@ -45,6 +45,56 @@ public static class DrawableAppend
         return new Addition(geometry, [.. vertices], [.. indices]);
     }
 
+    // Simple shapes (model space), around a centre. Faces turn outwards (corners anticlockwise seen from the front, as in
+    // the game's files); the texture is upright on the sides, once per face or once per metre.
+    public static (List<DrawableReader.VertexValues> Vertices, ushort[] Indices) Cube(Vector3 center, Vector3 size, bool perMetre) =>
+        Faces(center, size, perMetre,
+        [
+            (Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ), (-Vector3.UnitX, -Vector3.UnitY, Vector3.UnitZ),
+            (Vector3.UnitY, -Vector3.UnitX, Vector3.UnitZ), (-Vector3.UnitY, Vector3.UnitX, Vector3.UnitZ),
+            (Vector3.UnitZ, Vector3.UnitX, Vector3.UnitY), (-Vector3.UnitZ, Vector3.UnitX, -Vector3.UnitY),
+        ]);
+
+    // A flat rectangle facing up (size X by Y).
+    public static (List<DrawableReader.VertexValues> Vertices, ushort[] Indices) Plane(Vector3 center, Vector2 size, bool perMetre) =>
+        Faces(center, new Vector3(size, 0f), perMetre, [(Vector3.UnitZ, Vector3.UnitX, Vector3.UnitY)]);
+
+    // Each face: its normal, its texture's U direction and V direction (upwards in the image), cross(u, v) = normal.
+    private static (List<DrawableReader.VertexValues>, ushort[]) Faces(Vector3 center, Vector3 size, bool perMetre,
+        (Vector3 N, Vector3 U, Vector3 V)[] faces)
+    {
+        var half = size * 0.5f;
+        float Extent(Vector3 axis) => MathF.Abs(Vector3.Dot(axis, half));
+        var vertices = new List<DrawableReader.VertexValues>();
+        var indices = new List<ushort>();
+        foreach (var (n, u, v) in faces)
+        {
+            float hu = Extent(u), hv = Extent(v);
+            var repeat = perMetre ? new Vector2(Math.Max(2 * hu, 0.01f), Math.Max(2 * hv, 0.01f)) : Vector2.One;
+            int first = vertices.Count;
+            foreach (var (s, t) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f) })
+            {
+                var position = center + n * Extent(n) + u * (s * hu) + v * (t * hv);
+                var uv = new Vector2((s + 1) * 0.5f * repeat.X, (1 - t) * 0.5f * repeat.Y);
+                vertices.Add(new DrawableReader.VertexValues(position, n, uv, Vector4.One, new Vector4(u, 1f)));
+            }
+            indices.AddRange([(ushort)first, (ushort)(first + 1), (ushort)(first + 2), (ushort)first, (ushort)(first + 2), (ushort)(first + 3)]);
+        }
+        return (vertices, [.. indices]);
+    }
+
+    // New vertices and triangles for a geometry (values in model space), made from its first vertex. Null when the
+    // geometry's vertices cannot be written.
+    public static Addition? Make(ReadOnlySpan<byte> content, DrawableReader.StoredGeometry geometry,
+        IReadOnlyList<DrawableReader.VertexValues> vertices, ushort[] indices)
+    {
+        if (geometry.Vertices is not { } stored || geometry.VertexAt < 0 || geometry.VertexCount == 0)
+            return null;
+        return stored.Make(content.Slice(geometry.VertexAt, geometry.Stride), vertices) is { } bytes
+            ? new Addition(geometry, bytes, indices)
+            : null;
+    }
+
     // The model data with these additions. systemKept: length of the system pages kept as they are (those of the file as
     // first read); a geometry whose buffers are after it (added earlier) is written again, so repeated additions do not
     // pile up old copies. all: every geometry of the drawable. Throws InvalidDataException with a message when the file
