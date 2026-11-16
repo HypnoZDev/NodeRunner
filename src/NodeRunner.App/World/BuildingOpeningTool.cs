@@ -22,6 +22,7 @@ internal sealed class BuildingOpeningTool(MapEntity building, ModelPartTool mode
     public string Name = "";
     public (uint Hash, string Name)? Door;
     public bool AddDoor = true;
+    public bool AddRoom = true;
     public bool CutCollision = true;
     public bool RemoveOccluders = true;
     public bool RemoveGameDoors = true;

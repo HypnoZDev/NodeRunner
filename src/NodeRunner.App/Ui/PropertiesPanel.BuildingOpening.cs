@@ -96,6 +96,10 @@ internal sealed partial class PropertiesPanel
                 }
             }
         }
+        ImGui.Checkbox(L("Créer une pièce simple (sol, murs, plafond)"), ref tool.AddRoom);
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("Une pièce de la taille de la salle, avec les matières du bâtiment et sa collision, pour ne pas avoir un vide derrière la porte.\n")
+                + L("Ses textures se changent ensuite dans l'atelier de modèle (modèle <nom>_shell)."));
         ImGui.Checkbox(L("Percer la collision du bâtiment"), ref tool.CutCollision);
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(L("Sinon un mur invisible reste à la place de la porte. Les fichiers .ybn changés vont dans le projet."));

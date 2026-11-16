@@ -1,6 +1,7 @@
 using System.Numerics;
 using NodeRunner.App.World;
 using NodeRunner.Data.Collisions;
+using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
 using NodeRunner.Editor;
@@ -87,6 +88,29 @@ internal sealed partial class AppState
             report.Add(L($"porte {door.Name} rattachée au portail"));
         }
 
+        if (tool.AddRoom)
+        {
+            var (shell, shellError) = WriteRoomShell(tool, opening);
+            if (shell is { } shellHash)
+            {
+                var placed = new MapEntity
+                {
+                    ArchetypeHash = shellHash,
+                    Position = Vector3.Zero,
+                    StoredRotation = Quaternion.Identity,
+                    Flags = Adding.StaticFlags,
+                    Guid = (uint)Random.Shared.Next(1, int.MaxValue),
+                    LodDistance = RoomShellLodDistance,
+                    LodLevel = LodLevel.OrphanHd,
+                    InteriorRoom = 0,
+                };
+                History.Add(InteriorAddEdit.Apply(library, interior, [placed], L("Pièce de l'intérieur (sol, murs, plafond)")));
+                report.Add(L("pièce simple créée (sol, murs, plafond, collision)"));
+            }
+            else
+                report.Add(L($"pièce simple non créée : {shellError}"));
+        }
+
         if (tool.CutCollision)
         {
             var files = CollisionFilesCut(opening);
@@ -134,6 +158,52 @@ internal sealed partial class AppState
     }
 
     private static Matrix4x4 Inverse(Matrix4x4 m) => Matrix4x4.Invert(m, out var inverse) ? inverse : Matrix4x4.Identity;
+
+    private const float RoomShellLodDistance = 100f;
+
+    // The room's own model (made from the building's model: its materials), its type file and the interior's
+    // collision, written into the project's stream folder: <name>_shell.ydr, <name>_shell.ytyp and <name>.ybn (the
+    // collision of an interior is the .ybn named after it). Returns the model's type, or an error message.
+    private (uint? Archetype, string? Error) WriteRoomShell(BuildingOpeningTool tool, Opening opening)
+    {
+        if (SaveFolder is not { } stream || World.Maps is not { } library || World.Content is not { } content)
+            return (null, L("projet non ouvert"));
+        if (library.GetArchetype(tool.Building.ArchetypeHash) is not { } type || World.Models?.Locate(type) is not { } location)
+            return (null, L("modèle du bâtiment introuvable"));
+        if (!location.Path.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+            return (null, L("le modèle du bâtiment n'est pas un .ydr"));
+        if (content.ReadFile(location.Path) is not { } data || content.GetResourceHeader(location.Path) is not { } header
+            || library.GetArchetypeFile(tool.Building.ArchetypeHash) is not { } typesFile || content.ReadFile(typesFile) is not { } typesData)
+            return (null, L("fichiers du bâtiment illisibles"));
+
+        string name = tool.Name + "_shell";
+        var faces = RoomShell.Faces(tool.RoomSize, opening.Width, opening.Height)
+            .Select(f => new Data.Native.Models.ShellModel.Face(f.Surface == RoomShell.Surface.Floor, f.Corners, f.TexCoords, f.Normal, Vector3.Normalize(f.U)))
+            .ToList();
+        if (Data.Native.Models.ShellModel.Build(header, data, location.ModelHash, faces, out var error) is not { } model)
+            return (null, error);
+        int concrete = Enumerable.Range(0, 256).FirstOrDefault(i => World.Collisions?.Materials.Name((byte)i) == "CONCRETE", 1);
+        try
+        {
+            var schema = new Data.Native.Resources.MetaSchema([typesData], []);
+            string textures = type.TextureDictionaryHash == 0 ? ""
+                : World.Names?.TryGet(type.TextureDictionaryHash) ?? $"hash_{type.TextureDictionaryHash:X8}";
+            var size = tool.RoomSize;
+            var typesXml = RoomShell.TypesXml(name, textures, RoomShellLodDistance, new Vector3(-size.X * 0.5f, 0, 0), size with { X = size.X * 0.5f });
+            var types = Data.Native.Maps.YtypXml.Convert(new XmlExport(name + ".ytyp.xml", typesXml, _ => null), schema);
+            var collision = Data.Native.Collisions.YbnXml.Convert(RoomShell.CollisionXml(RoomShell.Slabs(size, opening.Width, opening.Height), concrete));
+            Directory.CreateDirectory(stream);
+            SafeFile.WriteAllBytes(Path.Combine(stream, name + ".ydr"), Data.Native.Resources.ResourceFile.Write(model.Header, model.Content));
+            SafeFile.WriteAllBytes(Path.Combine(stream, name + ".ytyp"), types);
+            SafeFile.WriteAllBytes(Path.Combine(stream, tool.Name + ".ybn"), collision);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            return (null, ex.Message);
+        }
+        World.Names?.Add(name);
+        return (Data.Hashing.Joaat.Hash(name), null);
+    }
 
     // Doors of the game's map (not of an interior) standing in the opening.
     private List<MapEntity> GameDoorsIn(MapLibrary library, Opening opening)
