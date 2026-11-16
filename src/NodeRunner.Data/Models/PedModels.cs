@@ -85,6 +85,8 @@ public static class PedModels
             BoundsMax = min.X <= max.X ? max : Vector3.Zero,
             Meshes = chosen.SelectMany(m => m.Meshes).ToList(),
             EmbeddedTextures = embedded,
+            // Every part is read with the ped's skeleton.
+            Skeleton = chosen.Select(m => m.Skeleton).FirstOrDefault(s => s is not null),
         };
     }
 

@@ -16,6 +16,9 @@ public sealed class ModelData
 
     public IReadOnlyDictionary<uint, TextureData> EmbeddedTextures { get; init; } = new Dictionary<uint, TextureData>();
 
+    // The bones the meshes with BoneIndices follow (peds: the skeleton of their .yft), null when none do.
+    public SkeletonData? Skeleton { get; init; }
+
     public int TriangleCount => Meshes.Sum(m => m.Indices.Length / 3);
 }
 
@@ -32,6 +35,12 @@ public sealed class ModelMesh
     public required Vector4[] Colors { get; init; }
 
     public required ushort[] Indices { get; init; }
+
+    // Meshes that bend with a skeleton (ModelData.Skeleton): for each vertex, up to 4 bones (one byte each, the first
+    // in the lowest byte) and how much each one moves it (adding up to 1). Positions are those of the default pose.
+    public uint[]? BoneIndices { get; init; }
+
+    public Vector4[]? BoneWeights { get; init; }
 
     public string? DiffuseTextureName { get; init; }
 

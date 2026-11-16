@@ -30,8 +30,8 @@ public sealed class DrawableReader : IModelReader
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
         try
         {
-            var pose = skeletonPath is null ? null : ReadPose(skeletonPath);
-            return Read(data, header, Path.GetFileNameWithoutExtension(path), Path.GetExtension(path), pose);
+            var (pose, skeleton) = skeletonPath is null ? (null, null) : ReadSkeleton(skeletonPath);
+            return Read(data, header, Path.GetFileNameWithoutExtension(path), Path.GetExtension(path), pose, skeleton);
         }
         catch (Exception ex) when (ex is not InvalidDataException)
         {
@@ -39,15 +39,16 @@ public sealed class DrawableReader : IModelReader
         }
     }
 
-    // Default pose of the bones of a .yft or .ydr, null without a skeleton.
-    private Matrix4x4[]? ReadPose(string path)
+    // Default pose of the bones of a .yft or .ydr (null without a skeleton), and the bones themselves when stored.
+    private (Matrix4x4[]? Pose, SkeletonData? Skeleton) ReadSkeleton(string path)
     {
         if (_files.ReadFile(path) is not { } data || _files.GetResourceHeader(path) is not { } header)
-            return null;
+            return (null, null);
         var res = Open(data, header);
         if (!path.EndsWith(".yft", StringComparison.OrdinalIgnoreCase))
-            return SkeletonPose(res, 0);
-        return SkeletonPose(res, Block(res, res.UInt64(FragDrawablePointer), DrawableLength)) ?? FragmentPose(res);
+            return (SkeletonPose(res, 0), Skeleton(res, 0));
+        int main = Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
+        return (SkeletonPose(res, main) ?? FragmentPose(res), Skeleton(res, main));
     }
 
     private static ResourceData Open(ReadOnlySpan<byte> data, ResourceHeader header) =>
@@ -57,8 +58,9 @@ public sealed class DrawableReader : IModelReader
         };
 
     // pose: the bones the parts of a dictionary are attached to when its drawables have no skeleton of their own.
+    // skeleton: those bones, given to the parts with which vertices follow them (to be animated).
     public static Dictionary<uint, ModelData> Read(ReadOnlySpan<byte> data, ResourceHeader header, string name, string extension,
-        Matrix4x4[]? pose = null)
+        Matrix4x4[]? pose = null, SkeletonData? skeleton = null)
     {
         var res = Open(data, header);
         uint fileHash = Joaat.Hash(name);
@@ -87,7 +89,12 @@ public sealed class DrawableReader : IModelReader
                     byHash[res.UInt32(hashes + i * 4)] = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
                 foreach (var (hash, offset) in byHash)
                 {
-                    if (Convert(res, hash, offset, SkeletonPose(res, offset) ?? pose) is { } model)
+                    // A part with a skeleton of its own (heads: the face's bones as well) follows the ped's bones of
+                    // the same tags.
+                    var own = SkeletonPose(res, offset);
+                    int[]? map = own is not null && skeleton is not null && Skeleton(res, offset) is { } ownBones ? BoneMap(ownBones, skeleton) : null;
+                    var bones = own is null || map is not null ? skeleton : null;
+                    if (Convert(res, hash, offset, own ?? pose, bones: bones, boneMap: map) is { } model)
                         models[hash] = model;
                 }
                 break;
@@ -362,7 +369,10 @@ public sealed class DrawableReader : IModelReader
     // pose: where each bone is in the model (null: no skeleton). A model that is not skinned is stored relative to its
     // bone (pieces of breakable objects: planks of a bench, arm of a traffic light).
     // shaderSource: drawable whose shaders are used when d has none (the wheels of a vehicle use the body's).
-    private static ModelData? Convert(ResourceData res, uint hash, int d, Matrix4x4[]? pose = null, int shaderSource = -1)
+    // bones: the skeleton the meshes then keep the bones of each vertex in; boneMap: from the drawable's own skeleton
+    // (which pose comes from) to it, null when it is that one.
+    private static ModelData? Convert(ResourceData res, uint hash, int d, Matrix4x4[]? pose = null, int shaderSource = -1,
+        SkeletonData? bones = null, int[]? boneMap = null)
     {
         if (d < 0 || Models(res, d) is not { } models)
             return null;
@@ -389,8 +399,22 @@ public sealed class DrawableReader : IModelReader
                 if (geometry < 0)
                     continue;
                 int shaderId = mapping >= 0 ? res.UInt16(mapping + i * 2) : 0;
-                if (ConvertGeometry(res, geometry, shaderId < shaders.Count ? shaders[shaderId] : null, shaders) is { } mesh)
-                    meshes.Add(boneTransform.IsIdentity ? mesh : Transform(mesh, boneTransform));
+                if (ConvertGeometry(res, geometry, shaderId < shaders.Count ? shaders[shaderId] : null, shaders) is not { } mesh)
+                    continue;
+                if (!boneTransform.IsIdentity)
+                    mesh = Transform(mesh, boneTransform);
+                if (bones is not null)
+                {
+                    try
+                    {
+                        mesh = WithBones(res, geometry, mesh, bones, boneMap, skinned, bone);
+                    }
+                    catch (InvalidDataException)
+                    {
+                        // Drawn still, in its default pose.
+                    }
+                }
+                meshes.Add(mesh);
             }
         }
 
@@ -403,8 +427,80 @@ public sealed class DrawableReader : IModelReader
             BoundsMax = Vec3(res, d + BoundsMaxOffset),
             Meshes = meshes,
             EmbeddedTextures = dictionary >= 0 ? YtdReader.ReadDictionary(res, dictionary) : new Dictionary<uint, TextureData>(),
+            Skeleton = meshes.Any(m => m.BoneIndices is not null) ? bones : null,
         };
     }
+
+    // The bones of each vertex: from the vertices of a skinned geometry (blend indices, numbered in the geometry's own
+    // bone list when it has one shorter than the skeleton's, and weights), or the one bone a rigid part is placed on.
+    // map: from the bones of the drawable's skeleton to those of the model's (null: the same).
+    private static ModelMesh WithBones(ResourceData res, int g, ModelMesh mesh, SkeletonData bones, int[]? map, bool skinned, int bone)
+    {
+        int count = mesh.Positions.Length;
+        int sourceCount = map?.Length ?? bones.Count;
+        var indices = new uint[count];
+        var weights = new Vector4[count];
+        if (!skinned)
+        {
+            if (bone >= sourceCount || bones.Count > 256)
+                return mesh;
+            Array.Fill(indices, (uint)(map?[bone] ?? bone));
+            Array.Fill(weights, Vector4.UnitX);
+            return WithBones(mesh, indices, weights);
+        }
+        if (bones.Count > 256 || Buffers(res, g) is not { } found || found.VertexCount != count
+            || !found.Declaration.Has(BlendWeightsComponent) || !found.Declaration.Has(BlendIndicesComponent))
+            return mesh;
+        int idCount = res.UInt16(g + GeometryBoneIdsCount);
+        ulong idPointer = res.UInt64(g + GeometryBoneIdsPointer);
+        int ids = idCount > 0 && idCount != sourceCount && idPointer != 0 ? res.ResolveArray(idPointer, idCount, 2, "os de la géométrie") : -1;
+        var declaration = found.Declaration;
+        ReadOnlySpan<byte> bytes = res.Bytes(found.VertexAt, found.VertexLength);
+        for (int v = 0; v < count; v++)
+        {
+            int start = v * declaration.Stride;
+            var w = declaration.Read(bytes, start, BlendWeightsComponent);
+            var b = declaration.Read(bytes, start, BlendIndicesComponent);
+            uint packed = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                int index = (int)MathF.Round(b[k] * 255f);
+                if (ids >= 0)
+                    index = index < idCount ? res.UInt16(ids + index * 2) : 0;
+                if (index >= sourceCount)
+                {
+                    index = 0;
+                    w[k] = 0f;
+                }
+                packed |= (uint)(map?[index] ?? index) << (8 * k);
+            }
+            float sum = w.X + w.Y + w.Z + w.W;
+            indices[v] = packed;
+            weights[v] = sum > 1e-4f ? w / sum : Vector4.UnitX;
+        }
+        return WithBones(mesh, indices, weights);
+    }
+
+    private static ModelMesh WithBones(ModelMesh mesh, uint[] indices, Vector4[] weights) => new()
+    {
+        Positions = mesh.Positions,
+        Normals = mesh.Normals,
+        TexCoords = mesh.TexCoords,
+        Colors = mesh.Colors,
+        Indices = mesh.Indices,
+        BoneIndices = indices,
+        BoneWeights = weights,
+        DiffuseTextureName = mesh.DiffuseTextureName,
+        BlendMode = mesh.BlendMode,
+        Emission = mesh.Emission,
+        Terrain = mesh.Terrain,
+        VertexColored = mesh.VertexColored,
+        TintTextureName = mesh.TintTextureName,
+        TintTexCoords = mesh.TintTexCoords,
+        ShaderHash = mesh.ShaderHash,
+        ShaderTextures = mesh.ShaderTextures,
+        DiffuseColor = mesh.DiffuseColor,
+    };
 
     // The models of the first level of detail present (high, medium, low, very low): a list header (pointer, count,
     // capacity) whose every slot is read.
@@ -646,11 +742,15 @@ public sealed class DrawableReader : IModelReader
 
     // ---- Geometry ----
 
-    // Geometry: 0x18 vertex buffer, 0x38 index buffer.
+    // Geometry: 0x18 vertex buffer, 0x38 index buffer, 0x68 bones its vertices are numbered in (u16 each) and 0x72 count.
     private const int GeometryLength = 0x98;
+    private const int GeometryBoneIdsPointer = 0x68;
+    private const int GeometryBoneIdsCount = 0x72;
 
     // Vertex components (bit index in the vertex declaration flags).
     private const int PositionComponent = 0;
+    private const int BlendWeightsComponent = 1;
+    private const int BlendIndicesComponent = 2;
     private const int NormalComponent = 3;
     private const int ColorComponent = 4;
     private const int SecondColorComponent = 5;
@@ -1051,6 +1151,52 @@ public sealed class DrawableReader : IModelReader
             pose[i] = transform;
         }
         return pose;
+    }
+
+    // The bones of the drawable's skeleton (0x20: 0x50 bytes each: 0x00 rotation x, y, z, w, 0x10 position, 0x20 scale,
+    // 0x44 tag), null without one.
+    private static SkeletonData? Skeleton(ResourceData res, int d)
+    {
+        if (d < 0 || SkeletonPose(res, d) is not { } pose)
+            return null;
+        int skeleton = Block(res, res.UInt64(d + 0x18), 0x70);
+        int count = res.UInt16(skeleton + 0x5E);
+        ulong bonesPointer = res.UInt64(skeleton + 0x20);
+        ulong parentsPointer = res.UInt64(skeleton + 0x38);
+        if (bonesPointer == 0 || parentsPointer == 0)
+            return null;
+        int bones = res.ResolveArray(bonesPointer, count, 0x50, "os du squelette");
+        int parentsAt = res.ResolveArray(parentsPointer, count, 2, "parents des os");
+        var tags = new ushort[count];
+        var parents = new int[count];
+        var rotations = new Quaternion[count];
+        var translations = new Vector3[count];
+        var scales = new Vector3[count];
+        for (int i = 0; i < count; i++)
+        {
+            int b = bones + i * 0x50;
+            rotations[i] = Quaternion.Normalize(new Quaternion(F32(res, b), F32(res, b + 4), F32(res, b + 8), F32(res, b + 12)));
+            translations[i] = Vec3(res, b + 0x10);
+            scales[i] = Vec3(res, b + 0x20);
+            tags[i] = res.UInt16(b + 0x44);
+            int parent = (short)res.UInt16(parentsAt + i * 2);
+            parents[i] = parent >= 0 && parent < count && parent != i ? parent : -1;
+        }
+        return new SkeletonData { Tags = tags, Parents = parents, Rotations = rotations, Translations = translations, Scales = scales, BindPose = pose };
+    }
+
+    // For each bone of a skeleton, the bone of the same tag in another one; a bone it lacks takes its nearest ancestor's.
+    private static int[] BoneMap(SkeletonData from, SkeletonData to)
+    {
+        var map = new int[from.Count];
+        for (int i = 0; i < from.Count; i++)
+        {
+            int found = -1;
+            for (int b = i, depth = 0; b >= 0 && found < 0 && depth <= from.Count; b = from.Parents[b], depth++)
+                found = to.IndexOf(from.Tags[b]);
+            map[i] = Math.Max(found, 0);
+        }
+        return map;
     }
 
     // Default pose of a fragment's bones, in the model (0xA8: 0x10 count, 0x20 matrices of 3 rows x 4 floats, the
