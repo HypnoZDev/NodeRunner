@@ -1306,6 +1306,12 @@ internal sealed unsafe partial class MainForm : Form
 
         HandleProjectRequests();
 
+        if (_state.DialogRequest is { } dialog)
+        {
+            _state.DialogRequest = null;
+            dialog(this);
+        }
+
         if (_ui.ArchiveExtractRequested is { } extract)
         {
             _ui.ArchiveExtractRequested = null;

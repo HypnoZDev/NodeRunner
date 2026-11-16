@@ -58,6 +58,32 @@ public sealed class YtdReader : ITextureReader
     internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset)
     {
         var textures = new Dictionary<uint, TextureData>();
+        foreach (var t in LocateDictionary(res, offset))
+        {
+            textures[t.NameHash] = new TextureData
+            {
+                NameHash = t.NameHash,
+                Name = t.Name,
+                Width = t.Width,
+                Height = t.Height,
+                MipLevels = t.MipLevels,
+                Format = t.Format,
+                Data = res.Bytes(t.DataAt, t.Length).ToArray(),
+            };
+        }
+        return textures;
+    }
+
+    // Where the pixels of each texture of the .ytd are in its data.
+    public static List<StoredTexture> StoredTextures(ReadOnlySpan<byte> data, ResourceHeader header)
+    {
+        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags)) { Enhanced = header.Version == EnhancedVersion };
+        return LocateDictionary(res, 0);
+    }
+
+    internal static List<StoredTexture> LocateDictionary(ResourceData res, int offset)
+    {
+        var found = new List<StoredTexture>();
         int count = res.UInt16(offset + TexturesCount);
         int list = res.ResolveArray(res.UInt64(offset + TexturesPointer), count, 8, "liste des textures");
         for (int i = 0; i < count; i++)
@@ -66,15 +92,15 @@ public sealed class YtdReader : ITextureReader
             if (pointer == 0)
                 continue;
             var texture = res.Enhanced
-                ? ReadEnhancedTexture(res, res.ResolveArray(pointer, 1, EnhancedLength, "texture"))
-                : ReadTexture(res, res.ResolveArray(pointer, 1, TextureLength, "texture"));
+                ? LocateEnhancedTexture(res, res.ResolveArray(pointer, 1, EnhancedLength, "texture"))
+                : LocateTexture(res, res.ResolveArray(pointer, 1, TextureLength, "texture"));
             if (texture is not null)
-                textures[texture.NameHash] = texture;
+                found.Add(texture);
         }
-        return textures;
+        return found;
     }
 
-    private static TextureData? ReadTexture(ResourceData res, int t)
+    private static StoredTexture? LocateTexture(ResourceData res, int t)
     {
         string? name = res.Text(res.UInt64(t + NamePointer), "nom de texture");
         int width = res.UInt16(t + WidthOffset);
@@ -86,10 +112,12 @@ public sealed class YtdReader : ITextureReader
         if (name is null || pixels == 0 || format == TextureFormat.Unknown || width == 0 || height == 0)
             return null;
 
-        return Texture(res, name, width, height, levels, format, pixels, PixelsLength(stride, height, levels));
+        // Rows padded beyond their pixels would not hold the levels one after the other.
+        bool packed = stride == YtdBuilder.Stride(format, width);
+        return Locate(res, name, width, height, levels, format, pixels, PixelsLength(stride, height, levels), packed);
     }
 
-    private static TextureData? ReadEnhancedTexture(ResourceData res, int t)
+    private static StoredTexture? LocateEnhancedTexture(ResourceData res, int t)
     {
         string? name = res.Text(res.UInt64(t + NamePointer), "nom de texture");
         int width = res.UInt16(t + EnhancedWidth);
@@ -104,24 +132,14 @@ public sealed class YtdReader : ITextureReader
         int length = 0;
         for (int i = 0; i < levels; i++)
             length += TextureLayout.Pitch(format, width >> i, height >> i).SlicePitch;
-        return Texture(res, name, width, height, levels, format, pixels, length);
+        return Locate(res, name, width, height, levels, format, pixels, length, true);
     }
 
-    private static TextureData Texture(ResourceData res, string name, int width, int height, int levels, TextureFormat format,
-        ulong pixels, int length)
+    private static StoredTexture Locate(ResourceData res, string name, int width, int height, int levels, TextureFormat format,
+        ulong pixels, int length, bool packed)
     {
         int start = res.ResolveArray(pixels, length, 1, "pixels de " + name);
-        name = name.ToLowerInvariant();
-        return new TextureData
-        {
-            NameHash = Joaat.Hash(name),
-            Name = name,
-            Width = width,
-            Height = height,
-            MipLevels = levels,
-            Format = format,
-            Data = res.Bytes(start, length).ToArray(),
-        };
+        return new StoredTexture(name.ToLowerInvariant(), width, height, levels, format, start, length, packed);
     }
 
     // Bytes of all the mip levels: the first is stride x height (for block formats, the stride is a row of blocks and

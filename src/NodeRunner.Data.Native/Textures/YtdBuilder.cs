@@ -74,7 +74,7 @@ internal static class YtdBuilder
     }
 
     // Bytes per row of pixels (for compressed formats: a row of 4 x 4 blocks divided by 4), as in the game's files.
-    private static int Stride(TextureFormat format, int width)
+    internal static int Stride(TextureFormat format, int width)
     {
         int row = TextureLayout.Pitch(format, width, 1).RowPitch;
         return TextureLayout.IsBlockCompressed(format) ? row / 4 : row;

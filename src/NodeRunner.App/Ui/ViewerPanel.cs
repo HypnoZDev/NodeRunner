@@ -66,6 +66,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
 
+    // Image being converted for a texture of the workshop (on a background thread).
+    private sealed record TextureJob(ModelPartTool Tool, string Source, uint NameHash, byte[]? Pixels, string? Note, string? Error);
+    private Task<TextureJob>? _textureJob;
+    // Texture dictionaries of the open model already changed in the project (asked once per model).
+    private readonly Dictionary<string, bool> _changedSources = new(StringComparer.OrdinalIgnoreCase);
+
     public void OpenArchetype(uint archetypeHash)
     {
         if (Library?.GetArchetype(archetypeHash) is { } archetype)
@@ -764,9 +770,10 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         if (_workshopFor != item)
         {
-            if (_workshop is { RemovedCount: > 0 } dropped && _workshopFor is not null)
-                state.Notify(L($"Morceaux retirés de {Path.GetFileName(dropped.Path)} non enregistrés : abandonnés."), warning: true);
+            if (_workshop is { ChangeCount: > 0 } dropped && _workshopFor is not null)
+                state.Notify(L($"Modifications de {Path.GetFileName(dropped.Path)} non enregistrées : abandonnées."), warning: true);
             _workshopFor = item;
+            _changedSources.Clear();
             (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
             _workshopRevision = -1;
             Viewer.OverlayEdges.Clear();
@@ -798,18 +805,19 @@ internal sealed unsafe class ViewerPanel(AppState state)
             tool.RemoveSelected();
             ShowWorkshopChanges(item, tool);
         }
-        if (Widgets.Button(L($"{Icons.Undo}  Annuler le dernier morceau"), L("Remet le dernier morceau retiré (pas encore enregistré)."),
-                width, enabled: tool.RemovedCount > 0))
+        if (Widgets.Button(L($"{Icons.Undo}  Annuler la dernière modification"),
+                L("Remet le dernier morceau retiré ou la dernière texture remplacée (pas encore enregistrés)."),
+                width, enabled: tool.ChangeCount > 0))
         {
             tool.UndoLast();
             ShowWorkshopChanges(item, tool);
         }
         if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
             tool.Clear();
-        if (tool.RemovedCount > 0)
+        if (tool.ChangeCount > 0)
         {
             ImGui.Spacing();
-            Widgets.Hint(L($"{tool.RemovedCount} morceau(x) retiré(s), pas encore enregistré(s) : la carte et le fichier ne changent qu'à l'enregistrement."), wrap: true);
+            Widgets.Hint(L($"{tool.ChangeCount} modification(s) pas encore enregistrée(s) : la carte et les fichiers ne changent qu'à l'enregistrement."), wrap: true);
             if (Widgets.PrimaryButton(L($"{Icons.Save}  Enregistrer le modèle"), width))
             {
                 var (done, message) = tool.Save(state);
@@ -823,7 +831,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Écrit le fichier du modèle dans le dossier stream du projet, puis recharge la carte une seule fois.\n")
                     + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule ensuite."));
-            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés depuis le dernier enregistrement."), width))
+            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés et les textures remplacées depuis le dernier enregistrement."), width))
             {
                 _workshopFor = null;
                 Viewer.Reload(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
@@ -838,7 +846,157 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _workshopFor = null;
         }
         ImGui.Spacing();
-        Widgets.Hint(L("Bientôt ici : déplacer un morceau, changer une texture."), wrap: true);
+        DrawWorkshopTextures(item, tool, width);
+        ImGui.Spacing();
+        Widgets.Hint(L("Bientôt ici : déplacer un morceau."), wrap: true);
+    }
+
+    // The textures of the model: replaced by an image (converted to the texture's size and format), or exported.
+    private void DrawWorkshopTextures(ViewerItem item, ModelPartTool tool, float width)
+    {
+        if (_textureJob is { IsCompleted: true } done)
+        {
+            _textureJob = null;
+            var job = done.Result;
+            if (job.Tool != tool)
+                state.Notify(L("Texture non remplacée : le modèle a changé pendant la conversion."), warning: true);
+            else if ((job.Error ?? tool.ReplaceTexture(state.World, job.Source, job.NameHash, job.Pixels!)) is { } error)
+                state.Notify(error, warning: true);
+            else
+            {
+                ShowWorkshopChanges(item, tool);
+                state.Notify(job.Note is null ? L("Texture remplacée (pas encore enregistrée).") : L($"Texture remplacée (pas encore enregistrée). {job.Note}"));
+            }
+        }
+        if (!Widgets.Section(L("Textures"), "workshop_textures"))
+            return;
+        var textures = Viewer.Model.Textures;
+        if (textures.Count == 0)
+        {
+            Widgets.Hint(Viewer.IsLoading ? L("Chargement...") : L("Aucune texture."));
+            return;
+        }
+        Widgets.Hint(L("Remplacer : choisissez une image (.png, .jpg, .dds...). NodeRunner la met à la taille de la texture et la convertit ")
+            + L("dans son format (DXT, BC7...), comme pour un fichier .dds. L'image change tout de suite dans la vue."), wrap: true);
+        if (_textureJob is not null)
+            Widgets.Hint(L($"{Icons.LoaderCircle}  Conversion de l'image..."));
+        float thumb = 40f;
+        foreach (var texture in textures)
+        {
+            ImGui.PushID(texture.Name + texture.Source);
+            var start = ImGui.GetCursorScreenPos();
+            DrawChecker(ImGui.GetWindowDrawList(), start, new Vector2(thumb));
+            if (Viewer.Thumbnail(texture.Texture) is var id && id != IntPtr.Zero)
+                ImGui.Image(id, new Vector2(thumb));
+            else
+                ImGui.Dummy(new Vector2(thumb));
+            ImGui.SameLine();
+            ImGui.BeginGroup();
+            ImGui.TextUnformatted(texture.Name);
+            ImGui.TextColored(UiTheme.TextMuted, $"{texture.Width} x {texture.Height} · {texture.Format}");
+            bool embedded = string.Equals(texture.Source, tool.Path, StringComparison.OrdinalIgnoreCase);
+            ImGui.TextColored(UiTheme.TextFaint, embedded ? L("dans le modèle") : Widgets.Fit(Path.GetFileName(texture.Source), width - thumb - 12f));
+            ImGui.EndGroup();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(texture.Source);
+
+            uint hash = Joaat.Hash(texture.Name);
+            float half = (width - ImGui.GetStyle().ItemSpacing.X) / 2f;
+            if (Widgets.Button(L($"{Icons.FolderOpen}  Remplacer..."),
+                    embedded ? L("Choisir l'image qui remplace cette texture.")
+                        : L($"Choisir l'image qui remplace cette texture. Elle est dans {Path.GetFileName(texture.Source)} : tous les objets qui utilisent ce dictionnaire changent."),
+                    half, enabled: _textureJob is null))
+                AskTextureImage(tool, texture.Source, hash, texture.Name);
+            ImGui.SameLine();
+            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Exporter..."), L("Enregistrer cette texture en .png (pour la retoucher) ou en .dds (format du jeu)."), half))
+                AskTextureExport(tool, texture.Source, hash);
+            if (!embedded && ChangedSource(texture.Source)
+                && Widgets.Button(L($"{Icons.Undo}  Remettre le dictionnaire d'origine"),
+                    L($"Annule toutes les textures remplacées dans {Path.GetFileName(texture.Source)} (le fichier d'avant est remis)."), width))
+            {
+                state.Notify(ModelPartTool.Restore(state, texture.Source));
+                _reopen = (item, state.World.ModelReader);
+                _workshopFor = null;
+            }
+            ImGui.Spacing();
+            ImGui.PopID();
+        }
+    }
+
+    private bool ChangedSource(string source)
+    {
+        if (!_changedSources.TryGetValue(source, out bool changed))
+            _changedSources[source] = changed = ModelPartTool.ChangedFile(state, source) is not null;
+        return changed;
+    }
+
+    // Asks for the image (dialog shown by the main window), then converts it on a background thread.
+    private void AskTextureImage(ModelPartTool tool, string source, uint nameHash, string name)
+    {
+        state.DialogRequest = owner =>
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = L($"Remplacer la texture {name}"),
+                Filter = L($"Images|{TextureImport.OpenFilter}|Tous les fichiers (*.*)|*.*"),
+            };
+            if (dialog.ShowDialog(owner) != DialogResult.OK)
+                return;
+            if (tool.FindTexture(state.World, source, nameHash, out var error) is not var (target, _))
+            {
+                state.Notify(error ?? L("Texture introuvable dans son fichier."), warning: true);
+                return;
+            }
+            if (!target.Packed)
+            {
+                state.Notify(L("Cette texture est rangée d'une façon que NodeRunner ne sait pas encore réécrire."), warning: true);
+                return;
+            }
+            string file = dialog.FileName;
+            _textureJob = Task.Run(() =>
+            {
+                try
+                {
+                    var (pixels, note) = TextureImport.Convert(file, target);
+                    return new TextureJob(tool, source, nameHash, pixels, note, null);
+                }
+                catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+                {
+                    return new TextureJob(tool, source, nameHash, null, null, ex.Message);
+                }
+            });
+        };
+    }
+
+    private void AskTextureExport(ModelPartTool tool, string source, uint nameHash)
+    {
+        state.DialogRequest = owner =>
+        {
+            if (tool.FindTexture(state.World, source, nameHash, out var error) is not var (texture, content))
+            {
+                state.Notify(error ?? L("Texture introuvable dans son fichier."), warning: true);
+                return;
+            }
+            bool png = Data.Native.Textures.TextureCodec.CanDecode(texture.Format);
+            using var dialog = new SaveFileDialog
+            {
+                Title = L("Exporter la texture"),
+                FileName = texture.Name + (png ? ".png" : ".dds"),
+                Filter = png ? L("Image PNG (*.png)|*.png|Image DDS, format du jeu (*.dds)|*.dds") : L("Image DDS, format du jeu (*.dds)|*.dds"),
+            };
+            if (dialog.ShowDialog(owner) != DialogResult.OK)
+                return;
+            try
+            {
+                TextureImport.Export(texture.Read(content), dialog.FileName);
+                state.Notify(L($"Texture exportée : {Path.GetFileName(dialog.FileName)}"));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                or System.Runtime.InteropServices.ExternalException)
+            {
+                state.Notify(L($"Export impossible : {ex.Message}"), warning: true);
+            }
+        };
     }
 
     // The view shows the model as changed in memory.
@@ -847,7 +1005,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         if (state.World.ModelReader is not { } reader)
             return;
         var changed = new PatchedModelReader(reader, tool.Path, tool.Header, (byte[])tool.Content.Clone());
-        Viewer.Reload(item, changed, state.World.Textures, state.World.TextureReader);
+        var textures = state.World.TextureReader is { } textureReader ? new PatchedTextureReader(textureReader, tool.ChangedDictionaries()) : null;
+        Viewer.Reload(item, changed, state.World.Textures, textures);
     }
 
     // Once the map is reloaded after a change of the model's file: the model is read again (from its new place when it

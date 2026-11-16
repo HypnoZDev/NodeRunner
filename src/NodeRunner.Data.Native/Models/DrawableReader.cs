@@ -109,36 +109,12 @@ public sealed class DrawableReader : IModelReader
     {
         var res = Open(data, header);
         var found = new List<StoredGeometry>();
-        int d;
-        Matrix4x4[]? pose;
-        switch (extension.ToLowerInvariant())
-        {
-            case ".ydr":
-                d = 0;
-                pose = SkeletonPose(res, 0);
-                break;
-            case ".yft":
-                d = Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
-                pose = FragmentPose(res) ?? SkeletonPose(res, d);
-                break;
-            case ".ydd":
-                int hashCount = res.UInt16(0x28);
-                int drawableCount = res.UInt16(0x38);
-                int hashes = res.ResolveArray(res.UInt64(0x20), hashCount, 4, "noms des modèles");
-                int pointers = res.ResolveArray(res.UInt64(0x30), drawableCount, 8, "modèles");
-                d = -1;
-                for (int i = 0; i < hashCount && i < drawableCount; i++)
-                {
-                    if (res.UInt32(hashes + i * 4) == nameHash)
-                        d = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
-                }
-                pose = SkeletonPose(res, d);
-                break;
-            default:
-                return found;
-        }
+        int d = FindDrawable(res, extension, nameHash);
         if (d < 0 || (res.UInt64(d + ModelsPointer) == 0 && res.UInt64(d + ModelsHigh) == 0))
             return found;
+        var pose = extension.Equals(".yft", StringComparison.OrdinalIgnoreCase)
+            ? FragmentPose(res) ?? SkeletonPose(res, d)
+            : SkeletonPose(res, d);
         for (int level = 0; level < 4; level++)
         {
             if (ModelList(res, res.UInt64(d + ModelsHigh + level * 8)) is not { } models)
@@ -171,6 +147,42 @@ public sealed class DrawableReader : IModelReader
             }
         }
         return found;
+    }
+
+    // Where the pixels of the textures embedded in one model of the file are in its data.
+    public static List<StoredTexture> StoredTextures(ReadOnlySpan<byte> data, ResourceHeader header, string extension, uint nameHash)
+    {
+        var res = Open(data, header);
+        int d = FindDrawable(res, extension, nameHash);
+        int group = d < 0 ? -1 : Block(res, res.UInt64(d + ShaderGroupPointer), 0x40);
+        int dictionary = group < 0 ? -1 : Block(res, res.UInt64(group + EmbeddedTexturesPointer), 0x40);
+        return dictionary >= 0 ? YtdReader.LocateDictionary(res, dictionary) : [];
+    }
+
+    // The drawable of the file (.ydr, .yft) or the one named nameHash (.ydd), -1 when none.
+    private static int FindDrawable(ResourceData res, string extension, uint nameHash)
+    {
+        switch (extension.ToLowerInvariant())
+        {
+            case ".ydr":
+                return 0;
+            case ".yft":
+                return Block(res, res.UInt64(FragDrawablePointer), DrawableLength);
+            case ".ydd":
+                int hashCount = res.UInt16(0x28);
+                int drawableCount = res.UInt16(0x38);
+                int hashes = res.ResolveArray(res.UInt64(0x20), hashCount, 4, "noms des modèles");
+                int pointers = res.ResolveArray(res.UInt64(0x30), drawableCount, 8, "modèles");
+                int d = -1;
+                for (int i = 0; i < hashCount && i < drawableCount; i++)
+                {
+                    if (res.UInt32(hashes + i * 4) == nameHash)
+                        d = Block(res, res.UInt64(pointers + i * 8), DrawableLength);
+                }
+                return d;
+            default:
+                return -1;
+        }
     }
 
     // Versions of GTA V Enhanced (.ydr / .ydd and .yft; 165 and 162 in the original release).

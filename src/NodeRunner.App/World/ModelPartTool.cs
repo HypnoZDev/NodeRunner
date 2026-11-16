@@ -3,14 +3,15 @@ using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Models;
+using NodeRunner.Data.Native.Textures;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
 // Removes pieces of an object's model (a logo, a sign...): a click in the 3D view picks the piece under the mouse (its
 // triangles touching each other), then the model file is written again with those triangles emptied. Nothing else of
-// the file changes. The file goes to the project's stream folder; a file of the project keeps its first version in
-// the originals folder.
+// the file changes. Its textures can also be replaced (in the model file, or in its .ytd), in place. The files go to
+// the project's stream folder; a file of the project keeps its first version in the originals folder.
 internal sealed class ModelPartTool
 {
     private const int MaxEdges = 30000;
@@ -32,9 +33,12 @@ internal sealed class ModelPartTool
     // Changes each time the chosen triangles change.
     public int Revision { get; private set; }
 
-    private ModelPartTool(string path, ResourceHeader header, byte[] content, List<DrawableReader.StoredGeometry> all)
+    private readonly uint _modelHash;
+
+    private ModelPartTool(string path, uint modelHash, ResourceHeader header, byte[] content, List<DrawableReader.StoredGeometry> all)
     {
         Path = path;
+        _modelHash = modelHash;
         _header = header;
         _content = content;
         _all = all;
@@ -49,7 +53,7 @@ internal sealed class ModelPartTool
         if (world.Maps?.GetArchetype(entity.ArchetypeHash) is not { } archetype || world.Models?.Locate(archetype) is not { } location)
             return (null, L("Modèle 3D introuvable."));
         var (tool, error) = Open(location, world);
-        return (tool is null ? null : new ModelPartTool(tool.Path, tool._header, tool._content, tool._all) { Entity = entity }, error);
+        return (tool is null ? null : new ModelPartTool(tool.Path, tool._modelHash, tool._header, tool._content, tool._all) { Entity = entity }, error);
     }
 
     public static (ModelPartTool? Tool, string? Error) Open(Data.Models.ModelLocation location, WorldLoader world)
@@ -63,7 +67,7 @@ internal sealed class ModelPartTool
             var all = DrawableReader.StoredGeometries(data, header, System.IO.Path.GetExtension(location.Path), location.ModelHash);
             if (all.Count == 0)
                 return (null, L("Ce modèle n'a aucune partie lisible."));
-            return (new ModelPartTool(location.Path, header, data, all), null);
+            return (new ModelPartTool(location.Path, location.ModelHash, header, data, all), null);
         }
         catch (InvalidDataException ex)
         {
@@ -168,15 +172,79 @@ internal sealed class ModelPartTool
         return L($"{System.IO.Path.GetFileName(file)} remis comme avant. Rechargement de la carte...");
     }
 
-    // Pieces removed in memory and not saved yet, last one last (each with what it changed, to undo it).
-    private readonly List<List<(int At, ushort Second, ushort Third)>> _removed = [];
+    // Changes made in memory and not saved yet, last one last: the file changed and how to undo it.
+    private sealed record Change(bool Texture, string File, Action Undo);
+    private readonly List<Change> _changes = [];
 
-    public int RemovedCount => _removed.Count;
+    // Texture dictionaries (.ytd) read for a change of their textures, by path.
+    private readonly Dictionary<string, (ResourceHeader Header, byte[] Content)> _dictionaries = new(StringComparer.OrdinalIgnoreCase);
+
+    public int ChangeCount => _changes.Count;
+    public int RemovedCount => _changes.Count(c => !c.Texture);
+    public int TextureChangeCount => _changes.Count(c => c.Texture);
 
     public ResourceHeader Header => _header;
 
-    // The model's data with the pieces removed so far (not saved).
+    // The model's data with the changes so far (not saved).
     public byte[] Content => _content;
+
+    // Copies of the texture dictionaries changed so far (not saved).
+    public Dictionary<string, (ResourceHeader Header, byte[] Content)> ChangedDictionaries() =>
+        _dictionaries.Where(d => _changes.Any(c => Same(c.File, d.Key)))
+            .ToDictionary(d => d.Key, d => (d.Value.Header, (byte[])d.Value.Content.Clone()), StringComparer.OrdinalIgnoreCase);
+
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    // The texture of this file (the model itself for its embedded textures, or a .ytd), with the data holding it.
+    public (StoredTexture Texture, byte[] Content)? FindTexture(WorldLoader world, string source, uint nameHash, out string? error)
+    {
+        error = null;
+        try
+        {
+            byte[] content;
+            List<StoredTexture> textures;
+            if (Same(source, Path))
+            {
+                content = _content;
+                textures = DrawableReader.StoredTextures(_content, _header, System.IO.Path.GetExtension(Path), _modelHash);
+            }
+            else
+            {
+                if (!_dictionaries.TryGetValue(source, out var dictionary))
+                {
+                    if (world.Content?.ReadFile(source) is not { } data || world.Content.GetResourceHeader(source) is not { } header)
+                    {
+                        error = L("Dictionnaire de textures introuvable.");
+                        return null;
+                    }
+                    _dictionaries[source] = dictionary = (header, data);
+                }
+                content = dictionary.Content;
+                textures = YtdReader.StoredTextures(dictionary.Content, dictionary.Header);
+            }
+            if (textures.FirstOrDefault(t => t.NameHash == nameHash) is not { } texture)
+            {
+                error = L("Texture introuvable dans son fichier.");
+                return null;
+            }
+            return (texture, content);
+        }
+        catch (InvalidDataException ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+    }
+
+    // Puts new pixels (from TextureImport.Convert) in the texture, in memory; the file is written by Save.
+    public string? ReplaceTexture(WorldLoader world, string source, uint nameHash, byte[] pixels)
+    {
+        if (FindTexture(world, source, nameHash, out var error) is not var (texture, content))
+            return error;
+        var before = texture.Write(content, pixels);
+        _changes.Add(new Change(true, Same(source, Path) ? Path : source, () => texture.Restore(content, before)));
+        return null;
+    }
 
     // Removes the chosen piece from the model in memory (and the same place of its simpler versions); the file is
     // written by Save. Returns the triangles removed and how many of them are in the simpler versions.
@@ -205,20 +273,21 @@ internal sealed class ModelPartTool
                 farther++;
             }
         }
-        _removed.Add(DrawablePatch.HideTriangles(_content, triangles.Select(t => (t.Geometry.IndicesAt, t.Triangle))));
+        var before = DrawablePatch.HideTriangles(_content, triangles.Select(t => (t.Geometry.IndicesAt, t.Triangle)));
+        _changes.Add(new Change(false, Path, () => DrawablePatch.Restore(_content, before)));
         Sync();
         int count = _selected.Count;
         Clear();
         return (count, farther);
     }
 
-    // Puts back the last piece removed in memory.
+    // Undoes the last change made in memory (a piece removed, a texture replaced).
     public bool UndoLast()
     {
-        if (_removed.Count == 0)
+        if (_changes.Count == 0)
             return false;
-        DrawablePatch.Restore(_content, _removed[^1]);
-        _removed.RemoveAt(_removed.Count - 1);
+        _changes[^1].Undo();
+        _changes.RemoveAt(_changes.Count - 1);
         Sync();
         Clear();
         return true;
@@ -234,20 +303,47 @@ internal sealed class ModelPartTool
         }
     }
 
-    // Writes the model with the pieces removed so far, into the project's stream folder, and reloads the map.
+    // Writes the changed files (the model, its texture dictionaries) into the project's stream folder, and reloads the
+    // map once.
     public (bool Done, string Message) Save(AppState state)
     {
-        string fileName = System.IO.Path.GetFileName(Path);
-        string? target = state.World.ProjectFiles?.StreamFileOf(Path);
+        if (state.World.ProjectFiles is null && state.SaveFolder is null)
+            return (false, L("Ouvrez ou créez un projet : le modèle modifié y est enregistré (dossier stream)."));
+        var files = new List<(string Path, ResourceHeader Header, byte[] Content)>();
+        if (_changes.Any(c => Same(c.File, Path)))
+            files.Add((Path, _header, _content));
+        foreach (var (path, (header, content)) in _dictionaries)
+        {
+            if (_changes.Any(c => Same(c.File, path)))
+                files.Add((path, header, content));
+        }
+        foreach (var (path, header, content) in files)
+        {
+            if (WriteFile(state, path, header, content) is { } error)
+                return (false, error);
+        }
+        int pieces = RemovedCount, textures = TextureChangeCount;
+        _changes.Clear();
+        _dictionaries.Clear();
+        state.World.RequestMapReload();
+        string names = string.Join(", ", files.Select(f => System.IO.Path.GetFileName(f.Path)));
+        return (true, textures == 0 ? L($"{names} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte...")
+            : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
+    }
+
+    // One file into the project's stream folder; an error message, or null.
+    private static string? WriteFile(AppState state, string path, ResourceHeader header, byte[] content)
+    {
+        string? target = state.World.ProjectFiles?.StreamFileOf(path);
         if (target is null)
         {
             if (state.SaveFolder is not { } stream)
-                return (false, L("Ouvrez ou créez un projet : le modèle modifié y est enregistré (dossier stream)."));
-            target = System.IO.Path.Combine(stream, fileName);
+                return L("Ouvrez ou créez un projet : le modèle modifié y est enregistré (dossier stream).");
+            target = System.IO.Path.Combine(stream, System.IO.Path.GetFileName(path));
         }
         try
         {
-            var bytes = Data.Native.Resources.ResourceFile.Write(_header, _content);
+            var bytes = Data.Native.Resources.ResourceFile.Write(header, content);
             // The first version is kept to put it back: the project's file itself, or a mark for a game's file (put
             // back by deleting the copy).
             string original = OriginalOf(state, target);
@@ -261,15 +357,12 @@ internal sealed class ModelPartTool
             }
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
             SafeFile.WriteAllBytes(target, bytes);
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return (false, L($"Enregistrement impossible : {ex.Message}"));
+            return L($"Enregistrement impossible : {ex.Message}");
         }
-        int pieces = _removed.Count;
-        _removed.Clear();
-        state.World.RequestMapReload();
-        return (true, L($"{fileName} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte..."));
     }
 
     // Map tool: removes the chosen piece and writes the file at once.

@@ -334,6 +334,10 @@ internal sealed class AppState
     // Prop library action asked from a panel, carried out by the main window (dialogs).
     public LibraryAction LibraryRequest { get; set; }
 
+    // A file dialog asked from a panel, shown by the main window after the frame (a dialog blocks the frame); it gets
+    // the window to own the dialog.
+    public Action<IWin32Window>? DialogRequest { get; set; }
+
     // Where to put the object of PlaceRequest: a point of the 3D view (0..1 of its width and height), null = its centre.
     public System.Numerics.Vector2? PlacePoint { get; set; }
 

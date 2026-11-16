@@ -108,6 +108,63 @@ public static class DdsFile
         };
     }
 
+    // A .dds image of the texture, every mip level (the classic header, the DX10 one for BC7 only).
+    public static byte[] Write(TextureData texture)
+    {
+        var format = texture.Format;
+        bool dx10 = format == TextureFormat.Bc7;
+        int length = 0;
+        for (int i = 0; i < texture.MipLevels; i++)
+            length += TextureLayout.Pitch(format, texture.Width >> i, texture.Height >> i).SlicePitch;
+        int start = HeaderSize + (dx10 ? Dx10HeaderSize : 0);
+        var dds = new byte[start + length];
+        void U32(int o, uint v) => BinaryPrimitives.WriteUInt32LittleEndian(dds.AsSpan(o), v);
+
+        bool compressed = TextureLayout.IsBlockCompressed(format);
+        U32(0, Magic);
+        U32(4, 124);
+        U32(8, 0x1 | 0x2 | 0x4 | 0x1000 | MipCountFlag | (compressed ? 0x80000u : 0x8u));
+        U32(12, (uint)texture.Height);
+        U32(16, (uint)texture.Width);
+        var (row, slice) = TextureLayout.Pitch(format, texture.Width, texture.Height);
+        U32(20, (uint)(compressed ? slice : row));
+        U32(28, (uint)texture.MipLevels);
+        U32(76, 32);
+        (uint flags, uint fourCc, uint bits, uint r, uint g, uint b, uint a) pf = format switch
+        {
+            TextureFormat.Bc1 => (FourCcFlag, FourCc("DXT1"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc2 => (FourCcFlag, FourCc("DXT3"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc3 => (FourCcFlag, FourCc("DXT5"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc4 => (FourCcFlag, FourCc("ATI1"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc5 => (FourCcFlag, FourCc("ATI2"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc7 => (FourCcFlag, FourCc("DX10"), 0, 0, 0, 0, 0),
+            TextureFormat.B8G8R8A8 => (RgbFlag | 0x1, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000),
+            TextureFormat.B8G8R8X8 => (RgbFlag, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0),
+            TextureFormat.R8G8B8A8 => (RgbFlag | 0x1, 0, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000),
+            TextureFormat.B5G5R5A1 => (RgbFlag | 0x1, 0, 16, 0x7C00, 0x03E0, 0x001F, 0x8000),
+            TextureFormat.A8 => (AlphaOnlyFlag, 0, 8, 0, 0, 0, 0xFF),
+            TextureFormat.L8 => (LuminanceFlag, 0, 8, 0xFF, 0, 0, 0),
+            _ => throw new InvalidDataException($"Format de texture {format} non pris en charge."),
+        };
+        U32(80, pf.flags);
+        U32(84, pf.fourCc);
+        U32(88, pf.bits);
+        U32(92, pf.r);
+        U32(96, pf.g);
+        U32(100, pf.b);
+        U32(104, pf.a);
+        U32(108, 0x1000 | (texture.MipLevels > 1 ? 0x400008u : 0u));
+        if (dx10)
+        {
+            U32(HeaderSize, 98); // BC7_UNORM
+            U32(HeaderSize + 4, 3);
+            U32(HeaderSize + 12, 1);
+        }
+        // Game files can be a few bytes short on the smallest levels: the rest stays zero.
+        texture.Data.AsSpan(0, Math.Min(length, texture.Data.Length)).CopyTo(dds.AsSpan(start));
+        return dds;
+    }
+
     private static uint FourCc(string code) => (uint)(code[0] | code[1] << 8 | code[2] << 16 | code[3] << 24);
 
     private static TextureFormat FromDxgi(uint dxgi) => dxgi switch
