@@ -964,8 +964,9 @@ internal sealed unsafe partial class MainForm : Form
             if (Matrix4x4.Invert(viewProjection, out var inverse))
             {
                 float cx = (click.X - scene.X + 0.5f) / scene.Width * 2f - 1f, cy = 1f - (click.Y - scene.Y + 0.5f) / scene.Height * 2f;
-                var near = Vector4.Transform(new Vector4(cx, cy, 0f, 1f), inverse);
-                var far = Vector4.Transform(new Vector4(cx, cy, 1f, 1f), inverse);
+                // Reversed depth with an infinite far plane: 1 is the near plane, 0 infinitely far.
+                var near = Vector4.Transform(new Vector4(cx, cy, 1f, 1f), inverse);
+                var far = Vector4.Transform(new Vector4(cx, cy, 0.5f, 1f), inverse);
                 var from = new Vector3(near.X, near.Y, near.Z) / near.W;
                 var to = new Vector3(far.X, far.Y, far.Z) / far.W;
                 if (!partTool.Click(from, Vector3.Normalize(to - from), control))
