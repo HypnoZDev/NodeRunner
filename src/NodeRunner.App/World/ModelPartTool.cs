@@ -168,12 +168,23 @@ internal sealed class ModelPartTool
         return L($"{System.IO.Path.GetFileName(file)} remis comme avant. Rechargement de la carte...");
     }
 
-    // Writes the model without the selected piece; returns the message to show and whether it worked.
-    public (bool Done, string Message) Apply(AppState state)
+    // Pieces removed in memory and not saved yet, last one last (each with what it changed, to undo it).
+    private readonly List<List<(int At, ushort Second, ushort Third)>> _removed = [];
+
+    public int RemovedCount => _removed.Count;
+
+    public ResourceHeader Header => _header;
+
+    // The model's data with the pieces removed so far (not saved).
+    public byte[] Content => _content;
+
+    // Removes the chosen piece from the model in memory (and the same place of its simpler versions); the file is
+    // written by Save. Returns the triangles removed and how many of them are in the simpler versions.
+    public (int Count, int Farther) RemoveSelected()
     {
         if (_selected.Count == 0)
-            return (false, L("Cliquez d'abord sur le morceau à retirer."));
-        var triangles = _selected.Select(s => (_shown[s.Mesh].IndicesAt, s.Triangle)).ToList();
+            return (0, 0);
+        var triangles = _selected.Select(s => (Geometry: _shown[s.Mesh], s.Triangle)).ToList();
         // The simpler versions of the model (seen from farther away): their triangles in the same place.
         var (min, max) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
         foreach (var group in _selected.GroupBy(s => s.Mesh))
@@ -190,11 +201,42 @@ internal sealed class ModelPartTool
         {
             foreach (int t in ModelParts.Inside(geometry.Positions, geometry.Indices, min, max))
             {
-                triangles.Add((geometry.IndicesAt, t));
+                triangles.Add((geometry, t));
                 farther++;
             }
         }
+        _removed.Add(DrawablePatch.HideTriangles(_content, triangles.Select(t => (t.Geometry.IndicesAt, t.Triangle))));
+        Sync();
+        int count = _selected.Count;
+        Clear();
+        return (count, farther);
+    }
 
+    // Puts back the last piece removed in memory.
+    public bool UndoLast()
+    {
+        if (_removed.Count == 0)
+            return false;
+        DrawablePatch.Restore(_content, _removed[^1]);
+        _removed.RemoveAt(_removed.Count - 1);
+        Sync();
+        Clear();
+        return true;
+    }
+
+    // The triangles as the data now holds them (emptied ones are not picked any more).
+    private void Sync()
+    {
+        foreach (var geometry in _all)
+        {
+            for (int k = 0; k < geometry.Indices.Length; k++)
+                geometry.Indices[k] = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(_content.AsSpan(geometry.IndicesAt + k * 2));
+        }
+    }
+
+    // Writes the model with the pieces removed so far, into the project's stream folder, and reloads the map.
+    public (bool Done, string Message) Save(AppState state)
+    {
         string fileName = System.IO.Path.GetFileName(Path);
         string? target = state.World.ProjectFiles?.StreamFileOf(Path);
         if (target is null)
@@ -205,7 +247,7 @@ internal sealed class ModelPartTool
         }
         try
         {
-            var bytes = DrawablePatch.HideTriangles(_header, _content, triangles);
+            var bytes = Data.Native.Resources.ResourceFile.Write(_header, _content);
             // The first version is kept to put it back: the project's file itself, or a mark for a game's file (put
             // back by deleting the copy).
             string original = OriginalOf(state, target);
@@ -220,13 +262,26 @@ internal sealed class ModelPartTool
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
             SafeFile.WriteAllBytes(target, bytes);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentOutOfRangeException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return (false, L($"Enregistrement impossible : {ex.Message}"));
         }
-        int count = _selected.Count;
-        Clear();
+        int pieces = _removed.Count;
+        _removed.Clear();
         state.World.RequestMapReload();
+        return (true, L($"{fileName} enregistré ({pieces} morceau(x) retiré(s)). Rechargement de la carte..."));
+    }
+
+    // Map tool: removes the chosen piece and writes the file at once.
+    public (bool Done, string Message) Apply(AppState state)
+    {
+        if (_selected.Count == 0)
+            return (false, L("Cliquez d'abord sur le morceau à retirer."));
+        var (count, farther) = RemoveSelected();
+        var (done, message) = Save(state);
+        if (!done)
+            return (false, message);
+        string fileName = System.IO.Path.GetFileName(Path);
         return (true, farther > 0
             ? L($"{count} triangles retirés de {fileName} (+ {farther} dans ses versions simplifiées). Rechargement de la carte...")
             : L($"{count} triangles retirés de {fileName}. Rechargement de la carte..."));

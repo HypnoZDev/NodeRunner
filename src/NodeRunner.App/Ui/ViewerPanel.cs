@@ -764,6 +764,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         if (_workshopFor != item)
         {
+            if (_workshop is { RemovedCount: > 0 } dropped && _workshopFor is not null)
+                state.Notify(L($"Morceaux retirés de {Path.GetFileName(dropped.Path)} non enregistrés : abandonnés."), warning: true);
             _workshopFor = item;
             (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
             _workshopRevision = -1;
@@ -788,21 +790,46 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Widgets.EndProperties();
         }
         ImGui.Spacing();
+        // Changes are shown at once in the view and kept in memory; the file and the map change only when saved.
         if (Widgets.Button(L($"{Icons.Trash}  Retirer ce morceau"),
-                L("Réécrit le fichier du modèle sans ces triangles, dans le dossier stream du projet, puis recharge la carte. ")
-                + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule."), width, enabled: tool.SelectedCount > 0))
+                L("Le morceau disparaît de la vue tout de suite. Le fichier et la carte ne changent qu'avec « Enregistrer le modèle »."),
+                width, enabled: tool.SelectedCount > 0))
         {
-            var (done, message) = tool.Apply(state);
-            state.Notify(message, warning: !done);
-            if (done)
-            {
-                _reopen = (item, state.World.ModelReader);
-                _workshopFor = null;
-            }
+            tool.RemoveSelected();
+            ShowWorkshopChanges(item, tool);
+        }
+        if (Widgets.Button(L($"{Icons.Undo}  Annuler le dernier morceau"), L("Remet le dernier morceau retiré (pas encore enregistré)."),
+                width, enabled: tool.RemovedCount > 0))
+        {
+            tool.UndoLast();
+            ShowWorkshopChanges(item, tool);
         }
         if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
             tool.Clear();
-        if (ModelPartTool.ChangedFile(state, tool.Path) is not null
+        if (tool.RemovedCount > 0)
+        {
+            ImGui.Spacing();
+            Widgets.Hint(L($"{tool.RemovedCount} morceau(x) retiré(s), pas encore enregistré(s) : la carte et le fichier ne changent qu'à l'enregistrement."), wrap: true);
+            if (Widgets.PrimaryButton(L($"{Icons.Save}  Enregistrer le modèle"), width))
+            {
+                var (done, message) = tool.Save(state);
+                state.Notify(message, warning: !done);
+                if (done)
+                {
+                    _reopen = (item, state.World.ModelReader);
+                    _workshopFor = null;
+                }
+            }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Écrit le fichier du modèle dans le dossier stream du projet, puis recharge la carte une seule fois.\n")
+                    + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule ensuite."));
+            if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés depuis le dernier enregistrement."), width))
+            {
+                _workshopFor = null;
+                Viewer.Reload(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
+            }
+        }
+        else if (ModelPartTool.ChangedFile(state, tool.Path) is not null
             && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
                 L("Annule tous les morceaux retirés de ce modèle (le fichier d'avant est remis)."), width))
         {
@@ -812,6 +839,15 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         ImGui.Spacing();
         Widgets.Hint(L("Bientôt ici : déplacer un morceau, changer une texture."), wrap: true);
+    }
+
+    // The view shows the model as changed in memory.
+    private void ShowWorkshopChanges(ViewerItem item, ModelPartTool tool)
+    {
+        if (state.World.ModelReader is not { } reader)
+            return;
+        var changed = new PatchedModelReader(reader, tool.Path, tool.Header, (byte[])tool.Content.Clone());
+        Viewer.Reload(item, changed, state.World.Textures, state.World.TextureReader);
     }
 
     // Once the map is reloaded after a change of the model's file: the model is read again (from its new place when it

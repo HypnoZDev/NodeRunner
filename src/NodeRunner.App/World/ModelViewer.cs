@@ -106,6 +106,15 @@ internal sealed class ModelViewer : IDisposable
 
     private static readonly Vector4 OverlayColor = new(1f, 0.3f, 0.25f, 0.95f);
 
+    // Shows the model read again (changed in the workshop), keeping the view and the hidden parts.
+    public void Reload(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
+    {
+        _keepView = true;
+        _model.Reload(item, reader, textures, textureReader);
+    }
+
+    private bool _keepView;
+
     public void ResetView()
     {
         Yaw = DefaultYaw;
@@ -150,7 +159,9 @@ internal sealed class ModelViewer : IDisposable
         {
             _center = (_model.BoundsMin + _model.BoundsMax) * 0.5f;
             _radius = Math.Max(0.05f, Size.Length() * 0.5f);
-            ResetView();
+            if (!_keepView)
+                ResetView();
+            _keepView = false;
         }
         UpdateThumbnails(imgui);
 

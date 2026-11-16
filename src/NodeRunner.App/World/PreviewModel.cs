@@ -46,6 +46,12 @@ internal sealed class PreviewModel : IDisposable
     {
         if (item == Item && Error is null)
             return;
+        Reload(item, reader, textures, textureReader);
+    }
+
+    // Reads the model again even when it is the one shown (its data changed); the current one stays until then.
+    public void Reload(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
+    {
         Item = item;
         Error = null;
         _loading = Task.Run(() => Read(item, reader, textures, textureReader));
