@@ -4,8 +4,9 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-// NodeRunner's look: graphite greys with a slightly cool tint, soft text, light blue accent, borderless fields a step
-// lighter than the panels, discreet rounding, sections separated by thin lines.
+// NodeRunner's look: graphite greys with a cool blue tint, soft text, accent colour, borderless fields a step lighter
+// than the panels, generous rounding, sections separated by thin lines. What floats over the 3D view (menus, tooltips,
+// the floating bar, the search) is glass: see-through, tinted, with a light edge. Docked panels stay opaque.
 internal static unsafe class UiTheme
 {
     public const float FontSize = 15f;
@@ -14,21 +15,27 @@ internal static unsafe class UiTheme
 
     // --- Palette ---
 
-    public static readonly Vector4 Chrome = Rgb(0x111214);
+    public static readonly Vector4 Chrome = Rgb(0x0F1015);
 
-    public static readonly Vector4 Panel = Rgb(0x1A1B1F);
+    public static readonly Vector4 Panel = Rgb(0x181A20);
 
-    public static readonly Vector4 Border = new(1f, 1f, 1f, 0.08f);
+    public static readonly Vector4 Border = new(1f, 1f, 1f, 0.09f);
 
-    public static readonly Vector4 Field = Rgb(0x25262B);
-    public static readonly Vector4 FieldHovered = Rgb(0x2C2D33);
-    public static readonly Vector4 FieldActive = Rgb(0x32343A);
+    public static readonly Vector4 Field = Rgb(0x23262E);
+    public static readonly Vector4 FieldHovered = Rgb(0x2A2E37);
+    public static readonly Vector4 FieldActive = Rgb(0x313641);
 
     public static readonly Vector4 Divider = new(1f, 1f, 1f, 0.06f);
 
-    public static readonly Vector4 Text = Rgb(0xE4E5E9);
-    public static readonly Vector4 TextMuted = Rgb(0x9A9CA5);
-    public static readonly Vector4 TextFaint = Rgb(0x666870);
+    public static readonly Vector4 Text = Rgb(0xE6E8EE);
+    public static readonly Vector4 TextMuted = Rgb(0xA0A4AF);
+    // Readable on the panels (contrast above 4.5:1), still a step below TextMuted.
+    public static readonly Vector4 TextFaint = Rgb(0x80848F);
+
+    // Glass: what floats over the 3D view.
+    public static readonly Vector4 Glass = new(0.075f, 0.085f, 0.11f, 0.78f);
+    public static readonly Vector4 GlassStrong = new(0.08f, 0.09f, 0.115f, 0.90f); // Menus and tooltips: text first.
+    public static readonly Vector4 GlassEdge = new(1f, 1f, 1f, 0.13f);
 
     // Accent colour (setting): buttons, selection, links.
     public static Vector4 Accent { get; private set; } = Rgb(DefaultAccent);
@@ -106,7 +113,7 @@ internal static unsafe class UiTheme
     public static readonly Vector4 AxisZ = Rgb(0x4C8DFF);
     public static readonly Vector4 AxisNeutral = Rgb(0x8A8C94);
 
-    public const float FrameRounding = 4f;
+    public const float FrameRounding = 5f;
 
     // Windows display scale (1.5 at 150 %). The interface is laid out in points; one point is Scale pixels.
     public static float Scale { get; private set; } = 1f;
@@ -209,13 +216,13 @@ internal static unsafe class UiTheme
         style.SeparatorTextBorderSize = 1;
         style.DockingSeparatorSize = 2;
 
-        style.WindowRounding = 6;
-        style.ChildRounding = 4;
+        style.WindowRounding = 10;
+        style.ChildRounding = 6;
         style.FrameRounding = FrameRounding;
-        style.PopupRounding = 6;
+        style.PopupRounding = 10;
         style.ScrollbarRounding = 6;
-        style.GrabRounding = 3;
-        style.TabRounding = 4;
+        style.GrabRounding = 4;
+        style.TabRounding = 6;
 
         style.WindowTitleAlign = new Vector2(0f, 0.5f);
         style.WindowMenuButtonPosition = ImGuiDir.None;
@@ -230,7 +237,7 @@ internal static unsafe class UiTheme
         Set(ImGuiCol.TextDisabled, TextFaint);
         Set(ImGuiCol.WindowBg, Panel);
         Set(ImGuiCol.ChildBg, black, 0f);
-        Set(ImGuiCol.PopupBg, Rgb(0x1F2025), 0.99f);
+        Set(ImGuiCol.PopupBg, GlassStrong);
         Set(ImGuiCol.Border, Border);
         Set(ImGuiCol.BorderShadow, black, 0f);
 

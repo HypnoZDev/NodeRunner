@@ -85,8 +85,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             ImGui.SetNextWindowFocus();
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, ImGui.GetStyle().Colors[(int)ImGuiCol.PopupBg]);
-        ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.Border);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.GlassStrong);
+        ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.GlassEdge);
         const ImGuiWindowFlags flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove
             | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse
             | ImGuiWindowFlags.NoNavInputs | ImGuiWindowFlags.AlwaysAutoResize;
@@ -94,7 +94,10 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         ImGui.PopStyleColor(2);
         ImGui.PopStyleVar(2);
         if (visible)
+        {
+            OverlayStyle.Sheen(ImGui.GetWindowDrawList(), ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), ImGui.GetStyle().WindowRounding);
             DrawContent();
+        }
         // A click elsewhere (another panel or the 3D view) closes it, like a menu.
         bool clickedOutside = (ImGui.IsMouseClicked(ImGuiMouseButton.Left) || ImGui.IsMouseClicked(ImGuiMouseButton.Right))
             && !ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);

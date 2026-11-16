@@ -40,7 +40,10 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         ImGui.SetNextWindowSize(size, ImGuiCond.Appearing);
         ImGui.SetNextWindowSizeConstraints(Vector2.Min(new Vector2(640f, 360f), room), room);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.GlassStrong);
+        ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.GlassEdge);
         bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
+        ImGui.PopStyleColor(2);
         ImGui.PopStyleVar();
         if (visible)
         {

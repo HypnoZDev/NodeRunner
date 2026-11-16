@@ -39,8 +39,13 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         ImGui.SetNextWindowSize(new Vector2(size.X, height));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8, 4));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.Glass);
         bool visible = ImGui.Begin("##workspace_tabs", BarFlags);
-        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor();
+        ImGui.PopStyleVar(3);
+        if (visible)
+            OverlayStyle.Sheen(ImGui.GetWindowDrawList(), ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), 0f);
         if (visible && ImGui.BeginTabBar("##workspace", ImGuiTabBarFlags.FittingPolicyScroll))
         {
             bool front = state.WorkshopFront;
@@ -139,8 +144,9 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         ImGui.SetNextWindowSize(size);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
         bool visible = ImGui.Begin("##workshop", BarFlags | ImGuiWindowFlags.NoScrollbar);
-        ImGui.PopStyleVar(2);
+        ImGui.PopStyleVar(3);
         if (visible)
             viewer.DrawWorkshop();
         ImGui.End();

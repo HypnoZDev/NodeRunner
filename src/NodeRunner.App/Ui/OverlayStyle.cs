@@ -3,15 +3,15 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-// Flat, minimal look of the elements floating over the 3D view (no frosted glass): solid dark background, faint edge,
-// soft shadow; buttons show only their icon until hovered.
+// Glass look of the elements floating over the 3D view: a tinted, see-through background with a light sheen at the top
+// and a bright edge, over a soft shadow; buttons show only their icon until hovered.
 internal static class OverlayStyle
 {
     public const float MenuRounding = 10f;
     public const float ButtonRounding = 7f;
 
-    private static readonly Vector4 Background = new(0.105f, 0.108f, 0.118f, 0.97f);
-    private static readonly Vector4 Edge = new(1f, 1f, 1f, 0.07f);
+    private static Vector4 Background => UiTheme.Glass;
+    private static Vector4 Edge => UiTheme.GlassEdge;
 
     public static void Panel(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding)
     {
@@ -23,7 +23,23 @@ internal static class OverlayStyle
                 ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.06f)), rounding + i * 1.5f);
         }
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(Background), rounding);
+        Sheen(drawList, min, max, rounding);
         drawList.AddRect(min, max, ImGui.GetColorU32(Edge), rounding, ImDrawFlags.None, 1f);
+    }
+
+    // The light caught by the glass: a faint white fading downwards over the top of the panel, and a brighter line on
+    // its top edge.
+    public static void Sheen(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding)
+    {
+        float height = Math.Min(max.Y - min.Y, 28f);
+        if (height <= rounding || max.X - min.X <= rounding * 2f)
+            return;
+        uint top = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.06f));
+        uint clear = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0f));
+        drawList.AddRectFilledMultiColor(new Vector2(min.X + rounding * 0.5f, min.Y + 1f), new Vector2(max.X - rounding * 0.5f, min.Y + height),
+            top, top, clear, clear);
+        drawList.AddLine(new Vector2(min.X + rounding, min.Y + 0.5f), new Vector2(max.X - rounding, min.Y + 0.5f),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.16f)), 1f);
     }
 
     public static void WindowBackground(float rounding)
