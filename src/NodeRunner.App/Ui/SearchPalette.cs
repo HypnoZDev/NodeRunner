@@ -311,7 +311,10 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         bool onlyCommands = query.StartsWith('>');
         if (onlyCommands)
             query = query[1..].Trim();
-        if ((onlyCommands || query.Length >= 2) && FindCommands(query, onlyCommands ? int.MaxValue : MaxCommands) is { Count: > 0 } commands)
+        var commands = onlyCommands || query.Length >= 2 ? FindCommands(query, onlyCommands ? int.MaxValue : MaxCommands) : [];
+        // A command whose name starts with what was typed comes first; a looser match after the objects found.
+        bool commandsFirst = onlyCommands || commands.Count > 0 && commands[0].Score <= 1;
+        if (commands.Count > 0 && commandsFirst)
             AddGroup(L("Commandes"), commands);
         if (onlyCommands)
             return;
@@ -335,6 +338,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             foreach (var group in groups.Where(g => g.Results.Count > 0).OrderBy(g => g.Results.Min(r => r.Score)))
                 AddGroup(group.Title, group.Results);
         }
+        if (commands.Count > 0 && !commandsFirst)
+            AddGroup(L("Commandes"), commands);
     }
 
     // Commands whose name or keywords hold every word typed (accents and case ignored), best matches first.
