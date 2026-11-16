@@ -169,7 +169,7 @@ internal sealed class ScenarioLife : IDisposable
             return;
         foreach (var spawn in _spawns)
         {
-            spawn.Posed = spawn.Point != skip && spawn.Slot.Model.Model is { IsSkinned: true }
+            spawn.Posed = spawn.Slot.Model.Model is { IsSkinned: true }
                 && ScenarioClips.Pose(spawn.Slot.Model.Data, spawn.Clip?.Clip, spawn.Phase, ref spawn.Pose);
         }
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
@@ -193,6 +193,38 @@ internal sealed class ScenarioLife : IDisposable
         }
         renderer.VehiclePaint = null;
         renderer.BonePose = null;
+    }
+
+    // The point of the ped, animal or vehicle drawn at pixel (x, y) of the view (as drawn by the last Draw: same pose),
+    // and where it was hit; null when none is there.
+    public (ScenarioPoint Point, Vector3 Hit)? Pick(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height,
+        int x, int y, ScenarioPoint? skip)
+    {
+        if (Shown == 0)
+            return null;
+        buffer.Begin(width, height);
+        renderer.BeginPick();
+        for (int i = 0; i < _spawns.Count; i++)
+        {
+            var spawn = _spawns[i];
+            if (spawn.Point == skip || spawn.Slot.Model.Model is not { } model)
+                continue;
+            renderer.BonePose = spawn.Posed ? spawn.Pose : null;
+            renderer.DrawPick(model, ScenarioPreview.Placement(spawn.Slot.Model, spawn.Slot.Item.Kind, spawn.Point), viewProjection, (uint)(i + 1));
+        }
+        renderer.BonePose = null;
+        uint number = buffer.Read(x, y);
+        if (number < 1 || number > _spawns.Count)
+            return null;
+        float depth = buffer.ReadDepth(x, y);
+        var hit = _spawns[(int)number - 1].Point.Position;
+        if (depth > 0f && Matrix4x4.Invert(viewProjection, out var inverse))
+        {
+            var world = Vector4.Transform(new Vector4((x + 0.5f) / width * 2f - 1f, 1f - (y + 0.5f) / height * 2f, depth, 1f), inverse);
+            if (Math.Abs(world.W) > 1e-12f)
+                hit = new Vector3(world.X, world.Y, world.Z) / world.W;
+        }
+        return (_spawns[(int)number - 1].Point, hit);
     }
 
     private void Clear()

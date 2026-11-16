@@ -194,6 +194,21 @@ internal sealed unsafe partial class MainForm
             _state.SelectedScenario = scenario;
             return;
         }
+        // A ped, animal or vehicle of the life simulation: its point, unless a model of the map hides it there.
+        if (!control && _state.ScenarioLife.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height,
+                click.X - scene.X, click.Y - scene.Y, null) is { } life)
+        {
+            var wall = _state.IsLayerVisible(ModelLayer.LayerName)
+                ? _modelLayer.PickHit(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y, null)
+                : null;
+            var eye = _state.Camera.Position;
+            if (wall is not { } w || Vector3.Distance(eye, w.Point) > Vector3.Distance(eye, life.Hit) - 0.05f)
+            {
+                _state.Select(null);
+                _state.SelectedScenario = life.Point;
+                return;
+            }
+        }
         // Lights next, while their layer is shown: small points, picked within a few pixels.
         if (!control && _state.IsLayerVisible(LodLightLayer.LayerName)
             && _lodLightLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height)) is { } light)
