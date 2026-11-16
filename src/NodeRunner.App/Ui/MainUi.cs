@@ -55,7 +55,12 @@ internal sealed class MainUi
             IsLibraryShown = () => _showLibrary,
         };
         _errorWindow = new ErrorWindow(state, modelLayer, collisionLayer, navMeshLayer);
-        _statusBar = new StatusBar(state, modelLayer, _errorWindow.Open);
+        _statusBar = new StatusBar(state, modelLayer, _errorWindow.Open)
+        {
+            IsDragging = () => IsGizmoDragging,
+            IsLooking = () => cameraController.IsLooking,
+            WorkshopHints = _viewerPanel.WorkshopHints,
+        };
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);

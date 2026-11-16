@@ -276,6 +276,21 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _gizmo.Cancel();
     }
 
+    // What the mouse and the keys do in the workshop with the tool in use, for the status bar.
+    public IReadOnlyList<(string Keys, string Action)> WorkshopHints()
+    {
+        (string, string) look = (L("Clic droit maintenu"), L("regarder autour"));
+        (string, string) frame = ("F", L("cadrer le modèle"));
+        (string, string) tools = ("1 - 5", L("outils"));
+        return _workshopTool switch
+        {
+            WorkshopTool.Move => [(L("Tirer une poignée"), L("déplacer ou tourner le morceau")), ("Ctrl", L("par pas")), (L("Clic"), L("choisir un morceau")), look, frame, tools],
+            WorkshopTool.Open => [(L("Clic sur le mur"), L("placer l'ouverture")), look, (L("Clic gauche glissé"), L("tourner autour")), frame, tools],
+            _ => [(L("Clic"), L("choisir un morceau")), (L("Ctrl+clic"), L("ajouter / retirer")), look, (L("Clic gauche glissé"), L("tourner autour")),
+                  (L("Molette"), L("zoom")), frame, tools],
+        };
+    }
+
     // Open a building: the workshop on the cutting tool (the opening is then placed by a click on the wall).
     public void ShowOpeningTool() => ChooseWorkshopTool(WorkshopTool.Open);
 

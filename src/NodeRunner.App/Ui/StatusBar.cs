@@ -5,11 +5,19 @@ using NodeRunner.Data.Installation;
 
 namespace NodeRunner.App.Ui;
 
-// Bar at the bottom of the window: map version and DLC, loading progress or errors on the left; camera position, game
-// edition and frames per second on the right.
+// Bar at the bottom of the window. Left: what is going on (loading, messages, unsaved changes), then what the mouse and
+// the keys do right now (for the tool in use, the keys held). Right: errors, camera position, game edition and frames
+// per second. The project, the map version and the DLC are in the toolbar.
 internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action openErrors)
 {
     private const float PaddingY = 3f;
+    private const float Gap = 24f;
+
+    // Set by the interface: a 3D handle is being dragged, the camera is looking around (right button held), and the
+    // hints of the model workshop's tool.
+    public Func<bool>? IsDragging { get; set; }
+    public Func<bool>? IsLooking { get; set; }
+    public Func<IReadOnlyList<(string Keys, string Action)>>? WorkshopHints { get; set; }
 
     public void Draw()
     {
@@ -18,58 +26,56 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.Chrome);
         if (DockLayout.BeginSideBar("##statusbar", ImGuiDir.Down, ImGui.GetTextLineHeight() + PaddingY * 2 + 2))
         {
-            DrawLeft();
-            DrawRight();
+            var right = RightTexts();
+            float rightWidth = ImGui.CalcTextSize(right.Errors).X + ImGui.CalcTextSize(right.Position).X + ImGui.CalcTextSize(right.Edition).X
+                + ImGui.CalcTextSize(right.Fps).X + Gap * 3;
+            float rightX = ImGui.GetWindowWidth() - ImGui.GetStyle().WindowPadding.X - rightWidth;
+            bool any = DrawStatus();
+            DrawHints(any, rightX - Gap);
+            DrawRight(right, rightX);
         }
         ImGui.End();
         ImGui.PopStyleColor();
         ImGui.PopStyleVar(2);
     }
 
-    private void DrawLeft()
+    // What is going on; true when something was written.
+    private bool DrawStatus()
     {
-        var settings = state.Settings;
+        bool any = false;
+        void Next()
+        {
+            if (any)
+                Separator();
+            any = true;
+        }
+
         if (state.IsGta4)
         {
+            Next();
             Item(Icons.Globe, World.Gta4World.EpisodeName(state.Gta4.Episode));
-            return;
         }
-        if (state.Project is { } project)
-            Item(Icons.FolderOpen, project.Name);
-        else
-            Item(Icons.FolderOpen, L("Aucun projet"), UiTheme.TextFaint);
-        Separator();
-        Item(Icons.Globe, Toolbar.VersionName(settings.MapVersion));
-
-        if (state.World.Content is { AllPacks.Count: > 0 } content)
-        {
-            var last = settings.LastDlcPack is null ? null
-                : content.AllPacks.FirstOrDefault(p => p.Name.Equals(settings.LastDlcPack, StringComparison.OrdinalIgnoreCase));
-            Separator();
-            Item(Icons.Package, last is null ? L($"Tous les DLC ({content.AllPacks.Count})") : L($"DLC jusqu'à : {last.DisplayName}"));
-        }
-
         var world = state.World;
-        if (world.Error is not null)
+        if (!state.IsGta4 && world.Error is not null)
         {
-            Separator();
+            Next();
             Item(Icons.TriangleAlert, world.Status, UiTheme.Error);
             Clickable(L("Clic : voir l'erreur et copier le rapport"));
         }
-        else if (world.IsBusy)
+        else if (!state.IsGta4 && world.IsBusy)
         {
-            Separator();
+            Next();
             Item(Icons.LoaderCircle, world.Status, UiTheme.Accent with { X = 0.42f, Y = 0.70f, Z = 1f });
         }
         else if (modelLayer.PendingModelCount > 0)
         {
-            Separator();
+            Next();
             Item(Icons.LoaderCircle, L($"{modelLayer.PendingModelCount} modèles en cours de chargement"), ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
         }
 
         if (state.Notice is { } notice && (DateTime.Now - notice.Time).TotalSeconds < 8)
         {
-            Separator();
+            Next();
             if (notice.IsWarning)
                 Item(Icons.TriangleAlert, notice.Text, UiTheme.Warning);
             else
@@ -78,7 +84,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
 
         if (state.Online.Session is { IsOver: false } session)
         {
-            Separator();
+            Next();
             string host = session.Participants.Count > 0 ? session.Participants[0] : L("l'hôte");
             Item(Icons.Users, session.Role == Editor.Online.SessionRole.Host
                 ? L($"Session Online : {session.Participants.Count} participant(s)")
@@ -87,17 +93,101 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
 
         if (state.History.HasUnsavedChanges && !state.Online.IsGuest)
         {
-            Separator();
+            Next();
             Item(Icons.Save, L($"Modifications non enregistrées ({state.PendingSaveText}) : Ctrl+S"), UiTheme.Warning);
         }
         else if (state.LastSave is { } save && (DateTime.Now - save.Time).TotalSeconds < 8)
         {
-            Separator();
+            Next();
             Item(save.Success ? Icons.Check : Icons.TriangleAlert, save.Text, save.Success ? UiTheme.Success : UiTheme.Error);
+        }
+        return any;
+    }
+
+    // What the mouse and the keys do now, as many as fit before the right part.
+    private void DrawHints(bool afterStatus, float limitX)
+    {
+        var hints = Hints();
+        if (hints.Count == 0)
+            return;
+        float keyPadding = 4f;
+        bool first = true;
+        var drawList = ImGui.GetWindowDrawList();
+        foreach (var (keys, action) in hints)
+        {
+            float width = ImGui.CalcTextSize(keys).X + keyPadding * 2f + 6f + ImGui.CalcTextSize(action).X;
+            bool separator = first && afterStatus;
+            if (separator)
+                ImGui.SameLine(0, 12f);
+            else if (!first)
+                ImGui.SameLine(0, 16f);
+            if (ImGui.GetCursorPosX() + width + (separator ? 24f : 0f) > limitX)
+                return; // No room left before the right part.
+            if (separator)
+            {
+                ImGui.TextColored(UiTheme.Rgb(0x34363C), "|");
+                ImGui.SameLine(0, 12f);
+            }
+            first = false;
+            // The key as a small cap, then what it does.
+            var at = ImGui.GetCursorScreenPos();
+            var size = ImGui.CalcTextSize(keys);
+            drawList.AddRectFilled(at - new Vector2(0, 1), at + new Vector2(size.X + keyPadding * 2f, size.Y + 1), Widgets.Col(UiTheme.Field), 3f);
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + keyPadding);
+            ImGui.TextUnformatted(keys);
+            ImGui.SameLine(0, keyPadding + 6f);
+            ImGui.TextColored(UiTheme.TextMuted, action);
         }
     }
 
-    private void DrawRight()
+    private IReadOnlyList<(string Keys, string Action)> Hints()
+    {
+        var io = ImGui.GetIO();
+        if (io.WantTextInput)
+            return [(L("Entrée"), L("valider")), (L("Échap"), L("annuler la saisie"))];
+        if (state.WorkshopShown && WorkshopHints?.Invoke() is { } workshop)
+            return workshop;
+        string move = state.Settings.MovementKeys == Input.MovementKeys.Wasd ? "W A S D" : state.Settings.MovementKeys == Input.MovementKeys.Zqsd ? "Z Q S D" : "Z Q S D / W A S D";
+        if (IsLooking?.Invoke() == true)
+        {
+            return [(move, L("se déplacer")), (L("Espace / C"), L("monter / descendre")), (L("Maj"), L("5 fois plus vite")), (L("Molette"), L("vitesse"))];
+        }
+        if (IsDragging?.Invoke() == true)
+            return [("Ctrl", L("par pas")), (L("Échap"), L("annuler le déplacement"))];
+        if (io.KeyCtrl)
+        {
+            return state.IsGta4
+                ? [("Ctrl+K", L("rechercher"))]
+                : [(L("Ctrl+clic"), L("ajouter à la sélection")), ("Ctrl+Z / Y", L("annuler / rétablir")), ("Ctrl+S", L("enregistrer")),
+                   ("Ctrl+C / V", L("copier / coller")), ("Ctrl+K", L("rechercher")), ("Ctrl+E", L("exporter"))];
+        }
+        if (state.IsGta4)
+        {
+            return [(L("Clic"), L("propriétés (lecture seule)")), (L("Clic droit maintenu"), L("regarder autour")), (move, L("se déplacer")),
+                    ("Ctrl+K", L("rechercher"))];
+        }
+        if (state.OpeningTool is not null)
+            return [(L("Clic sur le mur"), L("placer l'ouverture")), (L("Échap"), L("arrêter"))];
+        if (state.Tool == TransformTool.Collision)
+        {
+            return [(L("Clic"), L("choisir une surface")), (L("Ctrl+clic"), L("ajouter / retirer")), (L("Glisser"), L("rectangle")),
+                    (L("Suppr"), L("supprimer")), ("1", L("revenir à la sélection"))];
+        }
+        if (state.Selection is not null)
+        {
+            return state.Tool == TransformTool.Select
+                ? [(L("Double-clic"), L("modifier le modèle (porte : l'ouvrir)")), (L("Clic droit"), L("menu")), ("2 / 3 / 4", L("déplacer / tourner / échelle")),
+                   (L("Fin"), L("poser au sol")), (L("Suppr"), L("supprimer")), (L("Échap"), L("désélectionner"))]
+                : [(L("Tirer une poignée"), L("modifier")), ("Ctrl", L("par pas")), (L("Fin"), L("poser au sol")), (L("Suppr"), L("supprimer")),
+                   ("1", L("sélection")), (L("Échap"), L("désélectionner"))];
+        }
+        return [(L("Clic"), L("sélectionner")), (L("Clic droit maintenu"), L("regarder autour")), (move, L("se déplacer")), (L("Molette"), L("vitesse")),
+                ("Ctrl+K", L("rechercher")), ("F1", L("raccourcis"))];
+    }
+
+    private readonly record struct RightPart(string Errors, string Position, string Edition, string Fps, int ErrorCount);
+
+    private RightPart RightTexts()
     {
         var p = state.Camera.Position;
         string position = $"{Icons.MapPinned}  X {p.X:0}   Y {p.Y:0}   Z {p.Z:0}";
@@ -105,26 +195,27 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
         string fps = $"{Icons.Gauge}  {ImGui.GetIO().Framerate:0} FPS";
         int errorCount = Diagnostics.ErrorLog.Count;
         string errors = errorCount > 0 ? $"{Icons.TriangleAlert}  {errorCount}" : Icons.TriangleAlert;
+        return new RightPart(errors, position, edition, fps, errorCount);
+    }
 
-        float gap = 24f;
-        float width = ImGui.CalcTextSize(errors).X + ImGui.CalcTextSize(position).X + ImGui.CalcTextSize(edition).X + ImGui.CalcTextSize(fps).X + gap * 3;
-        float x = ImGui.GetWindowWidth() - ImGui.GetStyle().WindowPadding.X - width;
+    private void DrawRight(RightPart right, float x)
+    {
         ImGui.SameLine();
-        if (x <= ImGui.GetCursorPosX() + gap)
+        if (x <= ImGui.GetCursorPosX() + Gap)
             return; // Window too narrow: the left part wins.
 
         ImGui.SetCursorPosX(x);
-        if (errorCount > 0)
-            ImGui.TextColored(Diagnostics.ErrorLog.Unseen > 0 ? UiTheme.Error : UiTheme.Warning, errors);
+        if (right.ErrorCount > 0)
+            ImGui.TextColored(Diagnostics.ErrorLog.Unseen > 0 ? UiTheme.Error : UiTheme.Warning, right.Errors);
         else
-            ImGui.TextDisabled(errors);
-        Clickable(errorCount > 0 ? L($"{errorCount} erreur(s) : clic pour les voir et copier le rapport") : L("Aucune erreur. Clic : rapport à envoyer en cas de problème"));
-        ImGui.SameLine(0, gap);
-        ImGui.TextDisabled(position);
-        ImGui.SameLine(0, gap);
-        ImGui.TextDisabled(edition);
-        ImGui.SameLine(0, gap);
-        ImGui.TextUnformatted(fps);
+            ImGui.TextDisabled(right.Errors);
+        Clickable(right.ErrorCount > 0 ? L($"{right.ErrorCount} erreur(s) : clic pour les voir et copier le rapport") : L("Aucune erreur. Clic : rapport à envoyer en cas de problème"));
+        ImGui.SameLine(0, Gap);
+        ImGui.TextDisabled(right.Position);
+        ImGui.SameLine(0, Gap);
+        ImGui.TextDisabled(right.Edition);
+        ImGui.SameLine(0, Gap);
+        ImGui.TextUnformatted(right.Fps);
     }
 
     private static void Item(string icon, string text, Vector4? color = null)
