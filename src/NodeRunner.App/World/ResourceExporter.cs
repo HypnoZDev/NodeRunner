@@ -52,26 +52,122 @@ internal static class ResourceExporter
     {
         copied = [];
         fromLibrary = [];
-        if (Inspect(resourceFolder) == TargetState.Foreign)
+        var state = Inspect(resourceFolder);
+        if (state == TargetState.Foreign)
             return new MapFileSaver.Report([], [L("ce dossier existe déjà et n'a pas été créé par NodeRunner")]);
 
-        string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
+        // Everything is written in a work folder first (same disk, so the files are then moved, not copied): the previous
+        // export stays untouched until the new one is complete. The staged folder keeps the resource's name, used in file names.
+        bool created = !Directory.Exists(resourceFolder);
+        string work = Path.Combine(resourceFolder, WorkFolderName);
+        string staging = Path.Combine(work, "new", Path.GetFileName(Path.TrimEndingDirectorySeparator(resourceFolder)));
+        bool keepWork = false;
         try
         {
-            // A previous export: its map and collision files are replaced, so that a file no longer modified does not stay in it.
-            if (Directory.Exists(stream))
-                foreach (var old in Directory.EnumerateFiles(stream).Where(IsStreamedFile))
-                    File.Delete(old);
-            string audio = Path.Combine(resourceFolder, FiveMResource.AudioFolderName);
-            if (Directory.Exists(audio))
-                foreach (var old in Directory.EnumerateFiles(audio, "*_game.dat151.rel"))
-                    File.Delete(old);
+            try
+            {
+                if (Directory.Exists(work))
+                    Directory.Delete(work, recursive: true);
+                Directory.CreateDirectory(staging);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return new MapFileSaver.Report([], [L($"impossible de préparer l'export dans {work} : {ex.Message}")]);
+            }
+            var report = Write(world, maps, pathAreas, staging, collisionCuts, occlusionCuts, collisionEdits, occluderFileName,
+                interiorFiles, projectStream, copied, out fromLibrary);
+            if (report.Errors.Count > 0)
+            {
+                if (state == TargetState.Ours)
+                    report.Errors.Add(L("l'export précédent n'a pas été modifié"));
+                return report;
+            }
+            string? error = Commit(staging, resourceFolder, Path.Combine(work, "old"), out keepWork);
+            if (error is not null)
+                report.Errors.Add(error);
+            return report;
+        }
+        finally
+        {
+            try
+            {
+                if (!keepWork && Directory.Exists(work))
+                    Directory.Delete(work, recursive: true);
+                if (created && Directory.Exists(resourceFolder) && !Directory.EnumerateFileSystemEntries(resourceFolder).Any())
+                    Directory.Delete(resourceFolder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private const string WorkFolderName = ".noderunner-export";
+
+    // Puts the staged files in place of the previous export's (map, collision, audio settings files..., so that a file no
+    // longer modified does not stay in it); the files the user added to the resource are kept. On failure, the previous
+    // files are put back. Returns the error, if any; keepWork when the previous files could not all be put back.
+    private static string? Commit(string staging, string resourceFolder, string backup, out bool keepWork)
+    {
+        keepWork = false;
+        var added = Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(staging, f)).ToList();
+        var removed = new List<string>();
+        string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
+        if (Directory.Exists(stream))
+            removed.AddRange(Directory.EnumerateFiles(stream).Where(IsStreamedFile).Select(f => Path.GetRelativePath(resourceFolder, f)));
+        string audio = Path.Combine(resourceFolder, FiveMResource.AudioFolderName);
+        if (Directory.Exists(audio))
+            removed.AddRange(Directory.EnumerateFiles(audio, "*_game.dat151.rel").Select(f => Path.GetRelativePath(resourceFolder, f)));
+        removed.AddRange(added.Where(r => File.Exists(Path.Combine(resourceFolder, r))));
+        removed = removed.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var movedAway = new List<string>();
+        var placed = new List<string>();
+        try
+        {
+            foreach (var file in removed)
+            {
+                MoveFile(Path.Combine(resourceFolder, file), Path.Combine(backup, file));
+                movedAway.Add(file);
+            }
+            foreach (var file in added)
+            {
+                MoveFile(Path.Combine(staging, file), Path.Combine(resourceFolder, file));
+                placed.Add(file);
+            }
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new MapFileSaver.Report([], [L($"impossible de vider {stream} : {ex.Message}")]);
+            try
+            {
+                foreach (var file in placed)
+                    File.Delete(Path.Combine(resourceFolder, file));
+                foreach (var file in movedAway)
+                    MoveFile(Path.Combine(backup, file), Path.Combine(resourceFolder, file));
+            }
+            catch (Exception restore) when (restore is IOException or UnauthorizedAccessException)
+            {
+                keepWork = true;
+                return L($"impossible de remplacer l'export précédent ({ex.Message}) ni de le remettre en place ({restore.Message}) : ses fichiers sont dans {backup}");
+            }
+            return L($"impossible de remplacer l'export précédent, il est conservé : {ex.Message}");
         }
+    }
 
+    private static void MoveFile(string from, string to)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+        File.Move(from, to);
+    }
+
+    private static MapFileSaver.Report Write(WorldLoader world, IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string resourceFolder,
+        IReadOnlyList<CollisionFileCut> collisionCuts, IReadOnlyList<OccluderFileCut> occlusionCuts, CollisionEdits collisionEdits,
+        string occluderFileName, IReadOnlyList<string> interiorFiles, string? projectStream, List<string> copied, out List<string> fromLibrary)
+    {
+        fromLibrary = [];
+        string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
         var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
         if (world.Scenarios is { } scenarios)
