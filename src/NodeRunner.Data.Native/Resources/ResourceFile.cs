@@ -38,10 +38,30 @@ public static class ResourceFile
     public static (ResourceHeader Header, byte[] Content) Read(ReadOnlySpan<byte> file)
     {
         var header = ReadHeader(file);
-        using var input = new MemoryStream(file[HeaderSize..].ToArray());
+        var content = Inflate(file[HeaderSize..].ToArray(),
+            Archives.ResourcePages.Size(header.SystemFlags) + Archives.ResourcePages.Size(header.GraphicsFlags));
+        return (header, content);
+    }
+
+    // The most a file may take once decompressed: far above the largest of the game and of mods, low enough that a damaged
+    // or hostile file (a few megabytes can inflate to gigabytes) fails cleanly instead of exhausting the memory.
+    public const int MaxInflatedSize = 1 << 30;
+
+    internal static byte[] Inflate(byte[] data, int expectedLength)
+    {
+        using var input = new MemoryStream(data, writable: false);
         using var deflate = new DeflateStream(input, CompressionMode.Decompress);
-        using var content = new MemoryStream();
-        deflate.CopyTo(content);
-        return (header, content.ToArray());
+        // The expected length only sizes the buffer: capped, in case the flags are wrong (modded files), so that a few
+        // reads at once cannot exhaust the memory of a small PC; the buffer grows if really needed.
+        using var output = new MemoryStream(Math.Clamp(expectedLength, 0, 32 * 1024 * 1024));
+        var buffer = new byte[81920];
+        int read;
+        while ((read = deflate.Read(buffer)) > 0)
+        {
+            if (output.Length + read > MaxInflatedSize)
+                throw new InvalidDataException("Fichier trop grand une fois décompressé (fichier abîmé ?).");
+            output.Write(buffer, 0, read);
+        }
+        return output.Length == output.Capacity ? output.GetBuffer() : output.ToArray();
     }
 }

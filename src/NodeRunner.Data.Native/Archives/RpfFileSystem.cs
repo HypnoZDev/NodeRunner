@@ -182,16 +182,7 @@ public sealed class RpfFileSystem : IGameFileSystem
         Installation = null;
     }
 
-    private static byte[] Inflate(byte[] data, int expectedLength)
-    {
-        using var input = new MemoryStream(data);
-        using var deflate = new DeflateStream(input, CompressionMode.Decompress);
-        // The expected length only sizes the buffer: capped, in case the flags are wrong (modded files), so that a few
-        // reads at once cannot exhaust the memory of a small PC; the buffer grows if really needed.
-        using var output = new MemoryStream(Math.Clamp(expectedLength, 0, 32 * 1024 * 1024));
-        deflate.CopyTo(output);
-        return output.Length == output.Capacity ? output.GetBuffer() : output.ToArray();
-    }
+    private static byte[] Inflate(byte[] data, int expectedLength) => Resources.ResourceFile.Inflate(data, expectedLength);
 }
 
 // A file of an archive: bytes stored in the archive, size once decompressed, resource version, encryption.
