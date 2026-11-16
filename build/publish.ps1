@@ -5,6 +5,10 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "publish/NodeRunner"
 
+# No archive if a test fails.
+dotnet test (Join-Path $root "tests/NodeRunner.Tests/NodeRunner.Tests.csproj") -c Release
+if ($LASTEXITCODE -ne 0) { throw "tests failed" }
+
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 
 dotnet publish (Join-Path $root "src/NodeRunner.App/NodeRunner.App.csproj") `
