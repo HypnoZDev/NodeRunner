@@ -37,6 +37,9 @@ internal static class Widgets
             storage.SetBool(key, open);
         }
         bool hovered = ImGui.IsItemHovered();
+        // A technical word in the title (YMAP, navmesh...): explained when it is hovered.
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal) && Glossary.Explain(title) is { } meaning)
+            ImGui.SetTooltip(meaning);
         var after = ImGui.GetCursorScreenPos();
 
         ImGui.PushFont(UiTheme.SemiboldFont);

@@ -141,11 +141,22 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             ImGui.Dummy(new Vector2(0, 6));
             ImGui.TextColored(UiTheme.TextMuted, L("Aucun objet sélectionné"));
             Widgets.Hint(L("Clic gauche sur un objet de la vue 3D, ou dans la liste Scène, pour voir et modifier ses propriétés."), wrap: true);
+            ImGui.Dummy(new Vector2(0, 4));
+            float width = ImGui.GetContentRegionAvail().X;
+            if (Search is { } search && Widgets.Button(L($"{Icons.Search}  Rechercher un objet ou un lieu"), "Ctrl+K", width))
+                search();
+            if (!state.IsGta4 && Widgets.Button(L($"{Icons.LibraryBig}  Poser un prop de la bibliothèque"),
+                    L("Glissez un prop de la Bibliothèque dans la vue 3D."), width))
+                ShowLibrary?.Invoke();
         }
         ImGui.End();
     }
 
     private bool Simple => state.Settings.SimpleProperties;
+
+    // Shortcuts offered when nothing is selected.
+    public Action? Search { get; set; }
+    public Action? ShowLibrary { get; set; }
 
     private void DrawModeSwitch()
     {

@@ -42,8 +42,15 @@ internal sealed class MainUi
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer) { Commands = PaletteCommands };
+        _propertiesPanel.Search = _searchPalette.Open;
+        _propertiesPanel.ShowLibrary = ShowLibrary;
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap, OpenTypeInViewer);
-        _projectPanel = new ProjectPanel(state);
+        _projectPanel = new ProjectPanel(state)
+        {
+            NewProject = () => ProjectWindow!.Open(),
+            OpenProject = () => OpenProjectRequested = true,
+            ImportMapping = () => ImportMappingRequested = true,
+        };
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true, () => SaveSoloPackRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);

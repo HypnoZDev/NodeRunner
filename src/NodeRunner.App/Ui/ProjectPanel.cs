@@ -12,6 +12,11 @@ internal sealed unsafe class ProjectPanel(AppState state)
 {
     public const string Title = $"{Icons.Package}  Projet###Project";
 
+    // Offered when no project is open.
+    public Action? NewProject { get; set; }
+    public Action? OpenProject { get; set; }
+    public Action? ImportMapping { get; set; }
+
     private static string[] Filters => [L("Tout"), L("Ajoutés"), L("Déplacés"), L("Supprimés")];
 
     private List<ObjectChange> _changes = [];
@@ -47,7 +52,15 @@ internal sealed unsafe class ProjectPanel(AppState state)
         }
         if (state.Project is not { } project)
         {
-            Widgets.Hint(L("Aucun projet ouvert. Fichier > Nouveau projet, Ouvrir un projet ou Importer un mapping."), wrap: true);
+            Widgets.Hint(L("Aucun projet ouvert. Un projet garde vos modifications de la carte et les exporte en ressource FiveM."), wrap: true);
+            ImGui.Dummy(new Vector2(0, 4));
+            float width = ImGui.GetContentRegionAvail().X;
+            if (Widgets.PrimaryButton(L($"{Icons.FolderOpen}  Nouveau projet"), width))
+                NewProject?.Invoke();
+            if (Widgets.Button(L($"{Icons.FolderOpen}  Ouvrir un projet..."), "Ctrl+O", width))
+                OpenProject?.Invoke();
+            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Importer un mapping..."), L("Un mapping FiveM existant (dossier de ressource ou .zip) devient un projet."), width))
+                ImportMapping?.Invoke();
             return;
         }
         if (state.World.Maps is not { } library)
