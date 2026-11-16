@@ -86,8 +86,20 @@ internal sealed class Connection : IDisposable
         BinaryPrimitives.WriteInt32LittleEndian(frame, payload.Length + 1);
         frame[4] = (byte)type;
         payload.CopyTo(frame, 5);
-        _outgoing.Writer.TryWrite(frame);
+        // The other side no longer takes anything (frozen, very slow link): closed rather than piling up memory; it can
+        // come back and is sent the project again.
+        if (Interlocked.Add(ref _queued, frame.Length) > MaxQueued)
+        {
+            Close(L("l'autre ordinateur ne reçoit plus les messages"));
+            return;
+        }
+        if (!_outgoing.Writer.TryWrite(frame))
+            Interlocked.Add(ref _queued, -frame.Length);
     }
+
+    // A whole project plus the edits made meanwhile.
+    private const long MaxQueued = MaxFrame + (256L << 20);
+    private long _queued;
 
     // Sends what is queued, then closes.
     public void CloseAfterSending() => _outgoing.Writer.TryComplete();
@@ -139,7 +151,10 @@ internal sealed class Connection : IDisposable
         try
         {
             await foreach (var frame in _outgoing.Reader.ReadAllAsync())
+            {
                 await _link.WriteAsync(frame);
+                Interlocked.Add(ref _queued, -frame.Length);
+            }
             await _link.EndAsync();
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)

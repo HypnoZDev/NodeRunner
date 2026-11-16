@@ -425,6 +425,7 @@ public static partial class English
         ("Message invalide.", "Invalid message."),
         ("Invalid size.", "Invalid size."),
         ("connexion fermée", "connection closed"),
+        ("l'autre ordinateur ne reçoit plus les messages", "the other computer no longer receives the messages"),
         ("fermée", "closed"),
 
         // Online relay (codes NRS-XXXX)
