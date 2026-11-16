@@ -32,22 +32,67 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
     {
         if (!_open)
             return;
-        var center = ImGui.GetMainViewport().GetCenter();
-        ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
-        ImGui.SetNextWindowSizeConstraints(new Vector2(460f, 0f), new Vector2(460f, float.MaxValue));
+        // Wide rather than tall, to fit every screen: the categories on the left, the chosen one on the right.
+        var viewport = ImGui.GetMainViewport();
+        var room = viewport.WorkSize * 0.92f;
+        var size = Vector2.Min(new Vector2(900f, 560f), room);
+        ImGui.SetNextWindowPos(viewport.GetCenter(), ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
+        ImGui.SetNextWindowSize(size, ImGuiCond.Appearing);
+        ImGui.SetNextWindowSizeConstraints(Vector2.Min(new Vector2(640f, 360f), room), room);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
+        bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
         ImGui.PopStyleVar();
         if (visible)
-            DrawContent();
+        {
+            if (ImGui.BeginChild("##settings_pages", new Vector2(PagesWidth, 0), ImGuiChildFlags.None))
+                DrawPages();
+            ImGui.EndChild();
+            ImGui.SameLine(0, 16f);
+            if (ImGui.BeginChild("##settings_page", Vector2.Zero, ImGuiChildFlags.None))
+                DrawContent();
+            ImGui.EndChild();
+        }
         ImGui.End();
+    }
+
+    private const float PagesWidth = 180f;
+    private int _page;
+
+    private static (string Icon, string Name)[] Pages =>
+    [
+        (Icons.Gauge, L("Qualité")), (Icons.Camera, L("Caméra")), (Icons.Move, L("Édition")), (Icons.Layers, L("Calques")),
+        (Icons.Monitor, L("Interface")), (Icons.Sun, L("Ambiance")), (Icons.FolderOpen, L("Dossiers")),
+    ];
+
+    private void DrawPages()
+    {
+        var pages = Pages;
+        ImGui.PushStyleVar(ImGuiStyleVar.SelectableTextAlign, new Vector2(0f, 0.5f));
+        for (int i = 0; i < pages.Length; i++)
+        {
+            if (ImGui.Selectable($"{pages[i].Icon}  {pages[i].Name}##settings_page{i}", _page == i, ImGuiSelectableFlags.None, new Vector2(0, ImGui.GetFrameHeight() + 4f)))
+                _page = i;
+        }
+        ImGui.PopStyleVar();
+    }
+
+    // The chosen category's title; false for the others (their settings are not drawn).
+    private bool Page(int index)
+    {
+        if (_page != index)
+            return false;
+        ImGui.PushFont(UiTheme.TitleFont);
+        ImGui.TextUnformatted(Pages[index].Name);
+        ImGui.PopFont();
+        ImGui.Dummy(new Vector2(0, 4));
+        return true;
     }
 
     private void DrawContent()
     {
         var settings = state.Settings;
 
-        if (Widgets.Section(L("Qualité"), "settings_quality"))
+        if (Page(0))
         {
             int current = Array.FindIndex(Presets, p => Matches(p));
             int selected = current;
@@ -209,7 +254,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Caméra"), "settings_camera"))
+        if (Page(1))
         {
             if (Widgets.BeginProperties("##camera_grid", 0.42f))
             {
@@ -249,7 +294,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Édition"), "settings_edition"))
+        if (Page(2))
         {
             if (Widgets.BeginProperties("##edition_grid", 0.42f))
             {
@@ -293,7 +338,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Calques"), "settings_layers"))
+        if (Page(3))
         {
             if (Widgets.BeginProperties("##layers_grid", 0.42f))
             {
@@ -360,7 +405,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Interface"), "settings_interface"))
+        if (Page(4))
         {
             if (Widgets.BeginProperties("##interface_grid", 0.42f))
             {
@@ -445,7 +490,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Ambiance"), "settings_ambience"))
+        if (Page(5))
         {
             if (Widgets.BeginProperties("##ambience_grid", 0.42f))
             {
@@ -468,7 +513,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         }
 
         ImGui.Dummy(new Vector2(0, 4));
-        if (Widgets.Section(L("Dossiers"), "settings_folders"))
+        if (Page(6))
         {
             if (Widgets.BeginProperties("##folders_grid", 0.42f))
             {
