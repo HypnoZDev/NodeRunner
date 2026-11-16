@@ -1,8 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IsPackable>false</IsPackable>
+    <!-- The application is a self-contained exe; it is referenced to test its logic and the renderer. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +18,8 @@
     <ProjectReference Include="..\..\src\NodeRunner.Data\NodeRunner.Data.csproj" />
     <ProjectReference Include="..\..\src\NodeRunner.Data.Native\NodeRunner.Data.Native.csproj" />
     <ProjectReference Include="..\..\src\NodeRunner.Editor\NodeRunner.Editor.csproj" />
+    <ProjectReference Include="..\..\src\NodeRunner.Render\NodeRunner.Render.csproj" />
+    <ProjectReference Include="..\..\src\NodeRunner.App\NodeRunner.App.csproj" />
   </ItemGroup>
 
 </Project>

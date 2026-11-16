@@ -107,7 +107,7 @@ internal static class ResourceExporter
     // Puts the staged files in place of the previous export's (map, collision, audio settings files..., so that a file no
     // longer modified does not stay in it); the files the user added to the resource are kept. On failure, the previous
     // files are put back. Returns the error, if any; keepWork when the previous files could not all be put back.
-    private static string? Commit(string staging, string resourceFolder, string backup, out bool keepWork)
+    internal static string? Commit(string staging, string resourceFolder, string backup, out bool keepWork)
     {
         keepWork = false;
         var added = Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories)
