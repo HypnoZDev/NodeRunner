@@ -30,6 +30,22 @@ internal sealed class BuildingOpeningTool(MapEntity building, ModelPartTool mode
     // Changes each time the opening changes (the view redraws its outline).
     public int Revision { get; private set; }
 
+    // Other objects of the map the opening goes through (a door frame laid on the wall, a facade piece): their models,
+    // already cut in memory for Revision, are saved with the building's when kept.
+    public List<Neighbour> Others { get; } = [];
+    public int OthersRevision = -1;
+
+    public sealed class Neighbour(MapEntity entity, string name, int copies, int triangles, ModelPartTool model)
+    {
+        public MapEntity Entity { get; } = entity;
+        public string Name { get; } = name;
+        // Objects of the map using the same model: cutting it cuts them all.
+        public int Copies { get; } = copies;
+        public int Triangles { get; } = triangles;
+        public ModelPartTool Model { get; } = model;
+        public bool Cut = copies <= 1;
+    }
+
     public Opening? Current => Placed is { } o
         ? o with { Bottom = o.Bottom + o.Right * Shift.X + new Vector3(0, 0, Shift.Y), Width = Width, Height = Height }
         : null;

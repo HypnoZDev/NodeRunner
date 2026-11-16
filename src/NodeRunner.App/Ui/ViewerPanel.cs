@@ -287,6 +287,46 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     private int _openingBuildingRevision = -1;
 
+    // The building's opening cut in the workshop's model only, to be looked at before opening (one change, undone
+    // when the opening moves or the opening stops).
+    private bool _previewCut;
+    private int _previewRevision = -1;
+
+    private void DrawOpeningPreview(ViewerItem item, ModelPartTool tool, BuildingOpeningTool building, float width)
+    {
+        if (building.Current is not { } opening)
+            return;
+        if (_previewCut)
+        {
+            Widgets.Hint(L("Aperçu : le modèle est percé seulement ici, rien n'est enregistré. « Carte autour » montre les objets voisins."), wrap: true);
+            if (Widgets.Button(L($"{Icons.Undo}  Retirer l'aperçu"), null, width))
+                UndoOpeningPreview(item, tool);
+            return;
+        }
+        if (Widgets.Button(L($"{Icons.Eye}  Aperçu de la découpe"),
+                L("Perce le modèle dans l'Atelier seulement, pour voir ce qui disparaît avant d'ouvrir le bâtiment."), width)
+            && Matrix4x4.Invert(building.Building.Transform, out var toModel))
+        {
+            var (_, error) = tool.CutOpening(NodeRunner.Editor.BuildingOpening.ToModel(opening, toModel));
+            if (error is not null)
+                state.Notify(error, warning: true);
+            else
+            {
+                _previewCut = true;
+                _previewRevision = building.Revision;
+                state.WorkshopShowsMap = true;
+                ShowWorkshopChanges(item, tool);
+            }
+        }
+    }
+
+    private void UndoOpeningPreview(ViewerItem item, ModelPartTool tool)
+    {
+        _previewCut = false;
+        if (tool.UndoLast())
+            ShowWorkshopChanges(item, tool);
+    }
+
     public void OpenFile(string path)
     {
         string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
@@ -1049,6 +1089,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             // The model may have changed meanwhile (a building opened from Properties): read again after the reload.
             _reopen ??= (item, state.World.ModelReader);
+            _previewCut = false;
             _workshop = null;
             _workshopFor = null;
             Viewer.OverlayEdges.Clear();
@@ -1075,6 +1116,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         _workshopStatus = null;
         var building = OpeningBuilding;
+        if (_previewCut && (building is null || building.Revision != _previewRevision))
+            UndoOpeningPreview(item, tool);
         if (_openingBuildingRevision != (building?.Revision ?? -1))
         {
             _openingBuildingRevision = building?.Revision ?? -1;
@@ -1153,6 +1196,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
                     {
                         ImGui.Spacing();
                         ImGui.SeparatorText(L("Ouvrir le bâtiment"));
+                        DrawOpeningPreview(item, tool, building, width);
                         drawBuilding(building.Building);
                     }
                     else

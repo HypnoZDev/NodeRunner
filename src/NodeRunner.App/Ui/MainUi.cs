@@ -280,7 +280,11 @@ internal sealed class MainUi
             _state.WorkshopRequest = null;
             _viewerPanel.OpenWorkshop(workshopModel);
             if (_state.OpeningTool?.Building == workshopModel)
+            {
+                // A building is made of several objects: they are shown around it.
                 _viewerPanel.ShowOpeningTool();
+                _state.WorkshopShowsMap = true;
+            }
         }
         // The workshop's tools are in Properties, its parts in Scene.
         if (_state.WorkshopFront)

@@ -17,6 +17,29 @@ internal sealed partial class PropertiesPanel
             DrawBuildingOpening(entity, library, state.World.Names ?? new HashNames());
     }
 
+    // The other objects the opening goes through (a door frame laid on the wall): cut too when ticked; a model used
+    // several times on the map is cut everywhere, so it starts unticked.
+    private void DrawOpeningOthers(World.BuildingOpeningTool tool)
+    {
+        if (tool.Placed is null)
+            return;
+        // Found again once the opening stops changing (not while a value is dragged).
+        if (!ImGui.IsAnyItemActive())
+            state.UpdateOpeningOthers(tool);
+        if (tool.Others.Count == 0)
+            return;
+        ImGui.Spacing();
+        ImGui.SeparatorText(L("Autres objets traversés"));
+        Widgets.Hint(L("L'ouverture traverse aussi ces objets (encadrement de porte, morceau de façade) : cochés, leur modèle est percé avec le bâtiment."), wrap: true);
+        for (int i = 0; i < tool.Others.Count; i++)
+        {
+            var other = tool.Others[i];
+            ImGui.Checkbox(L($"{other.Name} ({other.Triangles} triangles)##opening_other{i}"), ref other.Cut);
+            if (other.Copies > 1)
+                ImGui.TextColored(UiTheme.Warning, L($"{Icons.TriangleAlert}  Utilisé {other.Copies} fois sur la carte : toutes les copies seront percées au même endroit."));
+        }
+    }
+
     // An interior behind a door drawn on the building's wall: the opening is placed by a click on the wall, then sized;
     // "Ouvrir le bâtiment" makes it all (AppState.OpenBuilding).
     private void DrawBuildingOpening(MapEntity entity, MapLibrary library, HashNames names)
@@ -26,7 +49,8 @@ internal sealed partial class PropertiesPanel
         {
             Widgets.Hint(L("Pour une porte dessinée sur le mur (pas un objet à part) : NodeRunner perce le mur du modèle et sa collision, ")
                 + L("crée un intérieur (MLO) derrière avec son portail et pose une vraie porte qui s'ouvre."), wrap: true);
-            if (Widgets.Button(L($"{Icons.DoorOpen}  Ouvrir ce bâtiment..."), L("Le bâtiment s'ouvre dans l'Atelier, outil Percer : cliquez ensuite sur la porte dessinée."), width))
+            Widgets.Hint(L("Expérimental : les bâtiments du jeu sont souvent faits de plusieurs objets ; vérifiez l'aperçu avant d'ouvrir."), wrap: true);
+            if (Widgets.Button(L($"{Icons.DoorOpen}  Ouvrir ce bâtiment... (expérimental)"), L("Le bâtiment s'ouvre dans l'Atelier, outil Percer : cliquez ensuite sur la porte dessinée."), width))
             {
                 state.StartBuildingOpening(entity);
                 if (state.OpeningTool is not null)
@@ -122,6 +146,7 @@ internal sealed partial class PropertiesPanel
         ImGui.Checkbox(L("Retirer les portes du jeu dans l'ouverture"), ref tool.RemoveGameDoors);
         if (changed)
             tool.Changed();
+        DrawOpeningOthers(tool);
 
         ImGui.Spacing();
         ImGui.BeginDisabled(tool.Placed is null || state.Project is null || !state.IsFreeInteriorName(tool.Name));

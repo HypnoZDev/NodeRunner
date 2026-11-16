@@ -57,6 +57,7 @@ internal sealed partial class AppState
         }
         if (ProjectMap(library) is not { } map)
             return;
+        UpdateOpeningOthers(tool);
         var door = tool.AddDoor && tool.Door is { } chosen && library.GetArchetype(chosen.Hash) is { } doorType ? (chosen.Hash, chosen.Name, doorType) : default;
         var plan = BuildingOpening.Make(opening, tool.RoomSize, door.Hash, door.doorType, door.Name);
         string building = World.Names?.Describe(tool.Building.ArchetypeHash) ?? L("le bâtiment");
@@ -150,6 +151,12 @@ internal sealed partial class AppState
             return;
         }
         var (done, message) = tool.Model.Save(this);
+        // The other objects the opening goes through (their models were cut for this opening).
+        foreach (var other in tool.Others.Where(o => o.Cut))
+        {
+            var (saved, otherMessage) = other.Model.Save(this);
+            report.Add(saved ? L($"{other.Name} percé ({other.Triangles} triangles)") : L($"{other.Name} non percé : {otherMessage}"));
+        }
         OpeningTool = null;
         report.Insert(0, L($"modèle percé ({count} triangles)"));
         Notify(done
@@ -204,6 +211,46 @@ internal sealed partial class AppState
         World.Names?.Add(name);
         return (Data.Hashing.Joaat.Hash(name), null);
     }
+
+    // The other objects whose model the opening goes through (their models cut in memory, to be saved with the
+    // building's), found again when the opening has changed. The choices made are kept by model.
+    public void UpdateOpeningOthers(BuildingOpeningTool tool)
+    {
+        if (tool.OthersRevision == tool.Revision || tool.Current is not { } opening || World.Maps is not { } library)
+            return;
+        tool.OthersRevision = tool.Revision;
+        var chosen = tool.Others.ToDictionary(o => o.Entity.ArchetypeHash, o => o.Cut);
+        tool.Others.Clear();
+        var center = opening.Center;
+        var seen = new HashSet<uint> { tool.Building.ArchetypeHash };
+        foreach (var entity in library.EntitiesAround(new Vector2(center.X, center.Y), opening.Width + OpeningNeighbourReach))
+        {
+            if (entity.IsDeleted || entity.IsInterior || entity.Interior is not null || entity.LodLevel is not (LodLevel.Hd or LodLevel.OrphanHd)
+                || seen.Contains(entity.ArchetypeHash) || Doors.IsDoor(World.Names?.TryGet(entity.ArchetypeHash))
+                || library.GetArchetype(entity.ArchetypeHash) is not { } type)
+                continue;
+            // The opening's middle within the model's box (widened by the opening): only those can be cut.
+            var local = Vector3.Transform(opening.Center, Inverse(entity.Transform));
+            var reach = new Vector3(opening.Width + opening.Depth);
+            if (Vector3.Clamp(local, type.BoundsMin - reach, type.BoundsMax + reach) != local)
+                continue;
+            seen.Add(entity.ArchetypeHash);
+            var (model, _) = ModelPartTool.Open(entity, World);
+            if (model is null)
+                continue;
+            var (count, error) = model.CutOpening(BuildingOpening.ToModel(opening, Inverse(entity.Transform)));
+            if (error is not null || count == 0)
+                continue;
+            int copies = library.Maps.Sum(m => m.Entities.Count(e => e.ArchetypeHash == entity.ArchetypeHash && !e.IsDeleted));
+            string name = World.Names?.Describe(entity.ArchetypeHash) ?? $"0x{entity.ArchetypeHash:X8}";
+            var neighbour = new BuildingOpeningTool.Neighbour(entity, name, copies, count, model);
+            if (chosen.TryGetValue(entity.ArchetypeHash, out bool cut))
+                neighbour.Cut = cut;
+            tool.Others.Add(neighbour);
+        }
+    }
+
+    private const float OpeningNeighbourReach = 20f; // Metres around the opening where objects are looked for.
 
     // Doors of the game's map (not of an interior) standing in the opening.
     private List<MapEntity> GameDoorsIn(MapLibrary library, Opening opening)
