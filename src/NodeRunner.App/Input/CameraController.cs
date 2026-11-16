@@ -64,13 +64,16 @@ internal sealed class CameraController
         };
     }
 
-    public void Update(Camera camera, float deltaTime)
+    // keysOnView: the keyboard belongs to the 3D view (not to a panel such as the viewer).
+    public void Update(Camera camera, float deltaTime, bool keysOnView = true)
     {
         float sensitivity = MouseSensitivity * Sensitivity;
         camera.Yaw -= _pendingLook.X * sensitivity;
         camera.Pitch -= _pendingLook.Y * sensitivity * (InvertY ? -1f : 1f);
         _pendingLook = Vector2.Zero;
 
+        if (!keysOnView && !_looking)
+            return;
         // Don't move while the user is typing in an ImGui text field.
         if (ImGui.GetCurrentContext() != IntPtr.Zero && ImGui.GetIO().WantTextInput)
             return;

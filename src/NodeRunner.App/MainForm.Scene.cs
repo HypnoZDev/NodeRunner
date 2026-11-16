@@ -21,6 +21,17 @@ internal sealed unsafe partial class MainForm
         return new Rectangle(x, y, width, height);
     }
 
+    // A left click on the 3D view leaves no ImGui window focused; otherwise the keys go to the
+    // focused panel unless the mouse is over the 3D view.
+    private bool KeysOnSceneView()
+    {
+        if (!ImGui.IsWindowFocused(ImGuiFocusedFlags.AnyWindow))
+            return true;
+        if (ImGui.GetIO().WantCaptureMouse || !_surface.Focused)
+            return false;
+        return SceneViewport().Contains(_surface.PointToClient(Cursor.Position));
+    }
+
     private void DrawWorld(ColorRenderer lines, Rectangle scene)
     {
         var camera = _state.Camera;

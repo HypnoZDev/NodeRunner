@@ -349,7 +349,7 @@ internal sealed unsafe partial class MainForm : Form
         _cameraController.Sensitivity = Math.Clamp(_state.Settings.MouseSensitivity, MinMouseSensitivity, MaxMouseSensitivity);
         _cameraController.InvertY = _state.Settings.InvertMouseY;
         _cameraController.MovementKeys = _state.Settings.MovementKeys;
-        _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f));
+        _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f), KeysOnSceneView());
 
         UiTheme.ApplyPending();
         UiTheme.FollowAccent(GameAccent(), deltaTime);
