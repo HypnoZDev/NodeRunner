@@ -35,10 +35,37 @@ public static class PropLibrary
             Directory.Delete(temporary, recursive: true);
             throw new IOException(L("aucun fichier .ytyp, .ydr, .ydd, .yft, .ytd ou .ybn dans ce pack"));
         }
-        if (Directory.Exists(target))
-            Directory.Delete(target, recursive: true);
         Directory.CreateDirectory(library);
-        Directory.Move(content, target);
+        // The installed pack is set aside, not deleted, until the new one is in place.
+        string? previous = null;
+        if (Directory.Exists(target))
+        {
+            previous = target + ".old";
+            if (Directory.Exists(previous))
+                Directory.Delete(previous, recursive: true);
+            Directory.Move(target, previous);
+        }
+        try
+        {
+            Directory.Move(content, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (previous is not null)
+                Directory.Move(previous, target);
+            throw;
+        }
+        if (previous is not null)
+        {
+            try
+            {
+                Directory.Delete(previous, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A file of the old pack still open: the new one is installed and comes first by name.
+            }
+        }
         if (Directory.Exists(temporary))
             Directory.Delete(temporary, recursive: true);
         return target;
