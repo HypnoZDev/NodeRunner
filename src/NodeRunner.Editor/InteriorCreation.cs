@@ -37,6 +37,34 @@ public static class InteriorCreation
         }
     }
 
+    // The side a portal faces: in the game's files the normal of its corners (cross(c1 - c0, c2 - c0)) points out of
+    // RoomFrom, towards RoomTo (88 % of the doors to the outside; the others are windows, portholes...). Null when it
+    // cannot be told (fewer than 3 corners, both rooms limbo, room missing).
+    public static bool? FacesAsTheGame(InteriorPortal portal, IReadOnlyList<InteriorRoom> rooms)
+    {
+        if (portal.Corners.Count < 3)
+            return null;
+        var c = portal.Corners;
+        var normal = Vector3.Cross(c[1] - c[0], c[2] - c[0]);
+        if (normal.LengthSquared() < 1e-10f)
+            return null;
+        var middle = c.Aggregate(Vector3.Zero, (sum, p) => sum + p) / c.Count;
+        static Vector3 Center(InteriorRoom r) => (r.BoundsMin + r.BoundsMax) * 0.5f;
+        // Limbo has no real box: the other room tells the side.
+        if (portal.RoomFrom > 0 && portal.RoomFrom < rooms.Count)
+            return Vector3.Dot(normal, middle - Center(rooms[portal.RoomFrom])) > 0;
+        if (portal.RoomTo > 0 && portal.RoomTo < rooms.Count)
+            return Vector3.Dot(normal, Center(rooms[portal.RoomTo]) - middle) > 0;
+        return null;
+    }
+
+    // The same opening facing the other side (corners in the opposite order).
+    public static InteriorPortal Turned(InteriorPortal portal) => portal with { Corners = [.. portal.Corners.Reverse()] };
+
+    // The portal facing as in the game's files.
+    public static InteriorPortal FacingAsTheGame(InteriorPortal portal, IReadOnlyList<InteriorRoom> rooms) =>
+        FacesAsTheGame(portal, rooms) == false ? Turned(portal) : portal;
+
     public static Archetype NewArchetype(string name)
     {
         uint hash = Data.Hashing.Joaat.Hash(name);
@@ -47,9 +75,9 @@ public static class InteriorCreation
             SourceIndex = 0,
         };
         var room = new InteriorRoom(RoomMin, RoomMax) { Name = "room1", Flags = DefaultRoomFlags };
-        // A door of 1.2 x 2.2 m in the middle of the side -Y, to the outside.
+        // A door of 1.2 x 2.2 m in the middle of the side -Y, to the outside (facing out of the room, as in the game).
         float y = RoomMin.Y, bottom = 0f, top = 2.2f;
-        var door = new InteriorPortal(1, 0, 0) { Corners = [new(-0.6f, y, top), new(0.6f, y, top), new(0.6f, y, bottom), new(-0.6f, y, bottom)] };
+        var door = new InteriorPortal(1, 0, 0) { Corners = [new(0.6f, y, top), new(-0.6f, y, top), new(-0.6f, y, bottom), new(0.6f, y, bottom)] };
         return new Archetype
         {
             NameHash = hash,

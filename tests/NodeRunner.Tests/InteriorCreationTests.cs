@@ -33,6 +33,20 @@ public class InteriorCreationTests
     }
 
     [Fact]
+    public void Portals_face_out_of_their_first_room_as_in_the_game()
+    {
+        var archetype = InteriorCreation.NewArchetype(Name);
+        var door = Assert.Single(archetype.InteriorPortals);
+        Assert.True(InteriorCreation.FacesAsTheGame(door, archetype.InteriorRooms));
+
+        var turned = InteriorCreation.Turned(door);
+        Assert.False(InteriorCreation.FacesAsTheGame(turned, archetype.InteriorRooms));
+        Assert.Equal(door.Corners, InteriorCreation.FacingAsTheGame(turned, archetype.InteriorRooms).Corners);
+        // From the outside into the room: facing into the room.
+        Assert.True(InteriorCreation.FacesAsTheGame(turned with { RoomFrom = 0, RoomTo = 1 }, archetype.InteriorRooms));
+    }
+
+    [Fact]
     public void Creates_an_interior_with_a_room_and_a_door()
     {
         var (library, map, edit) = Created();

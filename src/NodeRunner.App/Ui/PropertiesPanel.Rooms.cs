@@ -347,8 +347,23 @@ internal sealed partial class PropertiesPanel
             RoomCombo(L("Vers la salle"), L("Deuxième salle reliée par le portail (0 = l'extérieur)."), "##portal_to", portal.RoomTo,
                 r => archetype.InteriorPortals[index] with { RoomTo = r }, L($"Salle d'arrivée du portail {index}"));
             Widgets.Property("");
-            if (Widgets.Button(L($"{Icons.RefreshCw}  Inverser les salles"), L("Échange « De la salle » et « Vers la salle ».")))
-                Change(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }, L($"Inverser les salles du portail {index}"));
+            if (Widgets.Button(L($"{Icons.RefreshCw}  Inverser les salles"), L("Échange « De la salle » et « Vers la salle » (le portail est retourné avec).")))
+                Change(InteriorCreation.Turned(portal with { RoomFrom = portal.RoomTo, RoomTo = portal.RoomFrom }), L($"Inverser les salles du portail {index}"));
+            // Side it faces: the game's files have it facing out of the first room.
+            if (InteriorCreation.FacesAsTheGame(portal, archetype.InteriorRooms) is { } asTheGame)
+            {
+                Widgets.Property(L("Sens"), L("Les coins d'un portail du jeu tournent de façon à ce qu'il regarde hors de « De la salle ». ")
+                    + L("À l'envers, l'intérieur peut clignoter ou disparaître en jeu quand on passe le portail."));
+                if (asTheGame)
+                    ImGui.TextColored(UiTheme.TextMuted, L("comme le jeu"));
+                else
+                {
+                    ImGui.TextColored(UiTheme.Warning, L($"{Icons.TriangleAlert}  à l'envers"));
+                    ImGui.SameLine();
+                    if (Widgets.Button(L("Retourner"), L("Remet les coins dans l'ordre du jeu (même ouverture).")))
+                        Change(InteriorCreation.Turned(portal), L($"Retourner le portail {index}"));
+                }
+            }
             Widgets.Property("");
             if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Recoller au mur"), L("Pose le portail sur le mur le plus proche d'une de ses salles, sans changer sa taille.")))
             {

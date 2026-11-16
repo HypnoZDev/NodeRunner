@@ -139,7 +139,7 @@ internal sealed partial class AppState
                new(toCamera.X >= 0 ? max.X : min.X, center.Y + width, bottom), new(toCamera.X >= 0 ? max.X : min.X, center.Y - width, bottom)]
             : [new(center.X - width, toCamera.Y >= 0 ? max.Y : min.Y, top), new(center.X + width, toCamera.Y >= 0 ? max.Y : min.Y, top),
                new(center.X + width, toCamera.Y >= 0 ? max.Y : min.Y, bottom), new(center.X - width, toCamera.Y >= 0 ? max.Y : min.Y, bottom)];
-        var portal = new InteriorPortal(roomIndex, 0, 0) { Corners = corners };
+        var portal = InteriorCreation.FacingAsTheGame(new InteriorPortal(roomIndex, 0, 0) { Corners = corners }, archetype.InteriorRooms);
         var edit = InteriorLayoutEdit.Apply(library, interior, () => library.AddPortal(interior.ArchetypeHash, portal),
             L($"Ajouter un portail à la salle {roomIndex}"), isPortal: true, added: true);
         History.Add(edit);
