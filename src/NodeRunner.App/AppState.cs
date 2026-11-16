@@ -510,9 +510,11 @@ internal sealed class AppState
     // Doors opened in the 3D view (display only).
     public DoorAnimator OpenDoors { get; } = new();
 
-    // Opens or closes the door (or each door) in the 3D view.
+    // Opens or closes the door (with its other leaf, for a double door) or each door in the 3D view.
     public void ToggleDoors(IReadOnlyList<MapEntity> doors)
     {
+        if (doors.Count == 1 && World.Maps is { } library && DoorAnimator.Partner(doors[0], library, World.Names) is { } partner)
+            doors = [doors[0], partner];
         bool open = !doors.Any(OpenDoors.IsOpen);
         string? message = null;
         foreach (var door in doors)

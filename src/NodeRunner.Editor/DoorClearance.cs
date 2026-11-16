@@ -1,4 +1,5 @@
 using System.Numerics;
+using NodeRunner.Data.Collisions;
 
 namespace NodeRunner.Editor;
 
@@ -56,6 +57,43 @@ public static class DoorClearance
             if (angle >= wanted)
                 return limit;
         }
+    }
+
+    private const float MinFurniture = 0.4f;
+    public const float MaxFurniture = 4f;
+    private const float FurnitureReach = 1.2f;
+
+    // The box of a separately placed object as a collision mesh (in the object's space), when it is furniture the door
+    // can run into: neither tiny (pushed away) nor big (a building piece), standing low enough (not a hanging lamp), and
+    // not around the hinge (a door frame).
+    public static CollisionMesh? Furniture(Vector3 boundsMin, Vector3 boundsMax, Matrix4x4 transform, Vector3 hinge, float floor)
+    {
+        var size = boundsMax - boundsMin;
+        float largest = MathF.Max(size.X, MathF.Max(size.Y, size.Z));
+        if (largest < MinFurniture || largest > MaxFurniture || !Matrix4x4.Invert(transform, out var toObject))
+            return null;
+        var local = Vector3.Transform(hinge, toObject);
+        if (Vector3.Clamp(local, boundsMin - new Vector3(0.05f), boundsMax + new Vector3(0.05f)) == local)
+            return null;
+        float bottom = float.MaxValue;
+        var corners = new Vector3[8];
+        for (int i = 0; i < 8; i++)
+        {
+            corners[i] = new Vector3((i & 1) == 0 ? boundsMin.X : boundsMax.X, (i & 2) == 0 ? boundsMin.Y : boundsMax.Y,
+                (i & 4) == 0 ? boundsMin.Z : boundsMax.Z);
+            bottom = MathF.Min(bottom, Vector3.Transform(corners[i], transform).Z);
+        }
+        if (bottom > floor + FurnitureReach)
+            return null;
+        return new CollisionMesh
+        {
+            BoundsMin = boundsMin,
+            BoundsMax = boundsMax,
+            Vertices = corners,
+            // Sides only: tops and bottoms are ignored anyway.
+            Indices = [0, 1, 5, 0, 5, 4, 2, 6, 7, 2, 7, 3, 0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5],
+            Materials = new byte[8],
+        };
     }
 
     // The collision triangles in the door's space, around the circle its leaf sweeps.

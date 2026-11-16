@@ -64,6 +64,16 @@ public class DoorsTests
         Assert.False(DoorClearance.NoPassage(0f, 45f, 0f, 45f));
 
         Assert.Equal((-90f, 90f), DoorClearance.Reach(shape, -90f, 90f, at, []));
+
+        // A 2 m sofa standing 0.6 m away on the -Y side; a lighter and a hanging lamp do not count.
+        var sofaAt = Matrix4x4.CreateTranslation(100.5f, 199.1f, 30f);
+        var sofa = DoorClearance.Furniture(new Vector3(-1, -0.3f, 0), new Vector3(1, 0.3f, 0.9f), sofaAt, new Vector3(100, 200, 30), 30f);
+        Assert.NotNull(sofa);
+        var (sofaMin, sofaMax) = DoorClearance.Reach(shape, -90f, 90f, at, [new PlacedCollision(sofa, sofaAt)]);
+        Assert.InRange(sofaMin, -40f, -12f);
+        Assert.Equal(90f, sofaMax);
+        Assert.Null(DoorClearance.Furniture(new Vector3(-0.02f), new Vector3(0.02f), sofaAt, Vector3.Zero, 30f));
+        Assert.Null(DoorClearance.Furniture(new Vector3(-0.3f), new Vector3(0.3f), Matrix4x4.CreateTranslation(100.5f, 200f, 32.5f), new Vector3(100, 200, 30), 30f));
         Assert.Equal(Vector3.UnitY, Vector3.Round(Vector3.Transform(Vector3.UnitX, shape.Opened(1f, 90f))));
     }
 

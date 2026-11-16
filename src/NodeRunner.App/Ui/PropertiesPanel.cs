@@ -314,7 +314,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                 L("La porte est tournée pas à pas contre les collisions autour d'elle (murs, meubles des fichiers de carte et des intérieurs). ")
                 + L("En jeu, elle s'arrêtera sur l'obstacle : partie rouge de l'arc dans la vue 3D. Souvent un pivot mal placé ou un mur trop près.\n")
                 + L($"Une porte qui s'ouvre à {DoorClearance.Passage:0}° ou plus d'un côté laisse passer : s'arrêter contre le mur voisin est normal.\n")
-                + L("Les objets posés à part (props) ne sont pas comptés."),
+                + L("Les meubles posés à part comptent par leur boîte (ceux que le jeu peut bouger) ; les petits objets ne comptent pas."),
                 clear is { NoPassage: true } ? UiTheme.Warning : null);
         }
         var p = entity.Position;
@@ -464,7 +464,8 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         var doors = cache.Doors;
         if (doors.Count == 0 || doors.Count == 1 && doors[0] == entity)
             return;
-        if (Widgets.Button(doors.Any(state.OpenDoors.IsOpen) ? L($"{Icons.DoorOpen}  Fermer les portes ({doors.Count})") : L($"{Icons.DoorOpen}  Ouvrir les portes ({doors.Count})"),
+        // On a door, its own button opens it (with its other leaf), not every door of the interior.
+        if (!doors.Contains(entity) && Widgets.Button(doors.Any(state.OpenDoors.IsOpen) ? L($"{Icons.DoorOpen}  Fermer les portes ({doors.Count})") : L($"{Icons.DoorOpen}  Ouvrir les portes ({doors.Count})"),
                 L("Ouvre ces portes dans la vue 3D comme en jeu (rien n'est modifié ni enregistré)."), ImGui.GetContentRegionAvail().X))
             state.ToggleDoors(doors);
         if (doors.All(state.IsSelected) && state.SelectedEntities.Count == doors.Count)

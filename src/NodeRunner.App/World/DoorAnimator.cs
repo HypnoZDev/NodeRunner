@@ -140,16 +140,7 @@ internal sealed class DoorAnimator
     {
         if (!Matrix4x4.Invert(door.Transform, out var toDoor))
             return 1f;
-        MapEntity? partner = null;
-        float best = DoorLockScript.PairDistance;
-        foreach (var other in library.EntitiesAround(new Vector2(door.Position.X, door.Position.Y), DoorLockScript.PairDistance))
-        {
-            if (other == door || other.IsDeleted || !Doors.IsDoor(names?.TryGet(other.ArchetypeHash)))
-                continue;
-            float distance = Vector3.Distance(other.Position, door.Position);
-            if (distance < best && MathF.Abs(other.Position.Z - door.Position.Z) < 0.5f)
-                (partner, best) = (other, distance);
-        }
+        var partner = Partner(door, library, names);
         return partner is not null && Vector3.Transform(partner.Position, toDoor).X > 0f ? -1f : 1f;
     }
 
@@ -178,7 +169,44 @@ internal sealed class DoorAnimator
         var collisions = query.CollisionIn(world,
             new Vector3(p.X - reach, p.Y - reach, p.Z + shape.Bottom * scale - 0.5f),
             new Vector3(p.X + reach, p.Y + reach, p.Z + (shape.Bottom + shape.Height) * scale + 0.5f), edits);
+        // Movable furniture has its own collision, in no collision file: its box stands for it. A big piece's origin
+        // can be farther than the leaf reaches.
+        float floor = p.Z + shape.Bottom * scale;
+        foreach (var prop in Nearby(door, world.Maps!, reach + DoorClearance.MaxFurniture / 2f))
+        {
+            if (prop.IsInterior || Doors.IsDoor(world.Names?.TryGet(prop.ArchetypeHash))
+                || world.Maps!.GetArchetype(prop.ArchetypeHash) is not { } type || (type.Flags & DoorCheck.DynamicFlag) == 0
+                || DoorClearance.Furniture(type.BoundsMin, type.BoundsMax, prop.Transform, door.Position, floor) is not { } box)
+                continue;
+            collisions.Add(new PlacedCollision(box, prop.Transform));
+        }
         var (reachedMin, reachedMax) = DoorClearance.Reach(shape, min, max, door.Transform, collisions);
         return new Clearance(min, max, reachedMin, reachedMax);
+    }
+
+    // The objects around a door, those of its interior included (the map's index only holds the interior itself).
+    private static IEnumerable<MapEntity> Nearby(MapEntity door, MapLibrary library, float radius)
+    {
+        var center = new Vector2(door.Position.X, door.Position.Y);
+        bool Close(MapEntity e) => e != door && !e.IsDeleted && e.LodLevel is LodLevel.Hd or LodLevel.OrphanHd
+            && (e.EntitySet is null || e.EntitySet.IsActive) && Vector2.Distance(new Vector2(e.Position.X, e.Position.Y), center) <= radius;
+        var found = library.EntitiesAround(center, radius).Where(Close);
+        return door.Interior is { } interior ? found.Concat(interior.InteriorEntities.Where(Close)).Distinct() : found;
+    }
+
+    // The other leaf of a double door, if any.
+    public static MapEntity? Partner(MapEntity door, MapLibrary library, HashNames? names)
+    {
+        MapEntity? partner = null;
+        float best = DoorLockScript.PairDistance;
+        foreach (var other in Nearby(door, library, DoorLockScript.PairDistance))
+        {
+            if (!Doors.IsDoor(names?.TryGet(other.ArchetypeHash)) || MathF.Abs(other.Position.Z - door.Position.Z) >= 0.5f)
+                continue;
+            float distance = Vector3.Distance(other.Position, door.Position);
+            if (distance < best)
+                (partner, best) = (other, distance);
+        }
+        return partner;
     }
 }
