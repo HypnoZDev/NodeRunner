@@ -36,6 +36,9 @@ internal sealed class MainUi
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
+        _propertiesPanel.WorkshopContent = _viewerPanel.DrawWorkshopProperties;
+        _scenePanel.WorkshopContent = _viewerPanel.DrawWorkshopParts;
+        _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer);
@@ -276,7 +279,12 @@ internal sealed class MainUi
         {
             _state.WorkshopRequest = null;
             _viewerPanel.OpenWorkshop(workshopModel);
+            if (_state.OpeningTool?.Building == workshopModel)
+                _viewerPanel.ShowOpeningTool();
         }
+        // The workshop's tools are in Properties, its parts in Scene.
+        if (_state.WorkshopFront)
+            _showProperties = _showScene = true;
         HandleShortcuts();
         DrawMenuBar();
         // The bars first: the panels and the 3D view share what is left of the window.

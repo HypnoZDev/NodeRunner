@@ -46,10 +46,18 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private readonly record struct Row(int Depth, MapData Map, MapEntity? Entity, bool Open, bool HasChildren);
 
+    // Drawn instead of the map's objects while the model workshop is shown (the parts of its model).
+    public Action? WorkshopContent { get; set; }
+
     public void Draw(ref bool visible)
     {
         if (ImGui.Begin(L(Title), ref visible))
-            DrawContent();
+        {
+            if (state.WorkshopShown && WorkshopContent is { } workshop)
+                workshop();
+            else
+                DrawContent();
+        }
         ImGui.End();
     }
 

@@ -43,6 +43,7 @@ internal sealed class ShortcutsWindow(AppState state)
                 (L("Ctrl + clic"), L("Ajouter ou retirer de la sélection")),
                 (L("Double-clic sur une porte"), L("L'ouvrir ou la fermer (vue 3D seulement)")),
                 (L("Double-clic sur un objet"), L("Modifier son modèle dans l'onglet Atelier")),
+                (L("1 à 5 dans l'Atelier"), L("Outils : Choisir, Déplacer, Percer, Ajouter, Textures")),
                 (L("Échap"), L("Désélectionner")),
                 ("1", L("Outil Sélection")),
                 ("2", L("Outil Déplacer")),

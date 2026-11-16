@@ -222,31 +222,42 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _inWorkshop = false;
     }
 
-    // The workshop tab: the model large, its tools on the right.
+    // The workshop's tools: chosen in the bar over its view (or keys 1 to 5), their settings in Properties.
+    private enum WorkshopTool { Choose, Move, Open, Add, Textures }
+
+    private WorkshopTool _workshopTool;
+    private string? _workshopStatus; // Why there is no tool (map reloading, model unreadable).
+
+    private static string[] WorkshopToolNames =>
+        [L($"{Icons.MousePointer}  Choisir"), L($"{Icons.Move}  Déplacer"), L($"{Icons.DoorOpen}  Percer"), L($"{Icons.Box}  Ajouter"), L($"{Icons.Layers}  Textures")];
+
+    private static string[] WorkshopToolTips =>
+    [
+        L("Choisir des morceaux (clic, Ctrl+clic), les retirer, les dupliquer, les copier pour un autre modèle (touche 1)"),
+        L("Déplacer ou tourner le morceau choisi avec les poignées ou des valeurs exactes (touche 2)"),
+        L("Percer une ouverture dans un mur, pour une porte dessinée (touche 3)"),
+        L("Ajouter un cube, un plan ou un morceau copié d'un autre modèle (touche 4)"),
+        L("Remplacer, exporter ou redimensionner les textures du modèle (touche 5)"),
+    ];
+
+    // The workshop tab: its tools' bar, then the model large.
     public void DrawWorkshop()
     {
         _inWorkshop = true;
         try
         {
-            float spacing = ImGui.GetStyle().ItemSpacing.X;
-            float viewWidth = Math.Max(200f, ImGui.GetContentRegionAvail().X - InspectorWidth - spacing);
-            if (ImGui.BeginChild("##workshop_view", new Vector2(viewWidth, 0), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-                DrawView();
-            ImGui.EndChild();
-            ImGui.SameLine();
-            if (ImGui.BeginChild("##workshop_tools", Vector2.Zero, ImGuiChildFlags.None))
+            if (Viewer.Item is { } item)
+                UpdateWorkshop(item);
+            int chosen = (int)_workshopTool;
+            if (ImGui.BeginChild("##workshop_tools_bar", new Vector2(Math.Min(ImGui.GetContentRegionAvail().X, 620f), ImGui.GetFrameHeight()),
+                    ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar))
             {
-                if (_workshopCovers.Count > 0)
-                {
-                    ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Warning);
-                    ImGui.TextWrapped(L($"{Icons.TriangleAlert}  Sur la carte, {string.Join(", ", _workshopCovers)} est posé au même endroit que ce modèle et peut en cacher une partie : ")
-                        + L("ce que vous voyez ici seul n'est pas forcément visible en jeu. Bouton « Carte autour » pour les voir ensemble."));
-                    ImGui.PopStyleColor();
-                    ImGui.Spacing();
-                }
-                if (Viewer.Item is { } item)
-                    DrawWorkshopTab(item);
+                if (Widgets.Segmented("workshop_tool", WorkshopToolNames, ref chosen, WorkshopToolTips))
+                    ChooseWorkshopTool((WorkshopTool)chosen);
             }
+            ImGui.EndChild();
+            if (ImGui.BeginChild("##workshop_view", Vector2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+                DrawView();
             ImGui.EndChild();
         }
         finally
@@ -254,6 +265,27 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _inWorkshop = false;
         }
     }
+
+    private void ChooseWorkshopTool(WorkshopTool tool)
+    {
+        if (tool == _workshopTool)
+            return;
+        _workshopTool = tool;
+        _openingPlacing = false;
+        _gizmo.Cancel();
+    }
+
+    // Open a building: the workshop on the cutting tool (the opening is then placed by a click on the wall).
+    public void ShowOpeningTool() => ChooseWorkshopTool(WorkshopTool.Open);
+
+    // The building being opened (Properties > Ouvrir ce bâtiment) when it is the workshop's object: the Percer tool
+    // places its opening and shows its settings (drawn by Properties).
+    private BuildingOpeningTool? OpeningBuilding =>
+        state.OpeningTool is { } building && building.Building == state.WorkshopEntity ? building : null;
+
+    public Action<MapEntity>? BuildingOpeningContent { get; set; }
+
+    private int _openingBuildingRevision = -1;
 
     public void OpenFile(string path)
     {
@@ -792,7 +824,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     // Model workshop: handles on the chosen piece; the piece is moved when the mouse is released.
     private void UpdateWorkshopGizmo(Vector2 min, Vector2 size)
     {
-        if (!_inWorkshop || _workshopFor != Viewer.Item || Viewer.Item is not { } item
+        if (!_inWorkshop || _workshopTool != WorkshopTool.Move || _workshopFor != Viewer.Item || Viewer.Item is not { } item
             || _workshop is not { SelectionCenter: { } pivot } tool)
         {
             _gizmo.Cancel();
@@ -893,7 +925,15 @@ internal sealed unsafe class ViewerPanel(AppState state)
             var far = Vector4.Transform(new Vector4(cx, cy, 0.5f, 1f), inverse);
             var from = new Vector3(near.X, near.Y, near.Z) / near.W;
             var to = new Vector3(far.X, far.Y, far.Z) / far.W;
-            if (_openingPlacing)
+            if (_workshopTool == WorkshopTool.Open && OpeningBuilding is { } building)
+            {
+                // Opening the building: the click goes to its tool, in map space.
+                var placement = building.Building.Transform;
+                var local = from - Viewer.ModelOffset;
+                if (!building.Click(Vector3.Transform(local, placement), Vector3.Normalize(Vector3.TransformNormal(to - from, placement)), state.GroundHeightAt))
+                    state.Notify(L("Cliquez sur un mur de ce bâtiment (une surface debout de son modèle)."), warning: true);
+            }
+            else if (_openingPlacing)
             {
                 if (tool.PlaceOpening(from - Viewer.ModelOffset, Vector3.Normalize(to - from), _openingWidth, _openingHeight) is { } opening)
                 {
@@ -1001,18 +1041,18 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     // ---- Model workshop ----
 
-    private void DrawWorkshopTab(ViewerItem item)
+    // Each frame the workshop is shown: its tool on the model, the lines over the chosen piece, a converted texture.
+    private void UpdateWorkshop(ViewerItem item)
     {
-        float width = ImGui.GetContentRegionAvail().X;
-        Widgets.Hint(L("Modifiez le modèle sans quitter NodeRunner. Cliquez sur un morceau dans l'image : il s'entoure de rouge. ")
-            + L("Ctrl+clic : en ajouter ou en retirer un autre. Tourner la vue reste possible (cliquer-glisser)."), wrap: true);
         // While the map reloads (after a change of the model), its models are not readable: the tool waits.
         if (_reopen is not null || state.World.IsBusy || state.World.Models is null)
         {
+            // The model may have changed meanwhile (a building opened from Properties): read again after the reload.
+            _reopen ??= (item, state.World.ModelReader);
             _workshop = null;
             _workshopFor = null;
             Viewer.OverlayEdges.Clear();
-            Widgets.Hint(L($"{Icons.LoaderCircle}  Rechargement de la carte..."), wrap: true);
+            _workshopStatus = L($"{Icons.LoaderCircle}  Rechargement de la carte...");
             return;
         }
         if (_workshopFor != item)
@@ -1030,8 +1070,15 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         if (_workshop is not { } tool)
         {
-            Widgets.Hint(_workshopError ?? L("Modèle 3D introuvable."), wrap: true);
+            _workshopStatus = _workshopError ?? L("Modèle 3D introuvable.");
             return;
+        }
+        _workshopStatus = null;
+        var building = OpeningBuilding;
+        if (_openingBuildingRevision != (building?.Revision ?? -1))
+        {
+            _openingBuildingRevision = building?.Revision ?? -1;
+            _workshopRevision = -1;
         }
         if (_workshopRevision != tool.Revision)
         {
@@ -1040,15 +1087,138 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Viewer.OverlayEdges.AddRange(tool.Edges());
             if (CurrentOpening is { } opening)
                 Viewer.OverlayEdges.AddRange(opening.Edges());
+            // The building's opening is placed on the map: brought back into the model's space.
+            if (building?.Current is { } placed && Matrix4x4.Invert(building.Building.Transform, out var toModel))
+                Viewer.OverlayEdges.AddRange(placed.Edges().Select(e => (Vector3.Transform(e.From, toModel), Vector3.Transform(e.To, toModel))));
         }
-        ImGui.Spacing();
-        if (Widgets.BeginProperties("workshop"))
+        FinishTextureJob(item, tool);
+        // Keys 1 to 5: the tools, as on the map.
+        if (!ImGui.GetIO().WantTextInput && !ImGui.GetIO().KeyCtrl)
         {
-            Widgets.PropertyText(L("Fichier"), Path.GetFileName(tool.Path), tool.Path);
-            Widgets.PropertyText(L("Morceau choisi"), tool.SelectedCount == 0 ? L("aucun") : L($"{Widgets.Count(tool.SelectedCount)} triangles"));
-            Widgets.EndProperties();
+            ImGuiKey[] digits = [ImGuiKey._1, ImGuiKey._2, ImGuiKey._3, ImGuiKey._4, ImGuiKey._5];
+            ImGuiKey[] keypad = [ImGuiKey.Keypad1, ImGuiKey.Keypad2, ImGuiKey.Keypad3, ImGuiKey.Keypad4, ImGuiKey.Keypad5];
+            for (int i = 0; i < digits.Length; i++)
+            {
+                if (ImGui.IsKeyPressed(digits[i], false) || ImGui.IsKeyPressed(keypad[i], false))
+                    ChooseWorkshopTool((WorkshopTool)i);
+            }
         }
+    }
+
+    // Properties while the workshop is shown: the settings of its tool, then saving.
+    public void DrawWorkshopProperties()
+    {
+        _inWorkshop = true;
+        try
+        {
+            if (Viewer.Item is not { } item)
+                return;
+            ImGui.PushFont(UiTheme.TitleFont);
+            ImGui.TextUnformatted(WorkshopToolNames[(int)_workshopTool]);
+            ImGui.PopFont();
+            Widgets.Hint(item.Name);
+            if (_workshopCovers.Count > 0)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Warning);
+                ImGui.TextWrapped(L($"{Icons.TriangleAlert}  Sur la carte, {string.Join(", ", _workshopCovers)} est posé au même endroit que ce modèle et peut en cacher une partie : ")
+                    + L("ce que vous voyez ici seul n'est pas forcément visible en jeu. Bouton « Carte autour » pour les voir ensemble."));
+                ImGui.PopStyleColor();
+            }
+            if (_workshop is not { } tool || _workshopFor != item)
+            {
+                Widgets.Hint(_workshopStatus ?? L("Chargement..."), wrap: true);
+                return;
+            }
+            float width = ImGui.GetContentRegionAvail().X;
+            ImGui.Spacing();
+            if (Widgets.BeginProperties("workshop"))
+            {
+                Widgets.PropertyText(L("Fichier"), Path.GetFileName(tool.Path), tool.Path);
+                Widgets.PropertyText(L("Morceau choisi"), tool.SelectedCount == 0 ? L("aucun") : L($"{Widgets.Count(tool.SelectedCount)} triangles"));
+                Widgets.EndProperties();
+            }
+            switch (_workshopTool)
+            {
+                case WorkshopTool.Choose:
+                    DrawWorkshopChoose(item, tool, width);
+                    break;
+                case WorkshopTool.Move:
+                    if (tool.SelectedCount > 0)
+                        DrawWorkshopMove(item, tool, width);
+                    else
+                        Widgets.Hint(L("Cliquez d'abord sur un morceau dans la vue (ou dans la liste Scène) : les poignées apparaissent dessus."), wrap: true);
+                    break;
+                case WorkshopTool.Open:
+                    if (OpeningBuilding is { } building && BuildingOpeningContent is { } drawBuilding)
+                    {
+                        ImGui.Spacing();
+                        ImGui.SeparatorText(L("Ouvrir le bâtiment"));
+                        drawBuilding(building.Building);
+                    }
+                    else
+                        DrawWorkshopOpening(item, tool, width);
+                    break;
+                case WorkshopTool.Add:
+                    DrawWorkshopAdd(item, tool, width);
+                    break;
+                case WorkshopTool.Textures:
+                    ImGui.Spacing();
+                    DrawWorkshopTextures(item, tool, width);
+                    break;
+            }
+            DrawWorkshopSave(item, tool, width);
+        }
+        finally
+        {
+            _inWorkshop = false;
+        }
+    }
+
+    // Scene while the workshop is shown: the parts of the model (one per material), to choose them whole.
+    public void DrawWorkshopParts()
+    {
+        _inWorkshop = true;
+        try
+        {
+            if (Viewer.Item is not { } item || _workshop is not { } tool || _workshopFor != item)
+            {
+                Widgets.Hint(_workshopStatus ?? L("Chargement..."), wrap: true);
+                return;
+            }
+            Widgets.Hint(L("Les parties du modèle, une par matière. Clic : la choisir entière ; Ctrl+clic : l'ajouter ou la retirer. ")
+                + L("Un clic dans la vue choisit seulement le morceau touché."), wrap: true);
+            if (!ImGui.BeginChild("##workshop_parts", Vector2.Zero, ImGuiChildFlags.None))
+            {
+                ImGui.EndChild();
+                return;
+            }
+            var materials = tool.Materials;
+            for (int i = 0; i < materials.Count; i++)
+            {
+                var (_, texture, triangles) = materials[i];
+                int chosen = tool.SelectedIn(i);
+                ImGui.PushID(i);
+                if (ImGui.Selectable(L($"{Icons.Box}  Partie {i + 1} : {texture ?? L("sans texture")}"), chosen > 0))
+                    tool.SelectMesh(i, ImGui.GetIO().KeyCtrl);
+                string count = chosen > 0 && chosen < triangles ? $"{Widgets.Count(chosen)} / {Widgets.Count(triangles)}" : Widgets.Count(triangles);
+                var max = ImGui.GetItemRectMax();
+                float w = ImGui.CalcTextSize(count).X;
+                ImGui.GetWindowDrawList().AddText(new Vector2(max.X - w - 4f, ImGui.GetItemRectMin().Y), ImGui.GetColorU32(UiTheme.TextMuted), count);
+                ImGui.PopID();
+            }
+            ImGui.EndChild();
+        }
+        finally
+        {
+            _inWorkshop = false;
+        }
+    }
+
+    // Choose tool: what can be done with the chosen piece.
+    private void DrawWorkshopChoose(ViewerItem item, ModelPartTool tool, float width)
+    {
         ImGui.Spacing();
+        Widgets.Hint(L("Cliquez sur un morceau dans la vue : il s'entoure de rouge. Ctrl+clic : en ajouter ou en retirer un autre."), wrap: true);
         // Changes are shown at once in the view and kept in memory; the file and the map change only when saved.
         if (Widgets.Button(L($"{Icons.Trash}  Retirer ce morceau"),
                 L("Le morceau disparaît de la vue tout de suite. Le fichier et la carte ne changent qu'avec « Enregistrer le modèle »."),
@@ -1058,7 +1228,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ShowWorkshopChanges(item, tool);
         }
         if (Widgets.Button(L($"{Icons.Copy}  Dupliquer ce morceau"),
-                L("Ajoute une copie du morceau au même endroit (avec ses versions simplifiées) et la choisit :\ndéplacez-la ensuite avec les poignées ou les valeurs ci-dessous."),
+                L("Ajoute une copie du morceau au même endroit (avec ses versions simplifiées) et la choisit :\ndéplacez-la ensuite avec l'outil Déplacer."),
                 width, enabled: tool.SelectedCount > 0))
         {
             if (tool.DuplicateSelected() is { } error)
@@ -1066,11 +1236,12 @@ internal sealed unsafe class ViewerPanel(AppState state)
             else
             {
                 ShowWorkshopChanges(item, tool);
+                ChooseWorkshopTool(WorkshopTool.Move);
                 state.Notify(L("Copie ajoutée au même endroit : déplacez-la avec les poignées (elle est choisie)."));
             }
         }
         if (Widgets.Button(L($"{Icons.Copy}  Copier pour un autre modèle"),
-                L("Garde ce morceau pour l'ajouter à un autre modèle : ouvrez l'autre modèle dans l'atelier, puis « Ajouter un morceau »."),
+                L("Garde ce morceau pour l'ajouter à un autre modèle : ouvrez l'autre modèle dans l'atelier, puis outil Ajouter."),
                 width, enabled: tool.SelectedCount > 0))
         {
             if (tool.CopySelected(item.Name) is { } piece)
@@ -1082,6 +1253,15 @@ internal sealed unsafe class ViewerPanel(AppState state)
             else
                 state.Notify(L("Les sommets de ce modèle sont dans un format que NodeRunner ne sait pas encore modifier."), warning: true);
         }
+        if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
+            tool.Clear();
+    }
+
+    // Under every tool: undo, save, drop, or put the original file back.
+    private void DrawWorkshopSave(ViewerItem item, ModelPartTool tool, float width)
+    {
+        ImGui.Spacing();
+        ImGui.SeparatorText(L("Modifications"));
         if (Widgets.Button(L($"{Icons.Undo}  Annuler la dernière modification"),
                 L("Remet le dernier morceau retiré, déplacé ou dupliqué, ou la dernière texture remplacée (pas encore enregistrés)."),
                 width, enabled: tool.ChangeCount > 0))
@@ -1089,13 +1269,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
             tool.UndoLast();
             ShowWorkshopChanges(item, tool);
         }
-        if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
-            tool.Clear();
-        if (tool.SelectedCount > 0)
-            DrawWorkshopMove(item, tool, width);
         if (tool.ChangeCount > 0)
         {
-            ImGui.Spacing();
             Widgets.Hint(L($"{tool.ChangeCount} modification(s) pas encore enregistrée(s) : la carte et les fichiers ne changent qu'à l'enregistrement."), wrap: true);
             if (Widgets.PrimaryButton(L($"{Icons.Save}  Enregistrer le modèle"), width))
             {
@@ -1124,10 +1299,6 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _reopen = (item, state.World.ModelReader);
             _workshopFor = null;
         }
-        DrawWorkshopOpening(item, tool, width);
-        DrawWorkshopAdd(item, tool, width);
-        ImGui.Spacing();
-        DrawWorkshopTextures(item, tool, width);
     }
 
     // An opening through a wall (a door painted on the building): the triangles inside the rectangle go, those across its
@@ -1287,8 +1458,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
     }
 
-    // The textures of the model: replaced by an image (converted to the texture's size and format), or exported.
-    private void DrawWorkshopTextures(ViewerItem item, ModelPartTool tool, float width)
+    // An image converted on a background thread for a texture: put in the model.
+    private void FinishTextureJob(ViewerItem item, ModelPartTool tool)
     {
         if (_textureJob is { IsCompleted: true } done)
         {
@@ -1308,6 +1479,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
                     state.Notify(job.Note is null ? L("Texture remplacée (pas encore enregistrée).") : L($"Texture remplacée (pas encore enregistrée). {job.Note}"));
             }
         }
+    }
+
+    // The textures of the model: replaced by an image (converted to the texture's size and format), or exported.
+    private void DrawWorkshopTextures(ViewerItem item, ModelPartTool tool, float width)
+    {
         if (!Widgets.Section(L("Textures"), "workshop_textures"))
             return;
         var textures = Viewer.Model.Textures;

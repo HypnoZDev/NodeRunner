@@ -10,6 +10,13 @@ internal sealed partial class PropertiesPanel
 {
     private string _openingDoorQuery = "";
 
+    // The same settings in the model workshop (Percer tool) while this building is being opened.
+    public void DrawBuildingOpeningFor(MapEntity entity)
+    {
+        if (state.World.Maps is { } library)
+            DrawBuildingOpening(entity, library, state.World.Names ?? new HashNames());
+    }
+
     // An interior behind a door drawn on the building's wall: the opening is placed by a click on the wall, then sized;
     // "Ouvrir le bâtiment" makes it all (AppState.OpenBuilding).
     private void DrawBuildingOpening(MapEntity entity, MapLibrary library, HashNames names)
@@ -19,13 +26,19 @@ internal sealed partial class PropertiesPanel
         {
             Widgets.Hint(L("Pour une porte dessinée sur le mur (pas un objet à part) : NodeRunner perce le mur du modèle et sa collision, ")
                 + L("crée un intérieur (MLO) derrière avec son portail et pose une vraie porte qui s'ouvre."), wrap: true);
-            if (Widgets.Button(L($"{Icons.DoorOpen}  Ouvrir ce bâtiment..."), L("Cliquez ensuite sur la porte dessinée, dans la vue 3D."), width))
+            if (Widgets.Button(L($"{Icons.DoorOpen}  Ouvrir ce bâtiment..."), L("Le bâtiment s'ouvre dans l'Atelier, outil Percer : cliquez ensuite sur la porte dessinée."), width))
+            {
                 state.StartBuildingOpening(entity);
+                if (state.OpeningTool is not null)
+                    state.WorkshopRequest = entity;
+            }
             return;
         }
 
         if (tool.Placed is null)
-            Widgets.Hint(L($"{Icons.MousePointer}  Cliquez sur la porte dessinée sur le mur, dans la vue 3D (Échap : arrêter)."), wrap: true);
+            Widgets.Hint(state.WorkshopShown
+                ? L($"{Icons.MousePointer}  Cliquez sur la porte dessinée sur le mur, dans la vue de l'Atelier.")
+                : L($"{Icons.MousePointer}  Cliquez sur la porte dessinée sur le mur, dans la vue 3D (Échap : arrêter)."), wrap: true);
         else
             Widgets.Hint(L("Rouge : l'ouverture et jusqu'où elle traverse le mur. Vert : la salle de l'intérieur. Un autre clic sur le mur la déplace."), wrap: true);
 

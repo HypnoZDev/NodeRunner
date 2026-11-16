@@ -44,10 +44,19 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         (0x20000000, L("miroirs seulement")),
     ];
 
+    // Drawn instead of the map's properties while the model workshop is shown (its tool's settings).
+    public Action? WorkshopContent { get; set; }
+
     public void Draw(ref bool visible)
     {
         if (!ImGui.Begin(L(Title), ref visible))
         {
+            ImGui.End();
+            return;
+        }
+        if (state.WorkshopShown && WorkshopContent is { } workshop)
+        {
+            workshop();
             ImGui.End();
             return;
         }

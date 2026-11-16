@@ -127,6 +127,27 @@ internal sealed class ModelPartTool
         return true;
     }
 
+    // A whole part of the detailed version (number in Materials): replaces the selection, or is added / removed with add.
+    public void SelectMesh(int mesh, bool add)
+    {
+        if (mesh < 0 || mesh >= _meshes.Count)
+            return;
+        var (positions, indices) = _meshes[mesh];
+        var piece = Enumerable.Range(0, indices.Length / 3).Where(t => !ModelParts.IsEmpty(positions, indices, t))
+            .Select(t => new MeshTriangle(mesh, t)).ToList();
+        _farther = null;
+        if (!add)
+            _selected.Clear();
+        if (add && piece.All(_selected.Contains))
+            _selected.ExceptWith(piece);
+        else
+            _selected.UnionWith(piece);
+        Revision++;
+    }
+
+    // How many of the part's triangles are chosen.
+    public int SelectedIn(int mesh) => _selected.Count(t => t.Mesh == mesh);
+
     public void Clear()
     {
         _selected.Clear();

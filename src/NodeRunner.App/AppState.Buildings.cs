@@ -34,7 +34,7 @@ internal sealed partial class AppState
         if (World.Maps is { } library)
             tool.Door = BuildingOpening.ChooseDoor(library.GetArchetypeHashes().Select(h => (h, World.Names?.TryGet(h), library.GetArchetype(h)!)), tool.Width);
         OpeningTool = tool;
-        Notify(L("Cliquez sur la porte dessinée sur le mur du bâtiment, dans la vue 3D (Échap pour arrêter)."));
+        Notify(L("Cliquez sur la porte dessinée sur le mur du bâtiment (Échap pour arrêter)."));
     }
 
     // Makes the interior behind the opening, in this order: the game's doors in the opening go, the interior is created
