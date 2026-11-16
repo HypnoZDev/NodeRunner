@@ -55,6 +55,14 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private string _partSearch = "";
     private PreviewTexture? _openTexture;
     private int _captureScale = 2;
+
+    // Model workshop: the pieces of the open model chosen for removal.
+    private ModelPartTool? _workshop;
+    private string? _workshopError;
+    private ViewerItem? _workshopFor;
+    private bool _workshopShown;
+    private int _workshopRevision = -1;
+    private (ViewerItem Item, object? Reader)? _reopen;
     private bool _captureTransparent;
 
     public void OpenArchetype(uint archetypeHash)
@@ -114,6 +122,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
         bool visible = ImGui.Begin(L(Title), ref open);
         ImGui.PopStyleVar();
         Viewer.RequestedSize = Vector2.Zero; // Set again below while the view is visible.
+        ReopenChangedModel();
+        bool workshopWasShown = _workshopShown;
+        _workshopShown = false;
         if (visible)
         {
             UpdateCatalog();
@@ -139,6 +150,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
             }
         }
         ImGui.End();
+        if (!_workshopShown && workshopWasShown && Viewer.OverlayEdges.Count > 0)
+        {
+            Viewer.OverlayEdges.Clear();
+            _workshopRevision = -1;
+        }
     }
 
     private void UpdateCatalog()
@@ -616,6 +632,19 @@ internal sealed unsafe class ViewerPanel(AppState state)
         }
         if (!ImGui.IsItemHovered())
             return;
+        // Model workshop: a click without moving the mouse picks a piece.
+        if (_workshopShown && _workshop is { } tool && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && io.MouseDragMaxDistanceSqr[0] < 16f
+            && Matrix4x4.Invert(Viewer.LastViewProjection, out var inverse))
+        {
+            var at = (io.MousePos - ImGui.GetItemRectMin()) / size;
+            float cx = at.X * 2f - 1f, cy = 1f - at.Y * 2f;
+            // Reversed depth with an infinite far plane: 1 is the near plane.
+            var near = Vector4.Transform(new Vector4(cx, cy, 1f, 1f), inverse);
+            var far = Vector4.Transform(new Vector4(cx, cy, 0.5f, 1f), inverse);
+            var from = new Vector3(near.X, near.Y, near.Z) / near.W;
+            var to = new Vector3(far.X, far.Y, far.Z) / far.W;
+            tool.ClickModel(from - Viewer.ModelOffset, Vector3.Normalize(to - from), io.KeyCtrl);
+        }
         if (io.MouseWheel != 0)
             Viewer.Distance = Math.Clamp(Viewer.Distance * MathF.Pow(0.88f, io.MouseWheel), Viewer.MinDistance, Viewer.MaxDistance);
         if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
@@ -672,6 +701,14 @@ internal sealed unsafe class ViewerPanel(AppState state)
             Scroll("parts", DrawPartsTab);
             ImGui.EndTabItem();
         }
+        var workshopFlags = state.ShowModelWorkshop ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        state.ShowModelWorkshop = false;
+        if (!IsGta4 && item.Kind != ViewerKind.Ped && TabItem(L("Atelier"), workshopFlags))
+        {
+            _workshopShown = true;
+            Scroll("workshop", () => DrawWorkshopTab(item));
+            ImGui.EndTabItem();
+        }
         if (ImGui.BeginTabItem(L("Textures")))
         {
             Scroll("textures", DrawTexturesTab);
@@ -696,6 +733,88 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.EndTabItem();
         }
         ImGui.EndTabBar();
+    }
+
+    // A tab without a close button that can be brought to the front.
+    private static bool TabItem(string label, ImGuiTabItemFlags flags)
+    {
+        int length = System.Text.Encoding.UTF8.GetByteCount(label);
+        var bytes = stackalloc byte[length + 1];
+        System.Text.Encoding.UTF8.GetBytes(label, new Span<byte>(bytes, length));
+        bytes[length] = 0;
+        return ImGuiNative.igBeginTabItem(bytes, null, flags) != 0;
+    }
+
+    // ---- Model workshop ----
+
+    private void DrawWorkshopTab(ViewerItem item)
+    {
+        if (_workshopFor != item)
+        {
+            _workshopFor = item;
+            (_workshop, _workshopError) = ModelPartTool.Open(item.Location, state.World);
+            _workshopRevision = -1;
+        }
+        float width = ImGui.GetContentRegionAvail().X;
+        Widgets.Hint(L("Modifiez le modèle sans quitter NodeRunner. Cliquez sur un morceau dans l'image : il s'entoure de rouge. ")
+            + L("Ctrl+clic : en ajouter ou en retirer un autre. Tourner la vue reste possible (cliquer-glisser)."), wrap: true);
+        if (_workshop is not { } tool)
+        {
+            Widgets.Hint(_workshopError ?? L("Modèle 3D introuvable."), wrap: true);
+            return;
+        }
+        if (_workshopRevision != tool.Revision)
+        {
+            _workshopRevision = tool.Revision;
+            Viewer.OverlayEdges.Clear();
+            Viewer.OverlayEdges.AddRange(tool.Edges());
+        }
+        ImGui.Spacing();
+        if (Widgets.BeginProperties("workshop"))
+        {
+            Widgets.PropertyText(L("Fichier"), Path.GetFileName(tool.Path), tool.Path);
+            Widgets.PropertyText(L("Morceau choisi"), tool.SelectedCount == 0 ? L("aucun") : L($"{Widgets.Count(tool.SelectedCount)} triangles"));
+            Widgets.EndProperties();
+        }
+        ImGui.Spacing();
+        if (Widgets.Button(L($"{Icons.Trash}  Retirer ce morceau"),
+                L("Réécrit le fichier du modèle sans ces triangles, dans le dossier stream du projet, puis recharge la carte. ")
+                + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule."), width, enabled: tool.SelectedCount > 0))
+        {
+            var (done, message) = tool.Apply(state);
+            state.Notify(message, warning: !done);
+            if (done)
+            {
+                _reopen = (item, state.World.ModelReader);
+                _workshopFor = null;
+            }
+        }
+        if (Widgets.Button(L("Tout désélectionner"), null, width, enabled: tool.SelectedCount > 0))
+            tool.Clear();
+        if (ModelPartTool.ChangedFile(state, tool.Path) is not null
+            && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),
+                L("Annule tous les morceaux retirés de ce modèle (le fichier d'avant est remis)."), width))
+        {
+            state.Notify(ModelPartTool.Restore(state, tool.Path));
+            _reopen = (item, state.World.ModelReader);
+            _workshopFor = null;
+        }
+        ImGui.Spacing();
+        Widgets.Hint(L("Bientôt ici : déplacer un morceau, changer une texture."), wrap: true);
+    }
+
+    // Once the map is reloaded after a change of the model's file: the model is read again (from its new place when it
+    // moved into the project).
+    private void ReopenChangedModel()
+    {
+        if (_reopen is not var (item, reader) || state.World.ModelReader == reader || state.World.IsBusy || state.World.Maps is null)
+            return;
+        _reopen = null;
+        Viewer.Model.Close();
+        if (item.Kind == ViewerKind.Object && Library?.GetArchetype(item.ArchetypeHash) is { } archetype && Models?.Locate(archetype) is { } location)
+            Open(item with { Location = location });
+        else
+            Open(item);
     }
 
     private static void Scroll(string id, Action draw)

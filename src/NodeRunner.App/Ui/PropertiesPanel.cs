@@ -299,6 +299,12 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
                     state.Notify(L("Cliquez sur le morceau à retirer dans la vue 3D (Ctrl+clic pour en ajouter un autre, Échap pour arrêter)."));
                 }
             }
+            if (Widgets.Button(L($"{Icons.Box}  Ouvrir dans l'atelier de modèle"),
+                    L("Le modèle seul dans la Visionneuse, onglet Atelier : on tourne autour pour choisir les morceaux à retirer."), width))
+            {
+                showModel(entity.ArchetypeHash);
+                state.ShowModelWorkshop = true;
+            }
             if (library.GetArchetype(entity.ArchetypeHash) is { } type && state.World.Models?.Locate(type) is { } location
                 && ModelPartTool.ChangedFile(state, location.Path) is not null
                 && Widgets.Button(L($"{Icons.Undo}  Remettre le modèle d'origine"),

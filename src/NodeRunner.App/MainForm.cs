@@ -1202,9 +1202,9 @@ internal sealed unsafe partial class MainForm : Form
             }
         }
         // The piece of the model about to be removed.
-        if (!_state.IsGta4 && _state.PartTool is { SelectedCount: > 0 } partTool)
+        if (!_state.IsGta4 && _state.PartTool is { SelectedCount: > 0, Entity: { } partEntity } partTool)
         {
-            var at = partTool.Entity.Transform;
+            var at = partEntity.Transform;
             foreach (var (from, to) in partTool.Edges())
                 lines.AddLine(Vector3.Transform(from, at), Vector3.Transform(to, at), DoorBlockedColor);
         }

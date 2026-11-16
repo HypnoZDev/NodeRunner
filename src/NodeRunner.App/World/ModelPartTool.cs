@@ -23,14 +23,17 @@ internal sealed class ModelPartTool
     private readonly List<(Vector3[] Positions, ushort[] Indices)> _meshes;
     private readonly HashSet<MeshTriangle> _selected = [];
 
-    public MapEntity Entity { get; }
+    // The object of the map the tool was opened on, null when opened on a model alone (model workshop).
+    public MapEntity? Entity { get; private init; }
     public string Path { get; }
 
     public int SelectedCount => _selected.Count;
 
-    private ModelPartTool(MapEntity entity, string path, ResourceHeader header, byte[] content, List<DrawableReader.StoredGeometry> all)
+    // Changes each time the chosen triangles change.
+    public int Revision { get; private set; }
+
+    private ModelPartTool(string path, ResourceHeader header, byte[] content, List<DrawableReader.StoredGeometry> all)
     {
-        Entity = entity;
         Path = path;
         _header = header;
         _content = content;
@@ -43,8 +46,15 @@ internal sealed class ModelPartTool
     // The tool for this object's model, or an error message.
     public static (ModelPartTool? Tool, string? Error) Open(MapEntity entity, WorldLoader world)
     {
-        if (world.Maps?.GetArchetype(entity.ArchetypeHash) is not { } archetype || world.Models?.Locate(archetype) is not { } location
-            || world.Content is not { } content)
+        if (world.Maps?.GetArchetype(entity.ArchetypeHash) is not { } archetype || world.Models?.Locate(archetype) is not { } location)
+            return (null, L("Modèle 3D introuvable."));
+        var (tool, error) = Open(location, world);
+        return (tool is null ? null : new ModelPartTool(tool.Path, tool._header, tool._content, tool._all) { Entity = entity }, error);
+    }
+
+    public static (ModelPartTool? Tool, string? Error) Open(Data.Models.ModelLocation location, WorldLoader world)
+    {
+        if (world.Content is not { } content)
             return (null, L("Modèle 3D introuvable."));
         try
         {
@@ -53,7 +63,7 @@ internal sealed class ModelPartTool
             var all = DrawableReader.StoredGeometries(data, header, System.IO.Path.GetExtension(location.Path), location.ModelHash);
             if (all.Count == 0)
                 return (null, L("Ce modèle n'a aucune partie lisible."));
-            return (new ModelPartTool(entity, location.Path, header, data, all), null);
+            return (new ModelPartTool(location.Path, header, data, all), null);
         }
         catch (InvalidDataException ex)
         {
@@ -61,19 +71,27 @@ internal sealed class ModelPartTool
         }
     }
 
-    // Click: the piece under the ray (world space) replaces the selection, or is added / removed with add.
+    // Click on the map: the ray in world space, through the object's placement.
     public bool Click(Vector3 origin, Vector3 direction, bool add)
     {
-        if (!Matrix4x4.Invert(Entity.Transform, out var toModel))
+        if (Entity is null || !Matrix4x4.Invert(Entity.Transform, out var toModel))
             return false;
-        var localOrigin = Vector3.Transform(origin, toModel);
-        var localDirection = Vector3.TransformNormal(direction, toModel);
+        return ClickModel(Vector3.Transform(origin, toModel), Vector3.TransformNormal(direction, toModel), add);
+    }
+
+    // Click: the piece under the ray (model space) replaces the selection, or is added / removed with add.
+    public bool ClickModel(Vector3 localOrigin, Vector3 localDirection, bool add)
+    {
         if (ModelParts.Hit(_meshes, localOrigin, localDirection) is not { } found)
         {
-            if (!add)
+            if (!add && _selected.Count > 0)
+            {
                 _selected.Clear();
+                Revision++;
+            }
             return false;
         }
+        Revision++;
         var hit = found.Triangle;
         var (positions, indices) = _meshes[hit.Mesh];
         var piece = ModelParts.Connected(positions, indices, hit.Triangle).Select(t => new MeshTriangle(hit.Mesh, t)).ToList();
@@ -86,7 +104,11 @@ internal sealed class ModelPartTool
         return true;
     }
 
-    public void Clear() => _selected.Clear();
+    public void Clear()
+    {
+        _selected.Clear();
+        Revision++;
+    }
 
     // Edges of the selected triangles, in the model's space.
     public IEnumerable<(Vector3 From, Vector3 To)> Edges()
@@ -203,7 +225,7 @@ internal sealed class ModelPartTool
             return (false, L($"Enregistrement impossible : {ex.Message}"));
         }
         int count = _selected.Count;
-        _selected.Clear();
+        Clear();
         state.World.RequestMapReload();
         return (true, farther > 0
             ? L($"{count} triangles retirés de {fileName} (+ {farther} dans ses versions simplifiées). Rechargement de la carte...")

@@ -79,6 +79,13 @@ internal sealed class ModelViewer : IDisposable
     public Vector3[]? PaintColors { get; set; }
 
     public HashSet<int> HiddenMeshes { get; } = new();
+
+    // Lines drawn over the model, in its own space (the piece chosen in the model workshop).
+    public List<(Vector3 From, Vector3 To)> OverlayEdges { get; } = [];
+
+    // The last image's camera and the model's placement in it, to find what is under the mouse.
+    public Matrix4x4 LastViewProjection { get; private set; }
+    public Vector3 ModelOffset { get; private set; }
     public int HighlightedMesh { get; set; } = -1;
 
     public Vector2 RequestedSize { get; set; }
@@ -96,6 +103,8 @@ internal sealed class ModelViewer : IDisposable
         }
         _model.Open(item, reader, textures, textureReader);
     }
+
+    private static readonly Vector4 OverlayColor = new(1f, 0.3f, 0.25f, 0.95f);
 
     public void ResetView()
     {
@@ -169,7 +178,7 @@ internal sealed class ModelViewer : IDisposable
         }
     }
 
-    private void DrawScene(ModelRenderer renderer, ColorRenderer? lines, GpuModel model, float aspect)
+    private void DrawScene(ModelRenderer renderer, ColorRenderer? lines, GpuModel model, float aspect, bool capture = false)
     {
         _camera.FieldOfView = Math.Clamp(FieldOfViewDegrees, 10f, 100f) * MathF.PI / 180f;
         _camera.Yaw = Yaw;
@@ -178,6 +187,11 @@ internal sealed class ModelViewer : IDisposable
         var viewProjection = _camera.ViewProjection(aspect);
         var offset = -_center - Pan;
         var world = Matrix4x4.CreateTranslation(offset);
+        if (!capture)
+        {
+            LastViewProjection = viewProjection;
+            ModelOffset = offset;
+        }
 
         var light = LightFollowsCamera
             ? -_camera.Forward + _camera.Right * -0.4f + Vector3.UnitZ * LightHeight
@@ -228,6 +242,12 @@ internal sealed class ModelViewer : IDisposable
         if (ShowBounds)
             lines.AddBox(min, max, Matrix4x4.Identity, new Vector4(1f, 0.75f, 0.2f, 0.9f));
         lines.Flush(viewProjection, _camera.Position);
+        if (OverlayEdges.Count > 0 && !capture)
+        {
+            foreach (var (from, to) in OverlayEdges)
+                lines.AddLine(from + offset, to + offset, OverlayColor);
+            lines.Flush(viewProjection, _camera.Position, onTop: true);
+        }
     }
 
     // Grid under the model: 1 m squares (5 m for big models), one line in two brighter.
@@ -260,7 +280,7 @@ internal sealed class ModelViewer : IDisposable
             bool ground = ShowGround;
             if (request.Transparent)
                 ShowGround = false;
-            DrawScene(renderer, lines, model, (float)w / h);
+            DrawScene(renderer, lines, model, (float)w / h, capture: true);
             ShowGround = ground;
             var pixels = _capture.ReadPixels();
             string path = request.Path;

@@ -507,6 +507,9 @@ internal sealed class AppState
 
     public CollisionQuery CollisionQuery { get; } = new();
 
+    // The model viewer shows its workshop tab at its next frame.
+    public bool ShowModelWorkshop { get; set; }
+
     // While a piece of a model is being picked for removal: clicks in the 3D view go to it.
     public ModelPartTool? PartTool { get; set; }
 
