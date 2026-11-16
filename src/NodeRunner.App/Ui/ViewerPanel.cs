@@ -529,6 +529,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
             drawList.AddRectFilled(min, max, Widgets.Col(UiTheme.Field));
         UpdateWorkshopGizmo(min, size);
         HandleMouse(size);
+        if (_inWorkshop && (ImGui.IsItemHovered() || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)))
+            FlyWithKeys();
 
         // Name, make and class, then loading / error, over the top-left corner of the image.
         var pos = min + new Vector2(12, 10);
@@ -559,7 +561,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
             drawList.AddText(new Vector2(max.X - ImGui.CalcTextSize(dims).X - 12, min.Y + 10), Widgets.Col(muted), dims);
         }
         drawList.AddText(new Vector2(min.X + 12, max.Y - ImGui.GetTextLineHeight() - 8), Widgets.Col(light ? muted : UiTheme.TextFaint),
-            L("Clic gauche : tourner · clic droit ou molette enfoncée : déplacer · molette : zoom · double-clic : vue par défaut"));
+            _inWorkshop
+                ? L("Touches de la carte : avancer, monter (Maj : plus vite) · clic droit maintenu : regarder · clic gauche glissé : tourner autour · molette : zoom · F : cadrer")
+                : L("Clic gauche : tourner · clic droit ou molette enfoncée : déplacer · molette : zoom · double-clic : vue par défaut"));
 
         DrawInfo();
     }
@@ -770,6 +774,44 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _workshopRevision = -1;
     }
 
+    // Workshop: the map's keys move the camera (speed from the model's size, Shift faster), F frames the model.
+    private void FlyWithKeys()
+    {
+        var io = ImGui.GetIO();
+        if (io.WantTextInput || io.KeyCtrl || io.KeyAlt)
+            return;
+        if (ImGui.IsKeyPressed(ImGuiKey.F, false))
+            Viewer.Frame();
+        var (forward, left) = state.Settings.MovementKeys switch
+        {
+            Input.MovementKeys.Zqsd => (ImGuiKey.Z, ImGuiKey.Q),
+            Input.MovementKeys.Wasd => (ImGuiKey.W, ImGuiKey.A),
+            _ => (ImGuiKey.None, ImGuiKey.None),
+        };
+        bool both = forward == ImGuiKey.None;
+        static bool Down(params ReadOnlySpan<ImGuiKey> keys)
+        {
+            foreach (var key in keys)
+            {
+                if (key != ImGuiKey.None && ImGui.IsKeyDown(key))
+                    return true;
+            }
+            return false;
+        }
+        var move = Vector3.Zero;
+        if (Down(ImGuiKey.UpArrow, forward) || both && Down(ImGuiKey.W, ImGuiKey.Z)) move += Viewer.Forward;
+        if (Down(ImGuiKey.S, ImGuiKey.DownArrow)) move -= Viewer.Forward;
+        if (Down(ImGuiKey.D, ImGuiKey.RightArrow)) move += Viewer.Right;
+        if (Down(ImGuiKey.LeftArrow, left) || both && Down(ImGuiKey.A, ImGuiKey.Q)) move -= Viewer.Right;
+        if (Down(ImGuiKey.Space, ImGuiKey.E, ImGuiKey.PageUp)) move += Vector3.UnitZ;
+        if (Down(ImGuiKey.C, ImGuiKey.PageDown)) move -= Vector3.UnitZ;
+        if (move == Vector3.Zero)
+            return;
+        // The model's size crossed in about two seconds.
+        float speed = Math.Max(0.5f, Viewer.Radius) * (io.KeyShift ? 5f : 1f);
+        Viewer.Fly(Vector3.Normalize(move) * speed * Math.Min(io.DeltaTime, 0.1f));
+    }
+
     private void HandleMouse(Vector2 size)
     {
         var io = ImGui.GetIO();
@@ -780,6 +822,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
             {
                 Viewer.Yaw -= io.MouseDelta.X * 0.008f;
                 Viewer.Pitch -= io.MouseDelta.Y * 0.008f;
+            }
+            else if (_inWorkshop && ImGui.IsMouseDragging(ImGuiMouseButton.Right, 0f))
+            {
+                // Workshop: right button held looks around, as on the map.
+                float sensitivity = 0.004f * Math.Clamp(state.Settings.MouseSensitivity, MainForm.MinMouseSensitivity, MainForm.MaxMouseSensitivity);
+                var delta = io.MouseDelta * UiTheme.Scale; // In pixels, as on the map.
+                Viewer.Look(-delta.X * sensitivity, -delta.Y * sensitivity * (state.Settings.InvertMouseY ? -1f : 1f));
             }
             else if (ImGui.IsMouseDragging(ImGuiMouseButton.Right, 0f) || ImGui.IsMouseDragging(ImGuiMouseButton.Middle, 0f))
             {

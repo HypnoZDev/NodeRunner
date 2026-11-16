@@ -145,6 +145,42 @@ internal sealed class ModelViewer : IDisposable
         Pan += (-_camera.Right * delta.X + Vector3.Cross(_camera.Right, _camera.Forward) * delta.Y) * perPixel;
     }
 
+    // Free flight, as on the map: the camera moves (world axes, metres) or turns on itself; the orbit's target follows.
+    public Vector3 Forward
+    {
+        get
+        {
+            _camera.Yaw = Yaw;
+            return _camera.Forward;
+        }
+    }
+
+    public Vector3 Right
+    {
+        get
+        {
+            _camera.Yaw = Yaw;
+            return _camera.Right;
+        }
+    }
+
+    public void Fly(Vector3 move) => Pan += move;
+
+    public void Look(float yaw, float pitch)
+    {
+        var before = Forward;
+        Yaw += yaw;
+        Pitch += pitch;
+        Pan += (Forward - before) * Distance;
+    }
+
+    // The whole model in view, seen from the current direction.
+    public void Frame()
+    {
+        Pan = Vector3.Zero;
+        Distance = FitDistance();
+    }
+
     public void RequestCapture(string path, int scale, bool transparent) => _captureRequest = (path, scale, transparent);
 
     public IntPtr Thumbnail(GpuTexture texture) => _thumbnails.GetValueOrDefault(texture);

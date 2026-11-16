@@ -305,6 +305,8 @@ public static partial class English
         ("{0}  Modifier le modèle (Atelier)", "{0}  Edit the model (Workshop)"),
         ("Double-clic", "Double-click"),
         ("Double-clic sur un objet", "Double-click an object"),
+        ("Touches de la carte : avancer, monter (Maj : plus vite) · clic droit maintenu : regarder · clic gauche glissé : tourner autour · molette : zoom · F : cadrer",
+            "Map keys: move, go up (Shift: faster) · hold right button: look · left drag: turn around · wheel: zoom · F: frame"),
         ("Modifier son modèle dans l'onglet Atelier", "Edit its model in the Workshop tab"),
     ];
 }
