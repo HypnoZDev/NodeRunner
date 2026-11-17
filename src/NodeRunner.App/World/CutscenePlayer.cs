@@ -141,7 +141,7 @@ internal sealed class CutscenePlayer : IDisposable
         var clips = Clips(cutscene, cut);
         Clips(cutscene, cut + 1); // The next cut, read ahead.
         foreach (var actor in _actors)
-            Place(actor, clips, Time - start, cutscene.SceneTransform);
+            Place(actor, clips, Time - start, cutscene.SceneTransformAt(Time));
         _hidden.Clear();
         foreach (var (entity, switches) in _hides)
         {
@@ -204,7 +204,7 @@ internal sealed class CutscenePlayer : IDisposable
         var (position, rotation) = clip.Root(time, AnimationTrackKind.CameraTranslation, AnimationTrackKind.CameraRotation);
         if (position is not { } p || rotation is not { } r)
             return null;
-        var scene = cutscene.SceneTransform;
+        var scene = cutscene.SceneTransformAt(Time);
         // The camera looks along its own +Y.
         var forward = Vector3.Normalize(Vector3.TransformNormal(Vector3.Transform(Vector3.UnitY, r), scene));
         return (Vector3.Transform(p, scene), forward, clip.Value(time, AnimationTrackKind.CameraFieldOfView) ?? 45f);

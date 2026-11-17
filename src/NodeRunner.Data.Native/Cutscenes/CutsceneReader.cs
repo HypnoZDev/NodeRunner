@@ -15,7 +15,8 @@ public static class CutsceneReader
         "fTotalDuration", "vOffset", "fRotation", "pCutsceneObjects", "pCutsceneLoadEventList", "pCutsceneEventList",
         "pCutsceneEventArgsList", "cameraCutList", "iObjectId", "cName", "StreamingName", "AnimStreamingBase", "vPosition",
         "fRadius", "fTime", "iEventId", "iEventArgsIndex", "iObjectIdList", "vRotationQuaternion", "fNearDrawDistance",
-        "fFarDrawDistance", "iComponent", "iDrawable", "iTexture",
+        "fFarDrawDistance", "iComponent", "iDrawable", "iTexture", "concatDataList", "cSceneName", "fStartTime",
+        "bValidForPlayBack",
     ];
 
     private static readonly Dictionary<string, CutsceneObjectKind> Kinds = new()
@@ -57,8 +58,17 @@ public static class CutsceneReader
             LoadEvents = Events(root.Element("pCutsceneLoadEventList"), arguments),
             Events = Events(root.Element("pCutsceneEventList"), arguments),
             CameraCuts = Floats(root.Element("cameraCutList")),
+            Sections = Sections(root.Element("concatDataList")),
         };
     }
+
+    // Scenes put end to end, each at its own place: the used entries (a name, playable), by start time.
+    private static List<CutsceneSection> Sections(XElement? list) =>
+        (list?.Elements("Item") ?? [])
+        .Where(i => !string.IsNullOrWhiteSpace(i.Element("cSceneName")?.Value) && i.Element("bValidForPlayBack")?.Value.Trim() != "false")
+        .Select(i => new CutsceneSection(Float(i.Element("fStartTime")), Vector(i.Element("vOffset")), Float(i.Element("fRotation"))))
+        .OrderBy(s => s.Start)
+        .ToList();
 
     private static CutsceneObject Object(XElement item)
     {

@@ -48,6 +48,10 @@ public sealed record CutsceneEventArgs
     public int Texture { get; init; } = -1;
 }
 
+// A part of a cutscene made of several scenes put end to end: from Start (seconds), placed at Offset turned by
+// Rotation degrees around Z.
+public sealed record CutsceneSection(float Start, Vector3 Offset, float Rotation);
+
 // An event at a time (seconds from the start): Kind (see CutsceneEventKind), the object it is sent to (-1 none).
 public sealed record CutsceneEvent(float Time, int Kind, int ObjectId, CutsceneEventArgs? Args);
 
@@ -64,6 +68,9 @@ public sealed class Cutscene
     public IReadOnlyList<CutsceneEvent> LoadEvents { get; init; } = [];
     public IReadOnlyList<CutsceneEvent> Events { get; init; } = [];
     public IReadOnlyList<float> CameraCuts { get; init; } = [];
+
+    // Its parts placed each at its own place, by start time; empty: all of it at Offset / Rotation.
+    public IReadOnlyList<CutsceneSection> Sections { get; init; } = [];
 
     // Number of the camera cut playing at a time, and when it started.
     public (int Index, float Start) CutAt(float time)
@@ -121,6 +128,22 @@ public sealed class Cutscene
         return (Hashing.Joaat.Hash(name), copy);
     }
 
-    // Where a point of the scene (in its own space) is on the map.
-    public Matrix4x4 SceneTransform => Matrix4x4.CreateRotationZ(Rotation * MathF.PI / 180f) * Matrix4x4.CreateTranslation(Offset);
+    // Where a point of the scene (in its own space) is on the map, at the start.
+    public Matrix4x4 SceneTransform => Place(Offset, Rotation);
+
+    // Same at a time (the part playing then).
+    public Matrix4x4 SceneTransformAt(float time)
+    {
+        CutsceneSection? playing = null;
+        foreach (var section in Sections)
+        {
+            if (section.Start > time)
+                break;
+            playing = section;
+        }
+        return playing is { } s ? Place(s.Offset, s.Rotation) : SceneTransform;
+    }
+
+    private static Matrix4x4 Place(Vector3 offset, float degrees) =>
+        Matrix4x4.CreateRotationZ(degrees * MathF.PI / 180f) * Matrix4x4.CreateTranslation(offset);
 }
