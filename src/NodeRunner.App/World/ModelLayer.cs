@@ -283,6 +283,9 @@ internal sealed class ModelLayer : IDisposable
     // Doors opened in the view, drawn at their open position.
     public DoorAnimator? Doors { get; set; }
 
+    // Objects not drawn (those a cutscene playing replaces with its own).
+    public IReadOnlySet<MapEntity>? Hidden { get; set; }
+
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
         Action? beforeTranslucent = null, OcclusionCuller? occlusion = null)
     {
@@ -304,6 +307,8 @@ internal sealed class ModelLayer : IDisposable
             var entity = _visible[i];
             if (entity.Entity.IsDeleted)
                 continue; // Deleted since the list was made (it is being made again).
+            if (Hidden is { Count: > 0 } hidden && hidden.Contains(entity.Entity))
+                continue;
             var slot = SlotOf(entity, now);
             slot.LastUsed = now;
             if (!slot.Loaded)
@@ -388,7 +393,7 @@ internal sealed class ModelLayer : IDisposable
                 if (!_visible[i].IsCurrent)
                     _visible[i] = Refresh(_visible[i]);
                 var entity = _visible[i];
-                if (entity.Entity.IsDeleted)
+                if (entity.Entity.IsDeleted || Hidden is { Count: > 0 } hidden && hidden.Contains(entity.Entity))
                     continue;
                 var slot = SlotOf(entity, now);
                 if (!slot.Loaded)

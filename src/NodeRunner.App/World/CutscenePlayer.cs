@@ -2,6 +2,7 @@ using System.Numerics;
 using NodeRunner.Data.Cutscenes;
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Hashing;
+using NodeRunner.Data.Maps;
 using NodeRunner.Data.Models;
 using NodeRunner.Data.Native.Cutscenes;
 using NodeRunner.Data.Native.Models;
@@ -14,6 +15,7 @@ namespace NodeRunner.App.World;
 internal sealed class CutscenePlayer : IDisposable
 {
     private const int KeptCuts = 4;
+    private const float InteriorReach = 150f;
 
     private sealed class Actor(CutsceneObject source, (uint, int) key, ViewerItem item)
     {
@@ -36,6 +38,13 @@ internal sealed class CutscenePlayer : IDisposable
     private readonly Dictionary<int, Task<Dictionary<(uint, int), AnimationClip>>> _cuts = new();
     private readonly List<Actor> _actors = [];
     private bool _actorsMade;
+    // Map objects the cutscene hides (replaced by its own props), with the times it hides / shows them again
+    // (events 14 / 15, in order).
+    private readonly List<(MapEntity Entity, List<(float Time, bool On)> Switches)> _hides = [];
+    private readonly HashSet<MapEntity> _hidden = [];
+
+    // The map objects hidden at Time.
+    public IReadOnlySet<MapEntity> Hidden => _hidden;
 
     public Cutscene? Cutscene { get; private set; }
     public string? Path { get; private set; }
@@ -71,6 +80,8 @@ internal sealed class CutscenePlayer : IDisposable
         foreach (var actor in _actors)
             actor.Model.Dispose();
         _actors.Clear();
+        _hides.Clear();
+        _hidden.Clear();
         _cuts.Clear();
         _actorsMade = false;
         _loading = null;
@@ -131,13 +142,19 @@ internal sealed class CutscenePlayer : IDisposable
         Clips(cutscene, cut + 1); // The next cut, read ahead.
         foreach (var actor in _actors)
             Place(actor, clips, Time - start, cutscene.SceneTransform);
+        _hidden.Clear();
+        foreach (var (entity, switches) in _hides)
+        {
+            if (IsOn(switches, Time, false))
+                _hidden.Add(entity);
+        }
     }
 
     private void Place(Actor actor, Dictionary<(uint, int), AnimationClip>? clips, float local, Matrix4x4 scene)
     {
         actor.Shown = false;
         actor.Posed = false;
-        if (clips is null || !IsOn(actor, Time) || !clips.TryGetValue(actor.Key, out var clip) || actor.Model.Model is null)
+        if (clips is null || !IsOn(actor.Switches, Time, true) || !clips.TryGetValue(actor.Key, out var clip) || actor.Model.Model is null)
             return;
         float time = Math.Clamp(local, 0f, Math.Max(clip.Duration * 0.9999f, 0f));
         var (position, rotation) = clip.Root(time, AnimationTrackKind.MoverTranslation, AnimationTrackKind.MoverRotation);
@@ -159,13 +176,13 @@ internal sealed class CutscenePlayer : IDisposable
         actor.Shown = true;
     }
 
-    // Objects never loaded nor unloaded are always there; the others while loaded.
-    private static bool IsOn(Actor actor, float time)
+    // Whether the last switch before time is on; empty: whenEmpty (objects never loaded nor unloaded are always there).
+    private static bool IsOn(List<(float Time, bool On)> switches, float time, bool whenEmpty)
     {
-        if (actor.Switches.Count == 0)
-            return true;
+        if (switches.Count == 0)
+            return whenEmpty;
         bool on = false;
-        foreach (var (at, value) in actor.Switches)
+        foreach (var (at, value) in switches)
         {
             if (at > time)
                 break;
@@ -286,6 +303,42 @@ internal sealed class CutscenePlayer : IDisposable
         // Unloaded and loaded again at the same time: loaded wins.
         foreach (var actor in _actors)
             actor.Switches.Sort((a, b) => a.Time != b.Time ? a.Time.CompareTo(b.Time) : a.On.CompareTo(b.On));
+        HideMapObjects(world, cutscene);
+    }
+
+    // The map objects of each hidden model (its type, within its radius of its place on the map); several hidden models
+    // can name the same object: the last event sent to any of them counts.
+    private void HideMapObjects(WorldLoader world, Cutscene cutscene)
+    {
+        if (world.Maps is not { } maps)
+            return;
+        var targets = new Dictionary<int, List<MapEntity>>();
+        foreach (var hidden in cutscene.Objects.Where(o => o.Kind == CutsceneObjectKind.HiddenModel && o.Name != 0))
+        {
+            float radius = Math.Max(hidden.Radius, 0.1f);
+            var at = new Vector2(hidden.Position.X, hidden.Position.Y);
+            // Objects of an interior are found through the interior, placed further away.
+            var inside = maps.EntitiesAround(at, InteriorReach).SelectMany(e => e.InteriorEntities);
+            targets[hidden.Id] = maps.EntitiesAround(at, radius).Concat(inside)
+                .Where(e => (e.ArchetypeHash == hidden.Name || e.FileArchetypeHash == hidden.Name)
+                            && Vector2.Distance(new Vector2(e.Position.X, e.Position.Y), at) <= radius && Math.Abs(e.Position.Z - hidden.Position.Z) <= radius + 2f)
+                .Distinct()
+                .ToList();
+        }
+        var byEntity = new Dictionary<MapEntity, List<(float, bool)>>();
+        foreach (var e in cutscene.LoadEvents.Concat(cutscene.Events).OrderBy(e => e.Time))
+        {
+            if (e.Kind is not (CutsceneEventKind.EnableHideObject or CutsceneEventKind.DisableHideObject) || !targets.TryGetValue(e.ObjectId, out var entities))
+                continue;
+            foreach (var entity in entities)
+            {
+                if (!byEntity.TryGetValue(entity, out var switches))
+                    byEntity[entity] = switches = [];
+                switches.Add((e.Time, e.Kind == CutsceneEventKind.EnableHideObject));
+            }
+        }
+        foreach (var (entity, switches) in byEntity)
+            _hides.Add((entity, switches));
     }
 
     // The model of an object: a ped by its name, a vehicle by its fragment, a prop or weapon by its type on the map

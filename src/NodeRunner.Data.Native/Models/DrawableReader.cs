@@ -443,6 +443,7 @@ public sealed class DrawableReader : IModelReader
                 meshes.Add(mesh);
             }
         }
+        FollowNeighbours(meshes);
 
         int group = Block(res, res.UInt64(d + ShaderGroupPointer), 0x40);
         int dictionary = group < 0 ? -1 : Block(res, res.UInt64(group + EmbeddedTexturesPointer), 0x40);
@@ -487,6 +488,12 @@ public sealed class DrawableReader : IModelReader
             int start = v * declaration.Stride;
             var w = declaration.Read(bytes, start, BlendWeightsComponent);
             var b = declaration.Read(bytes, start, BlendIndicesComponent);
+            if (MathF.Round(b.Z * 255f) >= 255f)
+            {
+                // Moved by the game's cloth simulation (between three cloth points), not by bones: see FollowNeighbours.
+                indices[v] = ClothVertex;
+                continue;
+            }
             ulong packed = 0;
             for (int k = 0; k < 4; k++)
             {
@@ -505,6 +512,43 @@ public sealed class DrawableReader : IModelReader
             weights[v] = sum > 1e-4f ? w / sum : Vector4.UnitX;
         }
         return WithBones(mesh, indices, weights);
+    }
+
+    private const ulong ClothVertex = ulong.MaxValue;
+
+    // Cloth vertices (jacket tails...) take the bones of the nearest vertex moved by bones in the model: they follow the
+    // body without the game's cloth simulation.
+    private static void FollowNeighbours(List<ModelMesh> meshes)
+    {
+        if (!meshes.Any(m => m.BoneIndices is { } b && Array.IndexOf(b, ClothVertex) >= 0))
+            return;
+        var donors = new List<(Vector3 Position, ulong Bones, Vector4 Weights)>();
+        foreach (var mesh in meshes)
+        {
+            for (int v = 0; mesh.BoneIndices is { } bones && v < bones.Length; v++)
+            {
+                if (bones[v] != ClothVertex)
+                    donors.Add((mesh.Positions[v], bones[v], mesh.BoneWeights![v]));
+            }
+        }
+        foreach (var mesh in meshes)
+        {
+            for (int v = 0; mesh.BoneIndices is { } bones && v < bones.Length; v++)
+            {
+                if (bones[v] != ClothVertex)
+                    continue;
+                (ulong Bones, Vector4 Weights) nearest = (0, Vector4.UnitX);
+                float best = float.MaxValue;
+                foreach (var donor in donors)
+                {
+                    float d = Vector3.DistanceSquared(donor.Position, mesh.Positions[v]);
+                    if (d < best)
+                        (best, nearest) = (d, (donor.Bones, donor.Weights));
+                }
+                bones[v] = nearest.Bones;
+                mesh.BoneWeights![v] = nearest.Weights;
+            }
+        }
     }
 
     private static ModelMesh WithBones(ModelMesh mesh, ulong[] indices, Vector4[] weights) => new()
