@@ -27,7 +27,6 @@ internal sealed partial class PedStudio
     private AnimationClip? _clip;
     private string? _clipFile;
     private string? _clipName;
-    private float _time;
     private Matrix4x4[]? _pose;
 
     private readonly List<(string File, string Clip)> _recent = [];
@@ -84,8 +83,7 @@ internal sealed partial class PedStudio
         _clip = clip;
         _clipFile = file;
         _clipName = ClipName(clip);
-        _time = 0f;
-        _playing = true;
+        _bar.Start();
         _recent.RemoveAll(r => r.File == file && r.Clip == _clipName);
         _recent.Insert(0, (file, _clipName));
         if (_recent.Count > MaxRecent)

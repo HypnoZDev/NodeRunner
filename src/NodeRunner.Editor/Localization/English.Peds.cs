@@ -1,6 +1,6 @@
 namespace NodeRunner.Editor.Localization;
 
-// Ped viewer tab.
+// Ped viewer tab and cutscene viewer.
 public static partial class English
 {
     private static (string, string)[] Peds =>
@@ -101,5 +101,30 @@ public static partial class English
         ("Flèche gauche / droite", "Left / right arrow"),
         ("Image précédente / suivante", "Previous / next frame"),
         ("Début / fin de l'animation", "Start / end of the animation"),
+
+        // Cutscene viewer
+        ("{0}  Visionneuse de cinématiques", "{0}  Cutscene viewer"),
+        ("Ouvrir la visionneuse de cinématiques", "Open the cutscene viewer"),
+        ("La visionneuse de cinématiques est réservée à GTA V.", "The cutscene viewer is for GTA V only."),
+        ("{0}  Cinématiques", "{0}  Cutscenes"),
+        ("Ferme la visionneuse de cinématiques : le panneau Scène revient à la carte", "Closes the cutscene viewer: the Scene panel goes back to the map"),
+        ("{0}  Liste des cinématiques...", "{0}  Listing the cutscenes..."),
+        ("Toutes", "All"),
+        ("Histoire", "Story"),
+        ("Toutes les cinématiques de l'installation", "Every cutscene of the installation"),
+        ("Celles du mode histoire et des mises à jour solo", "Those of story mode and the single player updates"),
+        ("Celles des mises à jour Online présentes dans l'installation (lues hors ligne)", "Those of the Online updates in the installation (read offline)"),
+        ("Rechercher (ex. fbi_5, trevor, heist)", "Search (e.g. fbi_5, trevor, heist)"),
+        ("{0} cinématiques", "{0} cutscenes"),
+        ("Choisis une cinématique : elle se joue sur la carte, à sa place.", "Pick a cutscene: it plays on the map, at its place."),
+        ("{0}  Lecture...", "{0}  Reading..."),
+        ("{0} s · {1} plans · {2} personnages · {3} objets · {4} véhicules", "{0} s · {1} shots · {2} peds · {3} objects · {4} vehicles"),
+        ("{0}  Chargement des modèles...", "{0}  Loading the models..."),
+        ("{0} / {1} affichés à cet instant", "{0} / {1} shown at this time"),
+        ("{0}  Aller à la scène", "{0}  Go to the scene"),
+        ("Place la caméra au point de vue du premier plan", "Puts the camera where the first shot is taken from"),
+        ("plan {0} / {1}", "shot {0} / {1}"),
+        ("Fichier illisible.", "Unreadable file."),
+        ("Lecture impossible.", "Cannot read it."),
     ];
 }

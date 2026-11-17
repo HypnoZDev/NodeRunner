@@ -11,6 +11,8 @@ public enum AnimationTrackKind : byte
     // Movement of the whole character (root motion), added to its position / heading.
     MoverTranslation = 5,
     MoverRotation = 6,
+    CameraTranslation = 7,
+    CameraRotation = 8,
 }
 
 // One value per frame for one bone (by tag) and one kind of track. Rotations are quaternions (x, y, z, w).
@@ -23,7 +25,7 @@ public sealed class AnimationTrack
 
     public required Vector4[] Frames { get; init; }
 
-    public bool IsRotation => Kind is (byte)AnimationTrackKind.BoneRotation or (byte)AnimationTrackKind.MoverRotation;
+    public bool IsRotation => Kind is (byte)AnimationTrackKind.BoneRotation or (byte)AnimationTrackKind.MoverRotation or (byte)AnimationTrackKind.CameraRotation;
 
     public Vector4 Sample(float frame)
     {
@@ -92,6 +94,31 @@ public sealed class AnimationClip
     public required IReadOnlyList<ClipPart> Parts { get; init; }
 
     public float Duration => Parts.Count == 0 ? 0f : Parts.Max(p => p.Length);
+
+    // Where the clip moves the whole object at a time: its tracks of these kinds on the root (5 / 6: a ped or a prop,
+    // 7 / 8: a cutscene camera), null for a value it has no track for.
+    public (Vector3? Position, Quaternion? Rotation) Root(float time, AnimationTrackKind positionKind, AnimationTrackKind rotationKind)
+    {
+        Vector3? position = null;
+        Quaternion? rotation = null;
+        foreach (var part in Parts)
+        {
+            float frame = part.Animation.FrameAt(part.TimeAt(time));
+            foreach (var track in part.Animation.Tracks)
+            {
+                if (track.BoneTag != 0)
+                    continue;
+                if (track.Kind == (byte)positionKind)
+                {
+                    var v = track.Sample(frame);
+                    position = new Vector3(v.X, v.Y, v.Z);
+                }
+                else if (track.Kind == (byte)rotationKind)
+                    rotation = Quaternion.Normalize(track.SampleRotation(frame));
+            }
+        }
+        return (position, rotation);
+    }
 }
 
 // Reads the clips of a .ycd file, by name hash.

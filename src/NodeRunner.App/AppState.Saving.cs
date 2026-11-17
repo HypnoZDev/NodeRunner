@@ -63,6 +63,9 @@ internal sealed partial class AppState
     // The ped of the ped viewer tab.
     public ModelViewer PedViewer { get; } = new();
 
+    // The game cutscene played on the map (cutscene viewer).
+    public CutscenePlayer Cutscenes { get; } = new();
+
     // The car drawn on the selected parking spot.
     public CarGeneratorPreview SpotPreview { get; } = new();
 

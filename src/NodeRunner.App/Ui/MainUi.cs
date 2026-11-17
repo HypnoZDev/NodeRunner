@@ -33,6 +33,7 @@ internal sealed class MainUi
         _state = state;
         _viewerPanel = new ViewerPanel(state);
         _pedStudio = new PedStudio(state);
+        _cutscenePanel = new CutscenePanel(state);
         _workspaceTabs = new WorkspaceTabs(state, _viewerPanel, _pedStudio);
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
@@ -41,6 +42,7 @@ internal sealed class MainUi
         _scenePanel.WorkshopContent = _viewerPanel.DrawWorkshopParts;
         _propertiesPanel.PedContent = _pedStudio.DrawProperties;
         _scenePanel.PedContent = _pedStudio.DrawList;
+        _scenePanel.CutsceneContent = _cutscenePanel.DrawList;
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
@@ -119,6 +121,11 @@ internal sealed class MainUi
             new(Icons.Sunset, L("Heure : soir"), "coucher time", "", () => Hour(19f)),
             new(Icons.Moon, L("Heure : nuit"), "night time", "", () => Hour(23f)),
             new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", "F2", ToggleViewer),
+            new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", "", () =>
+            {
+                _cutscenePanel.Open();
+                _showScene = true;
+            }, gta5),
             new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "", _pedStudio.Open, gta5),
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
@@ -216,6 +223,7 @@ internal sealed class MainUi
     private readonly ViewerPanel _viewerPanel;
     private readonly WorkspaceTabs _workspaceTabs;
     private readonly PedStudio _pedStudio;
+    private readonly CutscenePanel _cutscenePanel;
     private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
@@ -363,6 +371,7 @@ internal sealed class MainUi
         _state.Online.Update();
         _viewerPanel.BeginFrame();
         _pedStudio.BeginFrame();
+        _cutscenePanel.BeginFrame();
         if (_state.WorkshopRequest is { } workshopModel)
         {
             _state.WorkshopRequest = null;
@@ -386,6 +395,7 @@ internal sealed class MainUi
         _resetLayout = false;
         _workspaceTabs.Draw();
         HideLibraryForPeds();
+        _cutscenePanel.DrawTimeline();
         // The map's handles and overlays only while the map is shown.
         if (!_state.MapCovered)
         {
@@ -669,6 +679,11 @@ internal sealed class MainUi
             ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
             if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), null, _state.PedOpen, !_state.IsGta4))
                 _pedStudio.Open();
+            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), null, _state.CutsceneOpen, !_state.IsGta4))
+            {
+                if (_state.CutsceneOpen) _cutscenePanel.Close();
+                else _cutscenePanel.Open();
+            }
             if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
             {
                 bool shown = _showLibrary;

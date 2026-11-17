@@ -128,6 +128,10 @@ internal sealed unsafe partial class MainForm
             c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsGta4);
         _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
 
+        // The cutscene chosen in the cutscene viewer, at its place.
+        _state.Cutscenes.Update(_state.World, _modelRenderer);
+        _state.Cutscenes.Draw(_modelRenderer, viewProjection);
+
         bool navMeshEnabled = NavMeshLayer.Surfaces.Any(s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)));
         _navMeshLayer.Update(_state.World, lines, camera.Position, _state.Settings.NavMeshRadius, navMeshEnabled);
         _navMeshLayer.Draw(lines, viewProjection, camera.Position,
