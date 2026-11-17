@@ -37,9 +37,9 @@ internal static unsafe class PlatformWindows
         platform.Platform_DestroyWindow = (IntPtr)(delegate* unmanaged<ImGuiViewport*, void>)&DestroyWindow;
         platform.Platform_ShowWindow = (IntPtr)(delegate* unmanaged<ImGuiViewport*, void>)&ShowWindow;
         platform.Platform_SetWindowPos = (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2, void>)&SetWindowPos;
-        platform.Platform_GetWindowPos = (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2>)&GetWindowPos;
+        ImGuiNative.ImGuiPlatformIO_Set_Platform_GetWindowPos(platform.NativePtr, (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2*, void>)&GetWindowPos);
         platform.Platform_SetWindowSize = (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2, void>)&SetWindowSize;
-        platform.Platform_GetWindowSize = (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2>)&GetWindowSize;
+        ImGuiNative.ImGuiPlatformIO_Set_Platform_GetWindowSize(platform.NativePtr, (IntPtr)(delegate* unmanaged<ImGuiViewport*, Vector2*, void>)&GetWindowSize);
         platform.Platform_SetWindowFocus = (IntPtr)(delegate* unmanaged<ImGuiViewport*, void>)&SetWindowFocus;
         platform.Platform_GetWindowFocus = (IntPtr)(delegate* unmanaged<ImGuiViewport*, byte>)&GetWindowFocus;
         platform.Platform_GetWindowMinimized = (IntPtr)(delegate* unmanaged<ImGuiViewport*, byte>)&GetWindowMinimized;
@@ -239,9 +239,11 @@ internal static unsafe class PlatformWindows
             Guard(() => form.MoveTo(ToScreen(pos)));
     }
 
+    // ImGui's C++ returns ImVec2 through a hidden pointer: the getters go through cimgui's out-parameter wrappers
+    // (a Vector2 returned straight back left the position to whatever was on the stack).
     [UnmanagedCallersOnly]
-    private static Vector2 GetWindowPos(ImGuiViewport* viewport) =>
-        FormOf(viewport) is { } form ? ToImGui(form.Location) : IsMain(viewport) ? Vector2.Zero : viewport->Pos;
+    private static void GetWindowPos(ImGuiViewport* viewport, Vector2* pos) =>
+        *pos = FormOf(viewport) is { } form ? ToImGui(form.Location) : IsMain(viewport) ? Vector2.Zero : viewport->Pos;
 
     [UnmanagedCallersOnly]
     private static void SetWindowSize(ImGuiViewport* viewport, Vector2 size)
@@ -251,13 +253,14 @@ internal static unsafe class PlatformWindows
     }
 
     [UnmanagedCallersOnly]
-    private static Vector2 GetWindowSize(ImGuiViewport* viewport)
+    private static void GetWindowSize(ImGuiViewport* viewport, Vector2* size)
     {
         if (IsMain(viewport))
-            return new Vector2(_surface!.ClientSize.Width, _surface.ClientSize.Height) / _scale;
-        return FormOf(viewport) is { IsDisposed: false } form
-            ? new Vector2(form.ClientSize.Width, form.ClientSize.Height) / _scale
-            : viewport->Size;
+            *size = new Vector2(_surface!.ClientSize.Width, _surface.ClientSize.Height) / _scale;
+        else
+            *size = FormOf(viewport) is { IsDisposed: false } form
+                ? new Vector2(form.ClientSize.Width, form.ClientSize.Height) / _scale
+                : viewport->Size;
     }
 
     [UnmanagedCallersOnly]
