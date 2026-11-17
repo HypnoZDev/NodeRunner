@@ -551,6 +551,14 @@ internal sealed partial class AppState
     public NodeRunner.Data.Maps.MapEntity? WorkshopEntity { get; set; }
     public bool WorkshopShowsMap { get; set; }
 
+    // Ped viewer tab beside the map: open, shown in place of the 3D view, brought to the front at the next frame.
+    public bool PedOpen { get; set; }
+    public bool PedShown { get; set; }
+    public bool PedFront { get; set; }
+
+    // A tab (workshop or ped viewer) is drawn over the 3D view: the map is not drawn nor edited.
+    public bool MapCovered => WorkshopCoversMap || PedShown;
+
     // Doors opened in the 3D view (display only).
     public DoorAnimator OpenDoors { get; } = new();
 

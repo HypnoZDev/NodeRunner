@@ -52,7 +52,10 @@ internal static class Icons
     public const string Rotate = "\ue2ea";
     public const string Route = "\ue53e";
     public const string Ruler = "\ue14b";
+    public const string PawPrint = "\ue4f5";
+    public const string PersonStanding = "\ue21e";
     public const string Save = "\ue14d";
+    public const string Shirt = "\ue1ca";
     public const string Scale = "\ue2eb";
     public const string ScanEye = "\ue536";
     public const string Search = "\ue151";

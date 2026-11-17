@@ -46,6 +46,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
 
     // Drawn instead of the map's properties while the model workshop is shown (its tool's settings).
     public Action? WorkshopContent { get; set; }
+    public Action? PedContent { get; set; }
 
     public void Draw(ref bool visible)
     {
@@ -57,6 +58,12 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
         if (state.WorkshopShown && WorkshopContent is { } workshop)
         {
             workshop();
+            ImGui.End();
+            return;
+        }
+        if (state.PedShown && PedContent is { } ped)
+        {
+            ped();
             ImGui.End();
             return;
         }

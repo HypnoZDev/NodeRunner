@@ -88,12 +88,7 @@ internal sealed class ScenarioPreview : IDisposable
             }
             return (new ViewerItem(name, ViewerKind.Vehicle, new ModelLocation(models.FragmentPath(hash)!, hash, hash)), paint, source);
         }
-        string? dictionary = models.DictionaryPath(hash);
-        var (parts, textures) = models.PedParts(hash);
-        // Peds stored one part per file are the story characters and some animals: their usual clothes.
-        var files = new PedFiles(dictionary, models.FragmentPath(hash), parts, textures, dictionary is null ? null : outfit);
-        return (new ViewerItem(name, ViewerKind.Ped, new ModelLocation(dictionary ?? parts.FirstOrDefault() ?? "", hash, hash)) { Ped = files },
-            null, source);
+        return (ViewerCatalog.Ped(models, name, outfit), null, source);
     }
 
     // Draws the model standing on the point, facing its heading.

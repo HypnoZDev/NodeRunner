@@ -70,6 +70,14 @@ public sealed class ModelCatalog
     public bool HasPed(uint pedHash) =>
         _fragments.ContainsKey(pedHash) && (_dictionaries.ContainsKey(pedHash) || _pedParts.Value.GetValueOrDefault(pedHash).Models is { Count: > 0 });
 
+    // Names of every ped and animal whose parts and skeleton are there, sorted.
+    public IReadOnlyList<string> PedNames() =>
+        _fragments.Where(p => HasPed(p.Key))
+            .Select(p => Path.GetFileNameWithoutExtension(p.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     // Index made from lists of files (another game: GTA IV), each keyed by the hash of its name; later files win.
     public static ModelCatalog FromFiles(IEnumerable<string> drawables, IEnumerable<string> dictionaries, IEnumerable<string> fragments)
     {

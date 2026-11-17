@@ -230,6 +230,7 @@ internal sealed unsafe partial class MainForm : Form
         _modelLayer.Dispose();
         _state.Viewer.Dispose();
         _state.WorkshopViewer.Dispose();
+        _state.PedViewer.Dispose();
         _state.SpotPreview.Dispose();
         _state.ScenarioPreview.Dispose();
         _state.ScenarioLife.Dispose();
@@ -374,7 +375,7 @@ internal sealed unsafe partial class MainForm : Form
 
         UiTheme.ApplyPending();
         UiTheme.FollowAccent(GameAccent(), deltaTime);
-        bool frosted = _backdropBlur is not null && _state.Settings.FrostedGlass && !_state.WorkshopCoversMap && _backdropArea.Width > 0;
+        bool frosted = _backdropBlur is not null && _state.Settings.FrostedGlass && !_state.MapCovered &&_backdropArea.Width > 0;
         OverlayStyle.BackdropAvailable = frosted && _backdropReady;
         OverlayStyle.BackdropMin = new Vector2(_backdropArea.Left, _backdropArea.Top) / UiTheme.Scale;
         OverlayStyle.BackdropMax = new Vector2(_backdropArea.Right, _backdropArea.Bottom) / UiTheme.Scale;
@@ -390,6 +391,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         _state.WorkshopViewer.Surroundings = WorkshopSurroundings();
         _state.WorkshopViewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
+        _state.PedViewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         _state.Thumbnails.Render(_modelRenderer!, imguiRenderer, graphics, _state.World);
         var scene = SceneViewport();
         ToggleClickedDoor(scene);
@@ -399,8 +401,8 @@ internal sealed unsafe partial class MainForm : Form
         PlaceRequestedObject(scene);
         graphics.BeginFrame(BackgroundColor);
         graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
-        // The workshop tab covers the 3D view: only the map's loading goes on.
-        if (_state.WorkshopCoversMap)
+        // A tab covers the 3D view: only the map's loading goes on.
+        if (_state.MapCovered)
             LoadWorld();
         else
             DrawWorld(_lineRenderer!, scene);

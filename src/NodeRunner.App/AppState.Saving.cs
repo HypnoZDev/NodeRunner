@@ -60,6 +60,9 @@ internal sealed partial class AppState
     // The model open in the workshop tab (the viewer above stays a catalogue).
     public ModelViewer WorkshopViewer { get; } = new();
 
+    // The ped of the ped viewer tab.
+    public ModelViewer PedViewer { get; } = new();
+
     // The car drawn on the selected parking spot.
     public CarGeneratorPreview SpotPreview { get; } = new();
 

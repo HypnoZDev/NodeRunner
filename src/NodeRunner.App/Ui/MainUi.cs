@@ -32,12 +32,15 @@ internal sealed class MainUi
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
-        _workspaceTabs = new WorkspaceTabs(state, _viewerPanel);
+        _pedStudio = new PedStudio(state);
+        _workspaceTabs = new WorkspaceTabs(state, _viewerPanel, _pedStudio);
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
         _propertiesPanel.WorkshopContent = _viewerPanel.DrawWorkshopProperties;
         _scenePanel.WorkshopContent = _viewerPanel.DrawWorkshopParts;
+        _propertiesPanel.PedContent = _pedStudio.DrawProperties;
+        _scenePanel.PedContent = _pedStudio.DrawList;
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
@@ -67,6 +70,7 @@ internal sealed class MainUi
             IsDragging = () => IsGizmoDragging,
             IsLooking = () => cameraController.IsLooking,
             WorkshopHints = _viewerPanel.WorkshopHints,
+            PedHints = _pedStudio.Hints,
         };
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _gizmo = new TransformGizmo(state);
@@ -115,6 +119,7 @@ internal sealed class MainUi
             new(Icons.Sunset, L("Heure : soir"), "coucher time", "", () => Hour(19f)),
             new(Icons.Moon, L("Heure : nuit"), "night time", "", () => Hour(23f)),
             new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", "F2", ToggleViewer),
+            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "", _pedStudio.Open, gta5),
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
@@ -192,6 +197,7 @@ internal sealed class MainUi
     private readonly ExportWindow _exportWindow;
     private readonly ViewerPanel _viewerPanel;
     private readonly WorkspaceTabs _workspaceTabs;
+    private readonly PedStudio _pedStudio;
     private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
@@ -338,6 +344,7 @@ internal sealed class MainUi
     {
         _state.Online.Update();
         _viewerPanel.BeginFrame();
+        _pedStudio.BeginFrame();
         if (_state.WorkshopRequest is { } workshopModel)
         {
             _state.WorkshopRequest = null;
@@ -361,7 +368,7 @@ internal sealed class MainUi
         _resetLayout = false;
         _workspaceTabs.Draw();
         // The map's handles and overlays only while the map is shown.
-        if (!_state.WorkshopCoversMap)
+        if (!_state.MapCovered)
         {
             _presence.Draw();
             _gizmo.Update(blocked: _searchPalette.IsOpen);
@@ -413,7 +420,7 @@ internal sealed class MainUi
         if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || IsGizmoDragging || _state.PendingDeletion is not null)
             return;
         // While the workshop is shown, the keys that edit the map do nothing.
-        bool map = !_state.WorkshopShown;
+        bool map = !_state.WorkshopShown && !_state.PedShown;
         if (map && ImGui.IsKeyPressed(ImGuiKey.Delete, false))
         {
             if (_state.Tool == TransformTool.Collision)
@@ -641,6 +648,8 @@ internal sealed class MainUi
         if (Menu(L("Outils")))
         {
             ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
+            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), null, _state.PedOpen, !_state.IsGta4))
+                _pedStudio.Open();
             if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
             {
                 bool shown = _showLibrary;

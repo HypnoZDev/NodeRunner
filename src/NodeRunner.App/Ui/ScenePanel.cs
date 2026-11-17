@@ -48,6 +48,7 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     // Drawn instead of the map's objects while the model workshop is shown (the parts of its model).
     public Action? WorkshopContent { get; set; }
+    public Action? PedContent { get; set; }
 
     public void Draw(ref bool visible)
     {
@@ -55,6 +56,8 @@ internal sealed unsafe class ScenePanel(AppState state)
         {
             if (state.WorkshopShown && WorkshopContent is { } workshop)
                 workshop();
+            else if (state.PedShown && PedContent is { } ped)
+                ped();
             else
                 DrawContent();
         }

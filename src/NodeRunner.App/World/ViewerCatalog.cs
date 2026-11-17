@@ -39,6 +39,20 @@ internal sealed partial class ViewerCatalog
 
     public static bool IsVehicleFile(string path) => VehicleArchive().IsMatch(path);
 
+    // A ped or animal by name; outfit picks its clothes (null: the first ones).
+    public static ViewerItem Ped(ModelCatalog models, string name, int? outfit)
+    {
+        uint hash = Joaat.Hash(name);
+        string? dictionary = models.DictionaryPath(hash);
+        var (parts, textures) = models.PedParts(hash);
+        // Peds stored one part per file are the story characters and some animals: their usual clothes.
+        var files = new PedFiles(dictionary, models.FragmentPath(hash), parts, textures, dictionary is null ? null : outfit);
+        return new ViewerItem(name, ViewerKind.Ped, new ModelLocation(dictionary ?? parts.FirstOrDefault() ?? "", hash, hash)) { Ped = files };
+    }
+
+    // Whether a ped's clothes can be changed (its parts in one dictionary, not one file each).
+    public static bool HasOutfits(ModelCatalog models, string name) => models.DictionaryPath(Joaat.Hash(name)) is not null;
+
     public static ViewerCatalog Build(WorldLoader world)
     {
         var vehicles = new List<ViewerItem>();

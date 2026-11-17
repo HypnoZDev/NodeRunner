@@ -18,6 +18,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
     public Func<bool>? IsDragging { get; set; }
     public Func<bool>? IsLooking { get; set; }
     public Func<IReadOnlyList<(string Keys, string Action)>>? WorkshopHints { get; set; }
+    public Func<IReadOnlyList<(string Keys, string Action)>>? PedHints { get; set; }
 
     public void Draw()
     {
@@ -147,6 +148,8 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             return [(L("Entrée"), L("valider")), (L("Échap"), L("annuler la saisie"))];
         if (state.WorkshopShown && WorkshopHints?.Invoke() is { } workshop)
             return workshop;
+        if (state.PedShown && PedHints?.Invoke() is { } ped)
+            return ped;
         string move = state.Settings.MovementKeys == Input.MovementKeys.Wasd ? "W A S D" : state.Settings.MovementKeys == Input.MovementKeys.Zqsd ? "Z Q S D" : "Z Q S D / W A S D";
         if (IsLooking?.Invoke() == true)
         {

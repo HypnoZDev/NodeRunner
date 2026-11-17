@@ -3,9 +3,10 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-// Tabs above the 3D view while the model workshop is open: "Map" (the 3D view) and the workshop, shown in its place.
-// As an option the workshop goes into its own window (to put on another screen), the map staying in the main one.
-internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
+// Tabs above the 3D view while the model workshop or the ped viewer is open: "Map" (the 3D view), the workshop and the
+// ped viewer, each shown in its place. As an option the workshop goes into its own window (to put on another screen),
+// the map staying in the main one.
+internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, PedStudio peds)
 {
     private const ImGuiWindowFlags BarFlags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings
         | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollWithMouse;
@@ -22,11 +23,17 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         {
             state.WorkshopShown = false;
             state.WorkshopCoversMap = false;
-            return;
         }
-        if (state.WorkshopDetached)
-        {
+        if (!state.PedOpen)
+            state.PedShown = false;
+        if (!state.WorkshopOpen && !state.PedOpen)
+            return;
+        bool detached = state.WorkshopOpen && state.WorkshopDetached;
+        if (detached)
             DrawDetached();
+        // The workshop alone, in its window: no tabs over the map.
+        if (!state.PedOpen && detached)
+        {
             DrawConfirmClose();
             return;
         }
@@ -50,45 +57,76 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
             OverlayStyle.Sheen(ImGui.GetWindowDrawList(), ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), 0f);
         if (visible && ImGui.BeginTabBar("##workspace", ImGuiTabBarFlags.FittingPolicyScroll))
         {
-            bool front = state.WorkshopFront;
-            state.WorkshopFront = false;
+            bool workshopTab = state.WorkshopOpen && !detached;
+            bool front = workshopTab && state.WorkshopFront;
+            if (workshopTab)
+                state.WorkshopFront = false;
+            bool pedFront = state.PedFront;
+            state.PedFront = false;
+            bool workshopShown = false, pedShown = false;
             if (TabItem(L($"{Icons.Map}  Carte###tab_map"), null, ImGuiTabItemFlags.None))
-            {
-                state.WorkshopShown = state.WorkshopCoversMap = false;
                 ImGui.EndTabItem();
-            }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
                 ImGui.SetTooltip(L("La carte en 3D"));
 
-            bool open = true;
-            var flags = (front ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None)
-                | (viewer.WorkshopChanged ? ImGuiTabItemFlags.UnsavedDocument : ImGuiTabItemFlags.None);
-            if (TabItem(L($"{Icons.Box}  Atelier : {viewer.WorkshopName ?? L("modèle")}###tab_workshop"), &open, flags))
+            if (workshopTab)
             {
-                state.WorkshopShown = state.WorkshopCoversMap = true;
-                ImGui.EndTabItem();
+                bool open = true;
+                var flags = (front ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None)
+                    | (viewer.WorkshopChanged ? ImGuiTabItemFlags.UnsavedDocument : ImGuiTabItemFlags.None);
+                if (TabItem(L($"{Icons.Box}  Atelier : {viewer.WorkshopName ?? L("modèle")}###tab_workshop"), &open, flags))
+                {
+                    workshopShown = true;
+                    ImGui.EndTabItem();
+                }
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                    ImGui.SetTooltip(viewer.WorkshopChanged
+                        ? L("Le modèle en cours de modification (● : modifications pas encore enregistrées)")
+                        : L("Le modèle en cours de modification"));
+                if (!open)
+                    AskClose();
             }
-            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
-                ImGui.SetTooltip(viewer.WorkshopChanged
-                    ? L("Le modèle en cours de modification (● : modifications pas encore enregistrées)")
-                    : L("Le modèle en cours de modification"));
-            if (!open)
-                AskClose();
-            if (ImGui.TabItemButton(L($"{Icons.Monitor}  Détacher"), ImGuiTabItemFlags.Trailing))
+
+            if (state.PedOpen)
             {
-                state.WorkshopDetached = true;
-                state.WorkshopFront = true;
+                bool open = true;
+                if (TabItem(L($"{Icons.PersonStanding}  Personnage : {state.PedViewer.Item?.Name ?? L("aucun")}###tab_ped"), &open,
+                        pedFront ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
+                {
+                    pedShown = true;
+                    ImGui.EndTabItem();
+                }
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                    ImGui.SetTooltip(L("La visionneuse de personnages : la liste est dans le panneau Scène, la tenue dans Propriétés"));
+                if (!open)
+                {
+                    peds.Close();
+                    pedShown = false;
+                }
             }
-            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
-                ImGui.SetTooltip(L("L'Atelier dans sa propre fenêtre, à poser sur un autre écran ; la carte reste ici."));
+
+            if (workshopTab)
+            {
+                if (ImGui.TabItemButton(L($"{Icons.Monitor}  Détacher"), ImGuiTabItemFlags.Trailing))
+                {
+                    state.WorkshopDetached = true;
+                    state.WorkshopFront = true;
+                }
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                    ImGui.SetTooltip(L("L'Atelier dans sa propre fenêtre, à poser sur un autre écran ; la carte reste ici."));
+                state.WorkshopShown = state.WorkshopCoversMap = workshopShown;
+            }
+            state.PedShown = pedShown;
             ImGui.EndTabBar();
         }
         ImGui.End();
         DockLayout.ReserveTop(height);
         DrawConfirmClose();
 
-        if (state.WorkshopShown && state.WorkshopOpen)
-            DrawWorkshop();
+        if (state.PedShown)
+            DrawCovering("##ped_tab", peds.DrawView);
+        else if (state.WorkshopShown && state.WorkshopOpen && !detached)
+            DrawCovering("##workshop", viewer.DrawWorkshop);
     }
 
     private void AskClose()
@@ -137,8 +175,8 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
             AskClose();
     }
 
-    // The workshop over the 3D view, below the tabs.
-    private void DrawWorkshop()
+    // A tab's content over the 3D view, below the tabs.
+    private static void DrawCovering(string id, Action draw)
     {
         var (position, size) = DockLayout.SceneArea;
         ImGui.SetNextWindowViewport(ImGui.GetMainViewport().ID);
@@ -147,10 +185,10 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
-        bool visible = ImGui.Begin("##workshop", BarFlags | ImGuiWindowFlags.NoScrollbar);
+        bool visible = ImGui.Begin(id, BarFlags | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         ImGui.PopStyleVar(3);
         if (visible)
-            viewer.DrawWorkshop();
+            draw();
         ImGui.End();
     }
 

@@ -25,7 +25,7 @@ internal sealed unsafe partial class MainForm
     // focused panel unless the mouse is over the 3D view.
     private bool KeysOnSceneView()
     {
-        if (_state.WorkshopShown)
+        if (_state.WorkshopShown || _state.PedShown)
             return false;
         if (!ImGui.IsWindowFocused(ImGuiFocusedFlags.AnyWindow))
             return true;
