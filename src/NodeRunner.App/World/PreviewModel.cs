@@ -112,7 +112,10 @@ internal sealed class PreviewModel : IDisposable
                 read[hash] = part = files.TryGetValue(hash, out var file) ? reader.ReadModels(file, ped.Skeleton).GetValueOrDefault(hash) : null;
             return part;
         }
-        return PedModels.Compose(h => parts.ContainsKey(h) || files.ContainsKey(h), Get, pedHash, ped.Variant);
+        var textures = ped.Textures.Count == 0 ? null
+            : ped.Textures.Select(t => Path.GetFileNameWithoutExtension(t)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return PedModels.Compose(h => parts.ContainsKey(h) || files.ContainsKey(h), Get, pedHash, ped.Variant, ped.Outfit,
+            textures is null ? null : textures.Contains);
     }
 
     // Takes the model once read; true when a new model was just put on the graphics card.

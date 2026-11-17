@@ -43,7 +43,16 @@ public sealed class ModelMesh
 
     public Vector4[]? BoneWeights { get; init; }
 
-    public string? DiffuseTextureName { get; init; }
+    public string? DiffuseTextureName { get => _diffuseTextureName; init => _diffuseTextureName = value; }
+    private string? _diffuseTextureName;
+
+    // A copy drawn with another colour texture (a ped's clothes in another colour).
+    public ModelMesh WithDiffuseTexture(string? name)
+    {
+        var copy = (ModelMesh)MemberwiseClone();
+        copy._diffuseTextureName = name;
+        return copy;
+    }
 
     public uint DiffuseTextureHash => DiffuseTextureName is null ? 0 : Joaat.Hash(DiffuseTextureName);
 

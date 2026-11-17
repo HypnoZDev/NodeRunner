@@ -29,6 +29,9 @@ internal sealed class CutscenePlayer : IDisposable
         public Matrix4x4 World;
         // Times its model is loaded or unloaded (events 6 / 7), in order.
         public readonly List<(float Time, bool On)> Switches = [];
+        // Clothes put on along the cutscene (event 34), in order, and those of the model shown or being read.
+        public readonly List<(float Time, int Component, int Drawable, int Texture)> Clothes = [];
+        public string Dressed = "";
     }
 
     private GameContent? _content;
@@ -135,7 +138,10 @@ internal sealed class CutscenePlayer : IDisposable
         }
 
         foreach (var actor in _actors)
+        {
+            Dress(world, actor);
             actor.Model.Update(renderer);
+        }
 
         var (cut, start) = cutscene.CutAt(Time);
         var clips = Clips(cutscene, cut);
@@ -174,6 +180,27 @@ internal sealed class CutscenePlayer : IDisposable
             actor.Posed = true;
         }
         actor.Shown = true;
+    }
+
+    // Reads the ped again when its clothes at Time are not those shown (the model shown stays until then). Clothes put
+    // on before the first change of the cutscene are worn from the start.
+    private void Dress(WorldLoader world, Actor actor)
+    {
+        if (actor.Clothes.Count == 0 || actor.Item.Ped is not { } ped)
+            return;
+        float until = Math.Max(Time, actor.Clothes[0].Time);
+        var outfit = new SortedDictionary<int, (int, int)>();
+        foreach (var (time, component, drawable, texture) in actor.Clothes)
+        {
+            if (time > until)
+                break;
+            outfit[component] = (drawable, texture);
+        }
+        string key = string.Join(";", outfit.Select(p => $"{p.Key}:{p.Value.Item1}:{p.Value.Item2}"));
+        if (key == actor.Dressed)
+            return;
+        actor.Dressed = key;
+        actor.Model.Open(actor.Item with { Ped = ped with { Outfit = outfit } }, world);
     }
 
     // Whether the last switch before time is on; empty: whenEmpty (objects never loaded nor unloaded are always there).
@@ -285,7 +312,6 @@ internal sealed class CutscenePlayer : IDisposable
                 || !keys.TryGetValue(source.Id, out var key) || ItemFor(world, source, pedNames) is not { } item)
                 continue;
             var actor = new Actor(source, key, item);
-            actor.Model.Open(item, world);
             _actors.Add(actor);
             byId[source.Id] = actor;
         }
@@ -300,6 +326,15 @@ internal sealed class CutscenePlayer : IDisposable
                     actor.Switches.Add((e.Time, e.Kind == CutsceneEventKind.LoadModels));
             }
         }
+        foreach (var e in cutscene.LoadEvents.Concat(cutscene.Events).OrderBy(e => e.Time))
+        {
+            if (e.Kind == CutsceneEventKind.PedVariation && e.Args is { Component: >= 0 and < 12, Drawable: >= 0 } args
+                && byId.TryGetValue(e.ObjectId, out var actor))
+                actor.Clothes.Add((e.Time, args.Component, args.Drawable, Math.Max(args.Texture, 0)));
+        }
+        // Peds dressed by the cutscene are read with their clothes (Dress).
+        foreach (var actor in _actors.Where(a => a.Clothes.Count == 0 || a.Item.Ped is null))
+            actor.Model.Open(actor.Item, world);
         // Unloaded and loaded again at the same time: loaded wins.
         foreach (var actor in _actors)
             actor.Switches.Sort((a, b) => a.Time != b.Time ? a.Time.CompareTo(b.Time) : a.On.CompareTo(b.On));

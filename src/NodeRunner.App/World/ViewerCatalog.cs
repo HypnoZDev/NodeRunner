@@ -25,7 +25,11 @@ internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Lo
 
 // Files of a ped: its parts (a drawable dictionary, or one file per part), the .yft holding its skeleton, the
 // textures of the parts stored one per file, and a number choosing its clothes (null: the first ones).
-internal sealed record PedFiles(string? Dictionary, string? Skeleton, IReadOnlyList<string> Parts, IReadOnlyList<string> Textures, int? Variant);
+internal sealed record PedFiles(string? Dictionary, string? Skeleton, IReadOnlyList<string> Parts, IReadOnlyList<string> Textures, int? Variant)
+{
+    // Clothes chosen by component number (a cutscene's), over the others: drawable and colour.
+    public IReadOnlyDictionary<int, (int Drawable, int Texture)>? Outfit { get; init; }
+}
 
 // Everything the model viewer lists: the vehicles of the game (DLC included), the object types of the map and those of
 // the prop library.

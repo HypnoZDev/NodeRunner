@@ -23,26 +23,40 @@ public static class PedModels
         Compose(parts.ContainsKey, parts.GetValueOrDefault, pedHash, variant);
 
     // Same with parts read on demand (has: whether a part is there, by name hash; get: reads it); without variant, the
-    // first drawable of each component, and only those are read.
-    public static ModelData? Compose(Func<uint, bool> has, Func<uint, ModelData?> get, uint pedHash, int? variant)
+    // first drawable of each component, and only those are read. outfit: the drawable and texture (colour: a, b, c...)
+    // chosen for some components, by number in the game's order (0 head, 3 upper body, 4 legs, 6 feet, 11 jacket...);
+    // hasTexture: whether a colour texture exists (null: assumed).
+    public static ModelData? Compose(Func<uint, bool> has, Func<uint, ModelData?> get, uint pedHash, int? variant,
+        IReadOnlyDictionary<int, (int Drawable, int Texture)>? outfit = null, Func<string, bool>? hasTexture = null)
     {
         var chosen = new List<ModelData>();
         string? skin = null;
-        foreach (string component in Components)
+        for (int c = 0; c < Components.Length; c++)
         {
+            string component = Components[c];
             // _u: any skin colour; _r and _m: textures per skin colour.
-            var drawables = new List<(uint Hash, bool PerRace)>();
+            var drawables = new List<(uint Hash, bool PerRace, int Number)>();
             for (int n = 0; n < MaxDrawables; n++)
             {
                 if (has(Joaat.Hash($"{component}_{n:000}_u")))
-                    drawables.Add((Joaat.Hash($"{component}_{n:000}_u"), false));
+                    drawables.Add((Joaat.Hash($"{component}_{n:000}_u"), false, n));
                 else if (has(Joaat.Hash($"{component}_{n:000}_r")))
-                    drawables.Add((Joaat.Hash($"{component}_{n:000}_r"), true));
+                    drawables.Add((Joaat.Hash($"{component}_{n:000}_r"), true, n));
                 else if (has(Joaat.Hash($"{component}_{n:000}_m")))
-                    drawables.Add((Joaat.Hash($"{component}_{n:000}_m"), true));
+                    drawables.Add((Joaat.Hash($"{component}_{n:000}_m"), true, n));
             }
             if (drawables.Count == 0)
                 continue;
+            if (outfit?.GetValueOrDefault(c, (-1, 0)) is ({ } wanted, var texture) && drawables.FindIndex(d => d.Number == wanted) is >= 0 and var at)
+            {
+                if (get(drawables[at].Hash) is { } dressed)
+                {
+                    chosen.Add(texture > 0 ? Recolored(dressed, texture, hasTexture) : dressed);
+                    if (component == "head")
+                        skin = Skin(dressed);
+                }
+                continue;
+            }
             if (variant is null || !Varied.Contains(component))
             {
                 drawables = [drawables[0]];
@@ -87,6 +101,30 @@ public static class PedModels
             EmbeddedTextures = embedded,
             // Every part is read with the ped's skeleton.
             Skeleton = chosen.Select(m => m.Skeleton).FirstOrDefault(s => s is not null),
+        };
+    }
+
+    // The part with its colour textures of another letter (uppr_diff_008_a_uni -> uppr_diff_008_b_uni).
+    private static ModelData Recolored(ModelData part, int texture, Func<string, bool>? hasTexture)
+    {
+        if (texture is < 0 or >= 26)
+            return part;
+        var meshes = part.Meshes.Select(m =>
+        {
+            if (m.DiffuseTextureName is not { } name || name.Split('_') is not { Length: >= 5 } bits || bits[1] != "diff" || bits[3].Length != 1)
+                return m;
+            bits[3] = ((char)('a' + texture)).ToString();
+            string other = string.Join('_', bits);
+            return hasTexture is null || hasTexture(other) ? m.WithDiffuseTexture(other) : m;
+        }).ToList();
+        return new ModelData
+        {
+            NameHash = part.NameHash,
+            BoundsMin = part.BoundsMin,
+            BoundsMax = part.BoundsMax,
+            Meshes = meshes,
+            EmbeddedTextures = part.EmbeddedTextures,
+            Skeleton = part.Skeleton,
         };
     }
 
