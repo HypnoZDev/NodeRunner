@@ -206,6 +206,53 @@ internal sealed class CutscenePanel(AppState state)
         Widgets.Hint(Player.IsLoading ? L($"{Icons.LoaderCircle}  Chargement des modèles...") : L($"{Player.ShownCount} / {Player.ActorCount} affichés à cet instant"));
         if (Widgets.Button(L($"{Icons.Map}  Aller à la scène"), L("Place la caméra au point de vue du premier plan")))
             GoTo(cutscene);
+        DrawHiddenPlaces(cutscene);
+    }
+
+    private const float PlaceMargin = 15f;     // Metres around a map's objects within which the scene counts as inside.
+    private const float SameSpotDistance = 15f; // Two versions of a place: their objects' centres this close.
+
+    private string? _placesFor;
+    private List<string> _places = [];
+
+    // A scene played in a place the game changes by script (Simeon's showroom open or closed...): the version it needs
+    // may be hidden by default (another version shown).
+    private void DrawHiddenPlaces(Cutscene cutscene)
+    {
+        if (state.World.Maps is not { } maps)
+            return;
+        var hidden = state.Settings.HiddenScriptedMaps ?? maps.DefaultHiddenScriptedMaps;
+        if (_placesFor != cutscene.Name)
+        {
+            _placesFor = cutscene.Name;
+            var at = cutscene.Offset;
+            _places = maps.ScriptedMapExtents
+                .Where(p => hidden.Contains(p.Key) && Vector3.Clamp(at, p.Value.Min, p.Value.Max) is var nearest && Vector3.Distance(nearest, at) < PlaceMargin)
+                .Select(p => p.Key).Order(StringComparer.Ordinal).ToList();
+        }
+        if (_places.Count == 0)
+            return;
+        ImGui.Spacing();
+        Widgets.Hint(L($"{Icons.TriangleAlert}  Scène dans un lieu que le jeu change par script, cette version est masquée : {string.Join(", ", _places)}"), wrap: true);
+        if (Widgets.Button(L("Afficher ce lieu"), L("Affiche cette version du lieu, masque celle qui est au même endroit et recharge la carte (Calques > Cartes de mission pour revenir en arrière)")))
+        {
+            var changed = new HashSet<string>(hidden);
+            foreach (string place in _places)
+            {
+                changed.Remove(place);
+                var box = maps.ScriptedMapExtents[place];
+                var centre = (box.Min + box.Max) * 0.5f;
+                foreach (var (other, extents) in maps.ScriptedMapExtents)
+                {
+                    if (!_places.Contains(other) && !changed.Contains(other)
+                        && Vector3.Distance((extents.Min + extents.Max) * 0.5f, centre) < SameSpotDistance)
+                        changed.Add(other);
+                }
+            }
+            state.Settings.HiddenScriptedMaps = changed;
+            state.SaveSettings();
+            _placesFor = null;
+        }
     }
 
     // ---- Timeline over the bottom of the 3D view ----

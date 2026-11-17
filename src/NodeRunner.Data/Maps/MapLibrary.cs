@@ -469,6 +469,10 @@ public sealed class MapLibrary
     // The ScriptedMapNames hidden when the user has not chosen: alternative versions of a place shown by another map.
     public IReadOnlySet<string> DefaultHiddenScriptedMaps { get; private set; } = new HashSet<string>();
 
+    // Where the objects of each scripted map are (shown or not), by name: to find those at a place.
+    public IReadOnlyDictionary<string, (Vector3 Min, Vector3 Max)> ScriptedMapExtents { get; private set; } =
+        new Dictionary<string, (Vector3, Vector3)>();
+
     // Reads every .ytyp and .ymap the game uses: base game, update and DLC packs.
     public static MapLibrary Load(GameContent content, IMapTypesReader typesReader, IMapDataReader mapReader,
         IProgress<string>? progress = null, IReadOnlySet<string>? hiddenScriptedMaps = null,
@@ -624,6 +628,7 @@ public sealed class MapLibrary
         DefaultHiddenScriptedMaps = ScriptedMapVariants.DefaultHidden(
             listed.Select(s => (FileName(s.Path), s.Map)).ToList(), byName.Values.Select(m => m.Map), withMansions);
         hidden ??= DefaultHiddenScriptedMaps;
+        ScriptedMapExtents = listed.ToDictionary(s => FileName(s.Path), s => (s.Map.EntitiesExtentsMin, s.Map.EntitiesExtentsMax));
 
         var scriptedByName = new Dictionary<uint, (MapData Map, string Path)>();
         foreach (var s in scripted)

@@ -84,8 +84,8 @@ public static class CutsceneReader
             events.Add(new CutsceneEvent(Float(item.Element("fTime")), Int(item.Element("iEventId")),
                 item.Element("iObjectId") is { } target ? Int(target) : -1, args));
         }
-        events.Sort((a, b) => a.Time.CompareTo(b.Time));
-        return events;
+        // Stable: events at the same time keep the file's order.
+        return [.. events.OrderBy(e => e.Time)];
     }
 
     private static CutsceneEventArgs? Arguments(XElement item)

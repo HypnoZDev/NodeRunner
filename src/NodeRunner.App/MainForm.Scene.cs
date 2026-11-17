@@ -125,7 +125,7 @@ internal sealed unsafe partial class MainForm
 
         // Peds, animals and vehicles on the points the game would use at this hour.
         _state.ScenarioLife.Update(_state.World, _modelRenderer, _state.ScenarioClips, camera.Position, hour, settings.MapVersion == NodeRunner.Data.FileSystem.MapVersion.Multiplayer,
-            c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsGta4);
+            c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsGta4 && _state.Cutscenes.Cutscene is null);
         _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
 
         // The cutscene chosen in the cutscene viewer, at its place.

@@ -25,7 +25,7 @@ internal sealed class CutscenePlayer : IDisposable
         public bool Posed;
         public bool Shown;
         public Matrix4x4 World;
-        // Times its animation is switched on or off (events 22 / 23), in order.
+        // Times its model is loaded or unloaded (events 6 / 7), in order.
         public readonly List<(float Time, bool On)> Switches = [];
     }
 
@@ -85,12 +85,18 @@ internal sealed class CutscenePlayer : IDisposable
     {
         if (!ReferenceEquals(world.Content, _content) && _content is not null)
         {
-            // Another map loaded: its files are not the same.
+            // The map was loaded again (other scripted maps shown...): the same cutscene is read again from its files.
+            string? reopen = Path;
             Close();
             _content = null;
             _clipFiles = null;
             _pedNames = null;
-            return;
+            _reopen = reopen;
+        }
+        if (_reopen is { } waiting && world.Content is not null && world.Models is not null)
+        {
+            _reopen = null;
+            Open(world, waiting);
         }
         if (_loading is { IsCompleted: true } loading)
         {
@@ -147,7 +153,7 @@ internal sealed class CutscenePlayer : IDisposable
         actor.Shown = true;
     }
 
-    // Objects without switches are always there; the others from their first "on".
+    // Objects never loaded nor unloaded are always there; the others while loaded.
     private static bool IsOn(Actor actor, float time)
     {
         if (actor.Switches.Count == 0)
@@ -182,6 +188,7 @@ internal sealed class CutscenePlayer : IDisposable
     }
 
     private (uint, int)? _cameraKey;
+    private string? _reopen;
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection)
     {
@@ -192,7 +199,8 @@ internal sealed class CutscenePlayer : IDisposable
             renderer.Begin(pass);
             foreach (var actor in _actors)
             {
-                if (!actor.Shown || actor.Model.Model is not { } model)
+                // A skinned model without its pose would stand in its default pose (arms spread): not drawn.
+                if (!actor.Shown || actor.Model.Model is not { } model || model.IsSkinned && !actor.Posed)
                     continue;
                 renderer.BonePose = actor.Posed && model.IsSkinned ? actor.Pose : null;
                 renderer.Draw(model, actor.World, viewProjection, Vector3.One);
@@ -258,16 +266,20 @@ internal sealed class CutscenePlayer : IDisposable
             _actors.Add(actor);
             byId[source.Id] = actor;
         }
-        foreach (var e in cutscene.Events)
+        // Objects come and go with their models, loaded and unloaded along the cutscene.
+        foreach (var e in cutscene.LoadEvents.Concat(cutscene.Events))
         {
-            if (e.Kind is not (CutsceneEventKind.EnableAnimation or CutsceneEventKind.DisableAnimation) || e.Args is null)
+            if (e.Kind is not (CutsceneEventKind.LoadModels or CutsceneEventKind.UnloadModels) || e.Args is null)
                 continue;
             foreach (int id in e.Args.ObjectIds)
             {
                 if (byId.TryGetValue(id, out var actor))
-                    actor.Switches.Add((e.Time, e.Kind == CutsceneEventKind.EnableAnimation));
+                    actor.Switches.Add((e.Time, e.Kind == CutsceneEventKind.LoadModels));
             }
         }
+        // Unloaded and loaded again at the same time: loaded wins.
+        foreach (var actor in _actors)
+            actor.Switches.Sort((a, b) => a.Time != b.Time ? a.Time.CompareTo(b.Time) : a.On.CompareTo(b.On));
     }
 
     // The model of an object: a ped by its name, a vehicle by its fragment, a prop or weapon by its type on the map
