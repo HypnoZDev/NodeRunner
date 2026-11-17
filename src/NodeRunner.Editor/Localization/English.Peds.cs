@@ -104,6 +104,9 @@ public static partial class English
 
         // Cutscene viewer
         ("{0}  Visionneuse de cinématiques", "{0}  Cutscene viewer"),
+        ("Visionneuse de cinématiques", "Cutscene viewer"),
+        ("Ouvrir une visionneuse (modèles, personnages, cinématiques) ou l'Atelier", "Open a viewer (models, peds, cutscenes) or the Workshop"),
+        ("Sélectionnez d'abord un objet sur la carte.", "Select an object on the map first."),
         ("Ouvrir la visionneuse de cinématiques", "Open the cutscene viewer"),
         ("La visionneuse de cinématiques est réservée à GTA V.", "The cutscene viewer is for GTA V only."),
         ("{0}  Cinématiques", "{0}  Cutscenes"),

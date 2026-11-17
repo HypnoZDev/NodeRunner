@@ -68,6 +68,8 @@ internal sealed class ShortcutsWindow(AppState state)
                 ("F1", L("Raccourcis clavier")),
                 ("F2", L("Visionneuse de modèles")),
                 ("F3", L("Explorateur d'archives")),
+                ("F4", L("Visionneuse de personnages")),
+                ("F5", L("Visionneuse de cinématiques")),
                 ("Ctrl+,", L("Paramètres")),
                 ("G", L("Grille au sol")));
             Group(L("Visionneuse de personnages"),

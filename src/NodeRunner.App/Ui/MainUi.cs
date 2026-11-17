@@ -34,7 +34,7 @@ internal sealed class MainUi
         _viewerPanel = new ViewerPanel(state);
         _pedStudio = new PedStudio(state);
         _cutscenePanel = new CutscenePanel(state);
-        _workspaceTabs = new WorkspaceTabs(state, _viewerPanel, _pedStudio);
+        _workspaceTabs = new WorkspaceTabs(state, _viewerPanel, _pedStudio, DrawOpenMenu);
         _libraryPanel = new LibraryPanel(state, OpenInViewer);
         _propertiesPanel = new PropertiesPanel(state, OpenInViewer, collisionLayer);
         _scenePanel = new ScenePanel(state);
@@ -122,12 +122,11 @@ internal sealed class MainUi
             new(Icons.Sunset, L("Heure : soir"), "coucher time", "", () => Hour(19f)),
             new(Icons.Moon, L("Heure : nuit"), "night time", "", () => Hour(23f)),
             new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", "F2", ToggleViewer),
-            new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", "", () =>
+            new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", "F5", () =>
             {
-                _cutscenePanel.Open();
-                _showScene = true;
+                if (!_state.CutsceneOpen) ToggleCutscenes();
             }, gta5),
-            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "", _pedStudio.Open, gta5),
+            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "F4", _pedStudio.Open, gta5),
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
@@ -188,6 +187,34 @@ internal sealed class MainUi
         _showViewer = !_showViewer;
         if (_showViewer)
             ImGui.SetWindowFocus(ViewerPanel.Title);
+    }
+
+    private void ToggleCutscenes()
+    {
+        if (_state.CutsceneOpen)
+            _cutscenePanel.Close();
+        else
+        {
+            _cutscenePanel.Open();
+            _showScene = true;
+        }
+    }
+
+    // The "+" of the tabs above the 3D view: every viewer, wherever it opens (panel, tab, or on the map).
+    private void DrawOpenMenu()
+    {
+        bool gta5 = !_state.IsGta4;
+        if (ImGui.MenuItem(L(ViewerPanel.Title), "F2", _showViewer))
+            ToggleViewer();
+        if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, gta5))
+            _pedStudio.Open();
+        if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, gta5))
+            ToggleCutscenes();
+        ImGui.Separator();
+        if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic"), false, gta5 && _state.Selection is not null))
+            _state.WorkshopRequest = _state.Selection;
+        if (_state.Selection is null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("Sélectionnez d'abord un objet sur la carte."));
     }
 
     private bool _focusLibrary;
@@ -492,6 +519,13 @@ internal sealed class MainUi
             ToggleViewer();
         if (ImGui.IsKeyPressed(ImGuiKey.F3, false))
             _showArchives = !_showArchives;
+        if (ImGui.IsKeyPressed(ImGuiKey.F4, false))
+        {
+            if (_state.PedShown) _pedStudio.Close();
+            else _pedStudio.Open();
+        }
+        if (ImGui.IsKeyPressed(ImGuiKey.F5, false) && !_state.IsGta4)
+            ToggleCutscenes();
         if (!map)
             return;
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.C))
@@ -680,13 +714,10 @@ internal sealed class MainUi
         if (Menu(L("Outils")))
         {
             ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
-            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), null, _state.PedOpen, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, !_state.IsGta4))
                 _pedStudio.Open();
-            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), null, _state.CutsceneOpen, !_state.IsGta4))
-            {
-                if (_state.CutsceneOpen) _cutscenePanel.Close();
-                else _cutscenePanel.Open();
-            }
+            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, !_state.IsGta4))
+                ToggleCutscenes();
             if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
             {
                 bool shown = _showLibrary;

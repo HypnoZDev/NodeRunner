@@ -3,10 +3,10 @@ using ImGuiNET;
 
 namespace NodeRunner.App.Ui;
 
-// Tabs above the 3D view while the model workshop or the ped viewer is open: "Map" (the 3D view), the workshop and the
-// ped viewer, each shown in its place. As an option the workshop goes into its own window (to put on another screen),
-// the map staying in the main one.
-internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, PedStudio peds)
+// Tabs above the 3D view: "Map" (the 3D view), the workshop and the ped viewer, each shown in its place, and "+" to open
+// a viewer. As an option the workshop goes into its own window (to put on another screen), the map staying in the main
+// one.
+internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, PedStudio peds, Action drawOpenMenu)
 {
     private const ImGuiWindowFlags BarFlags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings
         | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollWithMouse;
@@ -26,17 +26,12 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, P
         }
         if (!state.PedOpen)
             state.PedShown = false;
-        if (!state.WorkshopOpen && !state.PedOpen)
+        // GTA IV has no viewer in a tab: no bar.
+        if (state.IsGta4 && !state.WorkshopOpen && !state.PedOpen)
             return;
         bool detached = state.WorkshopOpen && state.WorkshopDetached;
         if (detached)
             DrawDetached();
-        // The workshop alone, in its window: no tabs over the map.
-        if (!state.PedOpen && detached)
-        {
-            DrawConfirmClose();
-            return;
-        }
 
         var (position, size) = DockLayout.SceneArea;
         float height = ImGui.GetFrameHeight() + 8f;
@@ -103,6 +98,16 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, P
                     peds.Close();
                     pedShown = false;
                 }
+            }
+
+            if (ImGui.TabItemButton($"{Icons.Plus}##tab_open", ImGuiTabItemFlags.NoTooltip))
+                ImGui.OpenPopup("##tab_open_menu");
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Ouvrir une visionneuse (modèles, personnages, cinématiques) ou l'Atelier"));
+            if (ImGui.BeginPopup("##tab_open_menu"))
+            {
+                drawOpenMenu();
+                ImGui.EndPopup();
             }
 
             if (workshopTab)

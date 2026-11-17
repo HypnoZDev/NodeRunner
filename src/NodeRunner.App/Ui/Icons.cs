@@ -60,6 +60,7 @@ internal static class Icons
     public const string StepBack = "\ue3e9";
     public const string StepForward = "\ue3ea";
     public const string PersonStanding = "\ue21e";
+    public const string Plus = "\ue13d";
     public const string Play = "\ue13c";
     public const string Save = "\ue14d";
     public const string Shirt = "\ue1ca";
