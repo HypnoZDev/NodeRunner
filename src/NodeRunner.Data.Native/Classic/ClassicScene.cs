@@ -8,6 +8,11 @@ using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Classic;
 
+// A room of Vice City or San Andreas: objects of one interior number standing together (San Andreas keeps its rooms far
+// above the city, Vice City mostly inside its buildings). Main: the largest object, which names the room.
+public sealed record ClassicInterior(int Number, string Name, Vector3 Center, float Radius, MapEntity Main,
+    IReadOnlyList<MapEntity> Entities);
+
 // The map of GTA III, Vice City or San Andreas in the form the 3D view draws (the GTA V one): each placement file
 // becomes a map, each definition an archetype, and the model and texture files are indexed by name.
 public sealed class ClassicScene
@@ -27,6 +32,14 @@ public sealed class ClassicScene
 
     // Placed models whose bounds could not be found (no collision, unreadable model).
     public int MissingBounds { get; private init; }
+
+    // Rooms of Vice City and San Andreas, sorted by interior number then name.
+    public IReadOnlyList<ClassicInterior> Interiors { get; private init; } = [];
+
+    public IReadOnlyDictionary<MapEntity, ClassicInterior> InteriorOf { get; private init; } = new Dictionary<MapEntity, ClassicInterior>();
+
+    // Objects of the same interior number at most this far apart belong to the same room.
+    private const float RoomLink = 60f;
 
     private const uint LodInParentMap = 8;
 
@@ -69,6 +82,7 @@ public sealed class ClassicScene
             Array.Fill(fileOf, file, first[file], file.Instances.Length);
 
         var maps = new List<(MapData, string)>(map.Files.Count);
+        var inRooms = new List<(int Number, MapEntity Entity)>();
         int index = 0;
         foreach (var file in map.Files)
         {
@@ -83,7 +97,7 @@ public sealed class ClassicScene
                 var parentFile = parent >= 0 ? fileOf[parent] : null;
                 inParent |= parentFile is not null && parentFile != file;
                 var (level, children) = levels[global];
-                entities.Add(new MapEntity
+                var entity = new MapEntity
                 {
                     ArchetypeHash = definition is null ? 0 : Joaat.Hash(definition.Name),
                     Position = instance.Position,
@@ -97,7 +111,11 @@ public sealed class ClassicScene
                         : Math.Max(definition?.DrawDistance ?? 0f, LodReach),
                     LodLevel = level,
                     ChildCount = children,
-                });
+                };
+                entities.Add(entity);
+                // Higher values are flags (San Andreas 256: seen from every interior), not rooms.
+                if (instance.Interior is > 0 and < 256)
+                    inRooms.Add((instance.Interior, entity));
             }
             var (min, max) = Extents(entities, radii);
             maps.Add((new MapData
@@ -110,8 +128,16 @@ public sealed class ClassicScene
             }, file.Path));
         }
 
+        var interiors = Rooms(inRooms, radii, definitions);
+        var interiorOf = new Dictionary<MapEntity, ClassicInterior>();
+        foreach (var interior in interiors)
+            foreach (var entity in interior.Entities)
+                interiorOf[entity] = interior;
+
         return new ClassicScene
         {
+            Interiors = interiors,
+            InteriorOf = interiorOf,
             Library = MapLibrary.FromMaps(archetypes, maps),
             Models = models,
             Textures = TextureCatalogOf(files, definitions),
@@ -120,6 +146,54 @@ public sealed class ClassicScene
             CollisionFiles = collisionFiles,
             MissingBounds = missing,
         };
+    }
+
+    // The objects of each interior number grouped by room (single link: one room keeps every object near another of
+    // it), named after the largest model (usually the room itself).
+    private static List<ClassicInterior> Rooms(List<(int Number, MapEntity Entity)> inRooms, Dictionary<uint, float> radii,
+        ClassicDefinitions definitions)
+    {
+        var names = new Dictionary<uint, string>();
+        foreach (var model in definitions.Models.Values)
+            names.TryAdd(Joaat.Hash(model.Name), model.Name);
+        var rooms = new List<ClassicInterior>();
+        foreach (var group in inRooms.GroupBy(r => r.Number))
+        {
+            var left = group.Select(r => r.Entity).ToList();
+            while (left.Count > 0)
+            {
+                var room = new List<MapEntity> { left[^1] };
+                left.RemoveAt(left.Count - 1);
+                for (int k = 0; k < room.Count; k++)
+                {
+                    var p = room[k].Position;
+                    for (int j = left.Count - 1; j >= 0; j--)
+                    {
+                        if (Vector3.DistanceSquared(left[j].Position, p) <= RoomLink * RoomLink)
+                        {
+                            room.Add(left[j]);
+                            left.RemoveAt(j);
+                        }
+                    }
+                }
+                float Radius(MapEntity e) => radii.GetValueOrDefault(e.ArchetypeHash) * MathF.Max(e.Scale.X, MathF.Max(e.Scale.Y, e.Scale.Z));
+                var min = new Vector3(float.MaxValue);
+                var max = new Vector3(float.MinValue);
+                foreach (var e in room)
+                {
+                    var r = new Vector3(Radius(e));
+                    min = Vector3.Min(min, e.Position - r);
+                    max = Vector3.Max(max, e.Position + r);
+                }
+                var main = room.MaxBy(Radius)!;
+                room.Sort((a, b) => string.Compare(names.GetValueOrDefault(a.ArchetypeHash), names.GetValueOrDefault(b.ArchetypeHash),
+                    StringComparison.OrdinalIgnoreCase));
+                rooms.Add(new ClassicInterior(group.Key, names.GetValueOrDefault(main.ArchetypeHash) ?? $"0x{main.ArchetypeHash:X8}",
+                    (min + max) / 2f, Vector3.Distance(min, max) / 2f, main, room));
+            }
+        }
+        rooms.Sort((a, b) => a.Number != b.Number ? a.Number.CompareTo(b.Number) : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return rooms;
     }
 
     // Bounds of each model from the collision files; the placed models without collision (most San Andreas low

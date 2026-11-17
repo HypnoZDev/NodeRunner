@@ -50,6 +50,9 @@ internal sealed partial class PropertiesPanel
             Widgets.PropertyText(L("Position"), Invariant($"{p.X:0.00}, {p.Y:0.00}, {p.Z:0.00}"), L("Mètres. X = est, Y = nord, Z = haut."));
             Widgets.PropertyText(L("Rotation (°)"), Invariant($"{angles.X:0.0}, {angles.Y:0.0}, {angles.Z:0.0}"), L("Degrés autour des axes X, Y et Z."));
             Widgets.PropertyText(L("Cap (°)"), Invariant($"{FiveMFormat.Heading(entity):0.0}"));
+            if (scene.InteriorOf.TryGetValue(entity, out var room))
+                Widgets.PropertyText(L("Intérieur"), L($"n° {room.Number} : {room.Name}"),
+                    L($"Pièce de {room.Entities.Count} objets (Scène > Intérieurs). Le jeu ne la montre que quand le joueur y entre."));
             Widgets.EndProperties();
         }
 

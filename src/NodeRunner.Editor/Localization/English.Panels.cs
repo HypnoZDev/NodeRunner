@@ -114,6 +114,18 @@ public static partial class English
         // Scene panel
         ("Proches", "Nearby"),
         ("Toute la carte", "Whole map"),
+        ("{0}  Intérieurs", "{0}  Interiors"),
+        ("Pièces du jeu : objets d'un même numéro d'intérieur. San Andreas les range loin au-dessus de la ville.",
+            "Rooms of the game: objects sharing an interior number. San Andreas keeps them far above the city."),
+        ("Pièce, numéro ou objet (ex. 3)", "Room, number or object (e.g. 3)"),
+        ("N°", "No."),
+        ("Objets", "Objects"),
+        ("{0} pièces, {1} objets", "{0} rooms, {1} objects"),
+        ("{0} pièce(s) trouvée(s) sur {1}", "{0} room(s) found out of {1}"),
+        ("Intérieur n° {0}, {1} objets\nPosition : {2}\nClic : voir la pièce", "Interior no. {0}, {1} objects\nPosition: {2}\nClick: view the room"),
+        ("n° {0} : {1}", "no. {0}: {1}"),
+        ("Pièce de {0} objets (Scène > Intérieurs). Le jeu ne la montre que quand le joueur y entre.",
+            "Room of {0} objects (Scene > Interiors). The game shows it only when the player goes in."),
 
         // New version notice
         ("NodeRunner {0} est disponible (vous avez la {1}).", "NodeRunner {0} is available (you have {1})."),

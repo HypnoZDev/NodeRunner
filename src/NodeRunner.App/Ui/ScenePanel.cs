@@ -3,6 +3,7 @@ using System.Numerics;
 using ImGuiNET;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Classic;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.Ui;
@@ -44,6 +45,15 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private static string[] Filters => [L($"{Icons.Crosshair}  Proches"), L($"{Icons.Globe}  Toute la carte")];
 
+    // Vice City / San Andreas: third filter listing the rooms.
+    private static string[] FiltersWithRooms => [.. Filters, L($"{Icons.House}  Intérieurs")];
+
+    private bool _roomsShown;
+    private readonly List<(ClassicInterior Room, MapEntity? Entity)> _roomRows = [];
+    private readonly HashSet<ClassicInterior> _expandedRooms = [];
+    private ClassicScene? _roomScene;
+    private bool _roomsDirty = true;
+
     private readonly record struct Row(int Depth, MapData Map, MapEntity? Entity, bool Open, bool HasChildren);
 
     // Drawn instead of the map's objects while the model workshop is shown (the parts of its model).
@@ -79,6 +89,12 @@ internal sealed unsafe class ScenePanel(AppState state)
             Reset(library);
 
         DrawFilters(library, names);
+        if (_roomsShown && state.IsClassic && state.Classic.Scene is { Interiors.Count: > 0 } scene)
+        {
+            DrawRooms(scene, names);
+            return;
+        }
+        _roomsShown = false;
         RevealSelection();
         if (_nearOnly && Vector2.Distance(Flat(_builtAt), Flat(state.Camera.Position)) > NearRefreshDistance)
             _dirty = true;
@@ -122,15 +138,22 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private void DrawFilters(MapLibrary library, HashNames names)
     {
-        int filter = _nearOnly ? 0 : 1;
-        if (Widgets.Segmented("scene_filter", Filters, ref filter, [L($"{FileKind} à moins de {NearRadius:0} m de la caméra"), L($"Tous les {FileKind} chargés")]))
+        bool rooms = state.IsClassic && state.Classic.Scene is { Interiors.Count: > 0 };
+        int filter = _roomsShown && rooms ? 2 : _nearOnly ? 0 : 1;
+        string[] tips = [L($"{FileKind} à moins de {NearRadius:0} m de la caméra"), L($"Tous les {FileKind} chargés")];
+        if (rooms)
+            tips = [.. tips, L("Pièces du jeu : objets d'un même numéro d'intérieur. San Andreas les range loin au-dessus de la ville.")];
+        if (Widgets.Segmented("scene_filter", rooms ? FiltersWithRooms : Filters, ref filter, tips))
         {
+            _roomsShown = filter == 2;
             _nearOnly = filter == 0;
             _dirty = true;
+            _roomsDirty = true;
         }
 
-        if (Widgets.SearchField("##scene_search", L($"{FileKind} ou objet (ex. {ExampleObject})"), ref _search))
+        if (Widgets.SearchField("##scene_search", _roomsShown ? L("Pièce, numéro ou objet (ex. 3)") : L($"{FileKind} ou objet (ex. {ExampleObject})"), ref _search))
         {
+            _roomsDirty = true;
             _matches = _search.Trim().Length >= 2 ? Search(library, names, _search.Trim()) : null;
             _dirty = true;
         }
@@ -396,6 +419,142 @@ internal sealed unsafe class ScenePanel(AppState state)
         ImGui.GetWindowDrawList().AddLine(new Vector2(left, p.Y - 3f), new Vector2(left + ImGui.GetWindowWidth(), p.Y - 3f), Widgets.Col(UiTheme.Divider));
         ImGui.Dummy(new Vector2(0, 1));
         Widgets.Hint(text);
+    }
+
+    // Rooms of Vice City / San Andreas: one line per room, open to see its objects. Clicking a room selects its
+    // largest object and frames the whole room.
+    private void DrawRooms(ClassicScene scene, HashNames names)
+    {
+        if (!ReferenceEquals(scene, _roomScene))
+        {
+            _roomScene = scene;
+            _expandedRooms.Clear();
+            _roomsDirty = true;
+        }
+        var selected = state.Gta4Selection;
+        if (selected != _revealed)
+        {
+            _revealed = selected;
+            if (selected is not null && scene.InteriorOf.TryGetValue(selected, out var owner) && _expandedRooms.Add(owner))
+                _roomsDirty = true;
+            _scrollToSelection = selected is not null;
+        }
+        if (_roomsDirty)
+            RebuildRooms(scene, names);
+
+        const ImGuiTableFlags flags = ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoBordersInBody;
+        float footer = UiTheme.SmallFontSize + ImGui.GetStyle().ItemSpacing.Y * 2f + 6f;
+        if (ImGui.BeginTable("##rooms_table", 3, flags, new Vector2(0, -footer)))
+        {
+            ImGui.TableSetupScrollFreeze(0, 1);
+            ImGui.TableSetupColumn(L("Nom"), ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn(L("N°"), ImGuiTableColumnFlags.WidthFixed, 40);
+            ImGui.TableSetupColumn(L("Objets"), ImGuiTableColumnFlags.WidthFixed, 54);
+            ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.TextFaint);
+            ImGui.TableHeadersRow();
+            ImGui.PopStyleColor();
+
+            float rowHeight = ImGui.GetTextLineHeight() + ImGui.GetStyle().CellPadding.Y * 2;
+            if (_scrollToSelection)
+            {
+                _scrollToSelection = false;
+                int index = _roomRows.FindIndex(r => r.Entity is not null && r.Entity == selected);
+                if (index >= 0)
+                    ImGui.SetScrollY(Math.Max(0, index * rowHeight - ImGui.GetWindowHeight() * 0.4f));
+            }
+            var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+            clipper.Begin(_roomRows.Count, rowHeight);
+            while (clipper.Step())
+            {
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                    DrawRoomRow(i, _roomRows[i], names);
+            }
+            clipper.End();
+            clipper.Destroy();
+            ImGui.EndTable();
+        }
+
+        int shown = _roomRows.Count(r => r.Entity is null);
+        var p = ImGui.GetCursorScreenPos();
+        float left = ImGui.GetWindowPos().X;
+        ImGui.GetWindowDrawList().AddLine(new Vector2(left, p.Y - 3f), new Vector2(left + ImGui.GetWindowWidth(), p.Y - 3f), Widgets.Col(UiTheme.Divider));
+        ImGui.Dummy(new Vector2(0, 1));
+        Widgets.Hint(shown == scene.Interiors.Count
+            ? L($"{scene.Interiors.Count} pièces, {scene.InteriorOf.Count} objets")
+            : L($"{shown} pièce(s) trouvée(s) sur {scene.Interiors.Count}"));
+    }
+
+    private void RebuildRooms(ClassicScene scene, HashNames names)
+    {
+        _roomsDirty = false;
+        _roomRows.Clear();
+        string query = _search.Trim();
+        foreach (var room in scene.Interiors)
+        {
+            bool found = query.Length == 0 || room.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || room.Number.ToString(CultureInfo.InvariantCulture) == query
+                || (query.Length >= 2 && room.Entities.Any(e => names.Describe(e.ArchetypeHash).Contains(query, StringComparison.OrdinalIgnoreCase)));
+            if (!found)
+                continue;
+            _roomRows.Add((room, null));
+            if (_expandedRooms.Contains(room))
+                foreach (var entity in room.Entities)
+                    _roomRows.Add((room, entity));
+        }
+    }
+
+    private void DrawRoomRow(int index, (ClassicInterior Room, MapEntity? Entity) row, HashNames names)
+    {
+        ImGui.TableNextRow(ImGuiTableRowFlags.None, 0);
+        ImGui.TableNextColumn();
+        ImGui.PushID(index);
+        var (room, entity) = row;
+        var flags = ImGuiTreeNodeFlags.SpanAllColumns | ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.NoTreePushOnOpen;
+        bool expanded = _expandedRooms.Contains(room);
+        if (entity is not null)
+            flags |= ImGuiTreeNodeFlags.Leaf;
+        if (entity is not null ? state.Gta4Selection == entity : state.Gta4Selection == room.Main && !expanded)
+            flags |= ImGuiTreeNodeFlags.Selected;
+
+        float indent = entity is null ? 0f : ImGui.GetStyle().IndentSpacing;
+        if (indent > 0) ImGui.Indent(indent);
+        string label = entity is null ? $"{Icons.House}  {room.Name}" : $"{Icons.Box}  {names.Describe(entity.ArchetypeHash)}";
+        label = Widgets.Fit(label, ImGui.GetContentRegionAvail().X - ImGui.GetTreeNodeToLabelSpacing());
+        ImGui.SetNextItemOpen(entity is null && expanded);
+        bool open = ImGui.TreeNodeEx("##room", flags, label);
+        if (indent > 0) ImGui.Unindent(indent);
+
+        if (entity is null && open != expanded)
+        {
+            if (open) _expandedRooms.Add(room); else _expandedRooms.Remove(room);
+            _roomsDirty = true;
+        }
+        else if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        {
+            if (entity is null)
+            {
+                state.Gta4Selection = room.Main;
+                state.FocusOn(room.Center, room.Radius);
+            }
+            else
+            {
+                state.Gta4Selection = entity;
+                if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                    state.FocusOn(entity);
+            }
+            _revealed = state.Gta4Selection;
+        }
+        if (entity is null && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+            ImGui.SetTooltip(L($"Intérieur n° {room.Number}, {room.Entities.Count} objets\nPosition : {state.FormatPosition(room.Center)}\nClic : voir la pièce"));
+        if (entity?.Map is { } map)
+            DrawContextMenu(new Row(1, map, entity, false, false), names);
+
+        ImGui.TableNextColumn();
+        ImGui.TextDisabled(room.Number.ToString(CultureInfo.InvariantCulture));
+        ImGui.TableNextColumn();
+        if (entity is null)
+            RightAligned(room.Entities.Count.ToString(CultureInfo.InvariantCulture));
+        ImGui.PopID();
     }
 
     private static string TypeName(MapEntity entity) =>
