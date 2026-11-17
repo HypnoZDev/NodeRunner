@@ -271,7 +271,7 @@ public static partial class English
         ("Ouvrir l'explorateur d'archives", "Open the archive explorer"),
         ("Ouvrir la Bibliothèque", "Open the Library"),
         ("Ouvrir NodeRunner Online", "Open NodeRunner Online"),
-        ("Ouvrir les paramètres d'affichage", "Open the display settings"),
+        ("Ouvrir les paramètres", "Open the settings"),
         ("Ouvrir les raccourcis clavier", "Open the keyboard shortcuts"),
         ("Afficher le panneau Scène", "Show the Scene panel"),
         ("Afficher le panneau Calques", "Show the Layers panel"),

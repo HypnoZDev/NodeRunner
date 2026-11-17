@@ -6,7 +6,7 @@ using NodeRunner.Data.FileSystem;
 namespace NodeRunner.App.Ui;
 
 // Bar under the menu: project (with its menu), game folder, save, undo / redo, map version (multiplayer or story
-// mode) and "map after this DLC", ground grid, global search (Ctrl+K).
+// mode) and "map after this DLC", global search (Ctrl+K).
 internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action browseGameFolder, Action openSearch, Action save, Action export, Action toggleOnline)
 {
     private const float PaddingY = 5f;
@@ -72,14 +72,6 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
             DrawDlcChoice();
         }
         ImGui.PopStyleColor(2);
-
-        Widgets.ToolbarSeparator();
-        bool grid = state.Settings.ShowGrid;
-        if (Widgets.IconButton(Icons.Grid, "grid", L("Grille au sol"), active: grid))
-        {
-            state.Settings.ShowGrid = !grid;
-            state.SaveSettings();
-        }
 
         Widgets.ToolbarSeparator();
         if (Widgets.ToolbarButton(Icons.Search, L("Rechercher"), L("Rechercher un objet, un YMAP, un type ou aller à une position FiveM (Ctrl+K)")))

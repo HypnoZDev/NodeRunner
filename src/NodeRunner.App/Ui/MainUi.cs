@@ -130,7 +130,7 @@ internal sealed class MainUi
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
-            new(Icons.Settings, L("Ouvrir les paramètres d'affichage"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
+            new(Icons.Settings, L("Ouvrir les paramètres"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
             new(Icons.Keyboard, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
             new(Icons.ListTree, L("Afficher le panneau Scène"), "objets liste panel", "", () => _showScene = true),
             new(Icons.Layers, L("Afficher le panneau Calques"), "layers panel", "", () => _showLayers = true),
