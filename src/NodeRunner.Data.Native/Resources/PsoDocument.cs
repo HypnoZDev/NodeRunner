@@ -163,7 +163,15 @@ internal static class PsoDocument
         if (field.Type == FieldType.Structure)
         {
             if (field.Subtype == 3)
-                return Pointer(c, U32(data, at)) is { } p ? ReadStructure(c, "value", c.Blocks[p.Block].Type, p.Offset, depth + 1) : null;
+            {
+                // Pointed-to structure: its type may be any derived one (cutscene objects), given as type="...".
+                if (Pointer(c, U32(data, at)) is not { } p)
+                    return null;
+                uint pointed = c.Blocks[p.Block].Type;
+                var structure = ReadStructure(c, "value", pointed, p.Offset, depth + 1);
+                structure.SetAttributeValue("type", c.Name(pointed));
+                return structure;
+            }
             return ReadStructure(c, "value", field.Reference, at, depth + 1);
         }
         if (field.Type == FieldType.Map)
