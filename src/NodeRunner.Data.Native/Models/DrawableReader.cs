@@ -463,17 +463,17 @@ public sealed class DrawableReader : IModelReader
     {
         int count = mesh.Positions.Length;
         int sourceCount = map?.Length ?? bones.Count;
-        var indices = new uint[count];
+        var indices = new ulong[count];
         var weights = new Vector4[count];
         if (!skinned)
         {
-            if (bone >= sourceCount || bones.Count > 256)
+            if (bone >= sourceCount)
                 return mesh;
-            Array.Fill(indices, (uint)(map?[bone] ?? bone));
+            Array.Fill(indices, (ulong)(map?[bone] ?? bone));
             Array.Fill(weights, Vector4.UnitX);
             return WithBones(mesh, indices, weights);
         }
-        if (bones.Count > 256 || Buffers(res, g) is not { } found || found.VertexCount != count
+        if (Buffers(res, g) is not { } found || found.VertexCount != count
             || !found.Declaration.Has(BlendWeightsComponent) || !found.Declaration.Has(BlendIndicesComponent))
             return mesh;
         int idCount = res.UInt16(g + GeometryBoneIdsCount);
@@ -486,7 +486,7 @@ public sealed class DrawableReader : IModelReader
             int start = v * declaration.Stride;
             var w = declaration.Read(bytes, start, BlendWeightsComponent);
             var b = declaration.Read(bytes, start, BlendIndicesComponent);
-            uint packed = 0;
+            ulong packed = 0;
             for (int k = 0; k < 4; k++)
             {
                 int index = (int)MathF.Round(b[k] * 255f);
@@ -497,7 +497,7 @@ public sealed class DrawableReader : IModelReader
                     index = 0;
                     w[k] = 0f;
                 }
-                packed |= (uint)(map?[index] ?? index) << (8 * k);
+                packed |= (ulong)(map?[index] ?? index) << (16 * k);
             }
             float sum = w.X + w.Y + w.Z + w.W;
             indices[v] = packed;
@@ -506,7 +506,7 @@ public sealed class DrawableReader : IModelReader
         return WithBones(mesh, indices, weights);
     }
 
-    private static ModelMesh WithBones(ModelMesh mesh, uint[] indices, Vector4[] weights) => new()
+    private static ModelMesh WithBones(ModelMesh mesh, ulong[] indices, Vector4[] weights) => new()
     {
         Positions = mesh.Positions,
         Normals = mesh.Normals,

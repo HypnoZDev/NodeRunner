@@ -36,9 +36,10 @@ public sealed class ModelMesh
 
     public required ushort[] Indices { get; init; }
 
-    // Meshes that bend with a skeleton (ModelData.Skeleton): for each vertex, up to 4 bones (one byte each, the first
-    // in the lowest byte) and how much each one moves it (adding up to 1). Positions are those of the default pose.
-    public uint[]? BoneIndices { get; init; }
+    // Meshes that bend with a skeleton (ModelData.Skeleton): for each vertex, up to 4 bones (16 bits each, the first
+    // in the lowest bits: the story characters have over 300 bones) and how much each one moves it (adding up to 1).
+    // Positions are those of the default pose.
+    public ulong[]? BoneIndices { get; init; }
 
     public Vector4[]? BoneWeights { get; init; }
 

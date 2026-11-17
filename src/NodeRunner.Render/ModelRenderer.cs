@@ -641,7 +641,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             x += mesh.Indices.Length;
         }
 
-        var skin = Skin(model, vertexCount);
+        var skinned = Skin(model, vertexCount);
+        var skin = skinned?.Skin;
         var vertexBuffer = _device.CreateBuffer(vertices,
             new BufferDescription((uint)(vertices.Length * sizeof(ModelVertex)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
         ID3D11Buffer indexBuffer;
@@ -670,14 +671,30 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             throw;
         }
         return new PreparedModel(vertexBuffer, indexBuffer, ranges.ToArray(), indexCount / 3,
-            (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L + (skin?.Length ?? 0) * (long)sizeof(SkinVertex), skinBuffer);
+            (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L + (skin?.Length ?? 0) * (long)sizeof(SkinVertex), skinBuffer)
+        {
+            BonePalette = skinned?.Palette,
+        };
     }
 
-    // Bones of each vertex, in the order of the vertex buffer; null when no mesh follows a skeleton (or one too big).
-    private static SkinVertex[]? Skin(ModelData model, int vertexCount)
+    // Bones of each vertex, in the order of the vertex buffer, numbered among the bones the model uses (its palette:
+    // which bone of the skeleton each one is); null when no mesh follows a skeleton or it uses more bones than a draw
+    // can take.
+    private static (SkinVertex[] Skin, int[] Palette)? Skin(ModelData model, int vertexCount)
     {
-        if (model.Skeleton is not { Count: > 0 and <= MaxBones } || !model.Meshes.Any(m => m.BoneIndices is not null))
+        if (model.Skeleton is not { Count: > 0 } skeleton || !model.Meshes.Any(m => m.BoneIndices is not null))
             return null;
+        var local = new Dictionary<int, int>();
+        var palette = new List<int>();
+        int Local(int bone)
+        {
+            if (!local.TryGetValue(bone, out int index))
+            {
+                local[bone] = index = palette.Count;
+                palette.Add(bone);
+            }
+            return index;
+        }
         var skin = new SkinVertex[vertexCount];
         int v = 0;
         foreach (var mesh in model.Meshes)
@@ -686,11 +703,24 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 continue;
             for (int i = 0; i < mesh.Positions.Length; i++, v++)
             {
-                if (mesh.BoneIndices is { } bones && mesh.BoneWeights is { } weights && i < bones.Length && i < weights.Length)
-                    skin[v] = new SkinVertex(bones[i], PackWeights(weights[i]));
+                if (mesh.BoneIndices is not { } bones || mesh.BoneWeights is not { } weights || i >= bones.Length || i >= weights.Length)
+                    continue;
+                var w = weights[i];
+                uint packed = 0;
+                for (int k = 0; k < 4; k++)
+                {
+                    int bone = (int)((bones[i] >> (16 * k)) & 0xFFFF);
+                    float weight = k == 0 ? w.X : k == 1 ? w.Y : k == 2 ? w.Z : w.W;
+                    // Bones without weight take no room in the palette.
+                    int index = weight > 0f && bone < skeleton.Count ? Local(bone) : 0;
+                    packed |= (uint)Math.Min(index, 255) << (8 * k);
+                }
+                skin[v] = new SkinVertex(packed, PackWeights(w));
             }
         }
-        return skin;
+        if (palette.Count == 0)
+            palette.Add(0);
+        return palette.Count > MaxBones ? null : (skin, palette.ToArray());
     }
 
     private static uint PackWeights(Vector4 w)
@@ -717,6 +747,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
             SkinBuffer = prepared.TakeSkinBuffer(),
+            BonePalette = prepared.BonePalette,
         };
     }
 
@@ -950,20 +981,22 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         }
         if (skinned)
         {
-            WriteBones(BonePose!);
+            WriteBones(BonePose!, model.BonePalette);
             _context.IASetVertexBuffer(1, model.SkinBuffer!, (uint)sizeof(SkinVertex));
         }
         _context.IASetVertexBuffer(0, model.VertexBuffer, (uint)sizeof(ModelVertex));
         _context.IASetIndexBuffer(model.IndexBuffer, Format.R16_UInt, 0);
     }
 
-    private void WriteBones(Matrix4x4[] pose)
+    // palette: the bone of the pose each bone number of the model is (null: the same).
+    private void WriteBones(Matrix4x4[] pose, int[]? palette)
     {
-        int count = Math.Min(pose.Length, MaxBones);
+        int count = Math.Min(palette?.Length ?? pose.Length, MaxBones);
         var rows = _boneRows;
         for (int b = 0; b < count; b++)
         {
-            ref readonly var m = ref pose[b];
+            int bone = palette is null ? b : palette[b];
+            ref readonly var m = ref pose[bone < pose.Length ? bone : 0];
             int o = b * 12;
             rows[o] = m.M11; rows[o + 1] = m.M21; rows[o + 2] = m.M31; rows[o + 3] = m.M41;
             rows[o + 4] = m.M12; rows[o + 5] = m.M22; rows[o + 6] = m.M32; rows[o + 7] = m.M42;
@@ -1079,6 +1112,9 @@ public sealed class GpuModel : IDisposable
     // Bones of each vertex (SkinVertex), for a model that follows a skeleton; null otherwise.
     internal ID3D11Buffer? SkinBuffer { get; init; }
 
+    // Which bone of the skeleton each bone number of SkinBuffer is.
+    internal int[]? BonePalette { get; init; }
+
     public bool IsSkinned => SkinBuffer is not null;
     internal Part[] Parts { get; }
     internal bool HasTranslucentParts { get; }
@@ -1133,6 +1169,8 @@ public sealed class PreparedModel : IDisposable
         ?? throw new InvalidOperationException("Model already finished.");
 
     internal ID3D11Buffer? TakeSkinBuffer() => Interlocked.Exchange(ref _skinBuffer, null);
+
+    internal int[]? BonePalette { get; init; }
 
     public void Dispose()
     {

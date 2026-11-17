@@ -121,11 +121,15 @@ public class RenderTests(SoftwareDevice gpu)
         Assert.Equal((0, 0, 0), (Pixel(pixels, 1, 1).B, Pixel(pixels, 1, 1).G, Pixel(pixels, 1, 1).R));
     }
 
-    [Fact]
-    public void SkinnedModel_FollowsItsBones()
+    // boneCount bones, the cube on the last one (story characters have over 300).
+    [Theory]
+    [InlineData(1)]
+    [InlineData(354)]
+    public void SkinnedModel_FollowsItsBones(int boneCount)
     {
         using var renderer = new ModelRenderer(gpu.Device, gpu.Context);
         using var target = new RenderTarget(gpu.Device, gpu.Context);
+        int last = boneCount - 1;
         var cube = Cube();
         var mesh = cube.Meshes[0];
         var skinned = new ModelData
@@ -137,14 +141,15 @@ public class RenderTests(SoftwareDevice gpu)
                 {
                     Positions = mesh.Positions, Normals = mesh.Normals, TexCoords = mesh.TexCoords, Colors = mesh.Colors,
                     Indices = mesh.Indices, VertexColored = true,
-                    BoneIndices = new uint[mesh.Positions.Length],
+                    BoneIndices = Enumerable.Repeat((ulong)last, mesh.Positions.Length).ToArray(),
                     BoneWeights = Enumerable.Repeat(Vector4.UnitX, mesh.Positions.Length).ToArray(),
                 },
             ],
             Skeleton = new SkeletonData
             {
-                Tags = [0], Parents = [-1], Rotations = [Quaternion.Identity], Translations = [Vector3.Zero], Scales = [Vector3.One],
-                BindPose = [Matrix4x4.Identity],
+                Tags = Enumerable.Range(0, boneCount).Select(i => (ushort)i).ToArray(), Parents = Enumerable.Repeat(-1, boneCount).ToArray(),
+                Rotations = Enumerable.Repeat(Quaternion.Identity, boneCount).ToArray(), Translations = new Vector3[boneCount],
+                Scales = Enumerable.Repeat(Vector3.One, boneCount).ToArray(), BindPose = Enumerable.Repeat(Matrix4x4.Identity, boneCount).ToArray(),
             },
         };
         using var model = renderer.Upload(skinned, [[]])!;
@@ -161,10 +166,16 @@ public class RenderTests(SoftwareDevice gpu)
             return centre.B + centre.G + centre.R > 30;
         }
 
+        Matrix4x4[] Pose(Matrix4x4 lastBone)
+        {
+            var pose = Enumerable.Repeat(Matrix4x4.Identity, boneCount).ToArray();
+            pose[last] = lastBone;
+            return pose;
+        }
         Assert.True(CentreDrawn(null));
-        Assert.True(CentreDrawn([Matrix4x4.Identity]));
+        Assert.True(CentreDrawn(Pose(Matrix4x4.Identity)));
         // The bone moved 10 m up: the cube leaves the middle of the view.
-        Assert.False(CentreDrawn([Matrix4x4.CreateTranslation(0f, 0f, 10f)]));
+        Assert.False(CentreDrawn(Pose(Matrix4x4.CreateTranslation(0f, 0f, 10f))));
         renderer.BonePose = null;
     }
 
