@@ -26,6 +26,10 @@ cbuffer Frame : register(b0)
     float4 GroundAmbient;
     float4 FogColor;   // a: 1 = fog on.
     float4 CameraFog;  // xyz: camera position, w: distance at which the fog hides everything.
+    float4 FillDirection;
+    float4 FillColor;
+    float4 RimDirection;
+    float4 RimColor;
 };
 cbuffer Object : register(b2)
 {
@@ -35,6 +39,7 @@ cbuffer Object : register(b2)
     float4 Emission;   // x: how much the mesh gives off its own light (0 = only lit by the sun).
                        // y = 1: the vertex colour is light worked out in advance (GTA IV), darkening nooks.
                        // z = 1: darkening decal, the texture brightness is how dark (GTA IV gta_decal_dirt).
+                       // w = 1: a character (ped shaders).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
 };
@@ -160,7 +165,11 @@ float4 Shade(PS_INPUT input, float4 color)
         ambient *= baked;
         sun *= 0.5f + 0.5f * baked;
     }
-    float3 light = ambient + SunColor.rgb * sun;
+    float3 light = ambient + SunColor.rgb * sun + FillColor.rgb * saturate(dot(n, FillDirection.xyz));
+    // Rim light: only on the edges seen side-on.
+    float3 toCamera = normalize(CameraFog.xyz - input.world);
+    float edge = 1.0f - saturate(abs(dot(n, toCamera)));
+    light += RimColor.rgb * saturate(dot(n, RimDirection.xyz)) * edge * edge;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * 1.4f);
 
@@ -182,6 +191,14 @@ float4 Shade(PS_INPUT input)
 }
 
 // Solid: the texture alpha may be something else than transparency (e.g. a tint mask), ignore it.
+// Characters' two-sided parts (hair, cloth) are lit on the side seen, as single sheets (their files hold each sheet
+// twice, back to back, with the winding not telling which side is which).
+void FaceCamera(inout PS_INPUT input)
+{
+    if (Emission.w > 0.5f && dot(input.normal, CameraFog.xyz - input.world) < 0.0f)
+        input.normal = -input.normal;
+}
+
 float4 PSOpaque(PS_INPUT input) : SV_Target
 {
     return float4(Shade(input).rgb, 1.0f);
@@ -210,6 +227,7 @@ float4 PSTerrain(PS_INPUT input) : SV_Target
 
 float4 PSCutout(PS_INPUT input) : SV_Target
 {
+    FaceCamera(input);
     float4 color = Shade(input);
     clip(color.a - 0.33f);
     return float4(color.rgb, 1.0f);
@@ -218,6 +236,7 @@ float4 PSCutout(PS_INPUT input) : SV_Target
 // The vertex alpha fades decals in and out (e.g. grime fading towards the top of a wall).
 float4 PSTranslucent(PS_INPUT input) : SV_Target
 {
+    FaceCamera(input);
     if (Emission.z > 0.5f)
     {
         float darkness = dot(ColorTexture.Sample(ColorSampler, input.uv).rgb, float3(0.299f, 0.587f, 0.114f)) * input.color.a;
@@ -264,6 +283,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 GroundAmbient;
         public Vector4 FogColor;
         public Vector4 CameraFog;
+        public Vector4 FillDirection;
+        public Vector4 FillColor;
+        public Vector4 RimDirection;
+        public Vector4 RimColor;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -571,7 +594,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
                 terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
-                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting, mesh.DarkeningDecal));
+                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting, mesh.DarkeningDecal, mesh.IsCharacter));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
@@ -651,7 +674,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
-                r.DarkeningDecal);
+                r.DarkeningDecal, r.Character);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
@@ -793,7 +816,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 // A missing layer shows layer 0 instead; without the mask, the vertex weights alone.
                 var mask = part.Layers![3];
                 bool useMask = mask is not null && part.TerrainMode != TerrainBlendMode.VertexOnly;
-                SetMesh(emission, part.BakedLighting, false, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
+                SetMesh(emission, part.BakedLighting, false, part.Character, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
                     part.TerrainMode == TerrainBlendMode.Layered ? 1f : 0f, 0f));
                 for (int l = 0; l < 3; l++)
                     _context.PSSetShaderResource((uint)l + 1, (part.Layers[l] ?? baseTexture).View);
@@ -801,7 +824,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             }
             else
             {
-                SetMesh(emission, part.BakedLighting, part.DarkeningDecal, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
+                SetMesh(emission, part.BakedLighting, part.DarkeningDecal, part.Character, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
                 if (part.TintTexture is not null)
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
@@ -850,6 +873,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 GroundAmbient = new Vector4(Lighting.GroundAmbient, 0f),
                 FogColor = new Vector4(Lighting.Horizon, Lighting.FogDistance > 0f ? 1f : 0f),
                 CameraFog = new Vector4(CameraPosition, MathF.Max(Lighting.FogDistance, 1f)),
+                FillDirection = new Vector4(Lighting.FillDirection, 0f),
+                FillColor = new Vector4(Lighting.FillColor, 0f),
+                RimDirection = new Vector4(Lighting.RimDirection, 0f),
+                RimColor = new Vector4(Lighting.RimColor, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);
@@ -911,9 +938,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         WriteConstants();
     }
 
-    private void SetMesh(float emission, bool bakedLighting, bool darkeningDecal, Vector4 terrain)
+    private void SetMesh(float emission, bool bakedLighting, bool darkeningDecal, bool character, Vector4 terrain)
     {
-        var value = new Vector4(emission, bakedLighting ? 1f : 0f, darkeningDecal ? 1f : 0f, 0f);
+        var value = new Vector4(emission, bakedLighting ? 1f : 0f, darkeningDecal ? 1f : 0f, character ? 1f : 0f);
         if (_constants.Emission == value && _constants.Terrain == terrain)
             return;
         _constants.Emission = value;
@@ -978,7 +1005,7 @@ public sealed class GpuModel : IDisposable
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
-        int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal);
+        int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal, bool Character);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -1022,7 +1049,7 @@ public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
         MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted,
-        bool BakedLighting, bool DarkeningDecal);
+        bool BakedLighting, bool DarkeningDecal, bool Character);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

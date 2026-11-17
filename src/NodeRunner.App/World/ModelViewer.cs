@@ -254,7 +254,7 @@ internal sealed class ModelViewer : IDisposable
         var sceneLighting = renderer.Lighting;
         var sceneShadows = renderer.Shadows;
         renderer.Shadows = null;
-        renderer.Lighting = SceneLighting.Neutral with { SunDirection = Vector3.Normalize(light) };
+        renderer.Lighting = SceneLighting.Studio(light, _camera.Forward, _camera.Right);
         renderer.CameraPosition = _camera.Position;
         renderer.VehiclePaint = PaintColors;
         renderer.HiddenMeshes = HiddenMeshes.Count > 0 ? HiddenMeshes : null;

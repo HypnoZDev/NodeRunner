@@ -19,6 +19,27 @@ public readonly record struct SceneLighting
 
     public float FogDistance { get; init; }
 
+    // Studio lights of the model viewers (none on the map): a soft fill from the other side, and a light from behind
+    // that outlines the silhouette.
+    public Vector3 FillDirection { get; init; }
+    public Vector3 FillColor { get; init; }
+    public Vector3 RimDirection { get; init; }
+    public Vector3 RimColor { get; init; }
+
+    // A photo studio around a model seen from a camera: key light from keyDirection, fill on the opposite side, rim
+    // light from behind and above, less ambient light than outdoors so the shapes stand out.
+    public static SceneLighting Studio(Vector3 keyDirection, Vector3 cameraForward, Vector3 cameraRight) => Neutral with
+    {
+        SunDirection = Vector3.Normalize(keyDirection),
+        SunColor = new Vector3(0.78f, 0.76f, 0.72f),
+        SkyAmbient = new Vector3(0.34f, 0.35f, 0.38f),
+        GroundAmbient = new Vector3(0.16f, 0.15f, 0.15f),
+        FillDirection = Vector3.Normalize(-cameraForward + cameraRight * 0.9f + Vector3.UnitZ * 0.2f),
+        FillColor = new Vector3(0.20f, 0.22f, 0.26f),
+        RimDirection = Vector3.Normalize(cameraForward + Vector3.UnitZ * 0.6f),
+        RimColor = new Vector3(0.55f, 0.55f, 0.52f),
+    };
+
     public static SceneLighting Neutral { get; } = new()
     {
         SunDirection = Vector3.Normalize(new Vector3(0.35f, 0.25f, 0.9f)),

@@ -65,6 +65,18 @@ public sealed class ModelMesh
     // Hash of the shader's name (e.g. "vehicle_paint1").
     public uint ShaderHash { get; init; }
 
+    // Drawn with a ped shader (skin, clothes, hair of a character): lit as the game lights characters.
+    public bool IsCharacter => CharacterShaders.Contains(ShaderHash);
+
+    private static readonly HashSet<uint> CharacterShaders = new[]
+    {
+        "ped", "ped_alpha", "ped_cloth", "ped_cloth_enveff", "ped_decal", "ped_decal_decoration", "ped_decal_expensive",
+        "ped_decal_medals", "ped_decal_nodiff", "ped_default", "ped_default_cloth", "ped_default_cutout", "ped_default_enveff",
+        "ped_default_mp", "ped_default_palette", "ped_emissive", "ped_enveff", "ped_fur", "ped_hair_cutout_alpha",
+        "ped_hair_spiked", "ped_nopeddamagedecals", "ped_palette", "ped_wrinkle", "ped_wrinkle_cloth",
+        "ped_wrinkle_cloth_enveff", "ped_wrinkle_cs", "ped_wrinkle_enveff",
+    }.Select(Joaat.Hash).ToHashSet();
+
     // Every texture of the shader, by parameter name hash (DiffuseSampler, BumpSampler...).
     public IReadOnlyDictionary<uint, string> ShaderTextures { get; init; } = EmptyTextures;
 
