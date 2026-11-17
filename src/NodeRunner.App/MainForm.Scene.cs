@@ -73,6 +73,8 @@ internal sealed unsafe partial class MainForm
         var settings = _state.Settings;
         float fogDistance = settings.Fog ? settings.FogDistance : 0f;
         var lighting = SceneLighting.ForHour(settings.TimeOfDay, fogDistance);
+        if (_state.IsClassic)
+            lighting = _classicLighting.Apply(lighting, _state.Classic.TimeCycle, settings.TimeOfDay, camera.Position);
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
         _modelRenderer.Anisotropy = settings.Anisotropy;

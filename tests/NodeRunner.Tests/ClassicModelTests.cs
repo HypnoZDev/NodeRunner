@@ -29,7 +29,8 @@ public class ClassicModelTests
         Assert.NotNull(model);
         var mesh = Assert.Single(model!.Meshes);
         Assert.Equal("wall", mesh.DiffuseTextureName);
-        Assert.True(mesh.BakedLighting);
+        Assert.True(mesh.ClassicPrelit);
+        Assert.Null(mesh.NightColors);
         Assert.Equal(MeshBlendMode.Cutout, mesh.BlendMode);
         Assert.Equal(3, mesh.Indices.Length);
         // The frame moves the model up by 10.

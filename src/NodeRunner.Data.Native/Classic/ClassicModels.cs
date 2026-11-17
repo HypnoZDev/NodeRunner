@@ -13,8 +13,8 @@ public static class ClassicModels
 {
     private const uint Prelit = 0x08, Textured = 0x04, Textured2 = 0x80, Native = 0x01000000;
     private const int AtomicRender = 0x04;
-    private const uint SanAndreasVersion = 0x36000;
-    private const float ClassicDaylight = 0.35f;
+    // San Andreas: second set of pre-lit colours, for the night (lit windows, walls under street lamps).
+    private const uint NightColorsPlugin = 0x253F2F9;
 
     // wheel: for a vehicle without its own wheel, the meshes of the wheel to put on its "wheel_xx_dummy" frames, sized by
     // wheelScale.
@@ -136,7 +136,8 @@ public static class ClassicModels
             Indices = indices,
             DiffuseTextureName = mesh.DiffuseTextureName,
             DiffuseColor = mesh.DiffuseColor,
-            BakedLighting = mesh.BakedLighting,
+            NightColors = mesh.NightColors,
+            ClassicPrelit = mesh.ClassicPrelit,
             BlendMode = mesh.BlendMode,
         };
     }
@@ -235,20 +236,17 @@ public static class ClassicModels
             return [];
         int at = 16 + (geometry.Version < 0x34000 ? 12 : 0);
 
-        // GTA III and Vice City add the daylight of the hour to the pre-lit colours, which are dark on their own;
-        // San Andreas stores them lit.
-        float daylight = geometry.Version < SanAndreasVersion ? ClassicDaylight : 0f;
+        // Kept as stored: the renderer adds the ambient light of the hour (GTA III, Vice City) or blends towards the
+        // night colours (San Andreas).
         Vector4[]? colors = null;
         if ((flags & Prelit) != 0)
         {
             Need(d, at, vertices * 4);
             colors = new Vector4[vertices];
             for (int i = 0; i < vertices; i++, at += 4)
-            {
-                var c = new Vector4(d[at], d[at + 1], d[at + 2], d[at + 3]) / 255f;
-                colors[i] = new Vector4(Vector3.Min(new Vector3(c.X, c.Y, c.Z) + new Vector3(daylight), Vector3.One), c.W);
-            }
+                colors[i] = new Vector4(d[at], d[at + 1], d[at + 2], d[at + 3]) / 255f;
         }
+        var nightColors = colors is null ? null : NightColors(data, children, vertices);
         int sets = (int)((flags >> 16) & 0xFF);
         if (sets == 0)
             sets = (flags & Textured2) != 0 ? 2 : (flags & Textured) != 0 ? 1 : 0;
@@ -316,15 +314,29 @@ public static class ClassicModels
                 Normals = used.Select(v => normals[v]).ToArray(),
                 TexCoords = used.Select(v => uv[v]).ToArray(),
                 Colors = colors is null ? used.Select(_ => Vector4.One).ToArray() : used.Select(v => colors[v]).ToArray(),
+                NightColors = nightColors is null ? null : used.Select(v => nightColors[v]).ToArray(),
+                ClassicPrelit = colors is not null,
                 Indices = [.. indices],
                 DiffuseTextureName = material.Texture,
                 DiffuseColor = material.Color == Vector4.One ? null : material.Color,
-                BakedLighting = colors is not null,
                 BlendMode = material.Color.W < 1f ? MeshBlendMode.Translucent
                     : material.Texture is not null ? MeshBlendMode.Cutout : MeshBlendMode.Opaque,
             });
         }
         return meshes;
+    }
+
+    // In the geometry's extension: a non-zero flag, then one RGBA colour per vertex.
+    private static Vector4[]? NightColors(byte[] data, List<RwChunk> children, int vertices)
+    {
+        if (children.FirstOrDefault(c => c.Type == RwChunk.Extension) is not { Type: RwChunk.Extension } extension
+            || extension.Child(data, NightColorsPlugin) is not { } plugin || plugin.Size < 4 + vertices * 4L
+            || BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(plugin.Offset)) == 0)
+            return null;
+        var colors = new Vector4[vertices];
+        for (int i = 0, at = plugin.Offset + 4; i < vertices; i++, at += 4)
+            colors[i] = new Vector4(data[at], data[at + 1], data[at + 2], data[at + 3]) / 255f;
+        return colors;
     }
 
     // The list gives, for each material slot, -1 for a new material (the next "Material" section) or the index of an

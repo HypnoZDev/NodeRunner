@@ -16,6 +16,7 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
     private volatile string? _error;
     private volatile ClassicScene? _scene;
     private volatile WaterMap? _water;
+    private volatile ClassicTimeCycle? _timeCycle;
 
     // A new set for each game opened: what was built from the previous one (archive tree, models) sees the change.
     public ClassicFileSystem Files { get; private set; } = new();
@@ -50,6 +51,9 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
     // Sea, rivers and pools, set once the map is read.
     public WaterMap? Water => _water;
 
+    // Colours of the light and sky through the day ("data	imecyc.dat"), null when missing.
+    public ClassicTimeCycle? TimeCycle => _timeCycle;
+
     public string GameName => ClassicInstallLocator.DisplayName(Game);
 
     public string MapFileKind => "IPL";
@@ -68,6 +72,7 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
         _error = null;
         _scene = null;
         _water = null;
+        _timeCycle = null;
         Folder = folder;
         Game = game;
         // The previous files are left to close by themselves: models of the previous map may still be reading them.
@@ -91,6 +96,9 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
                 foreach (string error in water.Errors)
                     Diagnostics.ErrorLog.Add(L($"Eau de {GameName}"), error);
                 _water = water;
+                _timeCycle = ClassicTimeCycle.Load(files, game);
+                if (_timeCycle is null)
+                    Diagnostics.ErrorLog.Add(GameName, L(@"data\timecyc.dat introuvable : couleurs du ciel de GTA V"));
                 if (ModelReader is ClassicModelReader reader)
                     reader.Definitions = map.Definitions;
                 _scene = ClassicScene.Build(map, files);

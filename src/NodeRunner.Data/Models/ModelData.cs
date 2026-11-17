@@ -66,6 +66,12 @@ public sealed class ModelMesh
     // Colors hold light worked out in advance (GTA IV: grey, about 0.5 in the open, 0 in nooks and under objects).
     public bool BakedLighting { get; init; }
 
+    // GTA III, Vice City, San Andreas: Colors are the whole light of the surface (pre-lit), to which the renderer adds
+    // the ambient light of the hour; NightColors (San Andreas) the same light at night, blended in by the hour.
+    public bool ClassicPrelit { get; init; }
+
+    public Vector4[]? NightColors { get; init; }
+
     // Shadow or grime laid over a surface by the brightness of its texture: white darkens fully, black leaves the
     // surface as it is (GTA IV "gta_decal_dirt", e.g. shadows painted on interior floors). Drawn translucent.
     public bool DarkeningDecal { get; init; }

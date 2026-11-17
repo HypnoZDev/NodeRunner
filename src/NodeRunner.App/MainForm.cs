@@ -54,6 +54,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly LodLightLayer _lodLightLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
+    private readonly ClassicLighting _classicLighting = new();
     private WindowAlpha? _windowAlpha;
     private readonly bool _backdrop;
     private bool? _backdropShown;
@@ -391,6 +392,7 @@ internal sealed unsafe partial class MainForm : Form
         _input.UpdateCursor();
 
         // The viewer's image first (it binds its own target), for the interface drawn below.
+        _state.Viewer.ClassicAmbient = ClassicLighting.ViewerAmbientOf(_state.Classic.Game);
         _state.Viewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);
         _state.WorkshopViewer.Surroundings = WorkshopSurroundings();
         _state.WorkshopViewer.Render(_modelRenderer!, imguiRenderer, graphics, _lineRenderer);

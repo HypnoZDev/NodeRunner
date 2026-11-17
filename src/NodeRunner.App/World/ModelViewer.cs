@@ -183,6 +183,9 @@ internal sealed class ModelViewer : IDisposable
     }
 
     // The whole model in view, seen from the current direction.
+    // First trilogy models: ambient light added to their pre-lit colours (see SceneLighting.ClassicAmbient).
+    public Vector3 ClassicAmbient { get; set; }
+
     public void Frame()
     {
         Pan = Vector3.Zero;
@@ -254,7 +257,7 @@ internal sealed class ModelViewer : IDisposable
         var sceneLighting = renderer.Lighting;
         var sceneShadows = renderer.Shadows;
         renderer.Shadows = null;
-        renderer.Lighting = SceneLighting.Studio(light, _camera.Forward, _camera.Right);
+        renderer.Lighting = SceneLighting.Studio(light, _camera.Forward, _camera.Right) with { ClassicAmbient = ClassicAmbient };
         renderer.CameraPosition = _camera.Position;
         renderer.VehiclePaint = PaintColors;
         renderer.HiddenMeshes = HiddenMeshes.Count > 0 ? HiddenMeshes : null;

@@ -115,6 +115,7 @@ public static partial class English
         ("Proches", "Nearby"),
         ("Toute la carte", "Whole map"),
         ("{0}  Intérieurs", "{0}  Interiors"),
+        (@"data\timecyc.dat introuvable : couleurs du ciel de GTA V", @"data\timecyc.dat not found: GTA V sky colours"),
         ("Pièces du jeu : objets d'un même numéro d'intérieur. San Andreas les range loin au-dessus de la ville.",
             "Rooms of the game: objects sharing an interior number. San Andreas keeps them far above the city."),
         ("Pièce, numéro ou objet (ex. 3)", "Room, number or object (e.g. 3)"),

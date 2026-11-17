@@ -30,6 +30,8 @@ cbuffer Frame : register(b0)
     float4 FillColor;
     float4 RimDirection;
     float4 RimColor;
+    float4 ClassicLight;  // First trilogy pre-lit surfaces: xyz = ambient light added, w = night colours blend (0 day).
+    float4 ClassicShade;  // x: how much the sun shadows darken them.
 };
 cbuffer Object : register(b2)
 {
@@ -38,6 +40,8 @@ cbuffer Object : register(b2)
     uint4 PickId;      // x: number of the object, for picking.
     float4 Emission;   // x: how much the mesh gives off its own light (0 = only lit by the sun).
                        // y = 1: the vertex colour is light worked out in advance (GTA IV), darkening nooks.
+                       // y = 2: the vertex colour is the whole light (first trilogy pre-lit), the second vertex
+                       //        colour the same at night.
                        // z = 1: darkening decal, the texture brightness is how dark (GTA IV gta_decal_dirt).
                        // w = 1: a character (ped shaders).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
@@ -176,6 +180,18 @@ float4 Shade(PS_INPUT input, float4 color)
     float sun = saturate(dot(n, LightDirection.xyz));
     if (sun > 0.0f)
         sun *= SunShadow(input.world, n);
+    if (Emission.y > 1.5f)
+    {
+        // First trilogy: the game lights its buildings only with their pre-lit colours (day and night sets in San
+        // Andreas) plus the ambient light of the hour; the sun only darkens what is in a shadow, a little.
+        float3 prelit = lerp(input.color.rgb, input.weights.rgb, ClassicLight.w) + ClassicLight.rgb;
+        float shade = 1.0f - ClassicShade.x * (1.0f - saturate(sun * 4.0f));
+        float3 classic = color.rgb * Tint.rgb * min(prelit, 1.0f) * shade;
+        float far = length(input.world - CameraFog.xyz);
+        float haze = FogColor.a * saturate((far - 0.25f * CameraFog.w) / (0.75f * CameraFog.w));
+        haze = haze * haze * (3.0f - 2.0f * haze);
+        return float4(lerp(classic, FogColor.rgb, haze), color.a);
+    }
     float sky = 0.5f + 0.5f * n.z;
     float3 ambient = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky);
     if (Emission.y > 0.5f)
@@ -322,6 +338,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 FillColor;
         public Vector4 RimDirection;
         public Vector4 RimColor;
+        public Vector4 ClassicLight;
+        public Vector4 ClassicShade;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -630,12 +648,13 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
                 terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
-                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting, mesh.DarkeningDecal, mesh.IsCharacter,
+                terrain is null && mesh.TintTextureName is not null, mesh.ClassicPrelit ? 2 : mesh.BakedLighting ? 1 : 0, mesh.DarkeningDecal, mesh.IsCharacter,
                 new Vector2(mesh.SpecularIntensity, mesh.SpecularFalloff)));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
-                    terrain?.Weights[i] ?? Vector4.Zero, terrain?.MaskTexCoords[i] ?? mesh.TintTexCoords?[i] ?? Vector2.Zero);
+                    terrain?.Weights[i] ?? (mesh.ClassicPrelit ? mesh.NightColors?[i] ?? mesh.Colors[i] : Vector4.Zero),
+                    terrain?.MaskTexCoords[i] ?? mesh.TintTexCoords?[i] ?? Vector2.Zero);
             }
             mesh.Indices.CopyTo(indices, x);
             x += mesh.Indices.Length;
@@ -961,6 +980,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 FillColor = new Vector4(Lighting.FillColor, 0f),
                 RimDirection = new Vector4(Lighting.RimDirection, 0f),
                 RimColor = new Vector4(Lighting.RimColor, 0f),
+                ClassicLight = new Vector4(Lighting.ClassicAmbient, Lighting.ClassicNight),
+                ClassicShade = new Vector4(Lighting.ClassicShadow, 0f, 0f, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);
@@ -1024,9 +1045,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         WriteConstants();
     }
 
-    private void SetMesh(float emission, bool bakedLighting, bool darkeningDecal, bool character, Vector4 terrain)
+    // bakedLighting: 0 none, 1 GTA IV (darkens nooks), 2 first trilogy pre-lit.
+    private void SetMesh(float emission, int bakedLighting, bool darkeningDecal, bool character, Vector4 terrain)
     {
-        var value = new Vector4(emission, bakedLighting ? 1f : 0f, darkeningDecal ? 1f : 0f, character ? 1f : 0f);
+        var value = new Vector4(emission, bakedLighting, darkeningDecal ? 1f : 0f, character ? 1f : 0f);
         if (_constants.Emission == value && _constants.Terrain == terrain)
             return;
         _constants.Emission = value;
@@ -1091,7 +1113,7 @@ public sealed class GpuModel : IDisposable
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
-        int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal, bool Character, GpuTexture? NormalTexture = null,
+        int Mesh, GpuTexture? TintTexture, int BakedLighting, bool DarkeningDecal, bool Character, GpuTexture? NormalTexture = null,
         GpuTexture? SpecularTexture = null, Vector2 Shine = default);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
@@ -1139,7 +1161,7 @@ public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
         MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted,
-        bool BakedLighting, bool DarkeningDecal, bool Character, Vector2 Shine);
+        int BakedLighting, bool DarkeningDecal, bool Character, Vector2 Shine);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

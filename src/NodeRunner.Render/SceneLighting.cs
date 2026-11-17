@@ -19,6 +19,12 @@ public readonly record struct SceneLighting
 
     public float FogDistance { get; init; }
 
+    // First trilogy pre-lit surfaces (ModelMesh.ClassicPrelit): ambient light added to their colours, blend towards
+    // their night colours (0 day, 1 night), how much the sun shadows darken them.
+    public Vector3 ClassicAmbient { get; init; }
+    public float ClassicNight { get; init; }
+    public float ClassicShadow { get; init; }
+
     // Studio lights of the model viewers (none on the map): a soft fill from the other side, and a light from behind
     // that outlines the silhouette.
     public Vector3 FillDirection { get; init; }
