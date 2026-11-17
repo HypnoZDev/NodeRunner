@@ -61,6 +61,10 @@ internal static class Icons
     public const string StepForward = "\ue3ea";
     public const string PersonStanding = "\ue21e";
     public const string Plus = "\ue13d";
+    public const string Blocks = "\ue4fa";
+    public const string Drama = "\ue521";
+    public const string FolderPlus = "\ue0d9";
+    public const string Keyboard = "\ue284";
     public const string Play = "\ue13c";
     public const string Save = "\ue14d";
     public const string Shirt = "\ue1ca";

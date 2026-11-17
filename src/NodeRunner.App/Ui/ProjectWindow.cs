@@ -8,7 +8,7 @@ namespace NodeRunner.App.Ui;
 // changes).
 internal sealed class ProjectWindow(AppState state, Action chooseLocation)
 {
-    public const string Title = $"{Icons.FolderOpen}  Nouveau projet###NouveauProjet";
+    public const string Title = $"{Icons.FolderPlus}  Nouveau projet###NouveauProjet";
 
     private bool _open;
     private bool _focusName;

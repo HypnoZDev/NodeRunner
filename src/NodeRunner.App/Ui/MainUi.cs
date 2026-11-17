@@ -100,7 +100,7 @@ internal sealed class MainUi
         [
             new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", "Ctrl+S", () => SaveRequested = true, gta5),
             new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", "Ctrl+E", _exportWindow.Open, gta5),
-            new(Icons.FolderOpen, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), gta5),
+            new(Icons.FolderPlus, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), gta5),
             new(Icons.FolderOpen, L("Ouvrir un projet"), "open", "Ctrl+O", () => OpenProjectRequested = true, gta5),
             new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", "Ctrl+Z", _state.Undo, gta5),
             new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", "Ctrl+Y", _state.Redo, gta5),
@@ -108,7 +108,7 @@ internal sealed class MainUi
             new(Icons.Move, L("Outil Déplacer"), "move bouger", "2", () => _state.Tool = TransformTool.Move, gta5),
             new(Icons.Rotate, L("Outil Tourner"), "rotate rotation pivoter", "3", () => _state.Tool = TransformTool.Rotate, gta5),
             new(Icons.Scale, L("Outil Échelle"), "scale taille agrandir", "4", () => _state.Tool = TransformTool.Scale, gta5),
-            new(Icons.Layers, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, gta5),
+            new(Icons.Mountain, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, gta5),
             new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", L("Fin"), _state.PutSelectionOnGround, gta5 && _state.Selection is not null),
             new(Icons.Box, L("Modifier le modèle sélectionné dans l'Atelier"), "atelier workshop morceau texture percer", L("Double-clic"),
                 () => _state.WorkshopRequest = _state.Selection, gta5 && _state.Selection is not null),
@@ -131,7 +131,7 @@ internal sealed class MainUi
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
             new(Icons.Settings, L("Ouvrir les paramètres d'affichage"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
-            new(Icons.Info, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
+            new(Icons.Keyboard, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
             new(Icons.ListTree, L("Afficher le panneau Scène"), "objets liste panel", "", () => _showScene = true),
             new(Icons.Layers, L("Afficher le panneau Calques"), "layers panel", "", () => _showLayers = true),
             new(Icons.SlidersHorizontal, L("Afficher le panneau Propriétés"), "properties panel", "", () => _showProperties = true),
@@ -601,7 +601,7 @@ internal sealed class MainUi
                 _exportWindow.Open();
             if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
-            if (ImGui.MenuItem(L($"{Icons.HardDrive}  Exporter en pack solo..."), null, false, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en pack solo..."), null, false, !_state.IsGta4))
                 _exportWindow.OpenSolo();
             if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
@@ -661,7 +661,7 @@ internal sealed class MainUi
 
         if (Menu(L("Créer"), !_state.IsGta4, Gta5OnlyTip))
         {
-            if (ImGui.MenuItem(L($"{Icons.Package}  Placer un prop de la bibliothèque...")))
+            if (ImGui.MenuItem(L($"{Icons.LibraryBig}  Placer un prop de la bibliothèque...")))
                 ShowLibrary();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Ouvre la bibliothèque de props : double-clic sur un prop, ou glisser-le dans la vue 3D."));
@@ -695,7 +695,7 @@ internal sealed class MainUi
                 _state.AddPathNode(null);
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute un nœud de route (pathnode) au sol devant la caméra, avec les réglages du nœud de véhicules le plus proche. Reliez-le ensuite à un autre nœud dans Propriétés."));
-            if (ImGui.MenuItem(L($"{Icons.Users}  Point de scénario"), null, false, _state.World.Scenarios is not null))
+            if (ImGui.MenuItem(L($"{Icons.Drama}  Point de scénario"), null, false, _state.World.Scenarios is not null))
                 _state.AddScenarioPoint(null);
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute un point de scénario au sol devant la caméra (un PNJ, un véhicule ou un animal y fait une activité), copie du point le plus proche. Choisissez ensuite son type dans Propriétés."));
@@ -718,7 +718,7 @@ internal sealed class MainUi
                 _pedStudio.Open();
             if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, !_state.IsGta4))
                 ToggleCutscenes();
-            if (ImGui.BeginMenu(L($"{Icons.Package}  Bibliothèque de props")))
+            if (ImGui.BeginMenu(L($"{Icons.LibraryBig}  Bibliothèque de props")))
             {
                 bool shown = _showLibrary;
                 if (ImGui.MenuItem(L("Afficher la bibliothèque"), null, ref shown))
@@ -769,7 +769,7 @@ internal sealed class MainUi
         {
             if (ImGui.MenuItem(L("Écran d'accueil")))
                 _welcomeWindow.Open();
-            if (ImGui.MenuItem(L("Raccourcis clavier"), "F1"))
+            if (ImGui.MenuItem(L($"{Icons.Keyboard}  Raccourcis clavier"), "F1"))
                 _shortcutsWindow.Toggle();
             if (ImGui.MenuItem(L($"{Icons.TriangleAlert}  Erreurs et rapport...")))
                 _errorWindow.Open();
@@ -821,7 +821,7 @@ internal sealed class MainUi
     // File menu: new, open, recent, close.
     private void DrawFileProjectItems()
     {
-        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Nouveau projet..."), "Ctrl+N"))
+        if (ImGui.MenuItem(L($"{Icons.FolderPlus}  Nouveau projet..."), "Ctrl+N"))
             ProjectWindow.Open();
         if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet..."), "Ctrl+O"))
             OpenProjectRequested = true;
@@ -854,7 +854,7 @@ internal sealed class MainUi
     {
         bool hasProject = _state.Project is not null;
         ImGui.Separator();
-        if (ImGui.MenuItem(L($"{Icons.Layers}  Ouvrir un autre projet en plus..."), null, false, hasProject))
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un autre projet en plus..."), null, false, hasProject))
             AddViewProjectRequested = "";
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(L("Affiche un autre projet (une autre ressource) en même temps que celui-ci, sans le fermer.\nChaque fichier modifié est enregistré dans son propre projet ; les objets ajoutés vont dans le projet actif.\nLa carte est rechargée."));

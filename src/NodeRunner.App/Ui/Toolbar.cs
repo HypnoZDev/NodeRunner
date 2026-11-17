@@ -212,8 +212,8 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         ImGui.SameLine(0, 2);
 
         string label = index < 0
-            ? L($"{Icons.Package}  Tous les DLC ({packs.Count})")
-            : $"{Icons.Package}  {index + 1}. {packs[index].DisplayName}";
+            ? L($"{Icons.Blocks}  Tous les DLC ({packs.Count})")
+            : $"{Icons.Blocks}  {index + 1}. {packs[index].DisplayName}";
         ImGui.SetNextItemWidth(260);
         if (ImGui.BeginCombo("##dlc", label, ImGuiComboFlags.HeightLarge))
         {

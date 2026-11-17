@@ -15,7 +15,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
 {
     private readonly TypesWindow _typesWindow = new(state, openTypeInViewer);
 
-    public const string Title = $"{Icons.Package}  Explorateur d'archives###Archives";
+    public const string Title = $"{Icons.HardDrive}  Explorateur d'archives###Archives";
     private const string TextTitle = $"{Icons.File}  Texte###ArchiveText";
     private const int MaxSearchResults = 5000;
     private const int MaxTextBytes = 2 * 1024 * 1024;

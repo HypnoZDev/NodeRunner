@@ -83,7 +83,7 @@ internal sealed class WelcomeWindow(AppState state, MainUi ui, Action showShortc
         ImGui.TextColored(UiTheme.TextMuted, L("Un projet = un dossier avec vos modifications, prêt à devenir une ressource FiveM."));
         ImGui.PopTextWrapPos();
         float third = (width - ImGui.GetStyle().ItemSpacing.X * 2f) / 3f;
-        if (Widgets.PrimaryButton(L($"{Icons.FolderOpen}  Nouveau projet"), third))
+        if (Widgets.PrimaryButton(L($"{Icons.FolderPlus}  Nouveau projet"), third))
         {
             ui.ProjectWindow.Open();
             Close();

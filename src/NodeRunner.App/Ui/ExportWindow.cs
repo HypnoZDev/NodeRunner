@@ -13,7 +13,7 @@ namespace NodeRunner.App.Ui;
 internal sealed class ExportWindow(AppState state, Action chooseFolder, Action chooseSoloPackFile)
 {
     public const string Title = $"{Icons.Package}  Exporter en ressource FiveM###Export";
-    public const string SoloTitle = $"{Icons.HardDrive}  Exporter en pack solo###Export";
+    public const string SoloTitle = $"{Icons.Package}  Exporter en pack solo###Export";
 
     private bool _open;
     private bool _solo;

@@ -15,7 +15,7 @@ internal sealed partial class PropertiesPanel
     private void DrawScenario(NodeRunner.Data.Scenarios.ScenarioPoint point, HashNames names)
     {
         ImGui.PushFont(UiTheme.SemiboldFont);
-        ImGui.TextUnformatted(L($"{Icons.Users}  Point de scénario {point.Index}"));
+        ImGui.TextUnformatted(L($"{Icons.Drama}  Point de scénario {point.Index}"));
         ImGui.PopFont();
         if (point.Region is { } region)
         {

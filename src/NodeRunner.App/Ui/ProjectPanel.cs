@@ -10,7 +10,7 @@ namespace NodeRunner.App.Ui;
 // its stream folder. Clicking an object goes to it.
 internal sealed unsafe class ProjectPanel(AppState state)
 {
-    public const string Title = $"{Icons.Package}  Projet###Project";
+    public const string Title = $"{Icons.FolderOpen}  Projet###Project";
 
     // Offered when no project is open.
     public Action? NewProject { get; set; }
@@ -55,7 +55,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
             Widgets.Hint(L("Aucun projet ouvert. Un projet garde vos modifications de la carte et les exporte en ressource FiveM."), wrap: true);
             ImGui.Dummy(new Vector2(0, 4));
             float width = ImGui.GetContentRegionAvail().X;
-            if (Widgets.PrimaryButton(L($"{Icons.FolderOpen}  Nouveau projet"), width))
+            if (Widgets.PrimaryButton(L($"{Icons.FolderPlus}  Nouveau projet"), width))
                 NewProject?.Invoke();
             if (Widgets.Button(L($"{Icons.FolderOpen}  Ouvrir un projet..."), "Ctrl+O", width))
                 OpenProject?.Invoke();

@@ -22,7 +22,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         (L("Eau"), Icons.Waves, [WaterLayer.LayerName]),
         (L("Boîtes des objets"), Icons.Boxes, EntityBoxLayer.Categories.Select(EntityBoxLayer.LayerName).ToArray()),
         (L("Pathnodes (routes)"), Icons.Route, PathNodeLayer.Categories.Select(PathNodeLayer.LayerName).ToArray()),
-        (L("Points de scénario"), Icons.Users, ScenarioLayer.Categories.Select(ScenarioLayer.LayerName).ToArray()),
+        (L("Points de scénario"), Icons.Drama, ScenarioLayer.Categories.Select(ScenarioLayer.LayerName).ToArray()),
         (L("Navmesh"), Icons.Footprints, NavMeshLayer.Surfaces.Select(NavMeshLayer.LayerName).Append(NavMeshLayer.OutlinesLayer).ToArray()),
         (L("Collisions"), Icons.Mountain, CollisionLayer.Surfaces.Select(CollisionLayer.LayerName).ToArray()),
         (L("Salles et portails"), Icons.House, RoomLayer.Parts.Select(RoomLayer.LayerName).ToArray()),
