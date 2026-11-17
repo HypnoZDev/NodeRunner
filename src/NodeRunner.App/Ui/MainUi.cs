@@ -84,6 +84,7 @@ internal sealed class MainUi
         _collisionGizmo = new CollisionGizmo(state, collisionLayer);
         _deleteWindow = new DeleteWindow(state);
         _interiorWindow = new InteriorWindow(state);
+        _imagePropWindow = new ImagePropWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
     }
 
@@ -264,6 +265,7 @@ internal sealed class MainUi
     private readonly DeleteWindow _deleteWindow;
     private readonly SettingsWindow _settingsWindow;
     private readonly InteriorWindow _interiorWindow;
+    private readonly ImagePropWindow _imagePropWindow;
     private readonly ErrorWindow _errorWindow;
     private readonly ShortcutsWindow _shortcutsWindow;
     private readonly WelcomeWindow _welcomeWindow;
@@ -463,6 +465,7 @@ internal sealed class MainUi
             _interiorWindow.OpenDuplicate(duplicated);
         }
         _interiorWindow.Draw();
+        _imagePropWindow.Draw();
         _onlineWindow.Draw();
         _errorWindow.Draw();
         _protectedWindow.Draw();
@@ -675,6 +678,10 @@ internal sealed class MainUi
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Ouvre la visionneuse : cherche un objet ou un véhicule du jeu, puis « Placer »."));
+            if (ImGui.MenuItem(L($"{Icons.Star}  Prop depuis une image..."), null, false, _state.World.Maps is not null))
+                _imagePropWindow.Open();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Fait un médaillon en 3D à partir d'une image (insigne, logo), avec sa collision, et l'ajoute à la bibliothèque de props."));
             ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.House}  Nouvel intérieur (MLO)..."), null, false, _state.World.Maps is not null))
                 _interiorWindow.Open();

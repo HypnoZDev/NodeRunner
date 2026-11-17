@@ -82,8 +82,8 @@ public static class RoomShell
 
     // Composite flags of the game's interior collisions (991 of their 1 526 parts): what they are (map weapon, dynamic,
     // animal, cover, vehicle) and what they collide with (vehicles, peds, ragdolls, animals, objects, plants...).
-    private const string TypeFlags = "MAP_WEAPON, MAP_DYNAMIC, MAP_ANIMAL, MAP_COVER, MAP_VEHICLE";
-    private const string IncludeFlags = "VEHICLE_NOT_BVH, VEHICLE_BVH, PED, RAGDOLL, ANIMAL, ANIMAL_RAGDOLL, OBJECT, PLANT, PROJECTILE, "
+    internal const string TypeFlags = "MAP_WEAPON, MAP_DYNAMIC, MAP_ANIMAL, MAP_COVER, MAP_VEHICLE";
+    internal const string IncludeFlags = "VEHICLE_NOT_BVH, VEHICLE_BVH, PED, RAGDOLL, ANIMAL, ANIMAL_RAGDOLL, OBJECT, PLANT, PROJECTILE, "
         + "EXPLOSION, FORKLIFT_FORKS, TEST_WEAPON, TEST_CAMERA, TEST_AI, TEST_SCRIPT, TEST_VEHICLE_WHEEL, GLASS";
 
     // The collision file in the XML form of Sollumz (YbnXml), in the interior's space. material: index in materials.dat.

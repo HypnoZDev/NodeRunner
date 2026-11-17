@@ -96,7 +96,7 @@ internal static class TextureImport
         SafeFile.WriteAllBytes(file, stream.ToArray());
     }
 
-    private static (byte[] Rgba, int Width, int Height) Load(string file)
+    internal static (byte[] Rgba, int Width, int Height) Load(string file)
     {
         try
         {
@@ -118,7 +118,7 @@ internal static class TextureImport
         }
     }
 
-    private static byte[] Resize(byte[] rgba, int width, int height, int newWidth, int newHeight)
+    internal static byte[] Resize(byte[] rgba, int width, int height, int newWidth, int newHeight)
     {
         using var source = ToBitmap(rgba, width, height);
         using var target = new Bitmap(newWidth, newHeight, PixelFormat.Format32bppArgb);

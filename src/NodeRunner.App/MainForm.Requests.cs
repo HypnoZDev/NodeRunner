@@ -180,6 +180,12 @@ internal sealed unsafe partial class MainForm
             HandleLibraryRequest(library);
         }
 
+        if (_state.ImagePropRequest is var (image, options))
+        {
+            _state.ImagePropRequest = null;
+            CreateImageProp(image, options);
+        }
+
         if (_droppedPaths is { } dropped)
         {
             _droppedPaths = null;

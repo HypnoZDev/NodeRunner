@@ -372,6 +372,15 @@ internal sealed partial class AppState
     // Prop library action asked from a panel, carried out by the main window (dialogs).
     public LibraryAction LibraryRequest { get; set; }
 
+    // A plaque to make from an image and add to the prop library (Create > Prop from an image), by the main window.
+    public (string Image, ImageProp.Options Options)? ImagePropRequest { get; set; }
+
+    // A free name for a prop made by NodeRunner: no object type of the game or of a project has it, except the library
+    // pack of that name (made again).
+    public bool IsFreePropName(string name) =>
+        InteriorCreation.IsValidName(name)
+        && (World.Maps?.GetArchetype(Data.Hashing.Joaat.Hash(name)) is null || Directory.Exists(Path.Combine(LibraryFolder, name)));
+
     // A file dialog asked from a panel, shown by the main window after the frame (a dialog blocks the frame); it gets
     // the window to own the dialog.
     public Action<IWin32Window>? DialogRequest { get; set; }
