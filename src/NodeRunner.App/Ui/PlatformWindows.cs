@@ -62,7 +62,9 @@ internal static unsafe class PlatformWindows
     {
         if (!Enabled)
             return;
-        var origin = _surface!.PointToScreen(Point.Empty);
+        // Minimized, Windows puts the window at -32000: every position would be shifted by that much (and saved so).
+        bool minimized = _owner!.WindowState == FormWindowState.Minimized;
+        var origin = minimized ? _origin : _surface!.PointToScreen(Point.Empty);
         if (origin != _origin || _scale != UiTheme.Scale || _monitorsChanged)
         {
             bool moved = origin != _origin || _scale != UiTheme.Scale;
@@ -84,6 +86,11 @@ internal static unsafe class PlatformWindows
             if (!(vp->DpiScale > 0f && vp->DpiScale < 99f))
                 vp->DpiScale = 1f;
         }
+        // ImGui.NewFrame ends by opening its fallback window ("Debug##Default"). If it does not fit in the main window
+        // (main window still small at start-up), ImGui gives it a window of its own, created in that same call; when no
+        // monitor is found for it, its DPI scale stays 0 and ImGui stops on an assert. It never draws anything: kept in
+        // the main window.
+        ImGui.SetNextWindowViewport(ImGui.GetMainViewport().ID);
     }
 
     // After the main window's interface is drawn.
