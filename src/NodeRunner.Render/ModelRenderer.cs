@@ -165,6 +165,10 @@ float4 Shade(PS_INPUT input, float4 color)
         ambient *= baked;
         sun *= 0.5f + 0.5f * baked;
     }
+    // Characters: the red of the vertex colour is how much of the surroundings' light reaches the vertex (nooks under
+    // the hair, the collar, between the fingers).
+    if (Emission.w > 0.5f)
+        ambient *= input.color.r;
     float3 light = ambient + SunColor.rgb * sun + FillColor.rgb * saturate(dot(n, FillDirection.xyz));
     // Rim light: only on the edges seen side-on.
     float3 toCamera = normalize(CameraFog.xyz - input.world);
