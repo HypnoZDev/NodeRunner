@@ -18,6 +18,8 @@ internal sealed class ImagePropWindow(AppState state)
     private float _diameter = 1f;
     private float _thicknessCm = 3f;
     private bool _backImage = true;
+    private float _reliefCm = 1f;
+    private bool _raiseDark;
 
     public void Open()
     {
@@ -92,6 +94,16 @@ internal sealed class ImagePropWindow(AppState state)
             if (ImGui.DragFloat("##image_prop_thickness", ref _thicknessCm, 0.1f, ImageProp.MinThickness * 100f, ImageProp.MaxThickness * 100f, "%.1f cm"))
                 _thicknessCm = Math.Clamp(_thicknessCm, ImageProp.MinThickness * 100f, ImageProp.MaxThickness * 100f);
 
+            Widgets.Property(L("Relief"), L("Hauteur des parties en relief (0 : face plate). Les parties claires de l'image ressortent, ou les foncées."));
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.DragFloat("##image_prop_relief", ref _reliefCm, 0.05f, 0f, ImageProp.MaxRelief * 100f, _reliefCm <= 0f ? L("plat") : "%.2f cm"))
+                _reliefCm = Math.Clamp(_reliefCm, 0f, ImageProp.MaxRelief * 100f);
+            if (_reliefCm > 0f)
+            {
+                Widgets.Property("");
+                ImGui.Checkbox(L("Faire ressortir les parties foncées##image_prop_dark"), ref _raiseDark);
+            }
+
             Widgets.Property(L("Dos"));
             ImGui.Checkbox(L("Image aussi au dos##image_prop_back"), ref _backImage);
 
@@ -109,7 +121,7 @@ internal sealed class ImagePropWindow(AppState state)
         ImGui.BeginDisabled(!ready);
         if (Widgets.PrimaryButton(L($"{Icons.Check}  Créer"), 120f) && ready)
         {
-            state.ImagePropRequest = (_image!, new ImageProp.Options(name, _diameter, _thicknessCm / 100f, _backImage));
+            state.ImagePropRequest = (_image!, new ImageProp.Options(name, _diameter, _thicknessCm / 100f, _backImage, _reliefCm / 100f, _raiseDark));
             _open = false;
         }
         ImGui.EndDisabled();

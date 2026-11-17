@@ -104,6 +104,87 @@ public class ImagePropTests
         Assert.Equal(new byte[] { 220, 180, 60, 255 }, rgba[..4]);
     }
 
+    // A gold disc (half the image wide) on navy.
+    private static byte[] Badge(int size)
+    {
+        var rgba = new byte[size * size * 4];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                int i = (y * size + x) * 4;
+                bool gold = Vector2.Distance(new(x, y), new((size - 1) / 2f)) / size < 0.25f;
+                (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = gold ? ((byte)220, (byte)180, (byte)60, (byte)255) : ((byte)20, (byte)30, (byte)70, (byte)255);
+            }
+        }
+        return rgba;
+    }
+
+    private static readonly ImageProp.Options Raised = Plaque with { Relief = 0.02f };
+
+    [Fact]
+    public void Relief_raises_the_bright_parts()
+    {
+        var height = ImagePropMaker.Relief(Badge(128), 128, raiseDark: false);
+        Assert.Equal(1f, height(new(0.5f, 0.5f)), 0.01f);
+        Assert.Equal(0f, height(new(0.5f, 0.1f)), 0.01f);
+        var dark = ImagePropMaker.Relief(Badge(128), 128, raiseDark: true);
+        Assert.Equal(0f, dark(new(0.5f, 0.5f)), 0.01f);
+
+        var mesh = ImageProp.Build(Raised, height);
+        float t = Raised.Thickness;
+        Assert.Equal(-t - Raised.Relief, mesh.Vertices[0].Position.Y, 0.001f);
+        Assert.Equal(-t, mesh.Vertices.Where(v => v.Position.Y < -t / 2).MaxBy(v => v.Position.Z).Position.Y, 0.001f);
+        var (min, max) = ImageProp.Box(Raised);
+        Assert.All(mesh.Vertices, v => Assert.Equal(v.Position, Vector3.Clamp(v.Position, min, max)));
+    }
+
+    [Fact]
+    public void Relief_faces_outwards_and_fits_one_model()
+    {
+        var mesh = ImageProp.Build(Raised, uv => uv.X > 0.5f ? 1 : 0);
+        Assert.InRange(mesh.Vertices.Count, 10_000, ushort.MaxValue);
+        float t = Raised.Thickness;
+        for (int i = 0; i < mesh.Indices.Count; i += 3)
+        {
+            var (a, b, c) = (mesh.Vertices[mesh.Indices[i]].Position, mesh.Vertices[mesh.Indices[i + 1]].Position, mesh.Vertices[mesh.Indices[i + 2]].Position);
+            var normal = Vector3.Cross(b - a, c - a);
+            if (a.Y <= -t + 1e-5f && b.Y <= -t + 1e-5f && c.Y <= -t + 1e-5f)
+                Assert.True(normal.Y < 0, $"front triangle {i / 3} turned inwards");
+            else if (a.Y == 0 && b.Y == 0 && c.Y == 0)
+                Assert.True(normal.Y > 0, $"back triangle {i / 3} turned inwards");
+            else
+                Assert.True(Vector3.Dot(normal, (a + b + c) with { Y = 0 }) > 0, $"edge triangle {i / 3} turned inwards");
+        }
+        // Every point of the front is used: no hole between the rings.
+        var used = mesh.Indices.ToHashSet();
+        Assert.Equal(mesh.Vertices.Count, used.Count);
+    }
+
+    [Fact]
+    public void Relief_model_converts_with_a_flat_one_further_away()
+    {
+        Func<Vector2, float> height = uv => uv.X > 0.5f ? 1 : 0;
+        string xml = ImageProp.DrawableXml(Raised, Raised.Name, material: 3, height);
+        Assert.Contains("<DrawableModelsMedium>", xml);
+        var bytes = YdrXml.Convert(new XmlExport(Raised.Name + ".ydr.xml", xml,
+            f => f.EndsWith(".dds", StringComparison.Ordinal) ? Dds() : null));
+        var (header, content) = ResourceFile.Read(bytes);
+        var model = DrawableReader.Read(content, header, Raised.Name, ".ydr").Values.Single();
+        Assert.Equal(ImageProp.Build(Raised, height).Indices.Count / 3, model.TriangleCount);
+    }
+
+    private static byte[] Dds() => DdsFile.Write(new TextureData
+    {
+        NameHash = Joaat.Hash(Plaque.Name),
+        Name = Plaque.Name,
+        Width = 4,
+        Height = 4,
+        MipLevels = 1,
+        Format = TextureFormat.Bc1,
+        Data = TextureCodec.Encode(new byte[4 * 4 * 4], 4, 4, TextureFormat.Bc1, 1),
+    });
+
     [Theory]
     [InlineData("Secret Service.png", "secret_service")]
     [InlineData("2024-logo!.jpg", "prop_2024_logo")]

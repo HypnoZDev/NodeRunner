@@ -91,5 +91,10 @@ public static partial class English
         ("ce nom est déjà celui d'un objet du jeu ou d'un projet", "this name is already used by an object of the game or of a project"),
         ("bibliothèque : {0}/{1}.ydr, {2}.ytyp", "library: {0}/{1}.ydr, {2}.ytyp"),
         ("Le prop n'a pas pu être créé :\n{0}", "The prop could not be made:\n{0}"),
+        ("Relief", "Relief"),
+        ("Hauteur des parties en relief (0 : face plate). Les parties claires de l'image ressortent, ou les foncées.",
+            "Height of the raised parts (0: flat face). The image's bright parts stand out, or its dark ones."),
+        ("plat", "flat"),
+        ("Faire ressortir les parties foncées##image_prop_dark", "Raise the dark parts##image_prop_dark"),
     ];
 }
