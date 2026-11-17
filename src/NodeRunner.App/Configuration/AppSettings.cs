@@ -89,6 +89,9 @@ public sealed class AppSettings
     // Panels can be dragged out of the main window (own Windows windows, other screens). Read at start-up.
     public bool DetachableWindows { get; set; } = true;
 
+    // Ask GitHub at start-up whether a newer version is published (UpdateCheck).
+    public bool CheckForUpdates { get; set; } = true;
+
     // Interface size (1.5 = 150 %); 0 = the Windows display scale.
     public float UiScale { get; set; }
 

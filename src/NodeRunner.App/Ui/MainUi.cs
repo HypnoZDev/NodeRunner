@@ -76,6 +76,7 @@ internal sealed class MainUi
         };
         _viewportOverlay = new ViewportOverlay(state, cameraController);
         _noticeToast = new NoticeToast(state);
+        _updateNotice = new UpdateNotice(state);
         _gizmo = new TransformGizmo(state);
         _roomHover = new RoomHover(state, roomLayer);
         _presence = new PresenceOverlay(state);
@@ -248,6 +249,7 @@ internal sealed class MainUi
     private readonly StatusBar _statusBar;
     private readonly ViewportOverlay _viewportOverlay;
     private readonly NoticeToast _noticeToast;
+    private readonly UpdateNotice _updateNotice;
     private readonly ExportWindow _exportWindow;
     private readonly ViewerPanel _viewerPanel;
     private readonly WorkspaceTabs _workspaceTabs;
@@ -436,6 +438,7 @@ internal sealed class MainUi
             _viewportOverlay.Draw();
         }
         _noticeToast.Draw();
+        _updateNotice.Draw();
         if (_showLayers) DrawLayersWindow();
         if (_showScene) _scenePanel.Draw(ref _showScene);
         if (_showLibrary) _libraryPanel.Draw(ref _showLibrary);

@@ -114,6 +114,18 @@ public static partial class English
         // Scene panel
         ("Proches", "Nearby"),
         ("Toute la carte", "Whole map"),
+
+        // New version notice
+        ("NodeRunner {0} est disponible (vous avez la {1}).", "NodeRunner {0} is available (you have {1})."),
+        ("{0}  Télécharger", "{0}  Download"),
+        ("Ouvrir la page de la nouvelle version sur GitHub", "Open the page of the new version on GitHub"),
+        ("Plus tard", "Later"),
+        ("Masquer jusqu'au prochain démarrage (Paramètres > Interface pour ne plus être prévenu)",
+            "Hide until the next start (Settings > Interface to stop these notices)"),
+        ("Nouvelles versions", "New versions"),
+        ("Au démarrage, demande à GitHub si une version plus récente de NodeRunner est sortie et l'affiche en haut à droite de la vue 3D. Rien d'autre n'est envoyé.",
+            "At start-up, asks GitHub whether a newer version of NodeRunner is out and shows it in the top right corner of the 3D view. Nothing else is sent."),
+
         ("Chargement de la carte...", "Loading the map..."),
         ("Aucune carte chargée.", "No map loaded."),
         ("{0} à moins de {1} m de la caméra", "{0}s within {1} m of the camera"),

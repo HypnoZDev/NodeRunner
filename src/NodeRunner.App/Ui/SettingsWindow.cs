@@ -502,6 +502,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                 }
                 if (detachable != PlatformWindows.Enabled)
                     ImGui.TextColored(UiTheme.Warning, L("Prend effet au prochain démarrage de NodeRunner."));
+
+                Widgets.Property(L("Nouvelles versions"), L("Au démarrage, demande à GitHub si une version plus récente de NodeRunner est sortie et l'affiche en haut à droite de la vue 3D. Rien d'autre n'est envoyé."));
+                bool updates = settings.CheckForUpdates;
+                if (ImGui.Checkbox("##check_updates", ref updates))
+                {
+                    settings.CheckForUpdates = updates;
+                    state.SaveSettings();
+                }
                 Widgets.EndProperties();
             }
         }
