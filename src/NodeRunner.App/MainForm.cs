@@ -44,6 +44,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly ScenarioLayer _scenarioLayer = new();
     private readonly NavMeshLayer _navMeshLayer = new();
     private readonly CollisionLayer _collisionLayer = new();
+    private readonly ClassicCollisionLayer _classicCollisionLayer = new();
     private readonly EntityBoxLayer _entityBoxLayer = new();
     private readonly RoomLayer _roomLayer = new();
     private readonly OcclusionLayer _occlusionLayer = new();
@@ -219,6 +220,7 @@ internal sealed unsafe partial class MainForm : Form
         _scenarioLayer.Dispose();
         _navMeshLayer.Dispose();
         _collisionLayer.Dispose();
+        _classicCollisionLayer.Dispose();
         _entityBoxLayer.Dispose();
         _roomLayer.Dispose();
         _occlusionLayer.Dispose();

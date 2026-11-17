@@ -154,6 +154,12 @@ internal sealed unsafe partial class MainForm
             _state.Settings.CollisionKind, _state.CollisionEdits);
         _collisionLayer.Draw(lines, viewProjection, camera.Position,
             s => _state.IsLayerVisible(CollisionLayer.LayerName(s)) || (collisionTool && !collisionsEnabled));
+        if (_state.IsClassic && _state.Classic.Game is var classicGame)
+        {
+            _classicCollisionLayer.Update(_state.Classic.Scene, _state.Classic.Files, classicGame, lines, camera.Position,
+                _state.Settings.CollisionRadius, collisionsEnabled);
+            _classicCollisionLayer.Draw(lines, viewProjection, camera.Position, s => _state.IsLayerVisible(CollisionLayer.LayerName(s)));
+        }
         if (collisionTool)
             _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion,
                 _state.CollisionDragPreview);

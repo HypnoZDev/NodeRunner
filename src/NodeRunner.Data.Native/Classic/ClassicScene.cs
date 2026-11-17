@@ -22,6 +22,9 @@ public sealed class ClassicScene
 
     public required HashNames Names { get; init; }
 
+    // The collision file (".col") holding each model's collision, by model name.
+    public required IReadOnlyDictionary<string, string> CollisionFiles { get; init; }
+
     // Placed models whose bounds could not be found (no collision, unreadable model).
     public int MissingBounds { get; private init; }
 
@@ -40,7 +43,8 @@ public sealed class ClassicScene
         var models = ModelCatalog.FromFiles(dffs, [], []);
 
         var placed = map.Files.SelectMany(f => f.Instances).Select(i => i.ModelId).ToHashSet();
-        var bounds = ReadBounds(map, files, dffs, placed, out int missing);
+        var collisionFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var bounds = ReadBounds(map, files, dffs, placed, collisionFiles, out int missing);
 
         var archetypes = definitions.Models.Values.Select(d => ToArchetype(d, bounds.GetValueOrDefault(d.Name))).ToList();
         var radii = new Dictionary<uint, float>();
@@ -107,6 +111,7 @@ public sealed class ClassicScene
             Textures = TextureCatalogOf(files, definitions),
             Definitions = definitions,
             Names = NamesOf(definitions),
+            CollisionFiles = collisionFiles,
             MissingBounds = missing,
         };
     }
@@ -114,7 +119,7 @@ public sealed class ClassicScene
     // Bounds of each model from the collision files; the placed models without collision (most San Andreas low
     // detail buildings) are measured on their model.
     private static Dictionary<string, ClassicBounds> ReadBounds(ClassicMap map, ClassicFileSystem files, List<string> dffs,
-        HashSet<int> placed, out int missing)
+        HashSet<int> placed, Dictionary<string, string> collisionFiles, out int missing)
     {
         var bounds = new Dictionary<string, ClassicBounds>(StringComparer.OrdinalIgnoreCase);
         foreach (string path in files.EnumerateFiles(".col").Concat(map.CollisionFiles).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -122,7 +127,10 @@ public sealed class ClassicScene
             if (files.ReadFile(path) is not { } data)
                 continue;
             foreach (var b in ClassicCollisions.ReadBounds(data))
+            {
                 bounds[b.Model] = b;
+                collisionFiles[b.Model] = path;
+            }
         }
 
         var dffByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
