@@ -51,7 +51,15 @@ public class DrawableReaderTests
         Assert.Equal(MeshBlendMode.Cutout, mesh.BlendMode);
     }
 
-    private static byte[] Build(bool enhanced = false)
+    [Fact]
+    public void Read_LeavesOutProxyModels()
+    {
+        var models = DrawableReader.Read(Build(proxy: true), new ResourceHeader(165, MetaDocument.PageFlags(1, SystemSize), 0), "prop_test", ".ydr");
+
+        Assert.Empty(Assert.Single(models).Value.Meshes);
+    }
+
+    private static byte[] Build(bool enhanced = false, bool proxy = false)
     {
         var d = new byte[SystemSize + 0x200];
         void P(int at, int target, bool graphics = false) =>
@@ -76,6 +84,8 @@ public class DrawableReaderTests
         U16(0x330, 1);
         P(0x340, 0x368);
         P(0x360, 0x400);
+        // Drawn in every pass (a proxy model, for shadows or reflections only, has bit 0 clear).
+        U16(0x320 + 0x2C, proxy ? 0xFE : 0xFF);
 
         // Shader group -> shader "default", cut out (bucket 3), one texture parameter (texture block at 0x600).
         P(0x210, 0x240);

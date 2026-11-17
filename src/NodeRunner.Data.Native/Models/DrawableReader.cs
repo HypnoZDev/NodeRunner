@@ -391,6 +391,8 @@ public sealed class DrawableReader : IModelReader
     private const int GeometriesCount = 0x10;
     private const int ShaderMappingPointer = 0x20;
     private const int SkeletonBinding = 0x28;
+    // Bit 0 clear: a proxy model (shadow or reflection only), never seen as it is.
+    private const int RenderMaskFlags = 0x2C;
 
     // pose: where each bone is in the model (null: no skeleton). A model that is not skinned is stored relative to its
     // bone (pieces of breakable objects: planks of a bench, arm of a traffic light).
@@ -409,7 +411,7 @@ public sealed class DrawableReader : IModelReader
         var meshes = new List<ModelMesh>();
         foreach (int model in models)
         {
-            if (model < 0)
+            if (model < 0 || (res.UInt16(model + RenderMaskFlags) & 1) == 0)
                 continue;
             uint binding = res.UInt32(model + SkeletonBinding);
             bool skinned = ((binding >> 8) & 0xFF) != 0;
@@ -784,9 +786,11 @@ public sealed class DrawableReader : IModelReader
 
     // Mirror surfaces show a live reflection in the game, not their placeholder texture: not drawn for now.
     // Simple shapes inside trees only cast the foliage's shadow in the game (white balls if drawn).
+    // Normal-only decals only bend the lighting of what is under them; their colour slot holds the normal map (purple
+    // patches if drawn).
     private static readonly HashSet<uint> HiddenShaders = new[]
     {
-        "mirror_default", "mirror_decal", "mirror_crack", "trees_shadow_proxy",
+        "mirror_default", "mirror_decal", "mirror_crack", "trees_shadow_proxy", "decal_normal_only",
     }.Select(Joaat.Hash).ToHashSet();
 
     // Shaders without texture, coloured by the vertex colours.
