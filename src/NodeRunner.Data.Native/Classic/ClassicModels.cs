@@ -13,6 +13,8 @@ public static class ClassicModels
 {
     private const uint Prelit = 0x08, Textured = 0x04, Textured2 = 0x80, Native = 0x01000000;
     private const int AtomicRender = 0x04;
+    private const uint SanAndreasVersion = 0x36000;
+    private const float ClassicDaylight = 0.35f;
 
     public static ModelData? ReadClump(byte[] data, uint nameHash)
     {
@@ -136,13 +138,19 @@ public static class ClassicModels
             return [];
         int at = 16 + (geometry.Version < 0x34000 ? 12 : 0);
 
+        // GTA III and Vice City add the daylight of the hour to the pre-lit colours, which are dark on their own;
+        // San Andreas stores them lit.
+        float daylight = geometry.Version < SanAndreasVersion ? ClassicDaylight : 0f;
         Vector4[]? colors = null;
         if ((flags & Prelit) != 0)
         {
             Need(d, at, vertices * 4);
             colors = new Vector4[vertices];
             for (int i = 0; i < vertices; i++, at += 4)
-                colors[i] = new Vector4(d[at], d[at + 1], d[at + 2], d[at + 3]) / 255f;
+            {
+                var c = new Vector4(d[at], d[at + 1], d[at + 2], d[at + 3]) / 255f;
+                colors[i] = new Vector4(Vector3.Min(new Vector3(c.X, c.Y, c.Z) + new Vector3(daylight), Vector3.One), c.W);
+            }
         }
         int sets = (int)((flags >> 16) & 0xFF);
         if (sets == 0)

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using System.Text;
 using NodeRunner.Data.Installation;
 using NodeRunner.Data.Native.Classic;
 
@@ -101,5 +102,36 @@ public class ClassicMapTests
             ("COLFILE", @"models\coll\generic.col"),
             ("IPL", @"data\maps\la\lae2.ipl"),
         ], entries);
+    }
+
+    [Fact]
+    public void TimedModels_AreShownFromOnToOff()
+    {
+        Assert.Equal(0b1111u << 20 | 0b111111u, ClassicScene.Hours(20, 6));
+        Assert.Equal(0b111u << 9, ClassicScene.Hours(9, 12));
+        Assert.Equal(0xFFFFFFu, ClassicScene.Hours(0, 24));
+    }
+
+    [Fact]
+    public void Collisions_GiveBoundsOfEachVersion()
+    {
+        static byte[] Entry(string magic, string name, float[] bounds)
+        {
+            var data = new byte[8 + 24 + 40];
+            Encoding.ASCII.GetBytes(magic).CopyTo(data, 0);
+            BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(4), data.Length - 8);
+            Encoding.ASCII.GetBytes(name).CopyTo(data, 8);
+            for (int i = 0; i < bounds.Length; i++)
+                BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(32 + i * 4), bounds[i]);
+            return data;
+        }
+        // COLL: radius, centre, min, max; COL3: min, max, centre, radius.
+        var data = Entry("COLL", "old", [5, 1, 2, 3, -1, -2, -3, 4, 5, 6])
+            .Concat(Entry("COL3", "new", [-1, -2, -3, 4, 5, 6, 1, 2, 3, 7])).ToArray();
+
+        var bounds = ClassicCollisions.ReadBounds(data);
+
+        Assert.Equal(new ClassicBounds("old", new Vector3(-1, -2, -3), new Vector3(4, 5, 6), new Vector3(1, 2, 3), 5), bounds[0]);
+        Assert.Equal(new ClassicBounds("new", new Vector3(-1, -2, -3), new Vector3(4, 5, 6), new Vector3(1, 2, 3), 7), bounds[1]);
     }
 }
