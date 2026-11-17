@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.1/NodeRunner-1.5.1-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.0/NodeRunner-1.6.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -42,6 +42,9 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   l'heure affichée, animé, avec l'objet qu'il tient (cigarette, téléphone...).
 - En bonus, **GTA IV** et ses épisodes : Liberty City en 3D (modèles, textures, intérieurs, eau, routes), en lecture
   seule.
+- Et la **trilogie d'origine** (versions PC d'origine de **GTA III**, **Vice City** et **San Andreas**) : la carte en
+  3D en lecture seule, avec niveaux de détail, eau, collisions, intérieurs, véhicules et la lumière de chaque jeu selon
+  l'heure.
 
 ![Les intérieurs (MLO) vus de l'extérieur, avec leurs salles et leur mobilier](docs/images/vue-interieurs.webp)
 
@@ -111,7 +114,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.1/NodeRunner-1.5.1-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.0/NodeRunner-1.6.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
