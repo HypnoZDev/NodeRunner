@@ -70,8 +70,8 @@ internal sealed class CutscenePanel(AppState state)
     // Puts the map's camera where the cutscene's is (close shots: a near plane closer than on the map).
     private void FollowFilm()
     {
-        bool film = _film && state.CutsceneOpen && !state.MapCovered && Player.Shot() is not null;
-        if (film && Player.Shot() is { } shot)
+        var shot = _film && state.CutsceneOpen && !state.MapCovered ? Player.Shot() : null;
+        if (shot is { } film)
         {
             if (!_filmNear)
             {
@@ -79,9 +79,9 @@ internal sealed class CutscenePanel(AppState state)
                 _filmNear = true;
             }
             state.Camera.NearPlane = FilmNearPlane;
-            state.Camera.Position = shot.Position;
-            state.Camera.LookAt(shot.Position + shot.Forward);
-            state.Camera.FieldOfView = Math.Clamp(shot.FieldOfView, 5f, 120f) * MathF.PI / 180f;
+            state.Camera.Position = film.Position;
+            state.Camera.LookAt(film.Position + film.Forward);
+            state.Camera.FieldOfView = Math.Clamp(film.FieldOfView, 5f, 120f) * MathF.PI / 180f;
         }
         else if (_filmNear)
         {

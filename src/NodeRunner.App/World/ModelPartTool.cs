@@ -58,7 +58,7 @@ internal sealed class ModelPartTool
     private static (List<DrawableReader.StoredGeometry>, List<DrawableReader.StoredGeometry>, List<(Vector3[], ushort[])>) Split(
         List<DrawableReader.StoredGeometry> all)
     {
-        int level = all.Min(g => g.Level);
+        int level = all.Count == 0 ? 0 : all.Min(g => g.Level);
         var shown = all.Where(g => g.Level == level).ToList();
         return (all, shown, shown.Select(g => (g.Positions, g.Indices)).ToList());
     }

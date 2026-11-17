@@ -34,7 +34,8 @@ public sealed class AnimationTrack
         int last = Frames.Length - 1;
         if (last <= 0)
             return last == 0 ? Frames[0] : Vector4.Zero;
-        frame = Math.Clamp(frame, 0f, last);
+        // NaN (a clip with a broken rate or duration) would index outside the frames.
+        frame = float.IsNaN(frame) ? 0f : Math.Clamp(frame, 0f, last);
         int f0 = Math.Min((int)frame, last - 1);
         float t = frame - f0;
         var a = Frames[f0];

@@ -122,6 +122,7 @@ public static partial class English
         ("dossier du jeu inconnu", "game folder unknown"),
         ("Ferme GTA V avant d'installer le pack.", "Close GTA V before installing the pack."),
         ("Ferme GTA V avant de désinstaller le pack.", "Close GTA V before uninstalling the pack."),
+        ("Nom de pack invalide : {0}", "Invalid pack name: {0}"),
         ("Copie du pack...", "Copying the pack..."),
         ("Ajout du pack à dlclist.xml...", "Adding the pack to dlclist.xml..."),
         ("dlclist.xml introuvable dans mods\\update\\update.rpf.", "dlclist.xml not found in mods\\update\\update.rpf."),

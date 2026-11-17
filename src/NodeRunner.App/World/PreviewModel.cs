@@ -44,16 +44,20 @@ internal sealed class PreviewModel : IDisposable
     // With the readers of another game (GTA IV).
     public void Open(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
     {
-        if (item == Item && Error is null)
+        // A model that could not be read is tried again only with other readers (map loaded again), not every frame.
+        if (item == Item && (Error is null || ReferenceEquals(reader, _reader)))
             return;
         Reload(item, reader, textures, textureReader);
     }
+
+    private IModelReader? _reader;
 
     // Reads the model again even when it is the one shown (its data changed); the current one stays until then.
     public void Reload(ViewerItem item, IModelReader? reader, TextureCatalog? textures, ITextureReader? textureReader)
     {
         Item = item;
         Error = null;
+        _reader = reader;
         _loading = Task.Run(() => Read(item, reader, textures, textureReader));
     }
 
@@ -124,6 +128,13 @@ internal sealed class PreviewModel : IDisposable
         if (_loading is not { IsCompleted: true } finished)
             return false;
         _loading = null;
+        if (!finished.IsCompletedSuccessfully)
+        {
+            // An unexpected error while reading (damaged file): shown instead of stopping the program.
+            Release();
+            Error = finished.Exception?.GetBaseException().Message ?? L("Lecture impossible.");
+            return false;
+        }
         var loaded = finished.Result;
         if (loaded.Item != Item)
             return false; // Another model was asked for meanwhile.

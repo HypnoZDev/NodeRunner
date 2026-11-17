@@ -130,6 +130,9 @@ internal static class SoloPackInstaller
     {
         if (IsGameRunning())
             throw new InvalidOperationException(L("Ferme GTA V avant de désinstaller le pack."));
+        // Only a pack name can be removed: never a path that would reach another folder of the game.
+        if (!string.Equals(SoloPack.ToPackName(name), name, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(L($"Nom de pack invalide : {name}"));
         string modsUpdate = ModsUpdate(game);
         if (File.Exists(modsUpdate) && !RpfEditor.IsEncrypted(modsUpdate))
         {

@@ -32,6 +32,8 @@ internal sealed class CutscenePlayer : IDisposable
         // Clothes put on along the cutscene (event 34), in order, and those of the model shown or being read.
         public readonly List<(float Time, int Component, int Drawable, int Texture)> Clothes = [];
         public string Dressed = "";
+        // How many of Clothes the model shown or being read wears (-1: none yet).
+        public int DressedCount = -1;
     }
 
     private GameContent? _content;
@@ -131,9 +133,9 @@ internal sealed class CutscenePlayer : IDisposable
         if (!_actorsMade)
         {
             _pedNames ??= Task.Run(() => models.PedNames().ToDictionary(n => Joaat.Hash(n), n => n));
-            if (!_pedNames.IsCompletedSuccessfully)
+            if (!_pedNames.IsCompleted)
                 return;
-            MakeActors(world, cutscene, _pedNames.Result);
+            MakeActors(world, cutscene, _pedNames.IsCompletedSuccessfully ? _pedNames.Result : []);
             _actorsMade = true;
         }
 
@@ -189,13 +191,16 @@ internal sealed class CutscenePlayer : IDisposable
         if (actor.Clothes.Count == 0 || actor.Item.Ped is not { } ped)
             return;
         float until = Math.Max(Time, actor.Clothes[0].Time);
+        int count = 0;
+        while (count < actor.Clothes.Count && actor.Clothes[count].Time <= until)
+            count++;
+        // Same changes as for the model shown: nothing to do (the usual case, every frame).
+        if (count == actor.DressedCount)
+            return;
+        actor.DressedCount = count;
         var outfit = new SortedDictionary<int, (int, int)>();
-        foreach (var (time, component, drawable, texture) in actor.Clothes)
-        {
-            if (time > until)
-                break;
+        foreach (var (_, component, drawable, texture) in actor.Clothes.Take(count))
             outfit[component] = (drawable, texture);
-        }
         string key = string.Join(";", outfit.Select(p => $"{p.Key}:{p.Value.Item1}:{p.Value.Item2}"));
         if (key == actor.Dressed)
             return;

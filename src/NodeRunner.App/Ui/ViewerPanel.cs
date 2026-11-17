@@ -1648,8 +1648,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
                         var resized = TextureImport.Resize(texture, w, h);
                         return new TextureJob(tool, source, resized.NameHash, null, null, null) { Resized = resized };
                     }
-                    catch (InvalidDataException ex)
+                    catch (Exception ex)
                     {
+                        // Any error (not enough memory for the size asked...) is reported, not raised on the next frame.
                         return new TextureJob(tool, source, texture.NameHash, null, null, ex.Message);
                     }
                 });
@@ -1698,8 +1699,9 @@ internal sealed unsafe class ViewerPanel(AppState state)
                     var (pixels, note) = TextureImport.Convert(file, target);
                     return new TextureJob(tool, source, nameHash, pixels, note, null);
                 }
-                catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+                catch (Exception ex)
                 {
+                    // A damaged image file can fail in many ways: reported, not raised on the next frame.
                     return new TextureJob(tool, source, nameHash, null, null, ex.Message);
                 }
             });
