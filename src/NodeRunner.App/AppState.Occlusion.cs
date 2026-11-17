@@ -170,7 +170,7 @@ internal sealed partial class AppState
         History.Add(new OccluderPresenceEdit([occluder], deleted: true,
             box ? L($"Supprimer la boîte d'occlusion {occluder.Index}") : L($"Supprimer le maillage d'occlusion {occluder.Index}")));
         SelectedOccluder = null;
-        Notify(box ? L($"Boîte d'occlusion {occluder.Index} supprimée de {occluder.File.FileName}")
+        NotifyUndoable(box ? L($"Boîte d'occlusion {occluder.Index} supprimée de {occluder.File.FileName}")
             : L($"Maillage d'occlusion {occluder.Index} supprimé de {occluder.File.FileName}"));
     }
 }

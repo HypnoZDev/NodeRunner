@@ -33,7 +33,7 @@ internal sealed partial class AppState
         SelectedCarGenerator = new CarGeneratorSelection(map, edit.Index);
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
-        Notify(L($"Place de véhicule ajoutée dans {Path.GetFileName(map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Place de véhicule ajoutée dans {Path.GetFileName(map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
     // Node waiting for a click on another node to link them; forgotten as soon as it is no longer selected.
@@ -106,7 +106,7 @@ internal sealed partial class AppState
             return;
         }
         History.Add(edit);
-        Notify(L($"Nœuds {a.Id.AreaId}:{a.Id.NodeId} et {b.Id.AreaId}:{b.Id.NodeId} reliés. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Nœuds {a.Id.AreaId}:{a.Id.NodeId} et {b.Id.AreaId}:{b.Id.NodeId} reliés. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedPathNode()
@@ -118,7 +118,7 @@ internal sealed partial class AppState
             return;
         History.Add(edit);
         SelectedPathNode = null;
-        Notify(L($"Nœud {id.AreaId}:{id.NodeId} supprimé avec ses liens. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Nœud {id.AreaId}:{id.NodeId} supprimé avec ses liens. Ctrl+Z pour annuler."));
     }
 
     // A scenario point: a copy of from (2 m beside it), or 15 m in front of the camera on the ground, in the region of the
@@ -155,7 +155,7 @@ internal sealed partial class AppState
         }
         History.Add(edit);
         SelectedScenario = null;
-        Notify(L($"Point de scénario supprimé de {region}.ymt. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Point de scénario supprimé de {region}.ymt. Ctrl+Z pour annuler."));
     }
 
     public void DeleteSelectedCarGenerator()
@@ -164,7 +164,7 @@ internal sealed partial class AppState
             return;
         History.Add(CarGeneratorDeleteEdit.Apply(selected.Map, selected.Index, L($"Supprimer la place de véhicule {selected.Index}")));
         SelectedCarGenerator = null;
-        Notify(L($"Place de véhicule {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Place de véhicule {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
     // A new timecycle zone (10 x 10 x 6 m, no modifier yet) 15 m in front of the camera, standing on the ground there,
@@ -205,7 +205,7 @@ internal sealed partial class AppState
             return;
         History.Add(TimecycleDeleteEdit.Apply(selected.Map, selected.Index, L($"Supprimer la zone de timecycle {selected.Index}")));
         SelectedTimecycle = null;
-        Notify(L($"Zone de timecycle {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Zone de timecycle {selected.Index} supprimée de {Path.GetFileName(selected.Map.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 
     // --- LOD lights ---
@@ -263,6 +263,6 @@ internal sealed partial class AppState
             return;
         History.Add(LodLightDeleteEdit.Apply(selected.Distant, selected.Lod, selected.Index, L($"Supprimer la lumière LOD {selected.Index}")));
         SelectedLodLight = null;
-        Notify(L($"Lumière LOD {selected.Index} supprimée de {Path.GetFileName(selected.Distant.FilePath ?? "")}. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Lumière LOD {selected.Index} supprimée de {Path.GetFileName(selected.Distant.FilePath ?? "")}. Ctrl+Z pour annuler."));
     }
 }

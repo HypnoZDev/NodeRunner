@@ -36,7 +36,7 @@ internal sealed partial class AppState
         Apply(CollisionEdit.Remove(CollisionEdits, [.. _selectedCollision]));
         int count = _selectedCollision.Count;
         SelectCollision([], CollisionSelectMode.Replace);
-        Notify(count == 1 ? L("1 surface de collision supprimée") : L($"{count} surfaces de collision supprimées"));
+        NotifyUndoable(count == 1 ? L("1 surface de collision supprimée") : L($"{count} surfaces de collision supprimées"));
     }
 
     // A move of objects (already made) with their map collision moved too (setting CollisionFollowsObjects).

@@ -327,6 +327,7 @@ internal sealed partial class AppState
             : World.Names?.Describe(plan.Target.ArchetypeHash) ?? $"0x{plan.Target.ArchetypeHash:X8}";
         History.Add(DeleteEdit.Apply(library, plan, L($"Supprimer {name}")));
         Select(null);
+        NotifyUndoable(L($"Supprimé : {name}"));
     }
 
     // Object type to add, waiting for the main form to find the ground at the centre of the 3D view; 0 if none.
@@ -345,11 +346,13 @@ internal sealed partial class AppState
     // Pictures of the library's props (Library panel).
     public World.LibraryThumbnails Thumbnails { get; private set; } = null!;
 
-    // Result of the last editing command (add an object, put it on the ground...), shown a few seconds in the status
-    // bar.
-    public (string Text, bool IsWarning, DateTime Time)? Notice { get; private set; }
+    // Result of the last editing command (add an object, put it on the ground...), shown a few seconds over the 3D view.
+    public AppNotice? Notice { get; private set; }
 
-    public void Notify(string text, bool warning = false) => Notice = (text, warning, DateTime.Now);
+    public void Notify(string text, bool warning = false) => Notice = new AppNotice(text, warning, DateTime.Now, null);
+
+    // Call right after History.Add: the notice offers an Undo button while that change is still the last one.
+    public void NotifyUndoable(string text) => Notice = new AppNotice(text, false, DateTime.Now, History.NextUndo);
 
     // Adds an object of type archetypeHash standing on ground, in the project's own map, selects it and takes the
     // "move" tool.
@@ -1047,3 +1050,6 @@ public enum TransformTool
 }
 
 internal enum LibraryAction { None, AddFolder, AddZip, ChooseFolder, Default, Reload }
+
+// Undoable: the change the notice reports, offered to undo while it is still the history's last one.
+internal sealed record AppNotice(string Text, bool IsWarning, DateTime Time, IEdit? Undoable);

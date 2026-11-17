@@ -74,15 +74,6 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             Item(Icons.LoaderCircle, L($"{modelLayer.PendingModelCount} modèles en cours de chargement"), ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
         }
 
-        if (state.Notice is { } notice && (DateTime.Now - notice.Time).TotalSeconds < 8)
-        {
-            Next();
-            if (notice.IsWarning)
-                Item(Icons.TriangleAlert, notice.Text, UiTheme.Warning);
-            else
-                Item(Icons.Check, notice.Text, UiTheme.Success);
-        }
-
         if (state.Online.Session is { IsOver: false } session)
         {
             Next();

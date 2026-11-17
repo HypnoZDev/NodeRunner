@@ -114,7 +114,7 @@ internal sealed partial class AppState
             return selected.Index;
         }, L($"Supprimer la salle {name}"), isPortal: false, added: false));
         Select(selected.Interior);
-        Notify(L($"Salle « {name} » supprimée{(portals > 0 ? L($" avec ses {portals} portail(s)") : "")} ; ses objets vont dans la salle qui les entoure ")
+        NotifyUndoable(L($"Salle « {name} » supprimée{(portals > 0 ? L($" avec ses {portals} portail(s)") : "")} ; ses objets vont dans la salle qui les entoure ")
             + L("(sinon dans limbo). Ctrl+Z pour annuler."));
     }
 
@@ -160,6 +160,6 @@ internal sealed partial class AppState
             return selected.Index;
         }, L($"Supprimer le portail {selected.Index}"), isPortal: true, added: false));
         Select(selected.Interior);
-        Notify(L($"Portail {selected.Index} supprimé. Ctrl+Z pour annuler."));
+        NotifyUndoable(L($"Portail {selected.Index} supprimé. Ctrl+Z pour annuler."));
     }
 }
