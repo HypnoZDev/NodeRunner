@@ -93,7 +93,15 @@ public sealed class ModelMesh
 
     public IReadOnlyList<string?> TextureNames => Terrain is not null ? [DiffuseTextureName, .. Terrain.TextureNames]
         : TintTextureName is not null ? [DiffuseTextureName, TintTextureName]
+        : IsCharacter ? [DiffuseTextureName, NormalTextureName, SpecularTextureName]
         : [DiffuseTextureName];
+
+    // Characters: the relief (normal map) and shine (specular map) textures of the shader.
+    public string? NormalTextureName => ShaderTextures.GetValueOrDefault(BumpSampler);
+    public string? SpecularTextureName => ShaderTextures.GetValueOrDefault(SpecSampler);
+
+    private static readonly uint BumpSampler = Joaat.Hash("BumpSampler");
+    private static readonly uint SpecSampler = Joaat.Hash("SpecSampler");
 }
 
 // Ground made of four textures (grass, dirt, rock...) blended per pixel.

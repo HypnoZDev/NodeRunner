@@ -42,12 +42,15 @@ cbuffer Object : register(b2)
                        // w = 1: a character (ped shaders).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
+    float4 Surface;    // Characters: x = 1 with a normal map (NormalTexture), y = 1 with a specular map.
 };
 Texture2D ColorTexture : register(t0);
 Texture2D Layer1 : register(t1);
 Texture2D Layer2 : register(t2);
 Texture2D Layer3 : register(t3);
 Texture2D BlendMask : register(t4);
+Texture2D NormalTexture : register(t6);
+Texture2D SpecularTexture : register(t7);
 SamplerState ColorSampler : register(s0);
 
 // Sun shadows (see ShadowMaps): one depth image per slice of the view, seen from the sun.
@@ -146,12 +149,29 @@ float SunShadow(float3 world, float3 n)
     return lerp(1.0f, lit, fade);
 }
 
+// The normal bent by a normal map (x and y in red and green, z rebuilt), along directions worked out from how the
+// position and the texture coordinates change from pixel to pixel: no tangents needed in the vertices.
+float3 Relief(float3 n, float3 world, float2 uv)
+{
+    float2 xy = NormalTexture.Sample(ColorSampler, uv).rg * 2.0f - 1.0f;
+    float3 bump = float3(xy, sqrt(saturate(1.0f - dot(xy, xy))));
+    float3 dp1 = ddx(world), dp2 = ddy(world);
+    float2 duv1 = ddx(uv), duv2 = ddy(uv);
+    float3 dp2perp = cross(dp2, n), dp1perp = cross(n, dp1);
+    float3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+    float3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+    float scale = rsqrt(max(max(dot(t, t), dot(b, b)), 1e-20f));
+    return normalize(t * scale * bump.x - b * scale * bump.y + n * bump.z);
+}
+
 // Lit colour; alpha straight from the colour.
 float4 Shade(PS_INPUT input, float4 color)
 {
     float3 n = input.normal;
     float len = length(n);
     n = len > 0.0001f ? n / len : float3(0, 0, 1);
+    if (Surface.x > 0.5f)
+        n = Relief(n, input.world, input.uv);
     float sun = saturate(dot(n, LightDirection.xyz));
     if (sun > 0.0f)
         sun *= SunShadow(input.world, n);
@@ -302,6 +322,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         private readonly uint _padding1, _padding2, _padding3;
         public Vector4 Emission;
         public Vector4 Terrain;
+        public Vector4 Surface;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -678,7 +699,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
-                r.DarkeningDecal, r.Character);
+                r.DarkeningDecal, r.Character, r.Character && textures.Length > 1 ? textures[1] : null,
+                r.Character && textures.Length > 2 ? textures[2] : null);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
@@ -832,9 +854,24 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 if (part.TintTexture is not null)
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
+            SetSurface(part.NormalTexture, part.SpecularTexture);
             _context.PSSetShaderResource(0, baseTexture.View);
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
+    }
+
+    // Relief and shine textures of a character's part (none for everything else).
+    private void SetSurface(GpuTexture? normal, GpuTexture? specular)
+    {
+        var value = new Vector4(normal is null ? 0f : 1f, specular is null ? 0f : 1f, 0f, 0f);
+        if (normal is not null)
+            _context.PSSetShaderResource(6, normal.View);
+        if (specular is not null)
+            _context.PSSetShaderResource(7, specular.View);
+        if (_constants.Surface == value)
+            return;
+        _constants.Surface = value;
+        WriteConstants();
     }
 
     // Sets the shaders and states for drawing object numbers into a PickBuffer (already bound), before a series of
@@ -1009,7 +1046,8 @@ public sealed class GpuModel : IDisposable
     // Layers: ground layers 1 to 3, then the blend mask (terrain only, else null).
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
-        int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal, bool Character);
+        int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal, bool Character, GpuTexture? NormalTexture = null,
+        GpuTexture? SpecularTexture = null);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
