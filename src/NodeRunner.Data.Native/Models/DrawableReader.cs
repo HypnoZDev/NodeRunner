@@ -722,6 +722,9 @@ public sealed class DrawableReader : IModelReader
 
     private static readonly uint DiffuseColorParameter = Joaat.Hash("matDiffuseColor");
 
+    private static readonly uint SpikedHairPreset = Joaat.Hash("ped_hair_spiked.sps");
+    private static readonly uint OrderNumberParameter = Joaat.Hash("orderNumber");
+
     // Terrain shaders taking their weights from the vertex colour only, or from the mask only.
     private static readonly uint TerrainVertexOnlyShader = Joaat.Hash("terrain_cb_w_4lyr_lod");
 
@@ -845,6 +848,10 @@ public sealed class DrawableReader : IModelReader
         ReadOnlySpan<byte> indexBytes = res.Bytes(indicesAt, indexCount * 2);
 
         if (shader is not null && HiddenShaders.Contains(shader.Name))
+            return null;
+        // Hair layers with an order number above 0 are extra layers the game leaves out by default (drawn, they make
+        // a thick shell with gaps over the hair).
+        if (shader is not null && shader.FileName == SpikedHairPreset && shader.Vectors.TryGetValue(OrderNumberParameter, out var order) && order.X > 0f)
             return null;
         // In trees and bushes, the untextured heart (cpv_only) keeps other data than a colour in its vertex colours
         // (drawn with them, it is a bright yellow ball): not drawn.
