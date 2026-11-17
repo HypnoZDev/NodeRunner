@@ -27,6 +27,7 @@ internal static class Icons
     public const string Eye = "\ue0ba";
     public const string EyeOff = "\ue0bb";
     public const string File = "\ue0c0";
+    public const string Film = "\ue0d0";
     public const string FolderOpen = "\ue247";
     public const string Footprints = "\ue3b9";
     public const string Gauge = "\ue1bf";
@@ -54,6 +55,7 @@ internal static class Icons
     public const string Ruler = "\ue14b";
     public const string PawPrint = "\ue4f5";
     public const string PersonStanding = "\ue21e";
+    public const string Play = "\ue13c";
     public const string Save = "\ue14d";
     public const string Shirt = "\ue1ca";
     public const string Scale = "\ue2eb";

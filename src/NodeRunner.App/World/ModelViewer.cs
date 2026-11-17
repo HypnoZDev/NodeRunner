@@ -80,6 +80,9 @@ internal sealed class ModelViewer : IDisposable
 
     public HashSet<int> HiddenMeshes { get; } = new();
 
+    // Matrices of the bones of a skinned model playing an animation (null: its default pose).
+    public Matrix4x4[]? BonePose { get; set; }
+
     // Lines drawn over the model, in its own space (the piece chosen in the model workshop).
     public List<(Vector3 From, Vector3 To)> OverlayEdges { get; } = [];
 
@@ -256,6 +259,7 @@ internal sealed class ModelViewer : IDisposable
         renderer.VehiclePaint = PaintColors;
         renderer.HiddenMeshes = HiddenMeshes.Count > 0 ? HiddenMeshes : null;
         renderer.HighlightedMesh = HighlightedMesh;
+        renderer.BonePose = BonePose;
         try
         {
             renderer.Wireframe = Shading == ViewerShading.Wireframe;
@@ -267,9 +271,11 @@ internal sealed class ModelViewer : IDisposable
                 // Grey and without textures: the map is there to place the model, not to be looked at.
                 bool untextured = renderer.Untextured;
                 renderer.Untextured = true;
+                renderer.BonePose = null;
                 foreach (var (other, transform) in around)
                     renderer.Draw(other, transform * world, viewProjection, SurroundingsTint);
                 renderer.Untextured = untextured;
+                renderer.BonePose = BonePose;
             }
             renderer.Begin(ModelPass.Translucent);
             renderer.Draw(model, world, viewProjection, Vector3.One);
@@ -290,6 +296,7 @@ internal sealed class ModelViewer : IDisposable
             renderer.VehiclePaint = null;
             renderer.HiddenMeshes = null;
             renderer.HighlightedMesh = -1;
+            renderer.BonePose = null;
             renderer.Lighting = sceneLighting;
             renderer.Shadows = sceneShadows;
         }

@@ -61,5 +61,23 @@ public static partial class English
         ("{0} triangles · {1} morceaux · {2} textures", "{0} triangles · {1} parts · {2} textures"),
         ("Taille : {0} m de haut", "Size: {0} m tall"),
         ("{0} textures introuvables", "{0} textures not found"),
+
+        // Animations
+        ("{0}  Personnages", "{0}  Peds"),
+        ("{0}  Liste des animations...", "{0}  Listing the animations..."),
+        ("Rechercher (ex. smoking, sit, dance, cop)", "Search (e.g. smoking, sit, dance, cop)"),
+        ("{0} fichiers d'animation", "{0} animation files"),
+        ("{0}  Lecture du fichier...", "{0}  Reading the file..."),
+        ("Aucune animation lisible dans ce fichier.", "No readable animation in this file."),
+        ("{0} clips : un clic pour le jouer", "{0} clips: click one to play it"),
+        ("Aucune : pose de base. Choisis une animation dans Scène > Animations.",
+            "None: default pose. Pick an animation in Scene > Animations."),
+        ("{0} s · {1} images", "{0} s · {1} frames"),
+        ("{0}  Copier pour FiveM", "{0}  Copy for FiveM"),
+        ("Copie ces lignes (Lua) pour un script FiveM :\n\n{0}", "Copies these lines (Lua) for a FiveM script:\n\n{0}"),
+        ("Copié : {0} / {1}", "Copied: {0} / {1}"),
+        ("Pose de base", "Default pose"),
+        ("Arrête l'animation : le personnage revient dans sa pose de base", "Stops the animation: the ped goes back to its default pose"),
+        ("Récentes", "Recent"),
     ];
 }

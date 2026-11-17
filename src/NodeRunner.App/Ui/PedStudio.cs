@@ -5,9 +5,9 @@ using NodeRunner.Data.Models;
 
 namespace NodeRunner.App.Ui;
 
-// Ped viewer, in a tab beside the map: one ped or animal large in the tab, the list of the game's peds in Scene, its
-// clothes in Properties.
-internal sealed class PedStudio(AppState state)
+// Ped viewer, in a tab beside the map: one ped or animal large in the tab, the game's peds and animations in Scene,
+// its clothes and the animation played in Properties.
+internal sealed partial class PedStudio(AppState state)
 {
     private ModelViewer Viewer => state.PedViewer;
 
@@ -115,6 +115,7 @@ internal sealed class PedStudio(AppState state)
 
     public void DrawView()
     {
+        Animate();
         DrawToolbar();
         var size = ImGui.GetContentRegionAvail();
         size = new Vector2(MathF.Floor(Math.Max(size.X, 2)), MathF.Floor(Math.Max(size.Y, 2)));
@@ -209,9 +210,26 @@ internal sealed class PedStudio(AppState state)
             Viewer.ResetView();
     }
 
-    // ---- Scene panel: the peds of the game ----
+    // ---- Scene panel: the peds and the animations of the game ----
 
-    public unsafe void DrawList()
+    public void DrawList()
+    {
+        if (!ImGui.BeginTabBar("##ped_scene_tabs"))
+            return;
+        if (ImGui.BeginTabItem(L($"{Icons.PersonStanding}  Personnages")))
+        {
+            DrawPeds();
+            ImGui.EndTabItem();
+        }
+        if (ImGui.BeginTabItem(L($"{Icons.Film}  Animations")))
+        {
+            DrawAnimations();
+            ImGui.EndTabItem();
+        }
+        ImGui.EndTabBar();
+    }
+
+    private unsafe void DrawPeds()
     {
         if (Names() is not { } names)
         {
@@ -291,6 +309,8 @@ internal sealed class PedStudio(AppState state)
             else
                 Widgets.Hint(L("Ce personnage a une seule tenue : ses pièces sont des fichiers séparés (personnages de l'histoire, certains animaux)."), wrap: true);
         }
+
+        DrawAnimationProperties();
 
         if (Widgets.Section(L($"{Icons.Info}  Modèle"), "ped_model"))
         {
