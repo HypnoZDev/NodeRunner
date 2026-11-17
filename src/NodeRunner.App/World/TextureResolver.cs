@@ -17,12 +17,17 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
     private readonly RecentFileCache<IReadOnlyDictionary<uint, TextureData>> _recentFiles = new(32);
 
     // The textures of each mesh of model (same order; for each mesh, same order as TextureNames), null when it has
-    // none or it was not found.
+    // none or it was not found. namedDictionaries: dictionaries holding one texture each, named after it (story
+    // characters' parts), only opened for that texture.
     public ResolvedTexture?[][] Resolve(ModelLocation location, ModelData model, List<string> errors, IReadOnlyList<string>? fallbackDictionaries = null,
-        Func<TextureKey, bool>? isOnGpu = null)
+        Func<TextureKey, bool>? isOnGpu = null, IReadOnlyList<string>? namedDictionaries = null)
     {
         var result = new ResolvedTexture?[model.Meshes.Count][];
         List<string>? chain = null;
+        var named = namedDictionaries?.GroupBy(p => Joaat.Hash(Path.GetFileNameWithoutExtension(p).ToLowerInvariant()))
+            .ToDictionary(g => g.Key, g => g.First());
+        // Names searched in vain, not searched again for the next meshes.
+        var missing = new HashSet<uint>();
         for (int i = 0; i < result.Length; i++)
         {
             var names = model.Meshes[i].TextureNames;
@@ -38,8 +43,11 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
                     continue;
                 }
 
+                if (missing.Contains(name))
+                    continue;
                 chain ??= [.. catalog.GetSearchChain(location.TextureDictionaryHash), .. fallbackDictionaries ?? []];
-                foreach (var path in chain)
+                IEnumerable<string> paths = named?.GetValueOrDefault(name) is { } own ? [own, .. chain] : chain;
+                foreach (var path in paths)
                 {
                     var key = new TextureKey(path, name);
                     if (isOnGpu?.Invoke(key) == true)
@@ -53,6 +61,8 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
                         break;
                     }
                 }
+                if (result[i][t] is null)
+                    missing.Add(name);
             }
         }
         return result;

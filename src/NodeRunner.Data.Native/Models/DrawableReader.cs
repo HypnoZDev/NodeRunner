@@ -68,7 +68,8 @@ public sealed class DrawableReader : IModelReader
         switch (extension.ToLowerInvariant())
         {
             case ".ydr":
-                if (Convert(res, fileHash, 0, SkeletonPose(res, 0)) is { } drawable)
+                // Given a skeleton (its own), its parts keep their bones to be animated.
+                if (Convert(res, fileHash, 0, SkeletonPose(res, 0), bones: skeleton is null ? null : Skeleton(res, 0)) is { } drawable)
                     models[fileHash] = drawable;
                 break;
 

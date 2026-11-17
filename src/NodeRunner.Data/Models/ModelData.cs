@@ -171,6 +171,6 @@ public interface IModelReader
     IReadOnlyDictionary<uint, ModelData> ReadModels(string path);
 
     // Same, with the skeleton of another file for the parts attached to a bone (a ped's .ydd takes the skeleton of its
-    // .yft).
+    // .yft); a .ydr given its own path keeps its bones, to be animated.
     IReadOnlyDictionary<uint, ModelData> ReadModels(string path, string? skeletonPath) => ReadModels(path);
 }

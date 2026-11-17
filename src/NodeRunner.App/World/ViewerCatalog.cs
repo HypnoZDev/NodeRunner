@@ -15,6 +15,9 @@ internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Lo
     // A ped: the files of its parts and how it is dressed.
     public PedFiles? Ped { get; init; }
 
+    // A .ydr read with its own skeleton, its parts following its bones when animated (cutscene props).
+    public bool OwnBones { get; init; }
+
     public uint ArchetypeHash => Name.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                                  && uint.TryParse(Name.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint hash)
         ? hash : Joaat.Hash(Name);

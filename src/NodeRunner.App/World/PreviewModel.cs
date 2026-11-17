@@ -76,7 +76,7 @@ internal sealed class PreviewModel : IDisposable
         {
             var model = item.Ped is { } ped
                 ? ReadPed(reader, ped, item.Location.ModelHash)
-                : reader.ReadModels(item.Location.Path).GetValueOrDefault(item.Location.ModelHash);
+                : reader.ReadModels(item.Location.Path, item.OwnBones ? item.Location.Path : null).GetValueOrDefault(item.Location.ModelHash);
             if (model is null)
                 return new Loaded(item, null, [], [L("modèle introuvable dans le fichier")]);
             ResolvedTexture?[][] textures = [];
@@ -86,8 +86,9 @@ internal sealed class PreviewModel : IDisposable
                 // peds stored one part per file have a texture dictionary per texture.
                 IReadOnlyList<string> fallback = item.Kind == ViewerKind.Vehicle
                     ? SharedVehicleTextures.Select(n => catalog.Locate(Joaat.Hash(n))).OfType<string>().ToArray()
-                    : item.Ped?.Textures ?? [];
-                textures = new TextureResolver(catalog, textureReader).Resolve(item.Location, model, errors, fallback);
+                    : [];
+                textures = new TextureResolver(catalog, textureReader).Resolve(item.Location, model, errors, fallback,
+                    namedDictionaries: item.Ped?.Textures);
             }
             return new Loaded(item, model, textures, errors);
         }

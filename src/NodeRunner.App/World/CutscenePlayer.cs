@@ -143,6 +143,12 @@ internal sealed class CutscenePlayer : IDisposable
         var (position, rotation) = clip.Root(time, AnimationTrackKind.MoverTranslation, AnimationTrackKind.MoverRotation);
         actor.World = Matrix4x4.CreateFromQuaternion(rotation ?? Quaternion.Identity)
                       * Matrix4x4.CreateTranslation(position ?? Vector3.Zero) * scene;
+        if (actor.Model.Data?.Skeleton is null)
+        {
+            // Without a skeleton, the root bone's movement (a glass tilted in the hand) moves the whole model.
+            var (offset, turn) = clip.Root(time, AnimationTrackKind.BoneTranslation, AnimationTrackKind.BoneRotation);
+            actor.World = Matrix4x4.CreateFromQuaternion(turn ?? Quaternion.Identity) * Matrix4x4.CreateTranslation(offset ?? Vector3.Zero) * actor.World;
+        }
         if (actor.Model.Data?.Skeleton is { } skeleton)
         {
             if (actor.Pose is null || actor.Pose.Length != skeleton.Count)
@@ -296,12 +302,15 @@ internal sealed class CutscenePlayer : IDisposable
             case CutsceneObjectKind.Vehicle:
                 return models.FragmentPath(hash) is { } vehicle ? new ViewerItem(name, ViewerKind.Vehicle, new ModelLocation(vehicle, hash, hash)) : null;
             default:
+                // Props move parts of themselves with their own bones (a glass tilted, headphones bent).
                 if (world.Maps?.GetArchetype(hash) is { } archetype && models.Locate(archetype) is { } location)
-                    return new ViewerItem(name, ViewerKind.Object, location);
+                    return new ViewerItem(name, ViewerKind.Object, location) { OwnBones = IsDrawable(location.Path) };
                 return (models.DrawablePath(hash) ?? models.FragmentPath(hash)) is { } path
-                    ? new ViewerItem(name, ViewerKind.Object, new ModelLocation(path, hash, hash)) : null;
+                    ? new ViewerItem(name, ViewerKind.Object, new ModelLocation(path, hash, hash)) { OwnBones = IsDrawable(path) } : null;
         }
     }
+
+    private static bool IsDrawable(string path) => path.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
 
     public void Dispose() => Close();
 }
