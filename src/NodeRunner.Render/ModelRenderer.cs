@@ -42,7 +42,8 @@ cbuffer Object : register(b2)
                        // w = 1: a character (ped shaders).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
-    float4 Surface;    // Characters: x = 1 with a normal map (NormalTexture), y = 1 with a specular map.
+    float4 Surface;    // Characters: x = 1 with a normal map (NormalTexture), y = 1 with a specular map (SpecularTexture),
+                       // z: how bright its highlights are, w: how tight.
 };
 Texture2D ColorTexture : register(t0);
 Texture2D Layer1 : register(t1);
@@ -196,6 +197,16 @@ float4 Shade(PS_INPUT input, float4 color)
     light += RimColor.rgb * saturate(dot(n, RimDirection.xyz)) * edge * edge;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * 1.4f);
+    // Characters' shine: highlights of the key light, as bright as the red of the specular map (squared) says, as
+    // tight as its alpha says.
+    if (Surface.y > 0.5f && sun > 0.0f)
+    {
+        float4 s = SpecularTexture.Sample(ColorSampler, input.uv);
+        float3 halfway = normalize(LightDirection.xyz + normalize(CameraFog.xyz - input.world));
+        float power = clamp(s.a * Surface.w, 8.0f, 512.0f);
+        float highlight = pow(saturate(dot(n, halfway)), power) * 0.3f;
+        lit += SunColor.rgb * (s.r * s.r * Surface.z * highlight * sun);
+    }
 
     // Distance fog, thicker towards the horizon colour; none on the first quarter of the distance.
     float distance = length(input.world - CameraFog.xyz);
@@ -619,7 +630,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var terrain = mesh.Terrain;
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
                 terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
-                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting, mesh.DarkeningDecal, mesh.IsCharacter));
+                terrain is null && mesh.TintTextureName is not null, mesh.BakedLighting, mesh.DarkeningDecal, mesh.IsCharacter,
+                new Vector2(mesh.SpecularIntensity, mesh.SpecularFalloff)));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
@@ -700,7 +712,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
                 r.DarkeningDecal, r.Character, r.Character && textures.Length > 1 ? textures[1] : null,
-                r.Character && textures.Length > 2 ? textures[2] : null);
+                r.Character && textures.Length > 2 ? textures[2] : null, r.Shine);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
@@ -854,16 +866,16 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 if (part.TintTexture is not null)
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
-            SetSurface(part.NormalTexture, part.SpecularTexture);
+            SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine);
             _context.PSSetShaderResource(0, baseTexture.View);
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
     }
 
     // Relief and shine textures of a character's part (none for everything else).
-    private void SetSurface(GpuTexture? normal, GpuTexture? specular)
+    private void SetSurface(GpuTexture? normal, GpuTexture? specular, Vector2 shine)
     {
-        var value = new Vector4(normal is null ? 0f : 1f, specular is null ? 0f : 1f, 0f, 0f);
+        var value = new Vector4(normal is null ? 0f : 1f, specular is null ? 0f : 1f, shine.X, shine.Y);
         if (normal is not null)
             _context.PSSetShaderResource(6, normal.View);
         if (specular is not null)
@@ -1047,7 +1059,7 @@ public sealed class GpuModel : IDisposable
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
         int Mesh, GpuTexture? TintTexture, bool BakedLighting, bool DarkeningDecal, bool Character, GpuTexture? NormalTexture = null,
-        GpuTexture? SpecularTexture = null);
+        GpuTexture? SpecularTexture = null, Vector2 Shine = default);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -1091,7 +1103,7 @@ public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
         MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted,
-        bool BakedLighting, bool DarkeningDecal, bool Character);
+        bool BakedLighting, bool DarkeningDecal, bool Character, Vector2 Shine);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;

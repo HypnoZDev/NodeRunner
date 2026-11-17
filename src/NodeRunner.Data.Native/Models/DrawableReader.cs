@@ -525,6 +525,8 @@ public sealed class DrawableReader : IModelReader
         ShaderHash = mesh.ShaderHash,
         ShaderTextures = mesh.ShaderTextures,
         DiffuseColor = mesh.DiffuseColor,
+        SpecularIntensity = mesh.SpecularIntensity,
+        SpecularFalloff = mesh.SpecularFalloff,
     };
 
     // The models of the first level of detail present (high, medium, low, very low): a list header (pointer, count,
@@ -724,6 +726,8 @@ public sealed class DrawableReader : IModelReader
 
     private static readonly uint SpikedHairPreset = Joaat.Hash("ped_hair_spiked.sps");
     private static readonly uint OrderNumberParameter = Joaat.Hash("orderNumber");
+    private static readonly uint SpecularIntensityParameter = Joaat.Hash("specularIntensityMult");
+    private static readonly uint SpecularFalloffParameter = Joaat.Hash("specularFalloffMult");
 
     // Terrain shaders taking their weights from the vertex colour only, or from the mask only.
     private static readonly uint TerrainVertexOnlyShader = Joaat.Hash("terrain_cb_w_4lyr_lod");
@@ -929,6 +933,8 @@ public sealed class DrawableReader : IModelReader
             ShaderHash = shader?.Name ?? 0,
             ShaderTextures = shader?.Textures ?? (IReadOnlyDictionary<uint, string>)new Dictionary<uint, string>(),
             DiffuseColor = shader is not null && shader.Vectors.TryGetValue(DiffuseColorParameter, out var diffuse) ? diffuse : null,
+            SpecularIntensity = shader is not null && shader.Vectors.TryGetValue(SpecularIntensityParameter, out var intensity) ? intensity.X : 1f,
+            SpecularFalloff = shader is not null && shader.Vectors.TryGetValue(SpecularFalloffParameter, out var falloff) ? falloff.X : 100f,
         };
     }
 
@@ -1368,6 +1374,8 @@ public sealed class DrawableReader : IModelReader
         ShaderHash = mesh.ShaderHash,
         ShaderTextures = mesh.ShaderTextures,
         DiffuseColor = mesh.DiffuseColor,
+        SpecularIntensity = mesh.SpecularIntensity,
+        SpecularFalloff = mesh.SpecularFalloff,
     };
 
     private static Vector3 Xyz(Vector4 v) => new(v.X, v.Y, v.Z);

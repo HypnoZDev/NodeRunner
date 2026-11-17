@@ -96,6 +96,11 @@ public sealed class ModelMesh
         : IsCharacter ? [DiffuseTextureName, NormalTextureName, SpecularTextureName]
         : [DiffuseTextureName];
 
+    // Shine set by the shader (specularIntensityMult, specularFalloffMult): how bright and how tight the highlights of
+    // the specular map are.
+    public float SpecularIntensity { get; init; } = 1f;
+    public float SpecularFalloff { get; init; } = 100f;
+
     // Characters: the relief (normal map) and shine (specular map) textures of the shader.
     public string? NormalTextureName => ShaderTextures.GetValueOrDefault(BumpSampler);
     public string? SpecularTextureName => ShaderTextures.GetValueOrDefault(SpecSampler);
