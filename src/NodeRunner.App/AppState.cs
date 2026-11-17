@@ -41,6 +41,7 @@ internal sealed partial class AppState
     public Gta4World Gta4 { get; } = new();
     public GameKind ActiveGame { get; set; } = GameKind.Gta5;
     public bool IsGta4 => ActiveGame == GameKind.Gta4;
+    public GameFeatures Features => GameFeatures.Of(ActiveGame);
 
     // GTA IV: the object clicked in the 3D view (read only), forgotten when another map is shown.
     public MapEntity? Gta4Selection

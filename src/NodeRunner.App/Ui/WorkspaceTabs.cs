@@ -17,7 +17,7 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, P
     // After the dock space: takes the top of the 3D view for the tabs, then the workshop covers the rest when chosen.
     public void Draw()
     {
-        if (state.WorkshopOpen && state.IsGta4)
+        if (state.WorkshopOpen && !state.Features.Editing)
             viewer.CloseWorkshop();
         if (!state.WorkshopOpen)
         {

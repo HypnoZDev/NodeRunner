@@ -245,7 +245,7 @@ internal sealed partial class AppState
     // unless kept (the same project opened again).
     public string? OpenProject(string folder, bool keepOthers = false)
     {
-        if (IsGta4)
+        if (!Features.Editing)
             return Gta4ProjectsBlocked;
         if (Online.Blocks() is { } blocked)
             return blocked;
@@ -267,7 +267,7 @@ internal sealed partial class AppState
     // Creates a project in a folder and opens it.
     public string? CreateProject(string folder, string name)
     {
-        if (IsGta4)
+        if (!Features.Editing)
             return Gta4ProjectsBlocked;
         if (Online.Blocks() is { } blocked)
             return blocked;

@@ -23,7 +23,7 @@ internal sealed partial class PedStudio(AppState state)
 
     public void Open()
     {
-        if (state.IsGta4)
+        if (!state.Features.PedViewer)
         {
             state.Notify(L("La visionneuse de personnages est réservée à GTA V."), warning: true);
             return;
@@ -48,7 +48,7 @@ internal sealed partial class PedStudio(AppState state)
     public void BeginFrame()
     {
         Viewer.RequestedSize = Vector2.Zero;
-        if (state.PedOpen && state.IsGta4)
+        if (state.PedOpen && !state.Features.PedViewer)
             Close();
         if (state.World.Models is { } models && !ReferenceEquals(models, _for))
         {

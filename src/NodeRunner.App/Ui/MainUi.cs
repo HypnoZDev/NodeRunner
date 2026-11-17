@@ -90,7 +90,7 @@ internal sealed class MainUi
     // What the search palette (Ctrl+K) can run besides finding things: the usual actions, by name.
     private IReadOnlyList<PaletteCommand> PaletteCommands()
     {
-        bool gta5 = !_state.IsGta4;
+        var features = _state.Features;
         var settings = _state.Settings;
         void Hour(float hour)
         {
@@ -99,20 +99,20 @@ internal sealed class MainUi
         }
         return
         [
-            new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", "Ctrl+S", () => SaveRequested = true, gta5),
-            new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", "Ctrl+E", _exportWindow.Open, gta5),
-            new(Icons.FolderPlus, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), gta5),
-            new(Icons.FolderOpen, L("Ouvrir un projet"), "open", "Ctrl+O", () => OpenProjectRequested = true, gta5),
-            new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", "Ctrl+Z", _state.Undo, gta5),
-            new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", "Ctrl+Y", _state.Redo, gta5),
-            new(Icons.MousePointer, L("Outil Sélection"), "select choisir", "1", () => _state.Tool = TransformTool.Select, gta5),
-            new(Icons.Move, L("Outil Déplacer"), "move bouger", "2", () => _state.Tool = TransformTool.Move, gta5),
-            new(Icons.Rotate, L("Outil Tourner"), "rotate rotation pivoter", "3", () => _state.Tool = TransformTool.Rotate, gta5),
-            new(Icons.Scale, L("Outil Échelle"), "scale taille agrandir", "4", () => _state.Tool = TransformTool.Scale, gta5),
-            new(Icons.Mountain, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, gta5),
-            new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", L("Fin"), _state.PutSelectionOnGround, gta5 && _state.Selection is not null),
+            new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", "Ctrl+S", () => SaveRequested = true, features.Editing),
+            new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", "Ctrl+E", _exportWindow.Open, features.Gta5Exports),
+            new(Icons.FolderPlus, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), features.Editing),
+            new(Icons.FolderOpen, L("Ouvrir un projet"), "open", "Ctrl+O", () => OpenProjectRequested = true, features.Editing),
+            new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", "Ctrl+Z", _state.Undo, features.Editing),
+            new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", "Ctrl+Y", _state.Redo, features.Editing),
+            new(Icons.MousePointer, L("Outil Sélection"), "select choisir", "1", () => _state.Tool = TransformTool.Select, features.Editing),
+            new(Icons.Move, L("Outil Déplacer"), "move bouger", "2", () => _state.Tool = TransformTool.Move, features.Editing),
+            new(Icons.Rotate, L("Outil Tourner"), "rotate rotation pivoter", "3", () => _state.Tool = TransformTool.Rotate, features.Editing),
+            new(Icons.Scale, L("Outil Échelle"), "scale taille agrandir", "4", () => _state.Tool = TransformTool.Scale, features.Editing),
+            new(Icons.Mountain, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, features.Editing),
+            new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", L("Fin"), _state.PutSelectionOnGround, features.Editing && _state.Selection is not null),
             new(Icons.Box, L("Modifier le modèle sélectionné dans l'Atelier"), "atelier workshop morceau texture percer", L("Double-clic"),
-                () => _state.WorkshopRequest = _state.Selection, gta5 && _state.Selection is not null),
+                () => _state.WorkshopRequest = _state.Selection, features.Editing && _state.Selection is not null),
             new(Icons.Grid, L("Afficher ou masquer la grille au sol"), "grid quadrillage", "G", () =>
             {
                 settings.ShowGrid = !settings.ShowGrid;
@@ -126,18 +126,18 @@ internal sealed class MainUi
             new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", "F5", () =>
             {
                 if (!_state.CutsceneOpen) ToggleCutscenes();
-            }, gta5),
-            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "F4", _pedStudio.Open, gta5),
+            }, features.CutsceneViewer),
+            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "F4", _pedStudio.Open, features.PedViewer),
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
-            new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, gta5),
-            new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, gta5),
+            new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, features.Editing),
+            new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, features.Online),
             new(Icons.Settings, L("Ouvrir les paramètres"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
             new(Icons.Keyboard, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
             new(Icons.ListTree, L("Afficher le panneau Scène"), "objets liste panel", "", () => _showScene = true),
             new(Icons.Layers, L("Afficher le panneau Calques"), "layers panel", "", () => _showLayers = true),
             new(Icons.SlidersHorizontal, L("Afficher le panneau Propriétés"), "properties panel", "", () => _showProperties = true),
             new(Icons.Activity, L("Afficher le panneau État"), "status panel", "", () => _showStatus = true),
-            new(Icons.FolderOpen, L("Afficher le panneau Projet"), "project fichiers panel", "", ShowProjectPanel, gta5),
+            new(Icons.FolderOpen, L("Afficher le panneau Projet"), "project fichiers panel", "", ShowProjectPanel, features.Editing),
             new(Icons.Monitor, L("Remettre la disposition des panneaux par défaut"), "layout reset fenêtres", "", () => _resetLayout = true),
             new(Icons.Info, L("À propos de NodeRunner Studio"), "about version crédits", "", () => _showAbout = true),
         ];
@@ -204,15 +204,15 @@ internal sealed class MainUi
     // The "+" of the tabs above the 3D view: every viewer, wherever it opens (panel, tab, or on the map).
     private void DrawOpenMenu()
     {
-        bool gta5 = !_state.IsGta4;
+        var features = _state.Features;
         if (ImGui.MenuItem(L(ViewerPanel.Title), "F2", _showViewer))
             ToggleViewer();
-        if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, gta5))
+        if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, features.PedViewer))
             _pedStudio.Open();
-        if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, gta5))
+        if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, features.CutsceneViewer))
             ToggleCutscenes();
         ImGui.Separator();
-        if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic"), false, gta5 && _state.Selection is not null))
+        if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic"), false, features.Editing && _state.Selection is not null))
             _state.WorkshopRequest = _state.Selection;
         if (_state.Selection is null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(L("Sélectionnez d'abord un objet sur la carte."));
@@ -512,7 +512,7 @@ internal sealed class MainUi
             ProjectWindow.Open();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.O))
             OpenProjectRequested = true;
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E) && !_state.IsGta4)
+        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E) && _state.Features.Gta5Exports)
             _exportWindow.Open();
         if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Comma))
             _settingsWindow.Open();
@@ -527,7 +527,7 @@ internal sealed class MainUi
             if (_state.PedShown) _pedStudio.Close();
             else _pedStudio.Open();
         }
-        if (ImGui.IsKeyPressed(ImGuiKey.F5, false) && !_state.IsGta4)
+        if (ImGui.IsKeyPressed(ImGuiKey.F5, false) && _state.Features.CutsceneViewer)
             ToggleCutscenes();
         if (!map)
             return;
@@ -600,13 +600,13 @@ internal sealed class MainUi
             int toSave = _state.PendingSaveCount;
             if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), "Ctrl+S", false, toSave > 0))
                 SaveRequested = true;
-            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E", false, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E", false, _state.Features.Gta5Exports))
                 _exportWindow.Open();
-            if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+            if (!_state.Features.Gta5Exports && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
-            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en pack solo..."), null, false, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en pack solo..."), null, false, _state.Features.Gta5Exports))
                 _exportWindow.OpenSolo();
-            if (_state.IsGta4 && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+            if (!_state.Features.Gta5Exports && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
             ImGui.Separator();
             if (ImGui.MenuItem(L("Quitter")))
@@ -656,13 +656,13 @@ internal sealed class MainUi
             ImGui.EndMenu();
         }
 
-        if (Menu(L("Projet"), !_state.IsGta4, Gta5OnlyTip))
+        if (Menu(L("Projet"), _state.Features.Editing, Gta5OnlyTip))
         {
             DrawProjectContentItems();
             ImGui.EndMenu();
         }
 
-        if (Menu(L("Créer"), !_state.IsGta4, Gta5OnlyTip))
+        if (Menu(L("Créer"), _state.Features.Editing, Gta5OnlyTip))
         {
             if (ImGui.MenuItem(L($"{Icons.LibraryBig}  Placer un prop de la bibliothèque...")))
                 ShowLibrary();
@@ -717,9 +717,9 @@ internal sealed class MainUi
         if (Menu(L("Outils")))
         {
             ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
-            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, _state.Features.PedViewer))
                 _pedStudio.Open();
-            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, !_state.IsGta4))
+            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, _state.Features.CutsceneViewer))
                 ToggleCutscenes();
             if (ImGui.BeginMenu(L($"{Icons.LibraryBig}  Bibliothèque de props")))
             {

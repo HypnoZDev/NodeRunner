@@ -292,7 +292,7 @@ internal sealed unsafe class ScenePanel(AppState state)
         else if (entity is not null && ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             // Ctrl+click adds the object to the selection or removes it.
-            bool control = ImGui.GetIO().KeyCtrl && !state.IsGta4;
+            bool control = ImGui.GetIO().KeyCtrl && state.Features.Editing;
             if (control)
                 state.ToggleSelect(entity);
             else

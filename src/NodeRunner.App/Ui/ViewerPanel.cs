@@ -1021,8 +1021,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.SetTooltip(L($"Fichier : {item.Location.Path}")
                 + (Viewer.MissingTextureCount > 0 ? L($"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}") : ""));
 
-        bool canPlace = item.Kind == ViewerKind.Object && !IsGta4 && state.World.Maps is not null && !_inWorkshop;
-        bool canEdit = !IsGta4 && item.Kind != ViewerKind.Ped && !_inWorkshop;
+        bool canPlace = item.Kind == ViewerKind.Object && state.Features.Editing && state.World.Maps is not null && !_inWorkshop;
+        bool canEdit = state.Features.Editing && item.Kind != ViewerKind.Ped && !_inWorkshop;
         float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
             + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
@@ -1829,7 +1829,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             }
         }
 
-        if (!IsGta4 && Widgets.Section(L("Script FiveM (Lua)"), "viewer_paint_script"))
+        if (state.Features.Gta5Exports && Widgets.Section(L("Script FiveM (Lua)"), "viewer_paint_script"))
         {
             string script = PaintScript();
             ImGui.PushFont(UiTheme.SmallFont);

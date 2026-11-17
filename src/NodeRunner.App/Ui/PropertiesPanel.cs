@@ -152,7 +152,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             float width = ImGui.GetContentRegionAvail().X;
             if (Search is { } search && Widgets.Button(L($"{Icons.Search}  Rechercher un objet ou un lieu"), "Ctrl+K", width))
                 search();
-            if (!state.IsGta4 && Widgets.Button(L($"{Icons.LibraryBig}  Poser un prop de la bibliothèque"),
+            if (state.Features.Editing && Widgets.Button(L($"{Icons.LibraryBig}  Poser un prop de la bibliothèque"),
                     L("Glissez un prop de la Bibliothèque dans la vue 3D."), width))
                 ShowLibrary?.Invoke();
         }

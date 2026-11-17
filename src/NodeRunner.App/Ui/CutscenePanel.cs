@@ -34,7 +34,7 @@ internal sealed class CutscenePanel(AppState state)
 
     public void Open()
     {
-        if (state.IsGta4)
+        if (!state.Features.CutsceneViewer)
         {
             state.Notify(L("La visionneuse de cinématiques est réservée à GTA V."), warning: true);
             return;
@@ -52,7 +52,7 @@ internal sealed class CutscenePanel(AppState state)
     // Once a frame before the interface: the time moves on, the camera goes to a cutscene just read.
     public void BeginFrame()
     {
-        if (state.CutsceneOpen && state.IsGta4)
+        if (state.CutsceneOpen && !state.Features.CutsceneViewer)
             Close();
         if (Player.Cutscene is not { } cutscene)
             return;

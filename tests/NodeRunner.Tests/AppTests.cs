@@ -142,3 +142,21 @@ public class AppSettingsTests : IDisposable
         Assert.Equal(defaults.MaxFps, AppSettings.Load(File_).MaxFps);
     }
 }
+
+// GTA V offers everything; the other games are browsed without being changed.
+public class GameFeaturesTests
+{
+    [Fact]
+    public void Gta5HasEveryFeature()
+    {
+        var features = GameFeatures.Of(GameKind.Gta5);
+        Assert.True(features.Editing && features.Gta5Exports && features.Online && features.PedViewer && features.CutsceneViewer);
+    }
+
+    [Fact]
+    public void Gta4IsBrowseOnly()
+    {
+        var features = GameFeatures.Of(GameKind.Gta4);
+        Assert.False(features.Editing || features.Gta5Exports || features.Online || features.PedViewer || features.CutsceneViewer);
+    }
+}
