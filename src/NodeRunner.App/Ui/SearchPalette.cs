@@ -85,7 +85,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
             ImGui.SetNextWindowFocus();
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.GlassStrong);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
         ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.GlassEdge);
         const ImGuiWindowFlags flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove
             | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse
@@ -95,6 +95,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         ImGui.PopStyleVar(2);
         if (visible)
         {
+            OverlayStyle.WindowGlass(strong: true);
             OverlayStyle.Sheen(ImGui.GetWindowDrawList(), ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), ImGui.GetStyle().WindowRounding);
             DrawContent();
         }

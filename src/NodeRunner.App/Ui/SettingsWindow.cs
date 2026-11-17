@@ -40,13 +40,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         ImGui.SetNextWindowSize(size, ImGuiCond.Appearing);
         ImGui.SetNextWindowSizeConstraints(Vector2.Min(new Vector2(640f, 360f), room), room);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(16, 14));
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.GlassStrong);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
         ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.GlassEdge);
         bool visible = ImGui.Begin(L(Title), ref _open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking);
         ImGui.PopStyleColor(2);
         ImGui.PopStyleVar();
         if (visible)
         {
+            OverlayStyle.WindowGlass(strong: true, titleBar: true);
             if (ImGui.BeginChild("##settings_pages", new Vector2(PagesWidth, 0), ImGuiChildFlags.None))
                 DrawPages();
             ImGui.EndChild();
@@ -477,6 +478,19 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     SaveWhenReleased();
                     if (!state.TransparentWindow && settings.Transparency > 0f)
                         ImGui.TextColored(UiTheme.Warning, L("Prend effet au prochain démarrage de NodeRunner."));
+                }
+
+                Widgets.Property(L("Verre dépoli"), L("La barre flottante, ses menus, la recherche et les Paramètres laissent voir la carte floutée derrière eux. Décocher sur un ordinateur lent."));
+                if (state.SoftwareRendering)
+                    ImGui.TextColored(UiTheme.TextFaint, L("Indisponible en rendu logiciel"));
+                else
+                {
+                    bool frosted = settings.FrostedGlass;
+                    if (ImGui.Checkbox("##frosted_glass", ref frosted))
+                    {
+                        settings.FrostedGlass = frosted;
+                        state.SaveSettings();
+                    }
                 }
 
                 Widgets.Property(L("Fenêtres détachables"), L("Un panneau (Visionneuse, Propriétés, Scène...) glissé hors de NodeRunner devient une vraie fenêtre de Windows, que l'on peut mettre sur un autre écran. Le glisser sur NodeRunner le remet dedans."));

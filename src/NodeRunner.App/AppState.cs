@@ -29,6 +29,9 @@ internal sealed partial class AppState
     // The window shows the Windows 11 backdrop (Mica) through the interface (see Settings.Transparency).
     public bool TransparentWindow { get; set; }
 
+    // No graphics card usable: Windows draws on the processor (WARP), effects like the frosted glass are left out.
+    public bool SoftwareRendering { get; set; }
+
     public Camera Camera { get; } = new();
 
     public WorldLoader World { get; }

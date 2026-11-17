@@ -119,6 +119,15 @@ float4 PS(PS_INPUT input) : SV_Target
         return id;
     }
 
+    // Under a fixed id (not a pointer), for an image whose view is recreated while the interface keeps its id.
+    public void SetTexture(IntPtr id, ID3D11ShaderResourceView? view)
+    {
+        if (view is null)
+            _textures.Remove(id);
+        else
+            _textures[id] = view;
+    }
+
     public void UnregisterTexture(IntPtr id) => _textures.Remove(id);
 
     public IntPtr RegisterTexture(GpuTexture texture) => RegisterTexture(texture.View);

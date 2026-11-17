@@ -10,10 +10,16 @@ internal static class OverlayStyle
     public const float MenuRounding = 10f;
     public const float ButtonRounding = 7f;
 
-    private static Vector4 Background => UiTheme.Glass;
     private static Vector4 Edge => UiTheme.GlassEdge;
 
-    public static void Panel(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding)
+    // Frosted glass: the blurred 3D view (BackdropBlur) under the tint. MainForm sets it before the interface is
+    // built and blurs the same rectangle (interface coordinates) afterwards, if Used.
+    public static readonly IntPtr BackdropTexture = 0x4E52_4746; // Fixed id, never a pointer.
+    public static bool BackdropAvailable;
+    public static Vector2 BackdropMin, BackdropMax;
+    public static bool BackdropUsed;
+
+    public static void Panel(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding, bool strong = false)
     {
         // Soft shadow: a few growing, fading rounded rectangles.
         for (int i = 1; i <= 4; i++)
@@ -22,9 +28,50 @@ internal static class OverlayStyle
             drawList.AddRectFilled(min - grow + new Vector2(0, 2), max + grow + new Vector2(0, 2),
                 ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.06f)), rounding + i * 1.5f);
         }
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(Background), rounding);
+        GlassFill(drawList, min, max, rounding, strong);
         Sheen(drawList, min, max, rounding);
         drawList.AddRect(min, max, ImGui.GetColorU32(Edge), rounding, ImDrawFlags.None, 1f);
+    }
+
+    // The glass itself: the blurred 3D view seen through a tint where it lies over the view, the tint alone (see-through)
+    // without the blur. Strong = more tint, for text (menus, search).
+    public static void GlassFill(ImDrawListPtr drawList, Vector2 min, Vector2 max, float rounding, bool strong,
+        ImDrawFlags corners = ImDrawFlags.RoundCornersAll)
+    {
+        var clipMin = Vector2.Max(min, BackdropMin);
+        var clipMax = Vector2.Min(max, BackdropMax);
+        var size = BackdropMax - BackdropMin;
+        if (!BackdropAvailable || clipMax.X <= clipMin.X || clipMax.Y <= clipMin.Y || size.X < 1f || size.Y < 1f)
+        {
+            drawList.AddRectFilled(min, max, ImGui.GetColorU32(strong ? UiTheme.GlassStrong : UiTheme.Glass), rounding, corners);
+            return;
+        }
+        BackdropUsed = true;
+        // Opaque underneath: the part beyond the 3D view (a menu over a panel) shows no panel text through it.
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(UiTheme.Chrome), rounding, corners);
+        drawList.PushClipRect(clipMin, clipMax, true);
+        drawList.AddImageRounded(BackdropTexture, min, max, (min - BackdropMin) / size, (max - BackdropMin) / size,
+            0xFFFFFFFF, rounding, corners);
+        drawList.PopClipRect();
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(strong ? UiTheme.FrostStrong : UiTheme.Frost), rounding, corners);
+    }
+
+    // Glass behind a window with its own background turned off (WindowBg transparent), drawn just after Begin. Below
+    // the title bar only, which ImGui has already drawn.
+    public static void WindowGlass(bool strong, bool titleBar = false, float rounding = -1f)
+    {
+        var min = ImGui.GetWindowPos();
+        var max = min + ImGui.GetWindowSize();
+        float title = titleBar ? ImGui.GetFrameHeight() : 0f;
+        if (rounding < 0f)
+            rounding = ImGui.GetStyle().WindowRounding;
+        if (max.X - min.X <= 1f || max.Y - min.Y <= title + 1f)
+            return;
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.PushClipRectFullScreen();
+        GlassFill(drawList, min with { Y = min.Y + title }, max, rounding, strong,
+            title > 0f ? ImDrawFlags.RoundCornersBottom : ImDrawFlags.RoundCornersAll);
+        drawList.PopClipRect();
     }
 
     // The light caught by the glass: a faint white fading downwards over the top of the panel, and a brighter line on
@@ -42,7 +89,7 @@ internal static class OverlayStyle
             ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.16f)), 1f);
     }
 
-    public static void WindowBackground(float rounding)
+    public static void WindowBackground(float rounding, bool strong = false)
     {
         var min = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
@@ -51,7 +98,7 @@ internal static class OverlayStyle
         // After Begin, drawing is clipped inside the window padding: lift that for the background and its shadow.
         var drawList = ImGui.GetWindowDrawList();
         drawList.PushClipRectFullScreen();
-        Panel(drawList, min, min + size, rounding);
+        Panel(drawList, min, min + size, rounding, strong);
         drawList.PopClipRect();
     }
 
@@ -147,7 +194,7 @@ internal static class OverlayStyle
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(6, 6));
         bool open = ImGui.BeginPopup(id);
         if (open)
-            WindowBackground(MenuRounding);
+            WindowBackground(MenuRounding, strong: true);
         else
             PopStyle();
         return open;

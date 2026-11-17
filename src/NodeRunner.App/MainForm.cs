@@ -30,6 +30,9 @@ internal sealed unsafe partial class MainForm : Form
     private ShadowMaps? _shadowMaps;
     private object? _waterShown; // The WaterMap uploaded to _waterRenderer.
     private PickBuffer? _pickBuffer;
+    private BackdropBlur? _backdropBlur;
+    private Rectangle _backdropArea; // Pixels of the 3D view blurred for the interface being built.
+    private bool _backdropReady;
     private (Point Location, bool Control)? _pickRequest;
 
     // Collision tool: left button pressed at this point (a drag draws a selection rectangle), and the click or
@@ -164,6 +167,19 @@ internal sealed unsafe partial class MainForm : Form
             _windowAlpha = new WindowAlpha(_graphics.Device, _graphics.Context);
         _state.TransparentWindow = _graphics.IsTransparent;
         _imguiRenderer = new ImGuiRenderer(_graphics.Device, _graphics.Context);
+        _state.SoftwareRendering = _graphics.IsSoftware;
+        if (!_graphics.IsSoftware)
+        {
+            // Only a look: without it the glass stays a plain tint.
+            try
+            {
+                _backdropBlur = new BackdropBlur(_graphics.Device, _graphics.Context);
+            }
+            catch (Exception e)
+            {
+                Diagnostics.ErrorLog.Add(L("Carte graphique"), e.Message);
+            }
+        }
         _lineRenderer = new ColorRenderer(_graphics.Device, _graphics.Context);
         _modelRenderer = new ModelRenderer(_graphics.Device, _graphics.Context);
         _skyRenderer = new SkyRenderer(_graphics.Device, _graphics.Context);
@@ -230,6 +246,10 @@ internal sealed unsafe partial class MainForm : Form
         _pickBuffer = null;
         _windowAlpha?.Dispose();
         _windowAlpha = null;
+        _imguiRenderer?.SetTexture(OverlayStyle.BackdropTexture, null);
+        _backdropBlur?.Dispose();
+        _backdropBlur = null;
+        _backdropReady = false;
         _lineRenderer?.Dispose();
         _lineRenderer = null;
         _imguiRenderer?.Dispose();
@@ -354,6 +374,11 @@ internal sealed unsafe partial class MainForm : Form
 
         UiTheme.ApplyPending();
         UiTheme.FollowAccent(GameAccent(), deltaTime);
+        bool frosted = _backdropBlur is not null && _state.Settings.FrostedGlass && !_state.WorkshopCoversMap && _backdropArea.Width > 0;
+        OverlayStyle.BackdropAvailable = frosted && _backdropReady;
+        OverlayStyle.BackdropMin = new Vector2(_backdropArea.Left, _backdropArea.Top) / UiTheme.Scale;
+        OverlayStyle.BackdropMax = new Vector2(_backdropArea.Right, _backdropArea.Bottom) / UiTheme.Scale;
+        OverlayStyle.BackdropUsed = false;
         PlatformWindows.NewFrame();
         ImGui.NewFrame();
         _ui.Draw();
@@ -379,6 +404,14 @@ internal sealed unsafe partial class MainForm : Form
             LoadWorld();
         else
             DrawWorld(_lineRenderer!, scene);
+        // The interface was built for last frame's area: blur that one (the same unless the panels just moved).
+        if (frosted && (OverlayStyle.BackdropUsed || !_backdropReady))
+        {
+            _backdropBlur!.Render(graphics, _backdropArea.X, _backdropArea.Y, _backdropArea.Width, _backdropArea.Height);
+            imguiRenderer.SetTexture(OverlayStyle.BackdropTexture, _backdropBlur.View);
+            _backdropReady = _backdropBlur.View is not null;
+        }
+        _backdropArea = scene;
         float opacity = 1f - Math.Clamp(_state.Settings.Transparency, 0f, MaxTransparency);
         _windowAlpha?.MakeOpaque(scene.X, scene.Y, scene.Width, scene.Height);
         imguiRenderer.Render(ImGui.GetDrawData());

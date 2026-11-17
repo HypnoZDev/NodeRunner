@@ -36,6 +36,9 @@ internal static unsafe class UiTheme
     public static readonly Vector4 Glass = new(0.075f, 0.085f, 0.11f, 0.78f);
     public static readonly Vector4 GlassStrong = new(0.08f, 0.09f, 0.115f, 0.90f); // Menus and tooltips: text first.
     public static readonly Vector4 GlassEdge = new(1f, 1f, 1f, 0.13f);
+    // Tint over the blurred 3D view (frosted glass): lighter, the blur already keeps the text readable.
+    public static readonly Vector4 Frost = new(0.07f, 0.08f, 0.11f, 0.42f);
+    public static readonly Vector4 FrostStrong = new(0.07f, 0.08f, 0.11f, 0.62f);
 
     // Accent colour (setting): buttons, selection, links.
     public static Vector4 Accent { get; private set; } = Rgb(DefaultAccent);

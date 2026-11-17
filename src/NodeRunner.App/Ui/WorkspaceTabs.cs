@@ -40,10 +40,12 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8, 4));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, UiTheme.Glass);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
         bool visible = ImGui.Begin("##workspace_tabs", BarFlags);
         ImGui.PopStyleColor();
         ImGui.PopStyleVar(3);
+        if (visible)
+            OverlayStyle.WindowGlass(strong: false, rounding: 0f);
         if (visible)
             OverlayStyle.Sheen(ImGui.GetWindowDrawList(), ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), 0f);
         if (visible && ImGui.BeginTabBar("##workspace", ImGuiTabBarFlags.FittingPolicyScroll))
