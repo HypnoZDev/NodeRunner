@@ -98,7 +98,7 @@ internal sealed unsafe partial class MainForm
             _modelLayer.Doors = _state.OpenDoors;
         }
 
-        _modelLayer.Hidden = _state.IsClassic ? _state.Classic.HiddenRooms(_state.Gta4Selection) : _state.Cutscenes.Hidden;
+        _modelLayer.Hidden = _state.IsClassic ? _state.Classic.HiddenRooms(_state.Gta4Selection, camera.Position) : _state.Cutscenes.Hidden;
 
         // Sun shadows: the objects seen from the sun first, into their own images.
         bool shadows = modelsEnabled && settings.Shadows;

@@ -15,6 +15,17 @@ public sealed record ClassicInterior(int Number, string Name, Vector3 Center, fl
 {
     // Far above the ground (most San Andreas rooms, the Vice City stadium): it hides nothing of the city.
     public bool AboveCity => Center.Z > 200f;
+
+    // Boxes of the room's own models (walls, floors), without the huge scenery seen through its windows.
+    public IReadOnlyList<(Vector3 Min, Vector3 Max)> Boxes { get; init; } = [];
+
+    public bool Contains(Vector3 point)
+    {
+        foreach (var (min, max) in Boxes)
+            if (Vector3.Clamp(point, min, max) == point)
+                return true;
+        return false;
+    }
 }
 
 // The map of GTA III, Vice City or San Andreas in the form the 3D view draws (the GTA V one): each placement file
@@ -44,6 +55,12 @@ public sealed class ClassicScene
 
     // Objects of the same interior number at most this far apart belong to the same room.
     private const float RoomLink = 60f;
+
+    // Room models wider than this are scenery seen from inside (fake city, whole island), not the room itself.
+    private const float RoomPartSize = 150f;
+
+    // Lets flat models (floors) hold the camera too.
+    private const float RoomPartMargin = 2f;
 
     private const uint LodInParentMap = 8;
 
@@ -155,7 +172,10 @@ public sealed class ClassicScene
             }, file.Path));
         }
 
-        var interiors = Rooms(inRooms, radii, definitions);
+        var boxes = new Dictionary<uint, (Vector3 Min, Vector3 Max)>();
+        foreach (var archetype in archetypes)
+            boxes[archetype.NameHash] = (archetype.BoundsMin, archetype.BoundsMax);
+        var interiors = Rooms(inRooms, radii, boxes, definitions);
         var interiorOf = new Dictionary<MapEntity, ClassicInterior>();
         foreach (var interior in interiors)
             foreach (var entity in interior.Entities)
@@ -178,7 +198,7 @@ public sealed class ClassicScene
     // The objects of each interior number grouped by room (single link: one room keeps every object near another of
     // it), named after the largest model (usually the room itself).
     private static List<ClassicInterior> Rooms(List<(int Number, MapEntity Entity)> inRooms, Dictionary<uint, float> radii,
-        ClassicDefinitions definitions)
+        Dictionary<uint, (Vector3 Min, Vector3 Max)> boxes, ClassicDefinitions definitions)
     {
         var names = new Dictionary<uint, string>();
         foreach (var model in definitions.Models.Values)
@@ -212,11 +232,29 @@ public sealed class ClassicScene
                     min = Vector3.Min(min, e.Position - r);
                     max = Vector3.Max(max, e.Position + r);
                 }
+                var roomBoxes = new List<(Vector3, Vector3)>();
+                foreach (var e in room)
+                {
+                    var (low, high) = boxes.GetValueOrDefault(e.ArchetypeHash);
+                    var boxMin = new Vector3(float.MaxValue);
+                    var boxMax = new Vector3(float.MinValue);
+                    var transform = e.Transform;
+                    for (int c = 0; c < 8; c++)
+                    {
+                        var corner = Vector3.Transform(new Vector3((c & 1) != 0 ? high.X : low.X, (c & 2) != 0 ? high.Y : low.Y,
+                            (c & 4) != 0 ? high.Z : low.Z), transform);
+                        boxMin = Vector3.Min(boxMin, corner);
+                        boxMax = Vector3.Max(boxMax, corner);
+                    }
+                    var size = boxMax - boxMin;
+                    if (size.X > 0f && MathF.Max(size.X, size.Y) <= RoomPartSize)
+                        roomBoxes.Add((boxMin - new Vector3(RoomPartMargin), boxMax + new Vector3(RoomPartMargin)));
+                }
                 var main = room.MaxBy(Radius)!;
                 room.Sort((a, b) => string.Compare(names.GetValueOrDefault(a.ArchetypeHash), names.GetValueOrDefault(b.ArchetypeHash),
                     StringComparison.OrdinalIgnoreCase));
                 rooms.Add(new ClassicInterior(group.Key, names.GetValueOrDefault(main.ArchetypeHash) ?? $"0x{main.ArchetypeHash:X8}",
-                    (min + max) / 2f, Vector3.Distance(min, max) / 2f, main, room));
+                    (min + max) / 2f, Vector3.Distance(min, max) / 2f, main, room) { Boxes = roomBoxes });
             }
         }
         rooms.Sort((a, b) => a.Number != b.Number ? a.Number.CompareTo(b.Number) : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
