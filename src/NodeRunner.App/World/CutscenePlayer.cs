@@ -77,6 +77,7 @@ internal sealed class CutscenePlayer : IDisposable
         Cutscene = null;
         Path = null;
         Error = null;
+        _cameraKey = null;
     }
 
     // Once a frame: takes what was read, puts the models on the graphics card, places the objects at Time.
@@ -98,6 +99,9 @@ internal sealed class CutscenePlayer : IDisposable
             {
                 Cutscene = loading.Result;
                 JustLoaded = true;
+                var keys = Cutscene.ClipKeys();
+                _cameraKey = Cutscene.Objects.FirstOrDefault(o => o.Kind == CutsceneObjectKind.Camera) is { } camera && keys.TryGetValue(camera.Id, out var cameraKey)
+                    ? cameraKey : null;
             }
             else
                 Error = loading.Exception?.InnerException?.Message ?? L("Lecture impossible.");
@@ -157,6 +161,27 @@ internal sealed class CutscenePlayer : IDisposable
         }
         return on;
     }
+
+    // Where the cutscene's camera is at Time, where it looks and its vertical field of view (degrees); null while its
+    // clip is read.
+    public (Vector3 Position, Vector3 Forward, float FieldOfView)? Shot()
+    {
+        if (Cutscene is not { } cutscene || _cameraKey is not { } key)
+            return null;
+        var (cut, start) = cutscene.CutAt(Time);
+        if (Clips(cutscene, cut) is not { } clips || !clips.TryGetValue(key, out var clip))
+            return null;
+        float time = Math.Clamp(Time - start, 0f, Math.Max(clip.Duration * 0.9999f, 0f));
+        var (position, rotation) = clip.Root(time, AnimationTrackKind.CameraTranslation, AnimationTrackKind.CameraRotation);
+        if (position is not { } p || rotation is not { } r)
+            return null;
+        var scene = cutscene.SceneTransform;
+        // The camera looks along its own +Y.
+        var forward = Vector3.Normalize(Vector3.TransformNormal(Vector3.Transform(Vector3.UnitY, r), scene));
+        return (Vector3.Transform(p, scene), forward, clip.Value(time, AnimationTrackKind.CameraFieldOfView) ?? 45f);
+    }
+
+    private (uint, int)? _cameraKey;
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection)
     {

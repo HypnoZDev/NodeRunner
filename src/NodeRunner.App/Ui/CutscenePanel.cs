@@ -26,6 +26,12 @@ internal sealed class CutscenePanel(AppState state)
 
     private CutscenePlayer Player => state.Cutscenes;
 
+    // The view follows the cutscene's camera (else the map's camera, free).
+    private bool _film = true;
+    private bool _filmNear;
+    private const float FilmNearPlane = 0.05f;
+    private float _freeNearPlane = 0.5f;
+
     public void Open()
     {
         if (state.IsGta4)
@@ -39,6 +45,7 @@ internal sealed class CutscenePanel(AppState state)
     public void Close()
     {
         Player.Close();
+        FollowFilm();
         state.CutsceneOpen = false;
     }
 
@@ -57,6 +64,30 @@ internal sealed class CutscenePanel(AppState state)
         }
         _bar.Advance(cutscene.Duration);
         Player.Time = _bar.ShownTime(cutscene.Duration);
+        FollowFilm();
+    }
+
+    // Puts the map's camera where the cutscene's is (close shots: a near plane closer than on the map).
+    private void FollowFilm()
+    {
+        bool film = _film && state.CutsceneOpen && !state.MapCovered && Player.Shot() is not null;
+        if (film && Player.Shot() is { } shot)
+        {
+            if (!_filmNear)
+            {
+                _freeNearPlane = state.Camera.NearPlane;
+                _filmNear = true;
+            }
+            state.Camera.NearPlane = FilmNearPlane;
+            state.Camera.Position = shot.Position;
+            state.Camera.LookAt(shot.Position + shot.Forward);
+            state.Camera.FieldOfView = Math.Clamp(shot.FieldOfView, 5f, 120f) * MathF.PI / 180f;
+        }
+        else if (_filmNear)
+        {
+            state.Camera.NearPlane = _freeNearPlane;
+            _filmNear = false;
+        }
     }
 
     // Where the first shot is taken from, looking at the scene; else just in front of the scene.
@@ -201,7 +232,13 @@ internal sealed class CutscenePanel(AppState state)
             if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows))
                 _bar.Keys(cutscene.Duration, FrameStep);
             var (cut, _) = cutscene.CutAt(Player.Time);
-            _bar.Draw(cutscene.Duration, FrameStep, L($"plan {cut + 1} / {cutscene.CameraCuts.Count + 1}"), cutscene.CameraCuts);
+            _bar.Draw(cutscene.Duration, FrameStep, L($"plan {cut + 1} / {cutscene.CameraCuts.Count + 1}"), cutscene.CameraCuts, () =>
+            {
+                if (Widgets.IconButton(Icons.Video, "cutscene_film", _film
+                        ? L("Caméra du film : la vue suit la caméra de la cinématique (clic : caméra libre)")
+                        : L("Caméra libre : la vue se déplace comme sur la carte (clic : caméra du film)"), active: _film))
+                    _film = !_film;
+            });
         }
         ImGui.End();
     }

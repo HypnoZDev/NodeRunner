@@ -83,7 +83,8 @@ internal sealed class PlaybackBar(string id)
     }
 
     // extra: more to say after the time ("plan 3 / 16"); marks: times drawn on the bar instead of one per second.
-    public void Draw(float duration, float frameStep, string? extra = null, IReadOnlyList<float>? marks = null)
+    // tools: more buttons drawn after the loop button.
+    public void Draw(float duration, float frameStep, string? extra = null, IReadOnlyList<float>? marks = null, Action? tools = null)
     {
         ImGui.PushID(id);
         ImGui.Dummy(new Vector2(0, 2));
@@ -101,6 +102,11 @@ internal sealed class PlaybackBar(string id)
         ImGui.SameLine(0, 2);
         if (Widgets.IconButton(Icons.Repeat, "loop", L("Boucle : l'animation recommence à la fin"), active: Loop))
             Loop = !Loop;
+        if (tools is not null)
+        {
+            ImGui.SameLine(0, 2);
+            tools();
+        }
         ImGui.SameLine(0, 12);
         ImGui.AlignTextToFramePadding();
         int frames = Frames(duration, frameStep);

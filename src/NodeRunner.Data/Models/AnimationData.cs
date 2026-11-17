@@ -13,6 +13,8 @@ public enum AnimationTrackKind : byte
     MoverRotation = 6,
     CameraTranslation = 7,
     CameraRotation = 8,
+    // Cutscene camera: vertical field of view in degrees.
+    CameraFieldOfView = 27,
 }
 
 // One value per frame for one bone (by tag) and one kind of track. Rotations are quaternions (x, y, z, w).
@@ -94,6 +96,20 @@ public sealed class AnimationClip
     public required IReadOnlyList<ClipPart> Parts { get; init; }
 
     public float Duration => Parts.Count == 0 ? 0f : Parts.Max(p => p.Length);
+
+    // The value of a single-number track on the root at a time (a camera's field of view), null when it has none.
+    public float? Value(float time, AnimationTrackKind kind)
+    {
+        foreach (var part in Parts)
+        {
+            foreach (var track in part.Animation.Tracks)
+            {
+                if (track.BoneTag == 0 && track.Kind == (byte)kind)
+                    return track.Sample(part.Animation.FrameAt(part.TimeAt(time))).X;
+            }
+        }
+        return null;
+    }
 
     // Where the clip moves the whole object at a time: its tracks of these kinds on the root (5 / 6: a ped or a prop,
     // 7 / 8: a cutscene camera), null for a value it has no track for.

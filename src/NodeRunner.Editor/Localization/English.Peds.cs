@@ -126,5 +126,9 @@ public static partial class English
         ("plan {0} / {1}", "shot {0} / {1}"),
         ("Fichier illisible.", "Unreadable file."),
         ("Lecture impossible.", "Cannot read it."),
+        ("Caméra du film : la vue suit la caméra de la cinématique (clic : caméra libre)",
+            "Film camera: the view follows the cutscene's camera (click: free camera)"),
+        ("Caméra libre : la vue se déplace comme sur la carte (clic : caméra du film)",
+            "Free camera: the view moves as on the map (click: film camera)"),
     ];
 }
