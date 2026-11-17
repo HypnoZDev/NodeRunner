@@ -33,6 +33,10 @@ public sealed class ClassicScene
     // GTA III / Vice City: furthest a low detail building may stand from the detailed one it replaces.
     private const float LodSearchDistance = 100f;
 
+    // The low detail buildings are drawn this far (the game stops much nearer, behind its fog): the city and the
+    // hills around stay whole from anywhere, at little cost (a few triangles each).
+    private const float LodReach = 3000f;
+
     public static ClassicScene Build(ClassicMap map, ClassicFileSystem files)
     {
         var definitions = map.Definitions;
@@ -88,7 +92,9 @@ public sealed class ClassicScene
                     Scale = instance.Scale,
                     ParentIndex = parentFile is null ? -1 : parent - first[parentFile],
                     Flags = parentFile is not null && parentFile != file ? LodInParentMap : 0u,
-                    LodDistance = definition?.DrawDistance ?? 0f,
+                    LodDistance = level is LodLevel.Hd or LodLevel.OrphanHd
+                        ? definition?.DrawDistance ?? 0f
+                        : Math.Max(definition?.DrawDistance ?? 0f, LodReach),
                     LodLevel = level,
                     ChildCount = children,
                 });
