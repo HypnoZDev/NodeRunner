@@ -2,8 +2,10 @@ using System.Globalization;
 
 namespace NodeRunner.Data.Native.Classic;
 
-// A vehicle declared in the "cars" section of a ".ide" file: number, model and texture dictionary.
-public sealed record ClassicVehicleDef(int Id, string Name, string TextureDictionary);
+// A vehicle declared in the "cars" section of a ".ide" file: number, model and texture dictionary. Cars of GTA III and
+// Vice City name the model of their wheels (taken from "models\generic\wheels.dff") and its size; -1 when the vehicle
+// file holds its own wheel (San Andreas).
+public sealed record ClassicVehicleDef(int Id, string Name, string TextureDictionary, int WheelModel = -1, float WheelScale = 1f);
 
 // A model declared in a ".ide" file. Timed models ("tobj") are only shown from TimeOn to TimeOff (hours, may wrap past
 // midnight). AnimationFile: San Andreas "anim" section (animated buildings).
@@ -23,6 +25,9 @@ public sealed class ClassicDefinitions
     private readonly Dictionary<int, ClassicVehicleDef> _vehicles = [];
 
     public IReadOnlyCollection<ClassicVehicleDef> Vehicles => _vehicles.Values;
+
+    public ClassicVehicleDef? FindVehicle(string name) =>
+        _vehicles.Values.FirstOrDefault(v => v.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     public IReadOnlyDictionary<int, ClassicModelDef> Models => _byId;
 
@@ -69,7 +74,7 @@ public sealed class ClassicDefinitions
                 case "cars":
                     var car = Split(line.ToString());
                     if (car.Length >= 3 && int.TryParse(car[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int carId) && car[1].Length > 0)
-                        _vehicles[carId] = new ClassicVehicleDef(carId, car[1], car[2]);
+                        _vehicles[carId] = ReadVehicle(carId, car);
                     else
                         bad++;
                     break;
@@ -83,6 +88,20 @@ public sealed class ClassicDefinitions
             }
         }
         return bad;
+    }
+
+    // Cars only: wheel model and size are the last two fields in GTA III / Vice City, fields 12 and 13 in San Andreas.
+    private static ClassicVehicleDef ReadVehicle(int id, string[] p)
+    {
+        int wheel = -1;
+        float scale = 1f;
+        if (p.Length >= 12 && p[3].Equals("car", StringComparison.OrdinalIgnoreCase))
+        {
+            int at = p.Length >= 15 ? 11 : p.Length - 2;
+            if (int.TryParse(p[at], NumberStyles.Integer, CultureInfo.InvariantCulture, out int w) && TryFloat(p[at + 1], out float s) && s > 0f)
+                (wheel, scale) = (w, s);
+        }
+        return new ClassicVehicleDef(id, p[1], p[2], wheel, scale);
     }
 
     private void Add(ClassicModelDef model)

@@ -316,9 +316,10 @@ public sealed class ClassicScene
             }
         }
         var parents = definitions.TextureParents.ToDictionary(p => Joaat.Hash(p.Key), p => Joaat.Hash(p.Value));
-        // Vehicles share the textures of "vehicle.txd" (lights, plates, glass).
-        uint shared = Joaat.Hash("vehicle");
-        if (dictionaries.ContainsKey(shared))
+        // Vehicles share the textures of "vehicle.txd" (San Andreas: lights, plates, glass) or of the wheels (Vice City
+        // "wheels.txd", GTA III "misc.txd").
+        uint shared = new[] { "vehicle", "wheels", "misc" }.Select(Joaat.Hash).FirstOrDefault(dictionaries.ContainsKey);
+        if (shared != 0)
         {
             foreach (var vehicle in definitions.Vehicles)
                 parents.TryAdd(Joaat.Hash(vehicle.TextureDictionary), shared);

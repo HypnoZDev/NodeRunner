@@ -16,7 +16,9 @@ public static class ClassicModels
     private const uint SanAndreasVersion = 0x36000;
     private const float ClassicDaylight = 0.35f;
 
-    public static ModelData? ReadClump(byte[] data, uint nameHash)
+    // wheel: for a vehicle without its own wheel, the meshes of the wheel to put on its "wheel_xx_dummy" frames, sized by
+    // wheelScale.
+    public static ModelData? ReadClump(byte[] data, uint nameHash, IReadOnlyList<ModelMesh>? wheel = null, float wheelScale = 1f)
     {
         // Animated textures (San Andreas waterfalls, neon signs) come in a section before the clump.
         var top = RwChunk.At(data, 0, data.Length);
@@ -67,6 +69,7 @@ public static class ClassicModels
             var transform = frame >= 0 && frame < frames.Count ? frames[frame].World : Matrix4x4.Identity;
             meshes.AddRange(ReadGeometry(data, geometries[geometry], transform));
         }
+        AddWheels(data, frames, geometries, atomics, meshes, wheel, wheelScale);
         if (meshes.Count == 0)
             return null;
 
@@ -81,6 +84,100 @@ public static class ClassicModels
         return new ModelData { NameHash = nameHash, Meshes = meshes, BoundsMin = min, BoundsMax = max };
     }
 
+    // The game puts a wheel on each "wheel_xx_dummy" frame of a vehicle: San Andreas cars hold one (on a "wheel" frame
+    // under a dummy), GTA III / Vice City ones take a shared model. Left wheels are the right one mirrored.
+    private static void AddWheels(byte[] data, List<Frame> frames, List<RwChunk> geometries, List<(int Frame, int Geometry)> atomics,
+        List<ModelMesh> meshes, IReadOnlyList<ModelMesh>? shared, float scale)
+    {
+        var dummies = Enumerable.Range(0, frames.Count)
+            .Where(i => frames[i].Name.StartsWith("wheel_", StringComparison.OrdinalIgnoreCase)
+                && frames[i].Name.EndsWith("_dummy", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (dummies.Count == 0)
+            return;
+        List<ModelMesh>? wheel = null;
+        int owner = -1;
+        foreach (var (frame, geometry) in atomics)
+        {
+            if (frame < 0 || frame >= frames.Count || !frames[frame].Name.Equals("wheel", StringComparison.OrdinalIgnoreCase))
+                continue;
+            owner = frames[frame].Parent;
+            wheel = ReadGeometry(data, geometries[geometry], frames[frame].Local);
+            break;
+        }
+        if (wheel is null && shared is not null)
+            wheel = [.. shared.Select(m => Transformed(m, Matrix4x4.CreateScale(scale), false))];
+        if (wheel is null)
+            return;
+        foreach (int dummy in dummies)
+        {
+            if (dummy == owner)
+                continue;
+            bool left = frames[dummy].Name.StartsWith("wheel_l", StringComparison.OrdinalIgnoreCase);
+            var place = (left ? Matrix4x4.CreateScale(-1f, 1f, 1f) : Matrix4x4.Identity) * frames[dummy].World;
+            meshes.AddRange(wheel.Select(m => Transformed(m, place, left)));
+        }
+    }
+
+    private static ModelMesh Transformed(ModelMesh mesh, Matrix4x4 transform, bool mirrored)
+    {
+        var indices = mesh.Indices.ToArray();
+        if (mirrored)
+        {
+            for (int i = 0; i + 2 < indices.Length; i += 3)
+                (indices[i + 1], indices[i + 2]) = (indices[i + 2], indices[i + 1]);
+        }
+        return new ModelMesh
+        {
+            Positions = [.. mesh.Positions.Select(p => Vector3.Transform(p, transform))],
+            Normals = [.. mesh.Normals.Select(n => SafeNormalize(Vector3.TransformNormal(n, transform)))],
+            TexCoords = mesh.TexCoords,
+            Colors = mesh.Colors,
+            Indices = indices,
+            DiffuseTextureName = mesh.DiffuseTextureName,
+            DiffuseColor = mesh.DiffuseColor,
+            BakedLighting = mesh.BakedLighting,
+            BlendMode = mesh.BlendMode,
+        };
+    }
+
+    // The meshes of one part of a clump holding several models (GTA III / Vice City "wheels.dff": a frame per wheel
+    // model), its most detailed level, around its own origin.
+    public static List<ModelMesh> ReadPart(byte[] data, string part)
+    {
+        var top = RwChunk.At(data, 0, data.Length);
+        if (top is not { Type: RwChunk.Clump } clump)
+            return [];
+        var children = clump.Children(data);
+        var frames = children.FirstOrDefault(c => c.Type == RwChunk.FrameList) is { Type: RwChunk.FrameList } frameList
+            ? ReadFrames(data, frameList)
+            : [];
+        var geometries = children.FirstOrDefault(c => c.Type == RwChunk.GeometryList) is { Type: RwChunk.GeometryList } geometryList
+            ? geometryList.Children(data).Where(c => c.Type == RwChunk.Geometry).ToList()
+            : [];
+        var found = new List<(int Level, int Geometry)>();
+        foreach (var atomic in children.Where(c => c.Type == RwChunk.Atomic))
+        {
+            if (atomic.Child(data, RwChunk.Struct) is not { Size: >= 16 } s)
+                continue;
+            int frame = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(s.Offset));
+            int geometry = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(s.Offset + 4));
+            if (frame < 0 || frame >= frames.Count || geometry < 0 || geometry >= geometries.Count)
+                continue;
+            // The atomic hangs on the part's frame or on a level frame under it ("wheel_rim_l0").
+            string name = frames[frame].Name;
+            int parentIndex = frames[frame].Parent;
+            string parent = parentIndex >= 0 && parentIndex < frames.Count ? frames[parentIndex].Name : "";
+            var (own, level) = DetailLevel(name);
+            if (own.Equals(part, StringComparison.OrdinalIgnoreCase) || parent.Equals(part, StringComparison.OrdinalIgnoreCase))
+                found.Add((Math.Max(level, 0), geometry));
+        }
+        if (found.Count == 0)
+            return [];
+        int best = found.Min(f => f.Level);
+        return [.. found.Where(f => f.Level == best).SelectMany(f => ReadGeometry(data, geometries[f.Geometry], Matrix4x4.Identity))];
+    }
+
     private static bool IsLeftOut(string name) =>
         name.EndsWith("_dam", StringComparison.OrdinalIgnoreCase) || name.EndsWith("_lo", StringComparison.OrdinalIgnoreCase)
         || name.EndsWith("_vlo", StringComparison.OrdinalIgnoreCase);
@@ -93,7 +190,7 @@ public static class ClassicModels
         return (name, -1);
     }
 
-    private sealed record Frame(string Name, Matrix4x4 World);
+    private sealed record Frame(string Name, Matrix4x4 Local, Matrix4x4 World, int Parent);
 
     // A 56-byte entry per frame: 3x3 rotation (right, up, at), position, parent index, flags; names in the extensions.
     private static List<Frame> ReadFrames(byte[] data, RwChunk list)
@@ -116,7 +213,7 @@ public static class ClassicModels
             string name = i < extensions.Count && extensions[i].Child(data, RwChunk.FrameName) is { } n
                 ? System.Text.Encoding.ASCII.GetString(data, n.Offset, n.Size).TrimEnd('\0')
                 : "";
-            frames.Add(new Frame(name, world));
+            frames.Add(new Frame(name, local, world, parent >= 0 && parent < i ? parent : -1));
         }
         return frames;
     }
@@ -303,17 +400,33 @@ public static class ClassicModels
 }
 
 // Models of a GTA III / Vice City / San Andreas installation for the 3D view: a ".dff" gives one model named after
-// the file.
+// the file; a car of GTA III / Vice City gets the wheels its definition names.
 public sealed class ClassicModelReader(ClassicFileSystem files) : IModelReader
 {
+    public const string WheelsFile = @"models\generic\wheels.dff";
+
+    private byte[]? _wheels;
+
+    // Set once the map is read (the vehicles and their wheels).
+    public ClassicDefinitions? Definitions { get; set; }
+
     public IReadOnlyDictionary<uint, ModelData> ReadModels(string path)
     {
         if (files.ReadFile(path) is not { } data)
             return new Dictionary<uint, ModelData>();
-        uint hash = Joaat.Hash(Path.GetFileNameWithoutExtension(path));
+        string name = Path.GetFileNameWithoutExtension(path);
+        uint hash = Joaat.Hash(name);
         try
         {
-            return ClassicModels.ReadClump(data, hash) is { } model
+            IReadOnlyList<ModelMesh>? wheel = null;
+            float scale = 1f;
+            if (Definitions?.FindVehicle(name) is { WheelModel: >= 0 } vehicle && Definitions.Find(vehicle.WheelModel) is { } wheelModel)
+            {
+                _wheels ??= files.ReadFile(WheelsFile);
+                if (_wheels is not null)
+                    (wheel, scale) = (ClassicModels.ReadPart(_wheels, wheelModel.Name), vehicle.WheelScale);
+            }
+            return ClassicModels.ReadClump(data, hash, wheel, scale) is { } model
                 ? new Dictionary<uint, ModelData> { [hash] = model }
                 : new Dictionary<uint, ModelData>();
         }

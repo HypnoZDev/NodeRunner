@@ -91,6 +91,8 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
                 foreach (string error in water.Errors)
                     Diagnostics.ErrorLog.Add(L($"Eau de {GameName}"), error);
                 _water = water;
+                if (ModelReader is ClassicModelReader reader)
+                    reader.Definitions = map.Definitions;
                 _scene = ClassicScene.Build(map, files);
                 _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
             }
