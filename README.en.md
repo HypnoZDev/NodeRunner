@@ -5,7 +5,7 @@
 **The GTA V map in 3D, to explore it, understand it and edit it. Free, portable, built for FiveM mapping.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.0/NodeRunner-1.5.0-win-x64.zip">
     <img src="https://img.shields.io/badge/Download-NodeRunner%20Studio%20for%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download NodeRunner Studio for Windows">
   </a>
   <br>
@@ -40,6 +40,9 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
   interior rooms and portals.
 - An **archive explorer**: every game file (RPF archives, DLC included) as a tree, name search, models opened in the
   viewer, YMAPs located on the map, text files displayed, extraction to disk.
+- **Life simulation**: on each scenario point, the pedestrian, animal or vehicle the game would put there at the time of
+  day shown, animated, holding its object (cigarette, phone...).
+- As a bonus, **GTA IV** and its episodes: Liberty City in 3D (models, textures, interiors, water, roads), read-only.
 
 ![Interiors (MLO) seen from outside, with their rooms and furniture](docs/images/vue-interieurs.webp)
 
@@ -60,6 +63,18 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
   interior elsewhere on the map, with its **audio** (sound occlusion between rooms, echo, ambience) generated on export.
 - **Parked vehicles** (car generators), **timecycle zones** and **LOD lights**: shown, edited, added or deleted.
 - **Occlusion**: occlusion boxes and models visible, editable, built automatically around a building.
+- **Roads (path nodes)**: node settings (speed, traffic, highway...), number of lanes, nodes and links added or deleted.
+- **Scenario points**: edited, moved, added or deleted (type, hours, probability, models...), with their chains and
+  clusters.
+
+**Edit a 3D model: the Workshop**
+- A tab next to the map, the model shown large: remove a part (logo, poster), move it, rotate it, duplicate it, add a
+  box or a plane, replace a texture with an image (.png, .jpg, .dds) or shrink it.
+- **Open a building** (experimental): cut a door into a painted wall, collision included, with a simple room behind it.
+
+**Characters and cutscenes**
+- **Character viewer**: the game's 1,119 pedestrians and animals, with every animation of the game.
+- **Cutscene viewer**: the game's cutscenes played on the map, in their place, with the film camera.
 
 **Your props and mappings**
 - A **prop library** shared by all your projects: packs (folder or .zip) with thumbnails, favourites, and placement by
@@ -77,7 +92,11 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - Before exporting, NodeRunner checks whether another resource on your server already modifies the same files (the
   infamous conflict where the last loaded resource silently wins).
 - Positions copied in one click as Lua (`vector3` / `vector4` with heading), JSON or C#.
-- One project per resource: your changes are saved in their folder and picked up next time you open it.
+- One project per resource: your changes are saved in their folder and picked up next time you open it, and several
+  projects can be open together.
+- Before exporting, roads, scenario points and the navmesh are checked (point in mid-air, broken link, building placed
+  where pedestrians walk...).
+- **Single-player pack**: the same project exported as a `dlc.rpf` for story mode, installed in the game's `mods` folder.
 
 **Your way**
 - Interface in **English or French** (automatic, from the Windows language), switched live.
@@ -88,7 +107,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 
 ## Download
 
-**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip)**
+**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.0/NodeRunner-1.5.0-win-x64.zip)**
 · other versions are on the [Releases](https://github.com/HypnoZDev/NodeRunner/releases) page.
 
 1. Download the `NodeRunner-x.y.z-win-x64.zip` file.
@@ -130,9 +149,8 @@ add the `ensure` line shown to your `server.cfg`, and it's in game.
 
 ## What's next?
 
-Coming up: importing models made with Sollumz (and creating `.ytyp` files), merging conflicting resources, a
-single-player pack, light and occlusion layers, and a cinematic mode to shoot videos of the map (vertical format
-included). The details are in the [specification](docs/cahier-des-charges.md) (in French).
+Coming up: merging conflicting resources, light and occlusion layers, and a cinematic mode to shoot videos of the map
+(vertical format included). The details are in the [specification](docs/cahier-des-charges.md) (in French).
 
 A bug, an idea? Open an [issue](https://github.com/HypnoZDev/NodeRunner/issues), with a screenshot and the position
 (the "Copy the position" button in the Properties panel) if it's a map problem.

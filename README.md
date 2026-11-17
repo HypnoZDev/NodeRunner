@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.0/NodeRunner-1.5.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -38,6 +38,10 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   collisions, salles et portails des intérieurs.
 - Un **explorateur d'archives** : tous les fichiers du jeu (archives RPF, DLC compris) en arborescence, recherche par
   nom, modèle ouvert dans la visionneuse, YMAP retrouvé sur la carte, fichiers texte affichés, extraction sur le disque.
+- **Simulation de vie** : sur chaque point de scénario, le piéton, l'animal ou le véhicule que le jeu y mettrait à
+  l'heure affichée, animé, avec l'objet qu'il tient (cigarette, téléphone...).
+- En bonus, **GTA IV** et ses épisodes : Liberty City en 3D (modèles, textures, intérieurs, eau, routes), en lecture
+  seule.
 
 ![Les intérieurs (MLO) vus de l'extérieur, avec leurs salles et leur mobilier](docs/images/vue-interieurs.webp)
 
@@ -61,6 +65,20 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - **Véhicules garés** (car generators), **zones de timecycle** et **lumières LOD** : affichés, modifiables, ajoutés ou
   supprimés.
 - **Occlusion** : boîtes et modèles d'occlusion visibles, modifiables, créés automatiquement autour d'un bâtiment.
+- **Routes (pathnodes)** : réglages des nœuds (vitesse, trafic, autoroute...), nombre de voies, ajout et suppression de
+  nœuds et de liens.
+- **Points de scénario** : modifiés, déplacés, ajoutés ou supprimés (type, horaires, probabilité, modèles...), avec
+  leurs chaînes et leurs ensembles.
+
+**Modifier un modèle 3D : l'Atelier**
+- Un onglet à côté de la carte, le modèle en grand : retirer un morceau (logo, affiche), le déplacer, le tourner, le
+  dupliquer, ajouter un cube ou un plan, remplacer une texture par une image (.png, .jpg, .dds) ou réduire sa taille.
+- **Ouvrir un bâtiment** (expérimental) : percer une porte dans un mur dessiné, collision comprise, avec une pièce
+  simple derrière.
+
+**Personnages et cinématiques**
+- **Visionneuse de personnages** : les 1 119 piétons et animaux du jeu, avec toutes les animations du jeu.
+- **Visionneuse de cinématiques** : les cinématiques du jeu jouées sur la carte, à leur place, avec la caméra du film.
 
 **Vos props et vos mappings**
 - **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
@@ -78,7 +96,11 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - Avant l'export, NodeRunner vérifie si une autre ressource de votre serveur modifie déjà les mêmes fichiers (le fameux
   conflit où la dernière ressource chargée gagne sans prévenir).
 - Positions copiées en un clic au format Lua (`vector3` / `vector4` avec le cap), JSON ou C#.
-- Un projet par ressource : vos modifications sont enregistrées dans leur dossier et reprises à la prochaine ouverture.
+- Un projet par ressource : vos modifications sont enregistrées dans leur dossier et reprises à la prochaine ouverture,
+  et plusieurs projets peuvent être ouverts ensemble.
+- Avant l'export, vérification des routes, des points de scénario et du navmesh (point en l'air, lien cassé, bâtiment
+  posé là où marchent les piétons...).
+- **Pack solo** : le même projet exporté en `dlc.rpf` pour le mode histoire, installé dans le dossier `mods` du jeu.
 
 **À votre façon**
 - Interface en **français ou en anglais** (automatique selon la langue de Windows), changée en direct.
@@ -89,7 +111,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.4.0/NodeRunner-1.4.0-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.5.0/NodeRunner-1.5.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
@@ -131,9 +153,8 @@ Ensuite : **Fichier > Exporter en ressource FiveM**, choisissez le dossier `reso
 
 ## Et ensuite ?
 
-Au programme : import de modèles faits avec Sollumz (et création des `.ytyp`), fusion des ressources en conflit, pack
-pour le mode solo, calques des lumières et de l'occlusion, et un mode cinématique pour tourner des vidéos de la carte
-(format vertical compris). Le détail est dans le [cahier des charges](docs/cahier-des-charges.md).
+Au programme : fusion des ressources en conflit, calques des lumières et de l'occlusion, et un mode cinématique pour
+tourner des vidéos de la carte (format vertical compris). Le détail est dans le [cahier des charges](docs/cahier-des-charges.md).
 
 Un bug, une idée ? Ouvrez une [issue](https://github.com/HypnoZDev/NodeRunner/issues), avec une capture d'écran et la
 position (bouton « Copier la position » du panneau Propriétés) si c'est un souci sur la carte.
