@@ -79,5 +79,27 @@ public static partial class English
         ("Pose de base", "Default pose"),
         ("Arrête l'animation : le personnage revient dans sa pose de base", "Stops the animation: the ped goes back to its default pose"),
         ("Récentes", "Recent"),
+
+        // Timeline
+        ("Au début (Origine)", "To the start (Home)"),
+        ("Image précédente (flèche gauche)", "Previous frame (left arrow)"),
+        ("Image suivante (flèche droite)", "Next frame (right arrow)"),
+        ("Lecture (Espace)", "Play (Space)"),
+        ("Pause (Espace)", "Pause (Space)"),
+        ("Boucle : l'animation recommence à la fin", "Loop: the animation starts again at the end"),
+        ("{0} / {1} s · image {2} / {3}", "{0} / {1} s · frame {2} / {3}"),
+        ("{0}  Vitesse x {1}", "{0}  Speed x {1}"),
+        ("Vitesse de lecture (ralenti pour regarder un geste)", "Playback speed (slow motion to watch a move)"),
+        ("Espace", "Space"),
+        ("Flèches", "Arrows"),
+        ("Origine / Fin", "Home / End"),
+        ("lecture / pause", "play / pause"),
+        ("image par image", "frame by frame"),
+        ("début / fin", "start / end"),
+        ("Visionneuse de personnages", "Ped viewer"),
+        ("Lecture / pause de l'animation", "Play / pause the animation"),
+        ("Flèche gauche / droite", "Left / right arrow"),
+        ("Image précédente / suivante", "Previous / next frame"),
+        ("Début / fin de l'animation", "Start / end of the animation"),
     ];
 }

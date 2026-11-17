@@ -70,6 +70,11 @@ internal sealed class ShortcutsWindow(AppState state)
                 ("F3", L("Explorateur d'archives")),
                 ("Ctrl+,", L("Paramètres")),
                 ("G", L("Grille au sol")));
+            Group(L("Visionneuse de personnages"),
+                (L("Espace"), L("Lecture / pause de l'animation")),
+                (L("Flèche gauche / droite"), L("Image précédente / suivante")),
+                (L("Origine / Fin"), L("Début / fin de l'animation")),
+                ("F", L("Vue par défaut")));
         }
         ImGui.End();
     }

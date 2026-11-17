@@ -115,9 +115,11 @@ internal sealed partial class PedStudio(AppState state)
 
     public void DrawView()
     {
+        TimelineKeys();
         Animate();
         DrawToolbar();
-        var size = ImGui.GetContentRegionAvail();
+        var clip = _clip;
+        var size = ImGui.GetContentRegionAvail() - new Vector2(0, clip is null ? 0f : TimelineHeight);
         size = new Vector2(MathF.Floor(Math.Max(size.X, 2)), MathF.Floor(Math.Max(size.Y, 2)));
         Viewer.RequestedSize = size * UiTheme.Scale;
 
@@ -152,6 +154,8 @@ internal sealed partial class PedStudio(AppState state)
             drawList.AddText(pos, Widgets.Col(Viewer.Error is not null ? UiTheme.Error : muted), status);
         drawList.AddText(new Vector2(min.X + 12, max.Y - ImGui.GetTextLineHeight() - 8), Widgets.Col(light ? muted : UiTheme.TextFaint),
             L("Clic gauche : tourner · clic droit ou molette enfoncée : déplacer · molette : zoom · double-clic ou F : vue par défaut"));
+        if (clip is not null)
+            DrawTimeline(clip);
     }
 
     private void DrawToolbar()
@@ -327,6 +331,8 @@ internal sealed partial class PedStudio(AppState state)
         }
     }
 
-    public IReadOnlyList<(string Keys, string Action)> Hints() =>
-        [(L("Clic gauche"), L("tourner")), (L("Clic droit"), L("déplacer")), (L("Molette"), L("zoom")), ("F", L("vue par défaut"))];
+    public IReadOnlyList<(string Keys, string Action)> Hints() => _clip is null
+        ? [(L("Clic gauche"), L("tourner")), (L("Clic droit"), L("déplacer")), (L("Molette"), L("zoom")), ("F", L("vue par défaut"))]
+        : [(L("Espace"), L("lecture / pause")), (L("Flèches"), L("image par image")), (L("Origine / Fin"), L("début / fin")),
+           (L("Clic gauche"), L("tourner")), (L("Molette"), L("zoom")), ("F", L("vue par défaut"))];
 }

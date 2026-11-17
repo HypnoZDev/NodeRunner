@@ -53,7 +53,12 @@ internal static class Icons
     public const string Rotate = "\ue2ea";
     public const string Route = "\ue53e";
     public const string Ruler = "\ue14b";
+    public const string Pause = "\ue12e";
     public const string PawPrint = "\ue4f5";
+    public const string Repeat = "\ue146";
+    public const string SkipBack = "\ue15f";
+    public const string StepBack = "\ue3e9";
+    public const string StepForward = "\ue3ea";
     public const string PersonStanding = "\ue21e";
     public const string Play = "\ue13c";
     public const string Save = "\ue14d";

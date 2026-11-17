@@ -85,6 +85,7 @@ internal sealed partial class PedStudio
         _clipFile = file;
         _clipName = ClipName(clip);
         _time = 0f;
+        _playing = true;
         _recent.RemoveAll(r => r.File == file && r.Clip == _clipName);
         _recent.Insert(0, (file, _clipName));
         if (_recent.Count > MaxRecent)
@@ -120,12 +121,10 @@ internal sealed partial class PedStudio
             Viewer.BonePose = null;
             return;
         }
-        _time += ImGui.GetIO().DeltaTime;
-        if (playing.Duration > 0f)
-            _time %= playing.Duration;
+        Advance(playing);
         if (_pose is null || _pose.Length != skeleton.Count)
             _pose = new Matrix4x4[skeleton.Count];
-        SkeletonAnimator.Pose(skeleton, playing, _time, _pose);
+        SkeletonAnimator.Pose(skeleton, playing, PoseTime(playing), _pose);
         Viewer.BonePose = _pose;
     }
 
