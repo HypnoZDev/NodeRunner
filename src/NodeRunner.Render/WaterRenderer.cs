@@ -341,22 +341,22 @@ float4 PS(PS_INPUT input) : SV_Target
 
     public bool HasSurfaces => _vertexCount > 0;
 
-    // Replaces the water drawn: triangles (three corners each) and the open ocean at height 0 all around oceanBounds
+    // Replaces the water drawn: triangles (three corners each) and the open ocean at oceanHeight all around oceanBounds
     // (min X, min Y, max X, max Y; nothing if empty).
-    public void SetSurfaces(IEnumerable<Vector3> triangles, Vector4 oceanBounds)
+    public void SetSurfaces(IEnumerable<Vector3> triangles, Vector4 oceanBounds, float oceanHeight = 0f)
     {
         var vertices = new List<WaterVertex>();
         foreach (var corner in triangles)
-            vertices.Add(new WaterVertex(corner, MathF.Abs(corner.Z) < 0.5f ? 1f : InlandWaves));
+            vertices.Add(new WaterVertex(corner, MathF.Abs(corner.Z - oceanHeight) < 0.5f ? 1f : InlandWaves));
 
         // Open ocean: four bands around the map's water, drawn after it (the map's water wins where they overlap).
         if (oceanBounds.Z > oceanBounds.X && oceanBounds.W > oceanBounds.Y)
         {
             float far = OceanReach;
-            AddRectangle(vertices, -far, oceanBounds.Y, oceanBounds.X, oceanBounds.W); // West.
-            AddRectangle(vertices, oceanBounds.Z, oceanBounds.Y, far, oceanBounds.W); // East.
-            AddRectangle(vertices, -far, -far, far, oceanBounds.Y); // South.
-            AddRectangle(vertices, -far, oceanBounds.W, far, far); // North.
+            AddRectangle(vertices, -far, oceanBounds.Y, oceanBounds.X, oceanBounds.W, oceanHeight); // West.
+            AddRectangle(vertices, oceanBounds.Z, oceanBounds.Y, far, oceanBounds.W, oceanHeight); // East.
+            AddRectangle(vertices, -far, -far, far, oceanBounds.Y, oceanHeight); // South.
+            AddRectangle(vertices, -far, oceanBounds.W, far, far, oceanHeight); // North.
         }
 
         _vertexBuffer?.Dispose();
@@ -369,12 +369,12 @@ float4 PS(PS_INPUT input) : SV_Target
         }
     }
 
-    private static void AddRectangle(List<WaterVertex> vertices, float minX, float minY, float maxX, float maxY)
+    private static void AddRectangle(List<WaterVertex> vertices, float minX, float minY, float maxX, float maxY, float z)
     {
-        var a = new WaterVertex(new Vector3(minX, minY, 0f), 1f);
-        var b = new WaterVertex(new Vector3(maxX, minY, 0f), 1f);
-        var c = new WaterVertex(new Vector3(minX, maxY, 0f), 1f);
-        var d = new WaterVertex(new Vector3(maxX, maxY, 0f), 1f);
+        var a = new WaterVertex(new Vector3(minX, minY, z), 1f);
+        var b = new WaterVertex(new Vector3(maxX, minY, z), 1f);
+        var c = new WaterVertex(new Vector3(minX, maxY, z), 1f);
+        var d = new WaterVertex(new Vector3(maxX, maxY, z), 1f);
         vertices.AddRange([a, b, c, c, b, d]);
     }
 

@@ -260,7 +260,7 @@ internal sealed unsafe partial class MainForm
         if (!ReferenceEquals(water, _waterShown))
         {
             _waterShown = water;
-            _waterRenderer!.SetSurfaces(water?.Quads.SelectMany(q => q.Triangles()) ?? [], water?.OceanBounds ?? Vector4.Zero);
+            _waterRenderer!.SetSurfaces(water?.Quads.SelectMany(q => q.Triangles()) ?? [], water?.OceanBounds ?? Vector4.Zero, water?.OceanHeight ?? 0f);
         }
         if (!_state.IsLayerVisible(WaterLayer.LayerName))
             return;

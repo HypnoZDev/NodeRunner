@@ -55,6 +55,9 @@ public sealed class WaterMap
     // Rectangle covered by the main map's water file (min X, min Y, max X, max Y); the open ocean is outside.
     public Vector4 OceanBounds { get; set; }
 
+    // Height of the open ocean (Vice City's sea is 6 m up).
+    public float OceanHeight { get; set; }
+
     public List<string> Errors { get; } = [];
 
     public static WaterMap Load(IGameFileSystem files)

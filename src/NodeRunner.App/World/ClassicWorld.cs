@@ -15,6 +15,7 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
     private volatile string _status = "";
     private volatile string? _error;
     private volatile ClassicScene? _scene;
+    private volatile WaterMap? _water;
 
     // A new set for each game opened: what was built from the previous one (archive tree, models) sees the change.
     public ClassicFileSystem Files { get; private set; } = new();
@@ -46,7 +47,8 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
 
     public ITextureReader TextureReader { get; private set; }
 
-    public WaterMap? Water => null;
+    // Sea, rivers and pools, set once the map is read.
+    public WaterMap? Water => _water;
 
     public string GameName => ClassicInstallLocator.DisplayName(Game);
 
@@ -65,6 +67,7 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
         _busy = true;
         _error = null;
         _scene = null;
+        _water = null;
         Folder = folder;
         Game = game;
         // The previous files are left to close by themselves: models of the previous map may still be reading them.
@@ -84,6 +87,10 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
                 var map = ClassicMap.Load(files);
                 foreach (string error in map.Errors)
                     Diagnostics.ErrorLog.Add(L($"Carte de {GameName}"), error);
+                var water = ClassicWater.Load(files, game);
+                foreach (string error in water.Errors)
+                    Diagnostics.ErrorLog.Add(L($"Eau de {GameName}"), error);
+                _water = water;
                 _scene = ClassicScene.Build(map, files);
                 _status = L($"Chargé en {clock.Elapsed.TotalSeconds:0.0} s.");
             }

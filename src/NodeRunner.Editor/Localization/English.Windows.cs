@@ -1162,5 +1162,6 @@ public static partial class English
         ("{0} : lecture seule", "{0}: read only"),
         ("Tous les véhicules du jeu (sections cars des .ide)", "Every vehicle of the game (cars sections of the .ide files)"),
         ("Type (ex. palm)", "Type (e.g. palm)"),
+        ("Eau de {0}", "{0} water"),
     ];
 }
