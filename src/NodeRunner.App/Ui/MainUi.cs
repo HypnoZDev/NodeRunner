@@ -157,6 +157,24 @@ internal sealed class MainUi
 
     public bool IsLibraryShown => _showLibrary;
 
+    private bool _libraryHiddenForPeds;
+
+    // The prop library has nothing for the ped viewer: closed while its tab is shown, back with the map (unless it was
+    // closed already).
+    private void HideLibraryForPeds()
+    {
+        if (_state.PedShown && _showLibrary && !_libraryHiddenForPeds)
+        {
+            _showLibrary = false;
+            _libraryHiddenForPeds = true;
+        }
+        else if (!_state.PedShown && _libraryHiddenForPeds)
+        {
+            _showLibrary = true;
+            _libraryHiddenForPeds = false;
+        }
+    }
+
     private void ToggleViewer()
     {
         _showViewer = !_showViewer;
@@ -367,6 +385,7 @@ internal sealed class MainUi
         DockLayout.Draw(_resetLayout, ScenePanel.Title, LayersTitle, PropertiesPanel.Title, StatusPanel.Title, LibraryPanel.Title);
         _resetLayout = false;
         _workspaceTabs.Draw();
+        HideLibraryForPeds();
         // The map's handles and overlays only while the map is shown.
         if (!_state.MapCovered)
         {
