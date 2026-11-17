@@ -51,8 +51,16 @@ public sealed class ClassicScene
     private const float LodSearchDistance = 100f;
 
     // The low detail buildings are drawn this far (the game stops much nearer, behind its fog): the city and the
-    // hills around stay whole from anywhere, at little cost (a few triangles each).
+    // hills around stay whole from anywhere, at little cost (a few triangles each). GTA III and Vice City have few of
+    // them: drawn across the whole map, they replace the whole-island models.
     private const float LodReach = 3000f;
+    private const float SmallMapLodReach = 6000f;
+
+    // GTA III / Vice City: a low detail model with no detailed one is hidden this close, as in the game.
+    private const float StandInNearDistance = 100f;
+
+    // Vice City / San Andreas area 13: shown from every area (city objects seen from the interiors), not a room.
+    private const int EverywhereArea = 13;
 
     public static ClassicScene Build(ClassicMap map, ClassicFileSystem files)
     {
@@ -85,6 +93,8 @@ public sealed class ClassicScene
         foreach (var file in map.Files)
             Array.Fill(fileOf, file, first[file], file.Instances.Length);
 
+        bool lodsByName = map.Game != ClassicGame.SanAndreas;
+        float reach = lodsByName ? SmallMapLodReach : LodReach;
         var maps = new List<(MapData, string)>(map.Files.Count);
         var inRooms = new List<(int Number, MapEntity Entity)>();
         int index = 0;
@@ -101,6 +111,18 @@ public sealed class ClassicScene
                 var parentFile = parent >= 0 ? fileOf[parent] : null;
                 inParent |= parentFile is not null && parentFile != file;
                 var (level, children) = levels[global];
+                float standInDistance = 0f;
+                if (lodsByName && level == LodLevel.OrphanHd && definition is not null)
+                {
+                    // Whole-island models (shown by the game from the other islands only) are never in range of
+                    // their own switch distance; the other unlinked low detail models give way up close.
+                    if (definition.Name.StartsWith("IslandLOD", StringComparison.OrdinalIgnoreCase))
+                        standInDistance = reach;
+                    else if (ClassicDefinitions.IsLodName(definition.Name))
+                        standInDistance = StandInNearDistance;
+                    if (standInDistance > 0f)
+                        level = LodLevel.Lod;
+                }
                 var entity = new MapEntity
                 {
                     ArchetypeHash = definition is null ? 0 : Joaat.Hash(definition.Name),
@@ -112,13 +134,14 @@ public sealed class ClassicScene
                     Flags = parentFile is not null && parentFile != file ? LodInParentMap : 0u,
                     LodDistance = level is LodLevel.Hd or LodLevel.OrphanHd
                         ? definition?.DrawDistance ?? 0f
-                        : Math.Max(definition?.DrawDistance ?? 0f, LodReach),
+                        : Math.Max(definition?.DrawDistance ?? 0f, reach),
                     LodLevel = level,
                     ChildCount = children,
+                    ChildLodDistance = standInDistance,
                 };
                 entities.Add(entity);
                 // Higher values are flags (San Andreas 256: seen from every interior), not rooms.
-                if (instance.Interior is > 0 and < 256)
+                if (instance.Interior is > 0 and < 256 and not EverywhereArea)
                     inRooms.Add((instance.Interior, entity));
             }
             var (min, max) = Extents(entities, radii);
