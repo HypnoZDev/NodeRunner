@@ -105,6 +105,10 @@ internal sealed class CutscenePanel(AppState state)
             state.FocusOn(target, 6f);
     }
 
+    // A cutscene of the Online updates (else of story mode).
+    private static bool IsOnline(string path) =>
+        path.Contains(@"\dlcpacks\mp", StringComparison.OrdinalIgnoreCase) || path.Contains(@"\cuts_mp", StringComparison.OrdinalIgnoreCase);
+
     private List<Entry>? Entries()
     {
         if (state.World.Content is not { } content)
@@ -114,8 +118,7 @@ internal sealed class CutscenePanel(AppState state)
             _for = content;
             _rowsFor = null;
             _list = Task.Run(() => content.EnumerateFiles(".cut")
-                .Select(p => new Entry(Path.GetFileNameWithoutExtension(p), p,
-                    p.Contains(@"\dlcpacks\mp", StringComparison.OrdinalIgnoreCase) || p.Contains(@"\cuts_mp", StringComparison.OrdinalIgnoreCase)))
+                .Select(p => new Entry(Path.GetFileNameWithoutExtension(p), p, IsOnline(p)))
                 .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList());
         }
@@ -206,7 +209,27 @@ internal sealed class CutscenePanel(AppState state)
         Widgets.Hint(Player.IsLoading ? L($"{Icons.LoaderCircle}  Chargement des modèles...") : L($"{Player.ShownCount} / {Player.ActorCount} affichés à cet instant"));
         if (Widgets.Button(L($"{Icons.Map}  Aller à la scène"), L("Place la caméra au point de vue du premier plan")))
             GoTo(cutscene);
+        DrawMapVersion();
         DrawHiddenPlaces(cutscene);
+    }
+
+    // Story cutscenes were shot on the story map, Online ones on the Online map: some places differ (Simeon's showroom
+    // has its interior on the story map only).
+    private void DrawMapVersion()
+    {
+        if (Player.Path is not { } path)
+            return;
+        bool online = IsOnline(path);
+        var wanted = online ? MapVersion.Multiplayer : MapVersion.SinglePlayer;
+        if (state.Settings.MapVersion == wanted)
+            return;
+        ImGui.Spacing();
+        Widgets.Hint(online
+            ? L($"{Icons.TriangleAlert}  Cinématique Online jouée sur la carte solo : certains lieux peuvent différer.")
+            : L($"{Icons.TriangleAlert}  Cinématique du mode histoire jouée sur la carte Online / FiveM : certains lieux diffèrent (ex. intérieur du concessionnaire de Simeon)."), wrap: true);
+        if (Widgets.Button(online ? L("Passer en carte Online / FiveM") : L("Passer en carte solo"),
+                L("Change la version de la carte (comme le choix de la barre d'outils) ; la carte se recharge et la cinématique repart")))
+            state.SetMapSelection(wanted, state.Settings.LastDlcPack);
     }
 
     private const float PlaceMargin = 15f;     // Metres around a map's objects within which the scene counts as inside.
