@@ -11,7 +11,11 @@ namespace NodeRunner.Data.Native.Classic;
 // A room of Vice City or San Andreas: objects of one interior number standing together (San Andreas keeps its rooms far
 // above the city, Vice City mostly inside its buildings). Main: the largest object, which names the room.
 public sealed record ClassicInterior(int Number, string Name, Vector3 Center, float Radius, MapEntity Main,
-    IReadOnlyList<MapEntity> Entities);
+    IReadOnlyList<MapEntity> Entities)
+{
+    // Far above the ground (most San Andreas rooms, the Vice City stadium): it hides nothing of the city.
+    public bool AboveCity => Center.Z > 200f;
+}
 
 // The map of GTA III, Vice City or San Andreas in the form the 3D view draws (the GTA V one): each placement file
 // becomes a map, each definition an archetype, and the model and texture files are indexed by name.

@@ -107,6 +107,38 @@ internal sealed class ClassicWorld : IOtherWorld, IDisposable
         });
     }
 
+    private readonly HashSet<MapEntity> _hiddenRooms = [];
+    private ClassicScene? _hiddenFor;
+    private ClassicInterior? _openRoom;
+
+    // Objects of the rooms standing inside the city (most of Vice City's): the game draws them only with the player
+    // inside, and they cover the buildings around (room seen through a window, low detail city behind it). Hidden,
+    // except the room of the selected object.
+    public IReadOnlySet<MapEntity> HiddenRooms(MapEntity? selected)
+    {
+        var scene = _scene;
+        if (scene is null)
+            return _hiddenRooms;
+        if (!ReferenceEquals(scene, _hiddenFor))
+        {
+            _hiddenFor = scene;
+            _openRoom = null;
+            _hiddenRooms.Clear();
+            foreach (var room in scene.Interiors.Where(r => !r.AboveCity))
+                _hiddenRooms.UnionWith(room.Entities);
+        }
+        var open = selected is not null && scene.InteriorOf.TryGetValue(selected, out var r2) && !r2.AboveCity ? r2 : null;
+        if (open != _openRoom)
+        {
+            if (_openRoom is not null)
+                _hiddenRooms.UnionWith(_openRoom.Entities);
+            if (open is not null)
+                _hiddenRooms.ExceptWith(open.Entities);
+            _openRoom = open;
+        }
+        return _hiddenRooms;
+    }
+
     public void Dispose() => Files.Dispose();
 
     // Reports on the worker thread itself (no synchronization context needed for a status text).

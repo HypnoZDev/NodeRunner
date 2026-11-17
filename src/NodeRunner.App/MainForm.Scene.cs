@@ -96,6 +96,8 @@ internal sealed unsafe partial class MainForm
             _modelLayer.Doors = _state.OpenDoors;
         }
 
+        _modelLayer.Hidden = _state.IsClassic ? _state.Classic.HiddenRooms(_state.Gta4Selection) : _state.Cutscenes.Hidden;
+
         // Sun shadows: the objects seen from the sun first, into their own images.
         bool shadows = modelsEnabled && settings.Shadows;
         if (shadows)
@@ -114,7 +116,6 @@ internal sealed unsafe partial class MainForm
         _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
         if (occlusionPreview)
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
-        _modelLayer.Hidden = _state.Cutscenes.Hidden;
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
                 () => DrawWater(viewProjection, lighting, scene), occlusionPreview ? _occlusionCuller : null);
