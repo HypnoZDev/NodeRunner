@@ -47,7 +47,7 @@ internal sealed unsafe class ProjectPanel(AppState state)
     {
         if (!state.Features.Editing)
         {
-            Widgets.Hint(L("Les projets sont pour GTA V : en GTA IV, la carte se consulte sans être modifiée."), wrap: true);
+            Widgets.Hint(L("Les projets sont pour GTA V : dans ce jeu, la carte se consulte sans être modifiée."), wrap: true);
             return;
         }
         if (state.Project is not { } project)

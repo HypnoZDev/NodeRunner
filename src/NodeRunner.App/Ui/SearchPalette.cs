@@ -57,13 +57,13 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     public bool IsOpen => _open;
 
     // The map shown: GTA V, or GTA IV (read only, no viewer).
-    private MapLibrary? Library => state.IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps;
+    private MapLibrary? Library => state.ShownMaps;
 
-    private HashNames Names => (state.IsGta4 ? state.Gta4.Scene?.Names : state.World.Names) ?? new HashNames();
+    private HashNames Names => state.ShownNames ?? new HashNames();
 
-    private bool IsBusy => state.IsGta4 ? state.Gta4.IsBusy : state.World.IsBusy;
+    private bool IsBusy => state.Other?.IsBusy ?? state.World.IsBusy;
 
-    private string FileKind => state.IsGta4 ? "WPL" : "YMAP";
+    private string FileKind => state.Other?.MapFileKind ?? "YMAP";
 
     public void Open()
     {
@@ -112,7 +112,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     {
         if (_justOpened || !ImGui.IsAnyItemActive())
             ImGui.SetKeyboardFocusHere();
-        Widgets.SearchField("##search_query", state.IsGta4 ? L("Objet, WPL, type, ou position : x, y, z") : L("Objet, YMAP, type, ou position FiveM : vector3(x, y, z)"),
+        Widgets.SearchField("##search_query", state.IsOtherGame ? L($"Objet, {FileKind}, type, ou position : x, y, z") : L("Objet, YMAP, type, ou position FiveM : vector3(x, y, z)"),
             ref _query, flags: ImGuiInputTextFlags.AutoSelectAll);
 
         if (_query != _searched || Library != _searchedLibrary)
@@ -164,6 +164,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         if (query.Length == 0)
         {
             Widgets.Hint(state.IsGta4 ? L("Exemples : ag_bigandbushy · manhat01 · 0xA9BC5D05 · -200, 500, 20")
+                : state.IsClassic ? L("Exemples : palm · lae2_roads12 · 2495, -1670, 13")
                 : L("Exemples : prop_bench_01a · dt1_02 · 0x3073333B · vector3(215.76, -810.12, 30.73) · -1037.5, -2737.9"), wrap: true);
             Widgets.Hint(L("Ou une commande : exporter, grille, atelier, paramètres... ( > pour les voir toutes)"), wrap: true);
             if (Library is null)
@@ -267,7 +268,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
         }
         ImGui.EndDisabled();
         ImGui.SameLine(0, 6f);
-        if (!clicked && Widgets.Button(viewer, state.IsGta4 ? L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée)")
+        if (!clicked && Widgets.Button(viewer, state.IsOtherGame ? L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée)")
                 : L("Voir le modèle seul dans la visionneuse (Ctrl+Entrée), puis « Placer » pour l'ajouter à la carte")))
         {
             OpenInViewer(result);
@@ -477,8 +478,8 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
 
     // GTA V: the .ytyp declaring the type; GTA IV: the model file (the .ide files are not kept).
     private string? ArchetypeFile(uint hash, MapLibrary library) =>
-        !state.IsGta4 ? library.GetArchetypeFile(hash)
-        : library.GetArchetype(hash) is { } archetype ? state.Gta4.Scene?.Models.Locate(archetype)?.Path : null;
+        !state.IsOtherGame ? library.GetArchetypeFile(hash)
+        : library.GetArchetype(hash) is { } archetype ? state.Other?.Models?.Locate(archetype)?.Path : null;
 
     private bool IsType(uint hash, MapLibrary library) => library.GetArchetype(hash) is not null || _objectsByType.ContainsKey(hash);
 
@@ -556,7 +557,7 @@ internal sealed class SearchPalette(AppState state, Action<MapData> revealMap, A
     private void GoTo(MapEntity entity)
     {
         state.Marker = null;
-        if (state.IsGta4)
+        if (state.IsOtherGame)
             state.Gta4Selection = entity;
         else
             state.Select(entity);

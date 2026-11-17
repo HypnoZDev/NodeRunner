@@ -572,7 +572,7 @@ internal sealed class MainUi
     }
 
     // Projects, additions and exports are for GTA V (FiveM resources).
-    private static string Gta5OnlyTip => L("GTA V seulement : en GTA IV, la carte se consulte sans être modifiée.");
+    private static string Gta5OnlyTip => L("GTA V seulement : dans ce jeu, la carte se consulte sans être modifiée.");
 
     private void DrawMenuBar()
     {

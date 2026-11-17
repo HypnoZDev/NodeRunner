@@ -26,6 +26,12 @@ public sealed class AppSettings
     public HashSet<string> Gta4HiddenLayers { get; set; } = new();
     public HashSet<string> Gta4ShownLayers { get; set; } = new();
 
+    // GTA III / Vice City / San Andreas: the folder holding the games (or one game's folder), found once and kept,
+    // the game of the trilogy chosen last time, and the camera of each game. Layers are those of GTA IV sessions.
+    public string? ClassicFolder { get; set; }
+    public GameKind LastClassicGame { get; set; } = GameKind.SanAndreas;
+    public Dictionary<GameKind, CameraSettings> ClassicCameras { get; set; } = new();
+
     public bool VSync { get; set; } = true;
 
     // Images per second at most; 0 = no limit (other than VSync).

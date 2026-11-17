@@ -66,6 +66,31 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
 
         if (state.IsGta4)
             DrawGta4Notice(position, size);
+        else if (state.IsClassic)
+            DrawClassicNotice(position, size);
+    }
+
+    // Trilogy session: while reading or after an error, a notice in the middle of the view.
+    private void DrawClassicNotice(Vector2 position, Vector2 size)
+    {
+        var classic = state.Classic;
+        if (classic.Library is not null && classic.Error is null)
+            return;
+        ImGui.SetNextWindowPos(position + size * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+        ImGui.SetNextWindowSizeConstraints(new Vector2(0f, 0f), new Vector2(Math.Min(460f, size.X - 2f * Margin), float.MaxValue));
+        if (ImGui.Begin("##classic_notice", OverlayFlags | ImGuiWindowFlags.NoInputs))
+        {
+            ImGui.PushTextWrapPos(Math.Min(440f, size.X - 4f * Margin));
+            ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  {classic.GameName}");
+            if (classic.Error is { } error)
+                ImGui.TextColored(UiTheme.Error, L($"Lecture impossible : {error}"));
+            else if (classic.Folder is null)
+                ImGui.TextUnformatted(L("Jeu introuvable."));
+            else
+                ImGui.TextUnformatted(classic.Status);
+            ImGui.PopTextWrapPos();
+        }
+        ImGui.End();
     }
 
     // GTA IV session: while reading, a notice in the middle; once the map is shown as boxes, a short line at the bottom.

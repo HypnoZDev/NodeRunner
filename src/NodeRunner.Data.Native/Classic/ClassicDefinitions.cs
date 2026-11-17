@@ -2,6 +2,9 @@ using System.Globalization;
 
 namespace NodeRunner.Data.Native.Classic;
 
+// A vehicle declared in the "cars" section of a ".ide" file: number, model and texture dictionary.
+public sealed record ClassicVehicleDef(int Id, string Name, string TextureDictionary);
+
 // A model declared in a ".ide" file. Timed models ("tobj") are only shown from TimeOn to TimeOff (hours, may wrap past
 // midnight). AnimationFile: San Andreas "anim" section (animated buildings).
 public sealed record ClassicModelDef(int Id, string Name, string TextureDictionary, float DrawDistance, uint Flags,
@@ -17,6 +20,9 @@ public sealed class ClassicDefinitions
     private readonly Dictionary<int, ClassicModelDef> _byId = [];
     private readonly Dictionary<string, ClassicModelDef> _byName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _textureParents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, ClassicVehicleDef> _vehicles = [];
+
+    public IReadOnlyCollection<ClassicVehicleDef> Vehicles => _vehicles.Values;
 
     public IReadOnlyDictionary<int, ClassicModelDef> Models => _byId;
 
@@ -57,6 +63,13 @@ public sealed class ClassicDefinitions
                 case "objs" or "tobj" or "anim":
                     if (ReadModel(Split(line.ToString()), section) is { } model)
                         Add(model);
+                    else
+                        bad++;
+                    break;
+                case "cars":
+                    var car = Split(line.ToString());
+                    if (car.Length >= 3 && int.TryParse(car[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int carId) && car[1].Length > 0)
+                        _vehicles[carId] = new ClassicVehicleDef(carId, car[1], car[2]);
                     else
                         bad++;
                     break;

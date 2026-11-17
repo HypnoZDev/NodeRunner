@@ -56,14 +56,30 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             Next();
             Item(Icons.Globe, World.Gta4World.EpisodeName(state.Gta4.Episode));
         }
+        if (state.IsClassic)
+        {
+            var classic = state.Classic;
+            Next();
+            Item(Icons.Globe, classic.GameName);
+            if (classic.Error is { } classicError)
+            {
+                Next();
+                Item(Icons.TriangleAlert, classicError, UiTheme.Error);
+            }
+            else if (classic.IsBusy)
+            {
+                Next();
+                Item(Icons.LoaderCircle, classic.Status, UiTheme.Accent with { X = 0.42f, Y = 0.70f, Z = 1f });
+            }
+        }
         var world = state.World;
-        if (!state.IsGta4 && world.Error is not null)
+        if (!state.IsOtherGame && world.Error is not null)
         {
             Next();
             Item(Icons.TriangleAlert, world.Status, UiTheme.Error);
             Clickable(L("Clic : voir l'erreur et copier le rapport"));
         }
-        else if (!state.IsGta4 && world.IsBusy)
+        else if (!state.IsOtherGame && world.IsBusy)
         {
             Next();
             Item(Icons.LoaderCircle, world.Status, UiTheme.Accent with { X = 0.42f, Y = 0.70f, Z = 1f });
@@ -150,12 +166,12 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             return [("Ctrl", L("par pas")), (L("Échap"), L("annuler le déplacement"))];
         if (io.KeyCtrl)
         {
-            return state.IsGta4
+            return state.IsOtherGame
                 ? [("Ctrl+K", L("rechercher"))]
                 : [(L("Ctrl+clic"), L("ajouter à la sélection")), ("Ctrl+Z / Y", L("annuler / rétablir")), ("Ctrl+S", L("enregistrer")),
                    ("Ctrl+C / V", L("copier / coller")), ("Ctrl+K", L("rechercher")), ("Ctrl+E", L("exporter"))];
         }
-        if (state.IsGta4)
+        if (state.IsOtherGame)
         {
             return [(L("Clic"), L("propriétés (lecture seule)")), (L("Clic droit maintenu"), L("regarder autour")), (move, L("se déplacer")),
                     ("Ctrl+K", L("rechercher"))];
@@ -185,7 +201,7 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
     {
         var p = state.Camera.Position;
         string position = $"{Icons.MapPinned}  X {p.X:0}   Y {p.Y:0}   Z {p.Z:0}";
-        string edition = state.IsGta4 ? $"{Icons.HardDrive}  GTA IV" : state.Game is { } game ? L($"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}") : L($"{Icons.HardDrive}  GTA V introuvable");
+        string edition = state.IsGta4 ? $"{Icons.HardDrive}  GTA IV" : state.IsClassic ? $"{Icons.HardDrive}  {state.Classic.GameName}" : state.Game is { } game ? L($"{Icons.HardDrive}  GTA V {(game.Edition == GameEdition.Legacy ? "Legacy" : "Enhanced")}") : L($"{Icons.HardDrive}  GTA V introuvable");
         string fps = $"{Icons.Gauge}  {ImGui.GetIO().Framerate:0} FPS";
         int errorCount = Diagnostics.ErrorLog.Count;
         string errors = errorCount > 0 ? $"{Icons.TriangleAlert}  {errorCount}" : Icons.TriangleAlert;

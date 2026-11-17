@@ -26,6 +26,11 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
                 if (Widgets.Section(L("Carte chargée"), "status_world"))
                     DrawGta4World();
             }
+            else if (state.IsClassic)
+            {
+                if (Widgets.Section(state.Classic.GameName + "###status_game", "status_game"))
+                    DrawClassicGame();
+            }
             else
             {
                 if (Widgets.Section("GTA V", "status_game"))
@@ -113,6 +118,29 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
         Widgets.EndProperties();
     }
 
+    private void DrawClassicGame()
+    {
+        var classic = state.Classic;
+        if (classic.Folder is not { } folder)
+        {
+            ImGui.TextColored(UiTheme.Warning, L("Jeu introuvable."));
+            return;
+        }
+        if (!Widgets.BeginProperties("##game"))
+            return;
+        Widgets.PropertyText(L("Dossier"), folder, folder);
+        var statusColor = classic.Error is not null ? UiTheme.Error : classic.IsBusy ? UiTheme.AccentText : UiTheme.Success;
+        Widgets.PropertyText(L("État"), classic.Error is { } error ? L($"Lecture impossible : {error}") : classic.Status, classic.Error, statusColor);
+        if (classic.IsLoaded)
+        {
+            Widgets.PropertyText(L("Archives (.img)"), Widgets.Count(classic.Files.EnumerateArchives().Count()));
+            Widgets.PropertyText(L("Fichiers"), Widgets.Count(classic.Files.AllFiles.Count));
+        }
+        if (classic.Library is { } library)
+            Widgets.PropertyText(L("Objets placés"), Widgets.Count(library.EntityCount));
+        Widgets.EndProperties();
+    }
+
     private void DrawGta4World()
     {
         var gta4 = state.Gta4;
@@ -189,7 +217,7 @@ internal sealed class StatusPanel(AppState state, MainUi ui, CameraController ca
             return;
         Widgets.PropertyText(L("Carte graphique"), state.AdapterName);
         Widgets.PropertyText(L("Images par seconde"), $"{ImGui.GetIO().Framerate:0}");
-        if (state.World.Models is not null || state.IsGta4 && state.Gta4.Scene is not null)
+        if (state.World.Models is not null || state.Other?.Library is not null)
         {
             string loading = modelLayer.PendingModelCount > 0 ? L($" ({modelLayer.PendingModelCount} en cours)") : "";
             Widgets.PropertyText(L("Objets dessinés"), $"{Widgets.Count(modelLayer.DrawnObjectCount)} / {Widgets.Count(modelLayer.NearbyObjectCount)}{loading}");

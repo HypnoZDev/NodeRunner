@@ -127,7 +127,7 @@ internal sealed unsafe partial class MainForm
         if (_doorClick is not { } click || _modelRenderer is null || _pickBuffer is null)
             return;
         _doorClick = null;
-        if (!_state.IsGta4 && _state.OpeningTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
+        if (!_state.IsOtherGame && _state.OpeningTool is null && scene.Contains(click) && _state.IsLayerVisible(ModelLayer.LayerName) && _state.World.Names is { } names)
         {
             var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
             if (_modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y) is { } picked)
@@ -158,7 +158,7 @@ internal sealed unsafe partial class MainForm
 
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
         // Picking the wall of a building to open: the click goes to the tool.
-        if (_state.OpeningTool is { } openingTool && !_state.IsGta4)
+        if (_state.OpeningTool is { } openingTool && !_state.IsOtherGame)
         {
             if (Matrix4x4.Invert(viewProjection, out var inverse))
             {
@@ -173,8 +173,8 @@ internal sealed unsafe partial class MainForm
             }
             return;
         }
-        // GTA IV: one object at a time, read only.
-        if (_state.IsGta4)
+        // Other games than GTA V: one object at a time, read only.
+        if (_state.IsOtherGame)
         {
             if (_state.IsLayerVisible(ModelLayer.LayerName))
                 _state.Gta4Selection = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);
@@ -315,7 +315,7 @@ internal sealed unsafe partial class MainForm
         if (_contextRequest is not { } click || _modelRenderer is null || _pickBuffer is null)
             return;
         _contextRequest = null;
-        if (_state.IsGta4)
+        if (_state.IsOtherGame)
             return;
         if (!scene.Contains(click))
             return;

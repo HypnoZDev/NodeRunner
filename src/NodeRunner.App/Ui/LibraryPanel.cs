@@ -35,7 +35,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         bool visible = ImGui.Begin(L(Title), ref open);
         if (visible && !state.Features.Editing)
         {
-            Widgets.Hint(L("La bibliothèque place des props dans un projet GTA V : indisponible en GTA IV."), wrap: true);
+            Widgets.Hint(L("La bibliothèque place des props dans un projet GTA V : indisponible dans ce jeu."), wrap: true);
         }
         else if (visible)
         {

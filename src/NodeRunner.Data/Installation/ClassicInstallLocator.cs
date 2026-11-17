@@ -111,5 +111,62 @@ public static class ClassicInstallLocator
                 yield return Path.Combine(root, name);
             }
         }
+
+        // Copies installed by hand: the folders of each fixed drive and of its "Games" / "Jeux" folder (each one is
+        // also looked into, for a folder holding the three games).
+        foreach (string folder in HandInstalledFolders())
+            yield return folder;
+    }
+
+    private static readonly HashSet<string> SystemFolders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Windows", "ProgramData", "System Volume Information", "Recovery", "PerfLogs", "Users", "Program Files",
+        "Program Files (x86)", "Intel", "AMD", "NVIDIA", "OneDriveTemp", "Config.Msi",
+    };
+
+    private static IEnumerable<string> HandInstalledFolders()
+    {
+        DriveInfo[] drives;
+        try
+        {
+            drives = DriveInfo.GetDrives();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            yield break;
+        }
+        foreach (var drive in drives)
+        {
+            bool ready;
+            try
+            {
+                ready = drive.DriveType == DriveType.Fixed && drive.IsReady;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ready = false;
+            }
+            if (!ready)
+                continue;
+            foreach (string root in new[] { drive.RootDirectory.FullName, Path.Combine(drive.RootDirectory.FullName, "Games"),
+                Path.Combine(drive.RootDirectory.FullName, "Jeux") })
+            {
+                string[] folders;
+                try
+                {
+                    folders = Directory.Exists(root) ? Directory.GetDirectories(root) : [];
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    folders = [];
+                }
+                foreach (string folder in folders)
+                {
+                    string name = Path.GetFileName(folder);
+                    if (!name.StartsWith('$') && !SystemFolders.Contains(name))
+                        yield return folder;
+                }
+            }
+        }
     }
 }

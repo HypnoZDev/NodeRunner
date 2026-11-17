@@ -79,7 +79,16 @@ internal static unsafe class UiTheme
 
     // GTA V keeps the accent of the settings; GTA IV and each of its episodes have their own.
     public static uint GameAccent(Configuration.GameKind game, Data.Native.Gta4.Gta4Episode episode, uint settingsAccent) =>
-        game != Configuration.GameKind.Gta4 ? settingsAccent : episode switch
+        game switch
+        {
+            Configuration.GameKind.Gta5 => settingsAccent,
+            Configuration.GameKind.Gta3 => 0x9DB4C8,
+            Configuration.GameKind.ViceCity => 0xF25CA8,
+            Configuration.GameKind.SanAndreas => 0x6DBF45,
+            _ => Gta4Accent(episode),
+        };
+
+    private static uint Gta4Accent(Data.Native.Gta4.Gta4Episode episode) => episode switch
         {
             Data.Native.Gta4.Gta4Episode.LostAndDamned => 0xF42015,
             Data.Native.Gta4.Gta4Episode.BalladOfGayTony => 0xFF79AE,

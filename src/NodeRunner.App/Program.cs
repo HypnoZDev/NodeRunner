@@ -39,12 +39,26 @@ internal static class Program
         {
             // The map starts loading at once, behind the start-up screen, then the 3D models around the camera (main
             // window still hidden): the main window opens on a loaded view.
-            // With both games installed, the start-up screen asks which one to open (the last one by default).
+            // With several games installed, the start-up screen asks which one to open (the last one by default). The
+            // trilogy has one button, for the game of it opened last (the others are picked above the 3D view).
             var main = new MainForm(state);
-            bool hasGta5 = state.Game is not null, hasGta4 = state.Gta4Folder is not null;
-            if (hasGta5 || hasGta4)
+            var games = new List<GameKind>();
+            if (state.Game is not null)
+                games.Add(GameKind.Gta5);
+            if (state.Gta4Folder is not null)
+                games.Add(GameKind.Gta4);
+            if (state.ClassicFolders.Count > 0)
             {
-                var game = !hasGta5 ? GameKind.Gta4 : !hasGta4 ? GameKind.Gta5 : settings.LastGame;
+                var classic = settings.LastClassicGame.Classic() is { } last && state.ClassicFolders.ContainsKey(last)
+                    ? settings.LastClassicGame
+                    : state.ClassicFolders.Keys.Order().First().Kind();
+                games.Add(classic);
+            }
+            if (games.Count > 0)
+            {
+                var game = games.Contains(settings.LastGame) ? settings.LastGame
+                    : settings.LastGame.Classic() is not null && games.Any(g => g.Classic() is not null) ? games.First(g => g.Classic() is not null)
+                    : games[0];
                 bool started = false;
                 void Start(GameKind chosen)
                 {
@@ -55,21 +69,24 @@ internal static class Program
                     {
                         state.Gta4.Load(state.Gta4Folder!, settings.Gta4Episode);
                     }
+                    else if (chosen.Classic() is { } classicGame)
+                    {
+                        state.Classic.Load(state.ClassicFolders[classicGame], classicGame);
+                        settings.LastClassicGame = chosen;
+                    }
                     else
                     {
                         state.RestoreProject();
                         state.World.Load(state.Game, settings.MapSelection, settings.HiddenScriptedMaps, state.SaveFolder);
                     }
-                    if (hasGta5 && hasGta4 && settings.LastGame != chosen)
-                    {
-                        settings.LastGame = chosen;
-                        state.SaveSettings();
-                    }
+                    settings.LastGame = chosen;
+                    state.SaveSettings();
                 }
-                bool offer = hasGta5 && hasGta4;
+                bool offer = games.Count > 1;
                 if (!offer)
                     Start(game);
-                using var splash = new SplashForm(state.World, state.Gta4, main.PreloadModels, game, settings.Gta4Episode, offer ? Start : null);
+                using var splash = new SplashForm(state.World, state.Gta4, state.Classic, games, main.PreloadModels, game, settings.Gta4Episode,
+                    offer ? Start : null);
                 Application.Run(splash);
                 // Closed before a choice (Alt+F4): the highlighted game.
                 if (!started)

@@ -51,10 +51,19 @@ internal sealed unsafe partial class MainForm
 
     // Starts loading when a game folder is found or changed, then builds the GPU data once it is ready.
     private void LoadWorld() =>
-        _state.World.Load(_state.IsGta4 ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
+        _state.World.Load(_state.IsOtherGame ? null : _state.Game, _state.Settings.MapSelection, _state.Settings.HiddenScriptedMaps, _state.SaveFolder, _state.ExtraStreamFolders);
 
     private void DrawWorld(ColorRenderer lines, Rectangle scene)
     {
+        if (_state.GameSwitchRequest is { } nextGame && !_state.Classic.IsBusy)
+        {
+            _state.GameSwitchRequest = null;
+            SaveCamera();
+            _state.Gta4Selection = null;
+            _state.SwitchClassicGame(nextGame);
+            RestoreCamera();
+        }
+
         var camera = _state.Camera;
         var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
 
@@ -70,12 +79,13 @@ internal sealed unsafe partial class MainForm
 
         bool modelsEnabled = _state.IsLayerVisible(ModelLayer.LayerName);
         int hour = (int)settings.TimeOfDay % 24;
-        if (_state.IsGta4)
+        if (_state.Other is { } other)
         {
-            var gta4 = _state.Gta4;
-            var scene4 = gta4.Scene;
-            _modelLayer.Update(scene4?.Library, scene4?.Models, gta4.ModelReader,
-                () => scene4 is null ? null : new TextureResolver(scene4.Textures, gta4.TextureReader), _modelRenderer, camera.Position,
+            var library = other.Library;
+            var models = other.Models;
+            var textures = other.Textures;
+            _modelLayer.Update(library, models, other.ModelReader,
+                () => textures is null ? null : new TextureResolver(textures, other.TextureReader), _modelRenderer, camera.Position,
                 settings.ViewDistanceMultiplier, hour, modelsEnabled);
             _modelLayer.Doors = null;
         }
@@ -126,7 +136,7 @@ internal sealed unsafe partial class MainForm
 
         // Peds, animals and vehicles on the points the game would use at this hour.
         _state.ScenarioLife.Update(_state.World, _modelRenderer, _state.ScenarioClips, camera.Position, hour, settings.MapVersion == NodeRunner.Data.FileSystem.MapVersion.Multiplayer,
-            c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsGta4 && _state.Cutscenes.Cutscene is null);
+            c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsOtherGame && _state.Cutscenes.Cutscene is null);
         _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
 
         // The cutscene chosen in the cutscene viewer, at its place.
@@ -147,18 +157,21 @@ internal sealed unsafe partial class MainForm
         if (collisionTool)
             _collisionLayer.DrawSelection(lines, viewProjection, camera.Position, _state.SelectedCollision, _state.CollisionSelectionVersion,
                 _state.CollisionDragPreview);
-        if (_state.IsGta4)
-            _pathNodeLayer.UpdateGta4(_state.Gta4.PathAreas, lines);
+        if (_state.IsOtherGame)
+            _pathNodeLayer.UpdateGta4(_state.IsGta4 ? _state.Gta4.PathAreas : null, lines);
         else
             _pathNodeLayer.Update(_state.World, lines, deferChanges: _ui.IsGizmoDragging || ImGui.IsAnyItemActive());
         _pathNodeLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(PathNodeLayer.LayerName(c)));
         bool entitiesEnabled = EntityBoxLayer.Categories.Any(c => _state.IsLayerVisible(EntityBoxLayer.LayerName(c)));
-        if (_state.IsGta4)
+        if (_state.IsOtherGame)
         {
-            var gta4Boxes = _state.Gta4.MapBoxes;
+            var gta4Boxes = _state.IsGta4 ? _state.Gta4.MapBoxes : null;
             _entityBoxLayer.Update(gta4Boxes, gta4Boxes is null ? null : gta4Boxes.Around, 0, lines, camera.Position, _state.Settings.EntityRadius,
                 entitiesEnabled);
-            ShowGta4Map(gta4Boxes);
+            if (_state.IsGta4)
+                ShowGta4Map(gta4Boxes);
+            else
+                ShowClassicMap(_state.Classic.Library);
         }
         else
         {
@@ -225,11 +238,25 @@ internal sealed unsafe partial class MainForm
         _state.Camera.LookAt(new Vector3(center.X, center.Y, 0f));
     }
 
+    // A first session of a trilogy game starts above the middle of its city.
+    private void ShowClassicMap(NodeRunner.Data.Maps.MapLibrary? library)
+    {
+        if (library is null || !_gta4CameraPending)
+            return;
+        _gta4CameraPending = false;
+        var outside = library.Maps.Where(m => m.Entities.Count > 0).ToList();
+        if (outside.Count == 0)
+            return;
+        var center = outside.Select(m => (m.EntitiesExtentsMin + m.EntitiesExtentsMax) * 0.5f).Aggregate((a, b) => a + b) / outside.Count;
+        _state.Camera.Position = new Vector3(center.X, center.Y - 400f, 350f);
+        _state.Camera.LookAt(new Vector3(center.X, center.Y, 0f));
+    }
+
     // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose
     // depth tells how much water is crossed).
     private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene)
     {
-        var water = _state.IsGta4 ? _state.Gta4.Water : _state.World.Water;
+        var water = _state.Other is { } other ? other.Water : _state.World.Water;
         if (!ReferenceEquals(water, _waterShown))
         {
             _waterShown = water;
@@ -344,23 +371,23 @@ internal sealed unsafe partial class MainForm
 
     // The selected objects of the map shown (GTA V, or the one GTA IV object).
     private IReadOnlyList<Data.Maps.MapEntity> SelectedForDrawing =>
-        !_state.IsGta4 ? _state.SelectedEntities : _state.Gta4Selection is { } gta4 ? [gta4] : [];
+        !_state.IsOtherGame ? _state.SelectedEntities : _state.Gta4Selection is { } gta4 ? [gta4] : [];
 
     private void DrawSelectionBox(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         var selected = SelectedForDrawing;
-        if (selected.Count == 0 || (_state.IsGta4 ? _state.Gta4.Scene?.Library : _state.World.Maps) is not { } library)
+        if (selected.Count == 0 || _state.ShownMaps is not { } library)
             return;
         for (int i = 0; i < selected.Count; i++)
         {
             var entity = selected[i];
             if (library.GetArchetype(entity.ArchetypeHash) is { } archetype)
                 lines.AddBox(archetype.BoundsMin, archetype.BoundsMax,
-                    !_state.IsGta4 && _state.OpenDoors.TryGetPose(entity, out var opened) ? opened * entity.Transform : entity.Transform,
+                    !_state.IsOtherGame && _state.OpenDoors.TryGetPose(entity, out var opened) ? opened * entity.Transform : entity.Transform,
                     i == selected.Count - 1 ? SelectionBoxColor : SecondarySelectionBoxColor);
         }
         // How the selected doors open.
-        if (!_state.IsGta4 && _state.World.Names is { } names)
+        if (!_state.IsOtherGame && _state.World.Names is { } names)
         {
             foreach (var door in selected.Take(MaxDoorArcs))
             {
@@ -395,7 +422,7 @@ internal sealed unsafe partial class MainForm
             }
         }
         // The opening about to be cut through a building, and the room behind it.
-        if (!_state.IsGta4 && _state.OpeningTool is { Current: { } opening } openingTool)
+        if (!_state.IsOtherGame && _state.OpeningTool is { Current: { } opening } openingTool)
         {
             foreach (var (from, to) in opening.Edges())
                 lines.AddLine(from, to, DoorBlockedColor);

@@ -26,8 +26,8 @@ internal sealed unsafe class WorkspaceTabs(AppState state, ViewerPanel viewer, P
         }
         if (!state.PedOpen)
             state.PedShown = false;
-        // GTA IV has no viewer in a tab: no bar.
-        if (state.IsGta4 && !state.WorkshopOpen && !state.PedOpen)
+        // Other games have no viewer in a tab: no bar.
+        if (state.IsOtherGame && !state.WorkshopOpen && !state.PedOpen)
             return;
         bool detached = state.WorkshopOpen && state.WorkshopDetached;
         if (detached)

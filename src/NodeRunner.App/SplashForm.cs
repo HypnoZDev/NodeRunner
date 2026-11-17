@@ -79,8 +79,11 @@ internal sealed partial class SplashForm : Form
 
     // Game choice: shown from ChoiceFrom, the highlighted game starts by itself after ChoiceDelay without any input.
     private const float ChoiceFrom = 0.3f, ChoiceDelay = 3f;
-    private static readonly RectangleF Gta5Button = new(Gutter, 334f, 128f, 42f);
-    private static readonly RectangleF Gta4Button = new(Gutter + 140f, 334f, 128f, 42f);
+    private static RectangleF ButtonRect(int index) => new(Gutter + 140f * index, 334f, 128f, 42f);
+
+    private RectangleF ButtonOf(GameKind game) => ButtonRect(Math.Max(0, _games.IndexOf(game)));
+
+    private RectangleF LastButton => ButtonRect(Math.Max(0, _games.Count - 1));
 
     // Timeline of the intro, in seconds.
     private const float TraceFrom = 0.15f, TraceTo = 1.0f;
@@ -92,13 +95,16 @@ internal sealed partial class SplashForm : Form
 
     private readonly WorldLoader _world;
     private readonly Gta4World _gta4;
+    private readonly ClassicWorld _classic;
+    // One button per game found; the trilogy has one button, for the game of it opened last.
+    private readonly List<GameKind> _games;
     private readonly Action<GameKind>? _choose;
     private GameKind _game;
     private bool _chosen;
     private float _chosenAt;
     private bool _choiceTouched;
     private GameKind? _hover;
-    private readonly GraphicsPath _numeralV = Numeral("V"), _numeralIV = Numeral("IV");
+    private readonly GraphicsPath _numeralV = Numeral("V"), _numeralIV = Numeral("IV"), _numeralIII = Numeral("III");
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 15 };
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly PrivateFontCollection _fonts = new();
@@ -136,10 +142,13 @@ internal sealed partial class SplashForm : Form
 
     // choose: null when the game is already loading; otherwise called once with the game picked on this screen.
     // gta4Episode: the episode that GTA IV would open.
-    public SplashForm(WorldLoader world, Gta4World gta4, Func<float>? preloadModels, GameKind game, Gta4Episode gta4Episode, Action<GameKind>? choose)
+    public SplashForm(WorldLoader world, Gta4World gta4, ClassicWorld classic, IReadOnlyList<GameKind> games, Func<float>? preloadModels,
+        GameKind game, Gta4Episode gta4Episode, Action<GameKind>? choose)
     {
         _world = world;
         _gta4 = gta4;
+        _classic = classic;
+        _games = games.Count > 0 ? [.. games] : [game];
         _preloadModels = preloadModels;
         _game = game;
         _gta4Episode = gta4Episode;
@@ -237,18 +246,20 @@ internal sealed partial class SplashForm : Form
         }
         StartMap();
 
-        bool mapDone = _game == GameKind.Gta4
-            ? !_gta4.IsBusy && _gta4.Folder is not null
+        bool mapDone = _game == GameKind.Gta4 ? !_gta4.IsBusy && _gta4.Folder is not null
+            : _game.Classic() is not null ? !_classic.IsBusy && _classic.Folder is not null
             : !_world.IsBusy && (_world.Maps is not null || _world.Error is not null);
         bool done = now > Timeout;
         float target;
         if (!mapDone && !done)
-            target = (_game == GameKind.Gta4 ? Gta4Progress(_gta4.Status) : Progress(_world.Status)) * MapShare;
+            target = (_game == GameKind.Gta4 ? Gta4Progress(_gta4.Status)
+                : _game.Classic() is not null ? Gta4Progress(_classic.Status)
+                : Progress(_world.Status)) * MapShare;
         else
         {
             // Then the 3D models around the camera, read and sent to the GPU by the main window, still hidden.
             _modelsStart ??= now;
-            float models = done || _game == GameKind.Gta4 || _world.Maps is null ? 1f : PreloadModels();
+            float models = done || _game != GameKind.Gta5 || _world.Maps is null ? 1f : PreloadModels();
             done |= models >= ModelsEnough || now - _modelsStart > ModelsTimeout;
             target = MapShare + (1f - MapShare) * models;
         }
@@ -267,8 +278,8 @@ internal sealed partial class SplashForm : Form
     }
 
     // GTA IV: its loader may fall back to the base game when the saved episode is no longer installed.
-    private uint GameAccent() => _game != GameKind.Gta4 ? Ui.UiTheme.DefaultAccent
-        : Ui.UiTheme.GameAccent(GameKind.Gta4, _chosen && _gta4.Folder is not null ? _gta4.Episode : _gta4Episode, Ui.UiTheme.DefaultAccent);
+    private uint GameAccent() => _game == GameKind.Gta5 ? Ui.UiTheme.DefaultAccent
+        : Ui.UiTheme.GameAccent(_game, _chosen && _gta4.Folder is not null ? _gta4.Episode : _gta4Episode, Ui.UiTheme.DefaultAccent);
 
     // A change of game colour sweeps the screen in a circle from the button of the game (or from the centre).
     private void FollowPalette()
@@ -281,7 +292,7 @@ internal sealed partial class SplashForm : Form
             _paletteFromRgb = _paletteRgb;
             _paletteRgb = rgb;
             _paletteAt = t;
-            var button = _game == GameKind.Gta4 ? Gta4Button : Gta5Button;
+            var button = ButtonOf(_game);
             _paletteOrigin = _choose is not null && (!_chosen || t < _chosenAt + 0.3f)
                 ? new PointF(button.X + button.Width / 2f, button.Y + button.Height / 2f)
                 : new PointF(Design.Width / 2f, Design.Height / 2f);
@@ -312,7 +323,10 @@ internal sealed partial class SplashForm : Form
     private GameKind? ButtonAt(Point pixel)
     {
         var p = new PointF(pixel.X / _scale, pixel.Y / _scale);
-        return Gta5Button.Contains(p) ? GameKind.Gta5 : Gta4Button.Contains(p) ? GameKind.Gta4 : null;
+        for (int i = 0; i < _games.Count; i++)
+            if (ButtonRect(i).Contains(p))
+                return _games[i];
+        return null;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
@@ -339,7 +353,8 @@ internal sealed partial class SplashForm : Form
             return;
         if (e.KeyCode is Keys.Left or Keys.Right)
         {
-            _game = _game == GameKind.Gta5 ? GameKind.Gta4 : GameKind.Gta5;
+            int index = Math.Max(0, _games.IndexOf(_game)) + (e.KeyCode == Keys.Right ? 1 : -1);
+            _game = _games[(index + _games.Count) % _games.Count];
             _choiceTouched = true;
         }
         else if (e.KeyCode is Keys.Enter or Keys.Space)
@@ -507,9 +522,16 @@ internal sealed partial class SplashForm : Form
             return;
         int Alpha(int a) => Math.Clamp((int)(a * visible), 0, 255);
         using (var label = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x8A, 0x94, 0xAA)))
-            g.DrawString(L("Jeu à ouvrir"), _statusFont, label, Gutter, Gta5Button.Y - 22f);
-        foreach (var (game, rect, text) in new[] { (GameKind.Gta5, Gta5Button, "GTA V"), (GameKind.Gta4, Gta4Button, "GTA IV") })
+            g.DrawString(L("Jeu à ouvrir"), _statusFont, label, Gutter, ButtonRect(0).Y - 22f);
+        foreach (var game in _games)
         {
+            var rect = ButtonOf(game);
+            string text = game switch
+            {
+                GameKind.Gta5 => "GTA V",
+                GameKind.Gta4 => "GTA IV",
+                _ => L("Trilogie"),
+            };
             bool selected = game == _game;
             using var path = new GraphicsPath();
             const float D = 8f;
@@ -524,7 +546,7 @@ internal sealed partial class SplashForm : Form
                 g.DrawPath(pen, path);
 
             const float NumeralHeight = 24f;
-            var numeral = game == GameKind.Gta5 ? _numeralV : _numeralIV;
+            var numeral = game == GameKind.Gta5 ? _numeralV : game == GameKind.Gta4 ? _numeralIV : _numeralIII;
             var nb = numeral.GetBounds();
             float k = NumeralHeight / nb.Height;
             var saved = g.Save();
@@ -544,12 +566,12 @@ internal sealed partial class SplashForm : Form
             : string.Format(L("Démarrage dans {0} s  ·  clic ou Entrée pour choisir"), Math.Max(1, (int)MathF.Ceiling(ChoiceFrom + ChoiceDelay - t)));
         using var brush = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90));
         var hintSize = g.MeasureString(hint, _smallFont);
-        g.DrawString(hint, _smallFont, brush, Gta4Button.Right + 16f, Gta4Button.Y + (Gta4Button.Height - hintSize.Height) / 2f);
+        g.DrawString(hint, _smallFont, brush, LastButton.Right + 16f, LastButton.Y + (LastButton.Height - hintSize.Height) / 2f);
         if (!_choiceTouched)
         {
             // Countdown ring at the right of the highlighted button.
             float left = Math.Clamp((ChoiceFrom + ChoiceDelay - t) / ChoiceDelay, 0f, 1f);
-            var rect = _game == GameKind.Gta5 ? Gta5Button : Gta4Button;
+            var rect = ButtonOf(_game);
             using var pen = new Pen(Color.FromArgb(Alpha(0xFF), Color.White), 1.6f);
             g.DrawArc(pen, rect.Right - 22f, rect.Y + (rect.Height - 14f) / 2f, 14f, 14f, -90f, 360f * left);
         }
@@ -858,9 +880,12 @@ internal sealed partial class SplashForm : Form
     {
         int Alpha(int a) => (int)(a * visible);
         using (var tagline = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0xA8, 0xB2, 0xC8)))
-            g.DrawString(_game == GameKind.Gta4
-                ? L("Liberty City, ouverte en grand.")
-                : L("Pensé pour les mappeurs FiveM."), _taglineFont, tagline, Gutter, 240f);
+            g.DrawString(_game switch
+            {
+                GameKind.Gta4 => L("Liberty City, ouverte en grand."),
+                GameKind.Gta3 or GameKind.ViceCity or GameKind.SanAndreas => L("GTA III, Vice City et San Andreas, ouverts en grand."),
+                _ => L("Pensé pour les mappeurs FiveM."),
+            }, _taglineFont, tagline, Gutter, 240f);
         using (var version = new SolidBrush(Color.FromArgb(Alpha(0xFF), 0x70, 0x7A, 0x90)))
             g.DrawString($"v{Program.Version}", _smallFont, version, Design.Width - 66f, 20f);
 
@@ -940,7 +965,7 @@ internal sealed partial class SplashForm : Form
     {
         if (_modelsStart is not null)
             return L("Chargement des modèles 3D...");
-        string status = _game == GameKind.Gta4 ? _gta4.Status : _world.Status;
+        string status = _game == GameKind.Gta4 ? _gta4.Status : _game.Classic() is not null ? _classic.Status : _world.Status;
         int colon = status.IndexOf(" :", StringComparison.Ordinal);
         string step = colon > 0 ? status[..colon] : status.TrimEnd('.');
         return $"{step}...";
@@ -1130,6 +1155,7 @@ internal sealed partial class SplashForm : Form
             _titleStudio.Dispose();
             _numeralV.Dispose();
             _numeralIV.Dispose();
+            _numeralIII.Dispose();
             _taglineFont.Dispose();
             _statusFont.Dispose();
             _wordmark.Dispose();

@@ -31,10 +31,10 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     // The model viewer shows the game NodeRunner runs on: GTA V, or GTA IV (game or episode chosen).
     private bool IsGta4 => state.IsGta4;
-    private MapLibrary? Library => IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps;
-    private HashNames? Names => IsGta4 ? state.Gta4.Scene?.Names : state.World.Names;
-    private ModelCatalog? Models => IsGta4 ? state.Gta4.Scene?.Models : state.World.Models;
-    private VehiclePaints? Paints => IsGta4 ? state.Gta4.Vehicles?.Paints : state.World.Vehicles?.Paints;
+    private MapLibrary? Library => state.ShownMaps;
+    private HashNames? Names => state.ShownNames;
+    private ModelCatalog? Models => state.Other is { } other ? other.Models : state.World.Models;
+    private VehiclePaints? Paints => IsGta4 ? state.Gta4.Vehicles?.Paints : state.IsClassic ? null : state.World.Vehicles?.Paints;
 
     private Task<ViewerCatalog>? _building;
     private ViewerCatalog? _catalog;
@@ -130,7 +130,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
             return null;
         uint archetypeHash = archetype.NameHash;
         string name = Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
-        if (IsGta4 && !name.StartsWith("0x", StringComparison.Ordinal))
+        if (state.IsOtherGame && !name.StartsWith("0x", StringComparison.Ordinal))
             name = name.ToLowerInvariant();
         return new ViewerItem(name, ViewerKind.Object, location);
     }
@@ -144,7 +144,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     // The model of a map object in the workshop tab.
     public void OpenWorkshop(MapEntity entity)
     {
-        if (IsGta4)
+        if (state.IsOtherGame)
             return;
         if (Library?.GetArchetype(entity.ArchetypeHash) is not { } archetype || ItemOf(archetype) is not { } item)
         {
@@ -363,8 +363,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _selectedMesh = -1;
             _openTexture = null;
         }
-        if (IsGta4)
-            Viewer.Open(item, state.Gta4.ModelReader, state.Gta4.Scene?.Textures, state.Gta4.TextureReader);
+        if (state.Other is { } other)
+            Viewer.Open(item, other.ModelReader, other.Textures, other.TextureReader);
         else
             Viewer.Open(item, state.World.ModelReader, state.World.Textures, state.World.TextureReader);
     }
@@ -413,8 +413,10 @@ internal sealed unsafe class ViewerPanel(AppState state)
             _catalog = null;
             var world = state.World;
             var scene = state.Gta4.Scene;
+            var classic = state.Classic.Scene;
             _building = library is null ? null
                 : IsGta4 && scene is not null ? Task.Run(() => ViewerCatalog.BuildGta4(scene))
+                : state.IsClassic && classic is not null ? Task.Run(() => ViewerCatalog.BuildClassic(classic))
                 : Task.Run(() => ViewerCatalog.Build(world));
         }
         if (_building is { IsCompleted: true } finished)
@@ -427,7 +429,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     // ---- Paint ----
 
     // GTA V's vehicle sheets (none in GTA IV).
-    private VehicleData? Vehicles => IsGta4 ? null : state.World.Vehicles;
+    private VehicleData? Vehicles => state.IsOtherGame ? null : state.World.Vehicles;
 
     private VehicleVariation? Variation =>
         Viewer.Item is { Kind: ViewerKind.Vehicle } item ? Paints?.VariationOf(item.Location.ModelHash) : null;
@@ -482,12 +484,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
         string[] labels = _catalog is { } c
             ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})", $"{Filters[2]} ({Widgets.Count(c.Library.Count)})"]
             : Filters;
-        if (IsGta4)
+        if (state.IsOtherGame)
         {
-            // No prop library in GTA IV.
+            // No prop library in the other games.
             _filter = Math.Min(_filter, 1);
             Widgets.Segmented("viewer_filter_gta4", labels[..2], ref _filter,
-                [L("Tous les véhicules du jeu ou de l'épisode choisi (vehicles.img)"), L("Tous les types d'objets de la carte (définitions .ide)")]);
+                [IsGta4 ? L("Tous les véhicules du jeu ou de l'épisode choisi (vehicles.img)") : L("Tous les véhicules du jeu (sections cars des .ide)"),
+                 L("Tous les types d'objets de la carte (définitions .ide)")]);
         }
         else
         {
@@ -498,8 +501,8 @@ internal sealed unsafe class ViewerPanel(AppState state)
         ImGui.SetNextItemWidth(-float.Epsilon);
         Widgets.SearchField("##viewer_search", _filter switch
         {
-            0 => IsGta4 ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
-            1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : L("Type (ex. prop_bench)"),
+            0 => state.IsOtherGame ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
+            1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : state.IsClassic ? L("Type (ex. palm)") : L("Type (ex. prop_bench)"),
             _ => L("Prop ou pack"),
         }, ref _search);
         if (_filter == 2)
@@ -1043,7 +1046,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
                     : L($"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler."));
             ImGui.SameLine();
         }
-        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), IsGta4 ? L("Nom du modèle")
+        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), state.IsOtherGame ? L("Nom du modèle")
                 : item.Kind == ViewerKind.Vehicle ? L("Nom de spawn du véhicule (ex. pour un script FiveM)") : L("Nom du type d'objet")))
             ImGui.SetClipboardText(item.Name);
     }
@@ -2404,13 +2407,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
     {
         if (Library?.GetArchetype(item.ArchetypeHash) is not { } a)
         {
-            Widgets.Hint(IsGta4 ? L("Type introuvable dans les .ide de la carte (modèle ouvert depuis l'explorateur d'archives).")
+            Widgets.Hint(state.IsOtherGame ? L("Type introuvable dans les .ide de la carte (modèle ouvert depuis l'explorateur d'archives).")
                 : L("Type introuvable dans les YTYP de la carte (modèle ouvert depuis l'explorateur d'archives)."), wrap: true);
             return;
         }
         var names = Names;
         string Name(uint hash) => hash == 0 ? "-" : names?.Describe(hash) ?? $"0x{hash:X8}";
-        if (Widgets.Section(IsGta4 ? L("Définition (.ide)") : L("Archétype (YTYP)"), "viewer_archetype") && Widgets.BeginProperties("viewer_archetype_props", 0.45f))
+        if (Widgets.Section(state.IsOtherGame ? L("Définition (.ide)") : L("Archétype (YTYP)"), "viewer_archetype") && Widgets.BeginProperties("viewer_archetype_props", 0.45f))
         {
             Widgets.PropertyText(L("Nom"), Name(a.NameHash), $"0x{a.NameHash:X8}");
             Widgets.PropertyText(L("Sorte"), KindName(a.Kind));

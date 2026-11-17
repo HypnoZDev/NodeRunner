@@ -69,12 +69,12 @@ internal sealed unsafe class ScenePanel(AppState state)
 
     private void DrawContent()
     {
-        if ((state.IsGta4 ? state.Gta4.Scene?.Library : state.World.Maps) is not { } library)
+        if (state.ShownMaps is not { } library)
         {
-            Widgets.Hint((state.IsGta4 ? state.Gta4.IsBusy : state.World.IsBusy) ? L("Chargement de la carte...") : L("Aucune carte chargée."));
+            Widgets.Hint((state.Other?.IsBusy ?? state.World.IsBusy) ? L("Chargement de la carte...") : L("Aucune carte chargée."));
             return;
         }
-        var names = (state.IsGta4 ? state.Gta4.Scene?.Names : state.World.Names) ?? new HashNames();
+        var names = state.ShownNames ?? new HashNames();
         if (!ReferenceEquals(library, _library))
             Reset(library);
 
@@ -91,21 +91,23 @@ internal sealed unsafe class ScenePanel(AppState state)
         DrawFooter(library);
     }
 
-    // GTA IV: one object selected at a time, read only.
-    private MapEntity? Selected => state.IsGta4 ? state.Gta4Selection : state.Selection;
+    // Other games than GTA V: one object selected at a time, read only.
+    private MapEntity? Selected => state.IsOtherGame ? state.Gta4Selection : state.Selection;
 
-    private bool IsSelected(MapEntity entity) => state.IsGta4 ? state.Gta4Selection == entity : state.IsSelected(entity);
+    private bool IsSelected(MapEntity entity) => state.IsOtherGame ? state.Gta4Selection == entity : state.IsSelected(entity);
 
     private void SelectOne(MapEntity entity)
     {
-        if (state.IsGta4)
+        if (state.IsOtherGame)
             state.Gta4Selection = entity;
         else
             state.Select(entity);
     }
 
-    // Kind of map file: YMAP, or WPL for GTA IV.
-    private string FileKind => state.IsGta4 ? "WPL" : "YMAP";
+    // Kind of map file: YMAP, WPL for GTA IV, IPL for the trilogy.
+    private string FileKind => state.Other?.MapFileKind ?? "YMAP";
+
+    private string ExampleObject => state.IsGta4 ? "ag_bigandbushy" : state.IsClassic ? "palm" : "prop_tree";
 
     private void Reset(MapLibrary library)
     {
@@ -127,7 +129,7 @@ internal sealed unsafe class ScenePanel(AppState state)
             _dirty = true;
         }
 
-        if (Widgets.SearchField("##scene_search", L($"{FileKind} ou objet (ex. {(state.IsGta4 ? "ag_bigandbushy" : "prop_tree")})"), ref _search))
+        if (Widgets.SearchField("##scene_search", L($"{FileKind} ou objet (ex. {ExampleObject})"), ref _search))
         {
             _matches = _search.Trim().Length >= 2 ? Search(library, names, _search.Trim()) : null;
             _dirty = true;
@@ -349,8 +351,8 @@ internal sealed unsafe class ScenePanel(AppState state)
                 CopyText(position);
             if (ImGui.MenuItem(L($"{Icons.MapPinned}  Copier position et cap : {withHeading}")))
                 CopyText(withHeading);
-            // GTA IV is read only: nothing more.
-            if (state.IsGta4)
+            // Other games are read only: nothing more.
+            if (state.IsOtherGame)
             {
                 ImGui.EndPopup();
                 return;

@@ -79,6 +79,12 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             ImGui.End();
             return;
         }
+        if (state.IsClassic)
+        {
+            DrawClassic();
+            ImGui.End();
+            return;
+        }
 
         DrawModeSwitch();
         if (state.Selection is { } entity && state.World.Maps is { } library)

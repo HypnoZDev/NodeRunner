@@ -72,6 +72,7 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             {
                 NodeRunner.Data.Native.Archives.RpfFileSystem rpf => new RpfArchiveFiles(rpf),
                 NodeRunner.Data.Native.Gta4.Gta4FileSystem img => new ImgArchiveFiles(img),
+                NodeRunner.Data.Native.Classic.ClassicFileSystem classic => new ClassicArchiveFiles(classic),
                 _ => null,
             };
             _building = source is null ? null : Task.Run(() => ArchiveTree.Build(source));
@@ -84,7 +85,9 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         }
     }
 
-    private object? OpenFiles() => state.IsGta4 ? (state.Gta4.IsLoaded ? state.Gta4.Files : null) : state.World.Files;
+    private object? OpenFiles() => state.IsGta4 ? (state.Gta4.IsLoaded ? state.Gta4.Files : null)
+        : state.IsClassic ? (state.Classic.IsLoaded ? state.Classic.Files : null)
+        : state.World.Files;
 
     private void DrawContent()
     {

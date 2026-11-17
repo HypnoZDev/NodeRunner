@@ -316,6 +316,13 @@ public sealed class ClassicScene
             }
         }
         var parents = definitions.TextureParents.ToDictionary(p => Joaat.Hash(p.Key), p => Joaat.Hash(p.Value));
+        // Vehicles share the textures of "vehicle.txd" (lights, plates, glass).
+        uint shared = Joaat.Hash("vehicle");
+        if (dictionaries.ContainsKey(shared))
+        {
+            foreach (var vehicle in definitions.Vehicles)
+                parents.TryAdd(Joaat.Hash(vehicle.TextureDictionary), shared);
+        }
         return new TextureCatalog(dictionaries, parents);
     }
 }

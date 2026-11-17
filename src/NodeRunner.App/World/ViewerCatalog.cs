@@ -129,6 +129,29 @@ internal sealed partial class ViewerCatalog
         return new ViewerCatalog { Vehicles = vehicles, Objects = objects };
     }
 
+    // GTA III / Vice City / San Andreas: the vehicles of the "cars" sections and every object type with a model.
+    public static ViewerCatalog BuildClassic(Data.Native.Classic.ClassicScene scene)
+    {
+        var vehicles = new List<ViewerItem>();
+        foreach (var vehicle in scene.Definitions.Vehicles)
+        {
+            uint hash = Joaat.Hash(vehicle.Name);
+            if (scene.Models.DrawablePath(hash) is { } path)
+                vehicles.Add(new ViewerItem(vehicle.Name.ToLowerInvariant(), ViewerKind.Vehicle, new ModelLocation(path, hash, Joaat.Hash(vehicle.TextureDictionary))));
+        }
+        var objects = new List<ViewerItem>();
+        foreach (uint hash in scene.Library.GetArchetypeHashes())
+        {
+            if (scene.Library.GetArchetype(hash) is not { } archetype || scene.Models.Locate(archetype) is not { } location)
+                continue;
+            string name = scene.Names.Describe(hash);
+            objects.Add(new ViewerItem(name.StartsWith("0x", StringComparison.Ordinal) ? name : name.ToLowerInvariant(), ViewerKind.Object, location));
+        }
+        vehicles.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+        objects.Sort(ByName);
+        return new ViewerCatalog { Vehicles = vehicles, Objects = objects };
+    }
+
     // The object types of the prop library, by pack then name.
     public static List<ViewerItem> LibraryItems(WorldLoader world)
     {

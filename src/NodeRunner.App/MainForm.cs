@@ -455,9 +455,12 @@ internal sealed unsafe partial class MainForm : Form
     private void RestoreCamera()
     {
         var camera = _state.Camera;
-        // Each game keeps its own camera; a first GTA IV session starts above Liberty City (ShowGta4Map).
-        var saved = _state.IsGta4 ? _state.Settings.Gta4Camera : _state.Settings.Camera;
-        _gta4CameraPending = _state.IsGta4 && saved is null;
+        // Each game keeps its own camera; a first session of another game starts above its city (ShowGta4Map,
+        // ShowClassicMap).
+        var saved = _state.IsGta4 ? _state.Settings.Gta4Camera
+            : _state.IsClassic ? _state.Settings.ClassicCameras.GetValueOrDefault(_state.ActiveGame)
+            : _state.Settings.Camera;
+        _gta4CameraPending = _state.IsOtherGame && saved is null;
         if (saved is not null)
         {
             camera.Position = new Vector3(saved.X, saved.Y, saved.Z);
@@ -487,6 +490,8 @@ internal sealed unsafe partial class MainForm : Form
         };
         if (_state.IsGta4)
             _state.Settings.Gta4Camera = saved;
+        else if (_state.IsClassic)
+            _state.Settings.ClassicCameras[_state.ActiveGame] = saved;
         else
             _state.Settings.Camera = saved;
         _state.SaveSettings();

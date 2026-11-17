@@ -30,8 +30,8 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
 
     private void DrawContent()
     {
-        // GTA IV session: projects (FiveM resources) and the GTA V folder have nothing to do with what is shown.
-        if (!state.IsGta4)
+        // Other games: projects (FiveM resources) and the GTA V folder have nothing to do with what is shown.
+        if (!state.IsOtherGame)
         {
             DrawProject();
             Widgets.ToolbarSeparator();
@@ -64,6 +64,10 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         if (state.IsGta4)
         {
             DrawGta4Episode();
+        }
+        else if (state.IsClassic)
+        {
+            DrawClassicGame();
         }
         else
         {
@@ -180,6 +184,28 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         ImGui.EndDisabled();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(L("Carte affichée : GTA IV ou l'un de ses épisodes (Episodes from Liberty City),\nqui changent certains quartiers."));
+    }
+
+    // The game of the trilogy shown; another one is opened in its place (its own camera, colour and map).
+    private void DrawClassicGame()
+    {
+        var classic = state.Classic;
+        ImGui.SetNextItemWidth(200);
+        ImGui.BeginDisabled(classic.IsBusy || state.GameSwitchRequest is not null);
+        if (ImGui.BeginCombo("##classic_game", $"{Icons.Globe}  {classic.GameName}"))
+        {
+            foreach (var game in state.ClassicFolders.Keys.Order())
+            {
+                var kind = NodeRunner.App.Configuration.GameKinds.Kind(game);
+                if (ImGui.Selectable(NodeRunner.Data.Installation.ClassicInstallLocator.DisplayName(game), kind == state.ActiveGame)
+                    && kind != state.ActiveGame)
+                    state.GameSwitchRequest = kind;
+            }
+            ImGui.EndCombo();
+        }
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L("Jeu de la trilogie affiché : GTA III, Vice City ou San Andreas."));
     }
 
     public static string VersionName(MapVersion version) =>

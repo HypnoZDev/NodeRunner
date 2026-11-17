@@ -1,5 +1,6 @@
 using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
+using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Installation;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
@@ -43,19 +44,53 @@ internal sealed partial class AppState
     public bool IsGta4 => ActiveGame == GameKind.Gta4;
     public GameFeatures Features => GameFeatures.Of(ActiveGame);
 
-    // GTA IV: the object clicked in the 3D view (read only), forgotten when another map is shown.
+    // GTA III / Vice City / San Andreas: the folder of each game found on this computer, and the files opened when one
+    // is the session's game.
+    public IReadOnlyDictionary<ClassicGame, string> ClassicFolders { get; private set; } = new Dictionary<ClassicGame, string>();
+    public ClassicWorld Classic { get; } = new();
+    public bool IsClassic => ActiveGame.Classic() is not null;
+
+    // Another game of the trilogy to show instead of the current one (handled by the main window).
+    public GameKind? GameSwitchRequest { get; set; }
+
+    // Opens another game of the trilogy in place of the current one.
+    public void SwitchClassicGame(GameKind game)
+    {
+        if (game.Classic() is not { } classic || !ClassicFolders.TryGetValue(classic, out var folder) || Classic.IsBusy)
+            return;
+        ActiveGame = game;
+        Settings.LastGame = game;
+        Settings.LastClassicGame = game;
+        SaveSettings();
+        Classic.Load(folder, classic);
+    }
+
+    // Any game but GTA V: its map is shown read only, from Other.
+    public bool IsOtherGame => ActiveGame != GameKind.Gta5;
+    public IOtherWorld? Other => ActiveGame switch
+    {
+        GameKind.Gta5 => null,
+        GameKind.Gta4 => Gta4,
+        _ => Classic,
+    };
+
+    // The map shown: GTA V's or the other game's.
+    public MapLibrary? ShownMaps => Other is { } other ? other.Library : World.Maps;
+    public HashNames? ShownNames => Other is { } other ? other.Names : World.Names;
+
+    // Another game than GTA V: the object clicked in the 3D view (read only), forgotten when another map is shown.
     public MapEntity? Gta4Selection
     {
-        get => _gta4SelectionScene is not null && _gta4SelectionScene == Gta4.Scene ? _gta4Selection : null;
+        get => _gta4SelectionMaps is not null && _gta4SelectionMaps == Other?.Library ? _gta4Selection : null;
         set
         {
             _gta4Selection = value;
-            _gta4SelectionScene = value is null ? null : Gta4.Scene;
+            _gta4SelectionMaps = value is null ? null : Other?.Library;
         }
     }
 
     private MapEntity? _gta4Selection;
-    private NodeRunner.Data.Native.Gta4.Gta4Scene? _gta4SelectionScene;
+    private MapLibrary? _gta4SelectionMaps;
 
     // The main selected object (the last one clicked), null if none.
     public MapEntity? Selection => SelectedEntities is [.., var last] ? last : null;
@@ -798,7 +833,7 @@ internal sealed partial class AppState
     {
         var center = entity.Position;
         float radius = 5f;
-        if ((IsGta4 ? Gta4.Scene?.Library : World.Maps)?.GetArchetype(entity.ArchetypeHash) is { } archetype)
+        if (ShownMaps?.GetArchetype(entity.ArchetypeHash) is { } archetype)
         {
             center = System.Numerics.Vector3.Transform((archetype.BoundsMin + archetype.BoundsMax) * 0.5f, entity.Transform);
             radius = System.Numerics.Vector3.Distance(archetype.BoundsMin, archetype.BoundsMax) * 0.5f * Math.Max(entity.Scale.X, entity.Scale.Z);
@@ -943,15 +978,15 @@ internal sealed partial class AppState
     }
 
     // Each game keeps its own layers: hiding the GTA V boxes does not hide those of Liberty City.
-    private HashSet<string> HiddenLayers => IsGta4 ? Settings.Gta4HiddenLayers : Settings.HiddenLayers;
-    private HashSet<string> ShownLayers => IsGta4 ? Settings.Gta4ShownLayers : Settings.ShownLayers;
+    private HashSet<string> HiddenLayers => IsOtherGame ? Settings.Gta4HiddenLayers : Settings.HiddenLayers;
+    private HashSet<string> ShownLayers => IsOtherGame ? Settings.Gta4ShownLayers : Settings.ShownLayers;
 
     public bool IsLayerVisible(string layer) =>
         IsHiddenByDefault(layer) ? ShownLayers.Contains(layer) : !HiddenLayers.Contains(layer);
 
     // GTA IV: the 3D models are shown, the boxes of the objects only on demand.
     private bool IsHiddenByDefault(string layer) =>
-        IsGta4 && layer.StartsWith("Entity.", StringComparison.Ordinal)
+        IsOtherGame && layer.StartsWith("Entity.", StringComparison.Ordinal)
         || layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
         || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName
         || layer == TimecycleLayer.LayerName || layer == LodLightLayer.LayerName;
@@ -1004,6 +1039,37 @@ internal sealed partial class AppState
             .ToList();
 
         Gta4Folder = Gta4InstallLocator.Resolve(Settings.Gta4Folder) ?? Gta4InstallLocator.Find();
+        RedetectClassicGames();
+    }
+
+    // The folder kept in the settings first; otherwise a search, whose result is kept (the parent folder when it holds
+    // the games side by side), so the next start-ups do not search again.
+    private void RedetectClassicGames()
+    {
+        var folders = new Dictionary<ClassicGame, string>();
+        foreach (var game in ClassicInstallLocator.Games)
+        {
+            if (ClassicInstallLocator.Resolve(Settings.ClassicFolder, game) is { } kept)
+                folders[game] = kept;
+        }
+        if (folders.Count == 0)
+        {
+            foreach (var game in ClassicInstallLocator.Games)
+            {
+                // A game found next to another one is looked for in the same parent folder first.
+                string? found = folders.Values.Select(Path.GetDirectoryName).OfType<string>()
+                    .Select(parent => ClassicInstallLocator.Resolve(parent, game)).FirstOrDefault(f => f is not null)
+                    ?? ClassicInstallLocator.Find(game);
+                if (found is not null)
+                    folders[game] = found;
+            }
+            if (folders.Count > 0)
+            {
+                var parents = folders.Values.Select(Path.GetDirectoryName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                Settings.ClassicFolder = folders.Count > 1 && parents.Count == 1 ? parents[0] : folders.Values.First();
+            }
+        }
+        ClassicFolders = folders;
     }
 
     public bool TrySetManualGameFolder(string folder)

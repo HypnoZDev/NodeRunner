@@ -4,7 +4,7 @@ using NodeRunner.Data.Water;
 namespace NodeRunner.App.World;
 
 // The GTA IV installation opened in this session: archives, road network and map, read on a worker thread.
-internal sealed class Gta4World : IDisposable
+internal sealed class Gta4World : IOtherWorld, IDisposable
 {
     private volatile bool _busy;
     private volatile string _status = "";
@@ -43,6 +43,22 @@ internal sealed class Gta4World : IDisposable
     public Gta4ModelReader ModelReader { get; }
 
     public Gta4TextureReader TextureReader { get; }
+
+    public NodeRunner.Data.Maps.MapLibrary? Library => _scene?.Library;
+
+    public NodeRunner.Data.Models.ModelCatalog? Models => _scene?.Models;
+
+    public NodeRunner.Data.Textures.TextureCatalog? Textures => _scene?.Textures;
+
+    public NodeRunner.Data.Hashing.HashNames? Names => _scene?.Names;
+
+    NodeRunner.Data.Models.IModelReader IOtherWorld.ModelReader => ModelReader;
+
+    NodeRunner.Data.Textures.ITextureReader IOtherWorld.TextureReader => TextureReader;
+
+    public string GameName => EpisodeName(Episode);
+
+    public string MapFileKind => "WPL";
 
     public Gta4World()
     {
