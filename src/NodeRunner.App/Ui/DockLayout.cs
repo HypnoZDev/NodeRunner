@@ -63,7 +63,8 @@ internal static unsafe partial class DockLayout
 
     private static (Vector2, Vector2) FindSceneArea(uint id, ImGuiViewportPtr viewport)
     {
-        var whole = (viewport.WorkPos, viewport.WorkSize);
+        // A NaN passes every "<" test below: a window placed from it gets no monitor, and ImGui stops on a zero DPI scale.
+        var whole = Finite(viewport.WorkPos) && Finite(viewport.WorkSize) ? (viewport.WorkPos, viewport.WorkSize) : (Vector2.Zero, Vector2.Zero);
         byte* root = igDockBuilderGetNode(id);
         byte* central = igDockBuilderGetCentralNode(id);
         if (root is null || central is null || *(uint*)root != id)
@@ -71,16 +72,18 @@ internal static unsafe partial class DockLayout
 
         var rootPos = *(Vector2*)(root + NodePosOffset);
         var rootSize = *(Vector2*)(root + NodeSizeOffset);
-        if (Vector2.Distance(rootPos, viewport.WorkPos) > 1f || Vector2.Distance(rootSize, viewport.WorkSize) > 1f)
+        if (!Finite(rootPos) || !Finite(rootSize) || Vector2.Distance(rootPos, viewport.WorkPos) > 1f || Vector2.Distance(rootSize, viewport.WorkSize) > 1f)
             return whole;
 
         var pos = *(Vector2*)(central + NodePosOffset);
         var size = *(Vector2*)(central + NodeSizeOffset);
-        if (size.X < 1f || size.Y < 1f || pos.X < rootPos.X - 1f || pos.Y < rootPos.Y - 1f
+        if (!Finite(pos) || !Finite(size) || size.X < 1f || size.Y < 1f || pos.X < rootPos.X - 1f || pos.Y < rootPos.Y - 1f
             || pos.X + size.X > rootPos.X + rootSize.X + 1f || pos.Y + size.Y > rootPos.Y + rootSize.Y + 1f)
             return whole;
         return (pos, size);
     }
+
+    private static bool Finite(Vector2 v) => float.IsFinite(v.X) && float.IsFinite(v.Y);
 
     // Bar along an edge of the window (toolbar, status bar): the panels and the 3D view are laid out in what is left.
     public static bool BeginSideBar(string name, ImGuiDir edge, float size)
