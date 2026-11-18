@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Maps;
@@ -13,11 +14,12 @@ internal static class ManifestFileSaver
     private static (RpfFileSystem Files, PsoSchema Schema)? _schema;
 
     // files: names of the files in stream; newTypeFiles: the .ytyp among them that the game does not have. A manifest
-    // brought by the project (an imported mapping) is kept as it is.
+    // brought by the project (an imported mapping) is kept, with what the export adds to it (Merge).
     public static void Save(WorldLoader world, IReadOnlyList<string> files, IReadOnlyList<string> newTypeFiles, string stream, MapFileSaver.Report report)
     {
-        if (newTypeFiles.Count == 0 || files.Contains(PackManifest.FileName, StringComparer.OrdinalIgnoreCase))
+        if (newTypeFiles.Count == 0)
             return;
+        bool brought = files.Contains(PackManifest.FileName, StringComparer.OrdinalIgnoreCase);
         try
         {
             var typeFiles = new Dictionary<uint, string>();
@@ -59,9 +61,26 @@ internal static class ManifestFileSaver
 
             if (PackManifest.Build(maps, newTypes, TypeFileOf) is not { } xml)
                 return;
+            string path = Path.Combine(stream, PackManifest.FileName);
+            if (brought)
+            {
+                XElement existing;
+                try
+                {
+                    existing = PsoXml.Read(File.ReadAllBytes(path), PackManifest.FieldNames);
+                }
+                catch (Exception ex) when (ex is not (OutOfMemoryException or IOException or UnauthorizedAccessException))
+                {
+                    return; // Not a manifest read here (another format, damaged): kept as it is.
+                }
+                if (!PackManifest.Merge(existing, xml))
+                    return;
+                xml = existing;
+            }
             var bytes = PsoXml.Build(xml, Schema(world));
-            File.WriteAllBytes(Path.Combine(stream, PackManifest.FileName), bytes);
-            report.Saved.Add(PackManifest.FileName);
+            SafeFile.WriteAllBytes(path, bytes);
+            if (!brought)
+                report.Saved.Add(PackManifest.FileName);
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
         {

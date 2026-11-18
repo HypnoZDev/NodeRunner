@@ -63,6 +63,72 @@ public static class PackManifest
 
     public static string HashName(uint hash) => $"hash_{hash:X8}";
 
+    // Field names of CPackFileMetaData, to read a manifest back (PsoXml.Read).
+    public static readonly string[] FieldNames =
+    [
+        "CPackFileMetaData", "MapDataGroups", "HDTxdBindingArray", "imapDependencies", "imapDependencies_2", "itypDependencies_2",
+        "Interiors", "imapName", "itypName", "manifestFlags", "itypDepArray", "Name", "Bounds", "packFileName", "Flags",
+        "WeatherTypes", "HoursOnOff", "assetType", "targetAsset", "HDTxd",
+    ];
+
+    // Adds to a manifest brought by the project (an imported mapping) what added (Build) lists and it lacks: maps, type
+    // files and interiors, and the missing type files of the entries both have. The rest of it is kept as it is.
+    // Returns whether anything was added.
+    public static bool Merge(XElement existing, XElement added)
+    {
+        bool changed = false;
+        foreach (var (section, key, list) in new[]
+                 {
+                     ("imapDependencies_2", "imapName", "itypDepArray"),
+                     ("itypDependencies_2", "itypName", "itypDepArray"),
+                     ("Interiors", "Name", "Bounds"),
+                 })
+        {
+            if (added.Element(section) is not { HasElements: true } items)
+                continue;
+            var target = existing.Element(section);
+            if (target is null)
+                existing.Add(target = new XElement(section));
+            foreach (var item in items.Elements("Item"))
+            {
+                uint name = Key((string?)item.Element(key));
+                var same = target.Elements("Item").FirstOrDefault(i => Key((string?)i.Element(key)) == name);
+                if (same is null)
+                {
+                    target.Add(new XElement(item));
+                    changed = true;
+                    continue;
+                }
+                var names = same.Element(list);
+                if (names is null)
+                    same.Add(names = new XElement(list));
+                var known = names.Elements("Item").Select(i => Key(i.Value)).ToHashSet();
+                foreach (var dependency in item.Element(list)?.Elements("Item") ?? [])
+                {
+                    if (known.Add(Key(dependency.Value)))
+                    {
+                        names.Add(new XElement(dependency));
+                        changed = true;
+                    }
+                }
+                if (item.Element("manifestFlags") is { Value.Length: > 0 } flags && same.Element("manifestFlags") is { } old
+                    && old.Value.Trim() is "" or "0")
+                {
+                    old.Value = flags.Value;
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
+    // The hash of a name as the manifest stores it ("hash_XXXXXXXX" when read back from a file).
+    private static uint Key(string? name) =>
+        name is null ? 0
+        : name.StartsWith("hash_", StringComparison.OrdinalIgnoreCase)
+          && uint.TryParse(name.AsSpan(5), System.Globalization.NumberStyles.HexNumber, null, out uint hash) ? hash
+        : NodeRunner.Data.Hashing.Joaat.Hash(name.Trim().ToLowerInvariant());
+
     // The .ytyp files of the archetypes, in the order first met.
     private static List<string> TypeFiles(IEnumerable<uint> archetypes, Func<uint, string?> typeFileOf, string? exclude)
     {

@@ -17,6 +17,22 @@ public static class PsoXml
     private const uint StringBlock = 1;
     private const byte Padding = 0x70;
 
+    // The XML of a PSO file, as Build takes it back: names not among knownNames (hashed in lower case or as written)
+    // are written "hash_XXXXXXXX".
+    public static XElement Read(byte[] data, IReadOnlyCollection<string> knownNames)
+    {
+        var asWritten = new Dictionary<uint, string>();
+        foreach (string name in knownNames)
+            asWritten.TryAdd(MetaXml.LiteralHash(name), name);
+        var root = PsoDocument.Parse(data, knownNames, asWritten);
+        foreach (var element in root.DescendantsAndSelf())
+        {
+            if (element.Name.LocalName.StartsWith("_0x", StringComparison.Ordinal))
+                element.Name = "hash_" + element.Name.LocalName[3..];
+        }
+        return root;
+    }
+
     public static byte[] Build(XElement root, PsoSchema schema)
     {
         var builder = new Builder(schema);

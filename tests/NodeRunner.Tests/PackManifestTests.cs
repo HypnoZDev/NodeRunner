@@ -114,4 +114,38 @@ public class PackManifestTests
         again.Add(file);
         Assert.Equal(2, again.Count);
     }
+
+    [Fact]
+    public void AnImportedManifestGetsWhatTheExportAdds()
+    {
+        // As read back from a file: names hashed, flags as numbers, other sections kept.
+        var existing = XElement.Parse($"""
+            <CPackFileMetaData>
+              <MapDataGroups><Item><Name>{PackManifest.HashName(Joaat.Hash("group"))}</Name></Item></MapDataGroups>
+              <HDTxdBindingArray />
+              <imapDependencies />
+              <imapDependencies_2>
+                <Item><imapName>{PackManifest.HashName(Joaat.Hash("their_map"))}</imapName><manifestFlags>0</manifestFlags>
+                  <itypDepArray><Item>{PackManifest.HashName(Joaat.Hash("their_props"))}</Item></itypDepArray></Item>
+              </imapDependencies_2>
+              <itypDependencies_2 />
+              <Interiors />
+            </CPackFileMetaData>
+            """);
+        var added = PackManifest.Build(
+            [new("their_map", [Bench], HasInterior: false), new("my_map", [Bench, Room], HasInterior: true)],
+            [new("my_props", []), new("my_int", [new PackManifest.Interior(Room, [Bench])])],
+            TypeFile)!;
+
+        Assert.True(PackManifest.Merge(existing, added));
+
+        var maps = existing.Element("imapDependencies_2")!.Elements("Item").ToList();
+        Assert.Equal(2, maps.Count);
+        Assert.Equal([PackManifest.HashName(Joaat.Hash("their_props")), "my_props"], maps[0].Element("itypDepArray")!.Elements().Select(e => e.Value));
+        Assert.Equal("my_map", maps[1].Element("imapName")!.Value);
+        Assert.Single(existing.Element("itypDependencies_2")!.Elements("Item"));
+        Assert.Single(existing.Element("Interiors")!.Elements("Item"));
+        Assert.Single(existing.Element("MapDataGroups")!.Elements("Item"));
+        Assert.False(PackManifest.Merge(existing, added));
+    }
 }

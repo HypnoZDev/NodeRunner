@@ -72,7 +72,7 @@ public static class MetaXml
         return known(literal) ? literal : lower;
     }
 
-    private static uint LiteralHash(string text)
+    internal static uint LiteralHash(string text)
     {
         uint hash = 0;
         foreach (char c in text)
