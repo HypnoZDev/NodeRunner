@@ -45,9 +45,11 @@ internal static class MapFileSaver
                 if (map.IsCustom && map.TimecycleModifiers.Any(z => !z.IsDeleted))
                     borrowed.Add(Description(content, library, m => m.TimecycleModifiers.Count > 0, YmapWriter.TimecycleDescription, ref _timecycle,
                         L("aucun YMAP du jeu avec des zones de timecycle, utilisable comme modèle")));
-                if (map.IsCustom && map.SavedContent is null && (map.DistantLights.Count > 0 || map.LodLights.Count > 0))
+                if (map.IsCustom && (map.DistantLights.Count > 0 || map.LodLights.Count > 0)
+                    && map.Entities.Count == 0 && map.CarGenerators.Count == 0 && map.TimecycleModifiers.Count == 0)
                 {
-                    // The project's own light files: built from a game light file of the same kind.
+                    // The project's own light files (lights only): built again from a game light file of the same kind,
+                    // even when saved before (a file saved without lights has no array to grow).
                     var template = LightTemplate(content, library, distant: map.DistantLights.Count > 0);
                     header = template.Header;
                     written = writer.BuildLights(template.Content, map, Path.GetFileNameWithoutExtension(name), extents);

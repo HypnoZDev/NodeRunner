@@ -160,3 +160,14 @@ public class GameFeaturesTests
         Assert.False(features.Editing || features.Gta5Exports || features.Online || features.PedViewer || features.CutsceneViewer);
     }
 }
+
+public class OccluderFileNamesTests
+{
+    [Fact]
+    public void The_project_boxes_are_split_into_files_that_hold_them()
+    {
+        int max = NodeRunner.Data.Native.Maps.OccluderFile.MaxBoxesPerFile;
+        Assert.Equal(["res_occl.ymap"], OccluderEdits.ProjectFileNames("res_occl.ymap", max));
+        Assert.Equal(["res_occl.ymap", "res_occl_2.ymap", "res_occl_3.ymap"], OccluderEdits.ProjectFileNames("res_occl.ymap", 2 * max + 1));
+    }
+}

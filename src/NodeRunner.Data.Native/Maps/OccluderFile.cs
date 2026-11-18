@@ -11,6 +11,9 @@ public sealed class OccluderFile : IOccluderReader, IOccluderWriter
     private const int MapBoxOccluders = 128;
     private const int MapOccludeModels = 144;
     private const int BoxSize = 16;
+
+    // The most boxes a file holds (its boxes are in one block).
+    public const int MaxBoxesPerFile = MetaDocument.MaxBlockLength / BoxSize;
     private const int ModelSize = 64;
 
     // Fields of OccludeModel.

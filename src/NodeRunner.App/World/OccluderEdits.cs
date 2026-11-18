@@ -32,7 +32,12 @@ internal sealed record OccluderEdits(int Format, string? ProjectFile, List<Saved
     // The .ymap files written into the stream folder.
     public IEnumerable<string> StreamFileNames =>
         (Files?.Keys.Select(Path.GetFileName).OfType<string>() ?? [])
-        .Concat(Created is { Count: > 0 } && ProjectFile is { } project ? [project] : []);
+        .Concat(Created is { Count: > 0 } && ProjectFile is { } project ? ProjectFileNames(project, Created.Count) : []);
+
+    // The project's boxes, in files of at most MaxBoxesPerFile boxes: name, name_2, name_3...
+    public static IEnumerable<string> ProjectFileNames(string project, int boxes) =>
+        Enumerable.Range(1, Math.Max(1, (boxes + Data.Native.Maps.OccluderFile.MaxBoxesPerFile - 1) / Data.Native.Maps.OccluderFile.MaxBoxesPerFile))
+            .Select(i => i == 1 ? project : $"{Path.GetFileNameWithoutExtension(project)}_{i}.ymap");
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 

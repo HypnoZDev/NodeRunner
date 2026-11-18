@@ -706,8 +706,7 @@ public sealed class YtypWriter : IMapTypesWriter
             {
                 listBlock = document.Blocks.Count;
                 listOffset = 0;
-                document.Blocks.Add(new MetaDocument.Block(listStructure ?? throw new InvalidDataException("aucune liste d'objets de salle dans ce fichier"),
-                    new byte[list.Count * 4]));
+                document.Blocks.Add(new MetaDocument.Block(listStructure ?? UIntStructure, new byte[list.Count * 4]));
             }
             for (int i = 0; i < list.Count; i++)
                 BinaryPrimitives.WriteUInt32LittleEndian(document.Blocks[listBlock].Data.AsSpan(listOffset + i * 4), list[i]);

@@ -30,11 +30,25 @@ internal static class OccluderFileSaver
         var writer = new OccluderFile();
         foreach (var file in toWrite)
         {
-            string name = file.IsProject ? projectFileName : file.FileName;
+            var cut = cuts.FirstOrDefault(c => Same(c, file));
+            var kept = file.Boxes.Where(b => !file.DeletedBoxes.Contains(b.Index) && cut?.Boxes.Contains(b.Index) != true).ToList();
+            // The project's boxes: several files when they do not fit in one (name, name_2, name_3...).
+            if (!file.IsProject)
+            {
+                Write(file, file.FileName, kept, cut);
+                continue;
+            }
+            var parts = kept.Chunk(OccluderFile.MaxBoxesPerFile).ToList();
+            var names = OccluderEdits.ProjectFileNames(projectFileName, kept.Count).ToList();
+            for (int part = 0; part < parts.Count; part++)
+                Write(file, names[part], [.. parts[part]], cut);
+        }
+        return written;
+
+        void Write(OccluderMapFile file, string name, List<OccluderBox> boxes, OccluderFileCut? cut)
+        {
             try
             {
-                var cut = cuts.FirstOrDefault(c => Same(c, file));
-                var boxes = file.Boxes.Where(b => !file.DeletedBoxes.Contains(b.Index) && cut?.Boxes.Contains(b.Index) != true).ToList();
                 var triangles = new Dictionary<int, IReadOnlySet<int>>();
                 foreach (int model in file.DeletedModels)
                     triangles[model] = Enumerable.Range(0, file.Occluders.Models[model].TriangleCount).ToHashSet();
@@ -49,8 +63,6 @@ internal static class OccluderFileSaver
                 ResourceHeader header;
                 if (file.IsProject)
                 {
-                    if (boxes.Count == 0)
-                        continue; // Created boxes all cut under deleted buildings.
                     var template = files.FirstOrDefault(f => !f.IsProject && f.Occluders.Boxes.Count > 0)
                         ?? throw new InvalidDataException(L("aucun fichier d'occlusion du jeu utilisable comme modèle"));
                     var source = content.ReadFile(template.GamePath) ?? throw new InvalidDataException(L("modèle introuvable"));
@@ -81,7 +93,6 @@ internal static class OccluderFileSaver
                 report.Errors.Add($"{name} : {ex.Message}");
             }
         }
-        return written;
     }
 
     private static bool Same(OccluderFileCut cut, OccluderMapFile file) =>
