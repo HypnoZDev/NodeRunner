@@ -121,6 +121,8 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             {
                 if (Widgets.Section(L($"Salles ({Math.Max(0, interiorType.InteriorRooms.Count - 1)})"), "rooms", defaultOpen: false))
                     DrawRoomList(placed, interiorType);
+                if (Widgets.Section(L("Santé de l'intérieur"), "interior_health", defaultOpen: false))
+                    DrawInteriorHealth(placed, interiorType, library, names);
                 if (Widgets.Section(L("Occlusion audio"), "audio_occlusion", defaultOpen: false))
                     DrawAudioOcclusion(placed, interiorType, library, names);
                 if (Widgets.Section(L("Réglages audio"), "interior_audio", defaultOpen: false))

@@ -368,9 +368,34 @@ internal static partial class ExportChecker
         CheckPathNodes(input, world, items);
         CheckPlacements(input, world, names, removedEntities, cuts, items);
         CheckNavMesh(world, names, addedEntities, sceneryEntities, cuts, items);
+        CheckInteriors(input, world, names, items);
 
         summary = L($"{input.Maps.Count} YMAP vérifiés ({removedTotal} objets retirés du jeu, {scanned} conflits). {summary}");
         return new Result(items, summary, cuts, occlusionCuts);
+    }
+
+    // Interiors placed by the shipped maps whose definition is broken (Properties > Interior health tells what).
+    private static void CheckInteriors(Input input, WorldLoader world, HashNames names, List<ExportCheckItem> items)
+    {
+        if (world.Maps is not { } library)
+            return;
+        var broken = new List<(MapEntity Interior, int Errors)>();
+        foreach (var interior in input.Maps.SelectMany(m => m.Kept).Where(e => e.IsInterior).DistinctBy(e => e.ArchetypeHash))
+        {
+            if (library.GetArchetype(interior.ArchetypeHash) is not { } archetype)
+                continue;
+            int errors = MloCheck.Check(archetype, hash => library.GetArchetype(hash) is not null).Count(i => MloCheck.IsError(i.Kind));
+            if (errors > 0)
+                broken.Add((interior, errors));
+        }
+        if (broken.Count == 0)
+            return;
+        items.Add(new ExportCheckItem(true,
+            broken.Count == 1 ? L("1 intérieur (MLO) avec des erreurs") : L($"{broken.Count} intérieurs (MLO) avec des erreurs"),
+            Limit(broken.Select(b => L($"{names.Describe(b.Interior.ArchetypeHash)} : {b.Errors} erreur(s)")).ToList()),
+            L("Portails mal reliés ou mal formés, objets rattachés à aucune salle : une partie de l'intérieur peut disparaître en jeu. ")
+            + L("Sélectionnez-le, puis Propriétés > Santé de l'intérieur pour le détail."),
+            Entities: broken.Take(MaxDetails).Select(b => b.Interior).ToList()));
     }
 
     // Doors left where a building was deleted, doors at the same place, game doors moved or removed (door lock scripts
