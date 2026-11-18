@@ -1173,6 +1173,7 @@ public static partial class English
         ("\n\n{0} fichier(s) de données de la ressource (sons, ambiance, .meta...) gardé(s) dans le dossier « resource » du projet : ils seront remis à l'export avec leurs lignes du fxmanifest.",
             "\n\n{0} data file(s) of the resource (sounds, ambience, .meta...) kept in the project's \"resource\" folder: they will be put back at export with their fxmanifest lines."),
         ("{0} (script non repris)", "{0} (script not carried over)"),
+        ("{0} (chemin refusé : {1})", "{0} (path refused: {1})"),
         ("FiveM ne charge qu'une version d'un fichier de même nom, et les deux sont différents : celui de l'une des ",
             "FiveM loads only one version of a file of a given name, and these two differ: the one of either "),
         ("deux ressources sera ignoré. Gardez-en un seul.", "resource will be ignored. Keep only one."),

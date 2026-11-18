@@ -392,10 +392,13 @@ public static class MappingImport
     private static void AddPackageFolder(Plan plan, string folder)
     {
         var package = ReadPackage(plan, File.ReadAllText(Path.Combine(folder, OivPackage.AssemblyFileName)));
+        string content = Path.GetFullPath(Path.Combine(folder, OivPackage.ContentFolderName)) + Path.DirectorySeparatorChar;
         foreach (var entry in package.Entries)
         {
-            string file = Path.Combine(folder, OivPackage.ContentFolderName, entry.Source);
-            if (File.Exists(file))
+            string file = Path.GetFullPath(Path.Combine(content, entry.Source));
+            if (!file.StartsWith(content, StringComparison.OrdinalIgnoreCase))
+                plan.Ignored.Add(L($"{entry.Name} (chemin refusé : {entry.Source})"));
+            else if (File.Exists(file))
                 plan.Add(entry.Name, entry.Source, () => File.OpenRead(file));
             else
                 plan.Ignored.Add(L($"{entry.Name} (absent du paquet)"));

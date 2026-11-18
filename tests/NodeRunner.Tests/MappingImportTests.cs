@@ -240,6 +240,30 @@ public class MappingImportTests : IDisposable
     }
 
     [Fact]
+    public void AnUnzippedPackageCannotReadOutsideItsContentFolder()
+    {
+        Touch(@"secret.ydr");
+        Touch(@"content2\b.ydr");
+        Touch(@"pkg\content\ok\a.ydr");
+        File.WriteAllText(Path.Combine(_root, @"pkg\assembly.xml"), """
+            <package><metadata><name>Bad</name></metadata><content>
+            <add source="ok/a.ydr">\a.ydr</add>
+            <add source="..\..\secret.ydr">\secret.ydr</add>
+            <add source="../../content2/b.ydr">\b.ydr</add>
+            <add source="C:\Windows\x.ydr">\x.ydr</add>
+            </content></package>
+            """);
+
+        var result = MappingImport.Import(Path.Combine(_root, "pkg"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null);
+
+        Assert.Equal(1, result.Copied);
+        Assert.Equal(["a.ydr"], Directory.GetFiles(result.Project.StreamFolder).Select(Path.GetFileName));
+        Assert.Equal(3, result.Ignored.Count(i => i.Contains("chemin refusé")));
+        Assert.True(OivPackage.IsInsideContent(@"ok\sub\a.ydr"));
+        Assert.False(OivPackage.IsInsideContent(@"ok\..\..\a.ydr"));
+    }
+
+    [Fact]
     public void AZippedResourceIsImportedLikeItsFolder()
     {
         string zip = MakeZip(@"dl\my_map.zip", ("my_map/fxmanifest.lua", ""), ("my_map/stream/a.ymap", "map"), ("my_map/stream/b.ytyp", "types"));

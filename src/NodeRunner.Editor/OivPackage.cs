@@ -64,8 +64,11 @@ public sealed class OivPackage
             string name = Path.GetFileName(target.Replace('/', '\\').TrimEnd('\\'));
             if (kind == "add" && element.Attribute("source")?.Value is { Length: > 0 } source && name.Length > 0)
             {
-                if (isStreamed(name))
-                    Entries.Add(new Entry(name, source.Replace('/', '\\').TrimStart('\\')));
+                string relative = source.Replace('/', '\\').TrimStart('\\');
+                if (!IsInsideContent(relative))
+                    Ignored.Add(L($"{name} (chemin refusé : {source})"));
+                else if (isStreamed(name))
+                    Entries.Add(new Entry(name, relative));
                 else
                     Ignored.Add(name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) ? L($"archive {name} (pack DLC)") : name);
             }
@@ -81,6 +84,11 @@ public sealed class OivPackage
             }
         }
     }
+
+    // A source path of the package stays inside its content folder: no drive, no root, no "..".
+    public static bool IsInsideContent(string relative) =>
+        relative.Length > 0 && !Path.IsPathRooted(relative) && !relative.Contains(':')
+        && !relative.Split('\\', '/').Any(part => part == "..");
 
     private static string? Text(XElement? element) => element?.Value.Trim() is { Length: > 0 } text ? text : null;
 
