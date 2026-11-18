@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.0/NodeRunner-1.6.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -86,6 +86,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 **Vos props et vos mappings**
 - **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
   placement en glissant le prop dans la vue 3D.
+- **Prop depuis une image** (Créer) : un insigne, un logo devient une plaque en 3D avec relief et collision, ronde
+  ou rectangulaire selon l'image, ajoutée à la bibliothèque.
 - Import d'un mapping (dossier, .zip, .oiv) et des fichiers exportés par **Sollumz** ou CodeWalker en XML (`.ydr.xml`,
   `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`) : convertis automatiquement.
 - **Dossier Sollumz surveillé** : chaque nouvel export depuis Blender arrive dans le projet et la carte se recharge seule.
@@ -114,7 +116,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.0/NodeRunner-1.6.0-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
