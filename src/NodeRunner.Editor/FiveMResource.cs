@@ -49,7 +49,7 @@ public static class FiveMResource
     // newTypeFiles: .ytyp files of the resource that are not game files (interiors made by the user), declared to the game.
     // audioGameData: the resource's audio settings file (AudioGameDataFile), if any.
     public static string BuildManifest(string author, string version, IEnumerable<string> mapFiles, IEnumerable<string>? newTypeFiles = null,
-        string? audioGameData = null)
+        string? audioGameData = null, IReadOnlyList<string>? extraLines = null)
     {
         var sb = new StringBuilder();
         sb.Append(GeneratedMarker).Append(' ').Append(version).Append(" (").Append(author).Append(")\n");
@@ -76,6 +76,12 @@ public static class FiveMResource
             sb.Append('\n');
             sb.Append("files {\n    '").Append(audioGameData).Append("',\n}\n");
             sb.Append("data_file 'AUDIO_GAMEDATA' '").Append(audioGameData[..^AudioGameDataExtension.Length]).Append("'\n");
+        }
+        if (extraLines is { Count: > 0 })
+        {
+            sb.Append("\n-- From the imported resource:\n");
+            foreach (string line in extraLines)
+                sb.Append(line).Append('\n');
         }
         return sb.ToString();
     }

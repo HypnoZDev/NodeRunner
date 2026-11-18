@@ -14,6 +14,9 @@ public sealed record ImportResult(MapProject Project, int Copied, IReadOnlyList<
 
     // Files of the project replaced by a file of the same name, among Copied (AddToProject).
     public int Replaced { get; init; }
+
+    // Data files of the imported resource kept in the project's resource folder (sounds, timecycle, .meta...).
+    public int ResourceFiles { get; init; }
 }
 
 // Imports a mapping made elsewhere as a new project: a FiveM resource or a plain "stream" folder, a .zip of one, or an
@@ -121,6 +124,9 @@ public static class MappingImport
         public readonly List<string> Duplicates = [];
         public readonly List<string> Ignored = [];
         public readonly List<IDisposable> Archives = [];
+        // Data files of an imported resource (ResourceExtras), relative to its folder, and their manifest lines.
+        public readonly List<(string Relative, Func<Stream> Open)> Extras = [];
+        public readonly List<string> ExtraLines = [];
         private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
 
         // readSibling: reads a file by path relative to this one's folder (the images of a .ytd.xml...).
@@ -297,7 +303,65 @@ public static class MappingImport
             if (ProtectedFile.IsProtected(target))
                 locked.Add(file);
         }
-        return new ImportResult(project, copied, plan.Duplicates, plan.Ignored, plan.Author) { Protected = locked, Converted = converted, Replaced = replaced };
+        int extras = CopyExtras(plan, project);
+        return new ImportResult(project, copied, plan.Duplicates, plan.Ignored, plan.Author)
+            { Protected = locked, Converted = converted, Replaced = replaced, ResourceFiles = extras };
+    }
+
+    // The data files of an imported resource go in the project's resource folder, with their manifest lines.
+    private static int CopyExtras(Plan plan, MapProject project)
+    {
+        if (plan.ExtraLines.Count == 0)
+            return 0;
+        string folder = Path.Combine(project.Folder, ResourceExtras.FolderName);
+        foreach (var (relative, open) in plan.Extras)
+        {
+            string target = Path.Combine(folder, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            string temporary = target + ".tmp";
+            using (var input = open())
+            using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write))
+                input.CopyTo(output);
+            File.Move(temporary, target, overwrite: true);
+        }
+        ResourceExtras.AddLines(project.Folder, plan.ExtraLines);
+        return plan.Extras.Count;
+    }
+
+    // Reads what a resource's manifest declares besides its stream folder (ResourceExtras).
+    private static void AddResource(Plan plan, string manifestText, IReadOnlyCollection<string> files, Func<string, Func<Stream>> open)
+    {
+        var (kept, lines, leftOut) = ResourceExtras.Select(ResourceExtras.Parse(manifestText), files);
+        plan.Ignored.AddRange(leftOut);
+        if (lines.Count == 0)
+            return;
+        foreach (string file in kept.Where(IsSafeRelative))
+            plan.Extras.Add((file, open(file)));
+        plan.ExtraLines.AddRange(lines);
+    }
+
+    // The folder holding a resource's manifest: the folder itself, or the parent of a "stream" folder.
+    private static void AddResourceFolder(Plan plan, string folder)
+    {
+        string root = folder;
+        if (!ManifestIn(root, out string? manifest)
+            && string.Equals(Path.GetFileName(folder), FiveMResource.StreamFolderName, StringComparison.OrdinalIgnoreCase)
+            && Path.GetDirectoryName(folder) is { } parent)
+        {
+            root = parent;
+            ManifestIn(root, out manifest);
+        }
+        if (manifest is null)
+            return;
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).ToList();
+        AddResource(plan, File.ReadAllText(manifest), files, relative => () => File.OpenRead(Path.Combine(root, relative)));
+    }
+
+    private static bool ManifestIn(string folder, out string? manifest)
+    {
+        manifest = Directory.EnumerateFiles(folder).FirstOrDefault(f => ResourceExtras.IsManifest(Path.GetFileName(f)));
+        return manifest is not null;
     }
 
     // Reads a file by path relative to a folder (the images of a .ytd.xml...).
@@ -317,7 +381,10 @@ public static class MappingImport
             plan.Add(Path.GetFileName(file), Path.GetRelativePath(folder, file), () => File.OpenRead(file), Sibling(Path.GetDirectoryName(file)!));
         plan.Duplicates.AddRange(duplicates);
         if (files.Count > 0)
+        {
+            AddResourceFolder(plan, folder);
             return;
+        }
         foreach (var archive in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Where(IsArchive).Order(StringComparer.OrdinalIgnoreCase))
             AddArchive(plan, archive);
     }
@@ -366,6 +433,17 @@ public static class MappingImport
                     plan.Ignored.Add(L($"{item.Name} (absent du paquet)"));
             }
             return;
+        }
+        // A zipped resource: the shallowest manifest gives its folder.
+        if (entries.Keys.Where(k => ResourceExtras.IsManifest(Path.GetFileName(k))).OrderBy(k => k.Count(c => c == '/')).FirstOrDefault() is { } manifestKey)
+        {
+            string root = manifestKey[..^Path.GetFileName(manifestKey).Length];
+            string manifestText;
+            using (var reader = new StreamReader(entries[manifestKey].Open()))
+                manifestText = reader.ReadToEnd();
+            var inside = entries.Keys.Where(k => k.StartsWith(root, StringComparison.OrdinalIgnoreCase) && !k.EndsWith('/'))
+                .Select(k => k[root.Length..]).ToList();
+            AddResource(plan, manifestText, inside, relative => entries[OivPackage.NormalizePath(root + relative)].Open);
         }
         foreach (var entry in zip.Entries.Where(e => e.Name.Length > 0 && IsImported(e.Name)).OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
         {

@@ -240,10 +240,11 @@ internal static class ResourceExporter
         ManifestFileSaver.Save(world, files, newTypes, stream, report);
         string? audioGameData = AudioGameDataFileSaver.Save(world, files, interiorFiles, resourceFolder, report);
         files = report.Saved.Concat(copied).Concat(fromLibrary).ToList();
+        var extraLines = CopyResourceExtras(projectStream, resourceFolder, report, copied);
         try
         {
             File.WriteAllText(Path.Combine(resourceFolder, FiveMResource.ManifestFileName),
-                FiveMResource.BuildManifest(Program.Author, Program.Version, files, newTypes, audioGameData));
+                FiveMResource.BuildManifest(Program.Author, Program.Version, files, newTypes, audioGameData, extraLines));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -252,6 +253,34 @@ internal static class ResourceExporter
         if (audioGameData is not null)
             report.Saved.Add(audioGameData);
         return report;
+    }
+
+    // The data files kept from an imported resource (ResourceExtras) and their manifest lines.
+    private static List<string> CopyResourceExtras(string? projectStream, string resourceFolder, MapFileSaver.Report report, List<string> copied)
+    {
+        if (projectStream is null || Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(projectStream)) is not { } project
+            || !MapProject.Exists(project))
+            return [];
+        var lines = ResourceExtras.ReadLines(project);
+        if (lines.Count == 0)
+            return [];
+        foreach (string file in ResourceExtras.ReadFiles(project))
+        {
+            string target = Path.Combine(resourceFolder, file);
+            if (File.Exists(target))
+                continue; // Written by the export itself (its own audio settings...).
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(Path.Combine(project, ResourceExtras.FolderName, file), target);
+                copied.Add(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                report.Errors.Add($"{file} : {ex.Message}");
+            }
+        }
+        return lines;
     }
 
     // A file written by the export (modified map, collision...) wins over the project's copy of the same name.

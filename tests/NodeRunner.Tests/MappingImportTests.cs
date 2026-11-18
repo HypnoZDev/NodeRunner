@@ -133,6 +133,47 @@ public class MappingImportTests : IDisposable
         Assert.False(File.Exists(Path.Combine(result.Project.StreamFolder, "b.ybn.tmp")));
     }
 
+    [Fact]
+    public void AResourcesDataFilesAreKeptWithTheirManifestLines()
+    {
+        Touch(@"mlo\stream\a.ymap");
+        Touch(@"mlo\audio\mlo_game.dat151.rel");
+        Touch(@"mlo\audio\sfx\bank\a.awc");
+        Touch(@"mlo\client.lua");
+        Touch(@"mlo\notes.txt");
+        File.WriteAllText(Path.Combine(_root, @"mlo\fxmanifest.lua"), """
+            fx_version 'cerulean'
+            game 'gta5'
+            this_is_a_map 'yes'
+            -- data_file 'TIMECYCLEMOD_FILE' 'commented.xml'
+            files {
+                'audio/*.dat151.rel',
+                "audio/sfx/**/*.awc",
+            }
+            client_script 'client.lua'
+            data_file 'DLC_ITYP_REQUEST' 'stream/mlo.ytyp'
+            data_file 'AUDIO_GAMEDATA' 'audio/mlo_game.dat'
+            data_file 'TIMECYCLEMOD_FILE' 'missing.xml'
+            """);
+
+        var result = MappingImport.Import(Path.Combine(_root, @"mlo\stream"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null);
+
+        string folder = result.Project.Folder;
+        Assert.Equal(1, result.Copied);
+        Assert.Equal(2, result.ResourceFiles);
+        Assert.Equal(["audio/mlo_game.dat151.rel", "audio/sfx/bank/a.awc"], ResourceExtras.ReadFiles(folder));
+        var lines = ResourceExtras.ReadLines(folder);
+        Assert.Contains("data_file 'AUDIO_GAMEDATA' 'audio/mlo_game.dat'", lines);
+        Assert.DoesNotContain(lines, l => l.Contains("DLC_ITYP_REQUEST") || l.Contains("missing.xml") || l.Contains("commented"));
+        Assert.Contains(result.Ignored, i => i.StartsWith("client.lua"));
+        Assert.Contains(result.Ignored, i => i.StartsWith("missing.xml"));
+
+        string manifest = FiveMResource.BuildManifest("me", "1.0", ["a.ymap"], extraLines: lines);
+        Assert.Contains("    'audio/sfx/bank/a.awc',", manifest);
+        Assert.True(ResourceExtras.Matches("audio/**/*.awc", "audio/a.awc"));
+        Assert.False(ResourceExtras.Matches("audio/*.awc", "audio/sfx/a.awc"));
+    }
+
     private const string Assembly = """
         <?xml version="1.0" encoding="UTF-8"?>
         <package version="2.0" target="Five">
