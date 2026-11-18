@@ -150,6 +150,31 @@ public class InteriorCreationTests
     }
 
     [Fact]
+    public void Is_added_to_a_project_map_saved_before()
+    {
+        var saved = DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, LodLevel.OrphanHd));
+        var map = new YmapReader().Read(saved);
+        var library = MapLibrary.Create((map, "proj_props.ymap"));
+        var edit = InteriorCreateEdit.Apply(library, map, Name, new Vector3(100, 200, 30), Quaternion.Identity, "create");
+        var instance = DeletionTests.Structure(YmapReader.InteriorInstanceStructure, YmapReader.InteriorInstanceSize);
+        var extents = MapExtentsCalculator.Compute(map, library.GetArchetype);
+
+        Assert.Throws<InvalidDataException>(() => new YmapWriter().Write(saved, map, extents, null, saved));
+        var written = new YmapWriter().Write(saved, map, extents, null, saved, instance, library.GetArchetype);
+        var back = new YmapReader().Read(written.Content);
+        Assert.Equal(2, back.Entities.Count);
+        Assert.Equal(map.Entities[0].ArchetypeHash, back.Entities[0].ArchetypeHash);
+        Assert.False(back.Entities[0].IsInterior);
+        Assert.True(back.Entities[1].IsInterior);
+        Assert.Equal(edit.Interior.Position, back.Entities[1].Position);
+        Assert.Equal(8u, back.ContentFlags & 8);
+
+        var document = MetaDocument.Read(written.Content);
+        var block = document.Blocks.Single(b => b.Structure == YmapReader.InteriorInstanceStructure);
+        Assert.Equal(1, BinaryPrimitives.ReadInt32LittleEndian(block.Data.AsSpan(152))); // Exits: the door.
+    }
+
+    [Fact]
     public void Is_shared_online()
     {
         var (library, _, edit) = Created();

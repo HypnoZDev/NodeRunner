@@ -54,13 +54,14 @@ internal static class MapFileSaver
                     header = template.Header;
                     written = writer.BuildLights(template.Content, map, Path.GetFileNameWithoutExtension(name), extents);
                 }
-                else if (map.IsCustom && map.SavedContent is { } saved && !map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior))
+                else if (map.IsCustom && map.SavedContent is { } saved)
                 {
                     // A map read from the project's files (imported or saved earlier): starts from it, so that what
-                    // the editor does not handle (parking spots, lights, extensions...) is kept.
+                    // the editor does not handle (lights, extensions...) is kept.
                     var template = Template(content, library);
                     header = template.Header;
-                    written = writer.Write(saved, map, extents, borrowed, template.Content);
+                    var interiorInstance = map.KeptEntities.Any(e => e.SourceIndex < 0 && e.IsInterior) ? InteriorInstanceDescription(content, library) : null;
+                    written = writer.Write(saved, map, extents, borrowed, template.Content, interiorInstance, library.GetArchetype);
                 }
                 else if (map.IsCustom)
                 {

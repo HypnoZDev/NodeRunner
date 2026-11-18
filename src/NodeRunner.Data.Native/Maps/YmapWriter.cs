@@ -15,9 +15,11 @@ public sealed class YmapWriter : IMapDataWriter
     // borrowed: descriptions of structures (parking spots, timecycle zones) taken from game map files, for a file that
     // does not describe them yet and gets its first ones.
     // template: a game map file with ordinary objects, whose descriptions are used when objects are added to a file
-    // that has none (saved empty, or with interiors only).
+    // that has none (saved empty, or with interiors only). interiorInstance: the description of CMloInstanceDef, for a
+    // file getting its first interior instance; archetypes: the interiors' number of portals to the outside (given for
+    // the user's own maps, whose interiors may have changed).
     public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents, IReadOnlyList<MetaDocument.StructureInfo>? borrowed,
-        byte[]? template = null)
+        byte[]? template = null, MetaDocument.StructureInfo? interiorInstance = null, Func<uint, Archetype?>? archetypes = null)
     {
         var document = MetaDocument.Read(source);
         int root = document.RootBlock;
@@ -36,13 +38,18 @@ public sealed class YmapWriter : IMapDataWriter
 
         var kept = map.KeptEntities.ToList();
         var added = kept.Where(e => e.SourceIndex < 0).ToList();
-        var newItems = added.Count == 0 ? [] : AppendEntities(document, mapData, sources, added, template);
+        var newItems = added.Count == 0 ? [] : AppendEntities(document, mapData, sources, added, template, interiorInstance);
         var items = new List<(int Block, int Offset)>(kept.Count);
         int next = 0;
         foreach (var entity in kept)
             items.Add(entity.SourceIndex >= 0 ? sources[entity.SourceIndex] : newItems[next++]);
         for (int i = 0; i < kept.Count; i++)
+        {
             WriteEntity(document, items[i], kept[i]);
+            if (kept[i].IsInterior && document.Blocks[items[i].Block].Structure == YmapReader.InteriorInstanceStructure
+                && (archetypes is not null || kept[i].SourceIndex < 0))
+                WriteExitPortals(document, items[i], kept[i], archetypes);
+        }
         WriteEntityPointers(document, mapData, items, template);
         WriteArray(document, mapData, SpotArray, map.CarGenerators, s => s.SourceIndex, s => s.IsDeleted, WriteCarGenerator, borrowed);
         WriteArray(document, mapData, ZoneArray, map.TimecycleModifiers, z => z.SourceIndex, z => z.IsDeleted, WriteTimecycle, borrowed);
@@ -178,8 +185,7 @@ public sealed class YmapWriter : IMapDataWriter
                 WriteNewEntityFields(document.Blocks[items[i].Block].Data, items[i].Offset, kept[i]);
             WriteEntity(document, items[i], kept[i]);
             if (kept[i].IsInterior)
-                BinaryPrimitives.WriteInt32LittleEndian(document.Blocks[items[i].Block].Data.AsSpan(items[i].Offset + InstanceExitPortals),
-                    archetypes?.Invoke(kept[i].ArchetypeHash)?.InteriorPortals.Count(p => p.RoomFrom == 0 || p.RoomTo == 0) ?? 0);
+                WriteExitPortals(document, items[i], kept[i], archetypes);
         }
 
         if (items.Count > 0)
@@ -208,6 +214,15 @@ public sealed class YmapWriter : IMapDataWriter
 
     public static MetaDocument.StructureInfo? TimecycleDescription(ReadOnlySpan<byte> source) =>
         MetaDocument.Read(source).FindStructure(YmapReader.TimecycleStructure);
+
+    // An interior instance's number of portals to the outside (limbo, room 0); the file's value kept when the interior
+    // is unknown.
+    private static void WriteExitPortals(MetaDocument document, (int Block, int Offset) item, MapEntity entity, Func<uint, Archetype?>? archetypes)
+    {
+        int? count = archetypes?.Invoke(entity.ArchetypeHash)?.InteriorPortals.Count(p => p.RoomFrom == 0 || p.RoomTo == 0);
+        if (count is not null || entity.SourceIndex < 0)
+            BinaryPrimitives.WriteInt32LittleEndian(document.Blocks[item.Block].Data.AsSpan(item.Offset + InstanceExitPortals), count ?? 0);
+    }
 
     // The description of interior instances (CMloInstanceDef) in a map file, null if it has none.
     public static MetaDocument.StructureInfo? InteriorInstanceDescription(ReadOnlySpan<byte> source) =>
@@ -319,46 +334,61 @@ public sealed class YmapWriter : IMapDataWriter
             BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(o + YmapReader.EntityChildCount), entity.Children.Count(c => !c.IsDeleted));
     }
 
-    // Ordinary objects added to an existing file (a map imported or saved earlier): new blocks after the file's, each
-    // object starting from one of the file's. Returns where each one is, in the order given.
+    // Objects added to an existing file (a map imported or saved earlier): new blocks after the file's, an ordinary
+    // object starting from one of the file's, an interior instance from zeros. Returns where each one is, in the order given.
     private static List<(int Block, int Offset)> AppendEntities(MetaDocument document, byte[] mapData,
-        List<(int Block, int Offset)> sources, List<MapEntity> added, byte[]? gameTemplate)
+        List<(int Block, int Offset)> sources, List<MapEntity> added, byte[]? gameTemplate, MetaDocument.StructureInfo? interiorInstance)
     {
-        if (added.Any(e => e.IsInterior))
-            throw new InvalidDataException("L'ajout d'un intérieur à ce fichier n'est pas encore pris en charge.");
-        int found = sources.FindIndex(i => document.Blocks[i.Block].Structure == YmapReader.EntityStructure);
-        byte[] template;
-        if (found >= 0)
+        if (added.Any(e => e.IsInterior) && document.FindStructure(YmapReader.InteriorInstanceStructure) is null)
         {
-            var source = sources[found];
-            template = document.Blocks[source.Block].Data.AsSpan(source.Offset, YmapReader.EntitySize).ToArray();
+            if (interiorInstance is null || interiorInstance.Size != YmapReader.InteriorInstanceSize)
+                throw new InvalidDataException("Description des intérieurs placés (CMloInstanceDef) introuvable.");
+            document.Structures.Add(interiorInstance);
         }
-        else
+        byte[]? template = null;
+        if (added.Any(e => !e.IsInterior))
         {
-            // No ordinary object in the file: every field of the new ones is written, they start from zeros.
-            if (document.FindStructure(YmapReader.EntityStructure) is null)
+            int found = sources.FindIndex(i => document.Blocks[i.Block].Structure == YmapReader.EntityStructure);
+            if (found >= 0)
             {
-                var description = (gameTemplate is null ? null : MetaDocument.Read(gameTemplate).FindStructure(YmapReader.EntityStructure))
-                                  ?? throw new InvalidDataException("Description des objets (CEntityDef) introuvable.");
-                document.Structures.Add(description);
+                var source = sources[found];
+                template = document.Blocks[source.Block].Data.AsSpan(source.Offset, YmapReader.EntitySize).ToArray();
             }
-            template = new byte[YmapReader.EntitySize];
+            else
+            {
+                // No ordinary object in the file: every field of the new ones is written, they start from zeros.
+                if (document.FindStructure(YmapReader.EntityStructure) is null)
+                {
+                    var description = (gameTemplate is null ? null : MetaDocument.Read(gameTemplate).FindStructure(YmapReader.EntityStructure))
+                                      ?? throw new InvalidDataException("Description des objets (CEntityDef) introuvable.");
+                    document.Structures.Add(description);
+                }
+                template = new byte[YmapReader.EntitySize];
+            }
+            CheckEntityLayout(document);
         }
-        CheckEntityLayout(document);
 
         var items = new List<(int Block, int Offset)>();
         var current = new List<byte>();
+        uint currentStructure = YmapReader.EntityStructure;
+        void Flush()
+        {
+            if (current.Count == 0)
+                return;
+            document.Blocks.Add(new MetaDocument.Block(currentStructure, current.ToArray()));
+            current.Clear();
+        }
         foreach (var entity in added)
         {
-            if (current.Count + template.Length > MetaDocument.MaxBlockLength)
-            {
-                document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, current.ToArray()));
-                current.Clear();
-            }
+            uint structure = entity.IsInterior ? YmapReader.InteriorInstanceStructure : YmapReader.EntityStructure;
+            var item = entity.IsInterior ? new byte[YmapReader.InteriorInstanceSize] : template!;
+            if (current.Count > 0 && (structure != currentStructure || current.Count + item.Length > MetaDocument.MaxBlockLength))
+                Flush();
+            currentStructure = structure;
             items.Add((document.Blocks.Count, current.Count));
-            current.AddRange(template);
+            current.AddRange(item);
         }
-        document.Blocks.Add(new MetaDocument.Block(YmapReader.EntityStructure, current.ToArray()));
+        Flush();
         for (int i = 0; i < added.Count; i++)
             WriteNewEntityFields(document.Blocks[items[i].Block].Data, items[i].Offset, added[i]);
 
