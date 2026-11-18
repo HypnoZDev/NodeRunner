@@ -31,6 +31,31 @@ public class AddingTests
     }
 
     [Fact]
+    public void A_moved_object_is_found_around_its_new_place_only()
+    {
+        var library = new MapLibrary();
+        var map = library.CreateCustomMap("test_props.ymap");
+        var entity = Adding.NewEntity(0x1234, null, new Vector3(25, 25, 0), Quaternion.Identity);
+        var history = new EditHistory();
+        history.Add(AddEdit.Apply(library, map, entity, "Ajouter"));
+        var before = Placement.Of(entity);
+        var after = before with { Position = new Vector3(225, 25, 0) };
+
+        entity.SetPlacement(after.Position, after.Orientation, after.Scale);
+        history.Add(new PlacementEdit(entity, before, after, "Déplacer"));
+        Assert.Single(library.EntitiesAround(new Vector2(225, 25), 5f), entity);
+        Assert.Empty(library.EntitiesAround(new Vector2(25, 25), 5f));
+
+        history.Undo();
+        Assert.Single(library.EntitiesAround(new Vector2(25, 25), 5f), entity);
+        Assert.Empty(library.EntitiesAround(new Vector2(225, 25), 5f));
+        history.Redo();
+        history.Undo();
+        history.Redo();
+        Assert.Single(library.EntitiesAround(new Vector2(225, 25), 300f), entity); // Never listed twice.
+    }
+
+    [Fact]
     public void Custom_map_boxes_fit_its_objects_only()
     {
         var library = new MapLibrary();

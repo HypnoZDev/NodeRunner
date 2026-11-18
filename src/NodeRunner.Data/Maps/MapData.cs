@@ -262,6 +262,7 @@ public sealed class MapEntity
         _storedRotation = IsInterior ? orientation : Quaternion.Inverse(orientation);
         _scale = scale;
         Revision++;
+        Index?.Relocate(this);
         foreach (var copy in _copies ?? [])
             copy.FollowInterior();
         foreach (var inside in InteriorEntities)
@@ -318,6 +319,10 @@ public sealed class MapEntity
     private List<MapEntity>? _copies;
 
     public MapData? Map { get; internal set; }
+
+    // The library whose spatial grid holds this entity, and the cell it is in there.
+    internal MapLibrary? Index { get; set; }
+    internal (int X, int Y) IndexedCell { get; set; }
 
     public int InteriorRoom { get => _interiorRoom; init => _interiorRoom = value; }
     private int _interiorRoom = -1;

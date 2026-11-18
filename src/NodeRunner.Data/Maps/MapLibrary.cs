@@ -769,12 +769,29 @@ public sealed class MapLibrary
     private void AddToCell(MapEntity entity, bool copy)
     {
         var cell = CellOf(new Vector2(entity.Position.X, entity.Position.Y));
+        entity.Index = this;
+        entity.IndexedCell = cell;
         if (!_cells.TryGetValue(cell, out var list))
             _cells[cell] = [entity];
         else if (copy)
             _cells[cell] = [.. list, entity];
         else
             list.Add(entity);
+    }
+
+    // An entity moved (MapEntity.SetPlacement): into the cell of its new place, so that searches around it find it.
+    internal void Relocate(MapEntity entity)
+    {
+        var cell = CellOf(new Vector2(entity.Position.X, entity.Position.Y));
+        if (cell == entity.IndexedCell)
+            return;
+        if (_cells.TryGetValue(entity.IndexedCell, out var old))
+        {
+            int at = old.FindIndex(e => ReferenceEquals(e, entity));
+            if (at >= 0)
+                _cells[entity.IndexedCell] = [.. old.Take(at), .. old.Skip(at + 1)];
+        }
+        AddToCell(entity, copy: true);
     }
 
     private static (int X, int Y) CellOf(Vector2 position) =>
