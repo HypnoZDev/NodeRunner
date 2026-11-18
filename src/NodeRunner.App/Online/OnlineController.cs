@@ -62,7 +62,7 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     public bool IsReady => state.World is { Maps: { } maps, IsBusy: false } && maps != _waitingFor;
 
     // The game's own files (the project and the library props it uses are sent with it).
-    public string Fingerprint => state.World.Maps is { } maps ? $"{maps.Maps.Count}-{maps.EntityCount}-{maps.ArchetypeCount - maps.LooseArchetypeCount}" : "";
+    public string Fingerprint => state.World.Maps is { } maps ? maps.ContentFingerprint() : "";
 
     // Limits of the host's project once extracted (it travels as one message of at most Connection.MaxFrame).
     private const long MaxProjectBytes = 8L << 30;

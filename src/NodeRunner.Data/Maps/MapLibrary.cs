@@ -28,6 +28,35 @@ public sealed class MapLibrary
 
     public HashSet<uint> GetArchetypeHashes() => _archetypes.Keys.ToHashSet();
 
+    // What the game's own files hold, the same on two PCs with the same game, DLC choice and mods, whatever the order of
+    // reading and the edits made since (moves, deletions, added objects and the project's files are left out): each
+    // game map file with the types of its objects in file order, and the game's types.
+    public string ContentFingerprint()
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var word = new byte[4];
+        void Add(uint value)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(word, value);
+            hash.AppendData(word);
+        }
+        var maps = _maps.Where(m => !m.IsCustom && !m.IsSaved)
+            .Select(m => (Map: m, Name: Path.GetFileName(m.FilePath ?? "").ToLowerInvariant()))
+            .OrderBy(m => m.Map.NameHash).ThenBy(m => m.Name, StringComparer.Ordinal);
+        foreach (var (map, name) in maps)
+        {
+            Add(map.NameHash);
+            hash.AppendData(System.Text.Encoding.UTF8.GetBytes(name));
+            var entities = map.Entities.Where(e => e.SourceIndex >= 0).OrderBy(e => e.SourceIndex).ToList();
+            Add((uint)entities.Count);
+            foreach (var entity in entities)
+                Add(entity.ArchetypeHash);
+        }
+        foreach (uint type in _archetypes.Keys.Where(k => !_archetypeFiles.TryGetValue(k, out var file) || !GameContent.IsLooseFile(file)).Order())
+            Add(type);
+        return Convert.ToHexString(hash.GetHashAndReset())[..16];
+    }
+
     public HashSet<uint> GetInteriorArchetypeHashes() =>
         _archetypes.Values.Where(a => a.Kind == ArchetypeKind.Interior).Select(a => a.NameHash).ToHashSet();
     public int EntityCount { get; private set; }
