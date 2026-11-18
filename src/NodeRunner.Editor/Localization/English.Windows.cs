@@ -1169,5 +1169,16 @@ public static partial class English
         ("Tous les véhicules du jeu (sections cars des .ide)", "Every vehicle of the game (cars sections of the .ide files)"),
         ("Type (ex. palm)", "Type (e.g. palm)"),
         ("Eau de {0}", "{0} water"),
+        ("erreur inattendue ({0}) : {1}", "unexpected error ({0}): {1}"),
+        ("{0} objet(s) utilisent un modèle d'un autre projet ouvert", "{0} object(s) use a model of another open project"),
+        ("Ce modèle n'est pas copié dans cette ressource : sur le serveur, l'objet sera invisible sans la ressource de l'autre projet. ",
+            "This model is not copied into this resource: on the server, the object will be invisible without the other project's resource. "),
+        ("Installez les deux ressources, ou ajoutez les fichiers du modèle à ce projet (Projet > Ajouter des fichiers au projet).",
+            "Install both resources, or add the model's files to this project (Project > Add files to the project)."),
+        ("{0} objet(s) des YMAP du projet utilisent un modèle introuvable", "{0} object(s) of the project's YMAP files use a model found nowhere"),
+        ("Ni le jeu (avec la carte et le DLC choisis), ni le projet, ni la bibliothèque n'ont ce modèle : il doit venir d'une autre ",
+            "Neither the game (with the chosen map and DLC), the project nor the library has this model: it must come from another "),
+        ("ressource du serveur (pack de props), ou d'un DLC plus récent du jeu (sv_enforceGameBuild).",
+            "resource of the server (prop pack), or from a newer DLC of the game (sv_enforceGameBuild)."),
     ];
 }

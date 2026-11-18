@@ -151,8 +151,27 @@ public static class MappingImport
     {
         using var plan = Collect(sources, out string name);
         name = plan.Name ?? name;
-        var project = MapProject.Create(FreeFolder(projectsFolder, name), name, mapVersion, lastDlcPack);
-        return Copy(plan, project, xmlConverters);
+        string folder = FreeFolder(projectsFolder, name);
+        // "name 2" when "name" is taken: the resource name differs too, so that both exports can sit on one server.
+        if (!string.Equals(Path.GetFileName(folder), MapProject.ToFolderName(name), StringComparison.Ordinal))
+            name = Path.GetFileName(folder);
+        var project = MapProject.Create(folder, name, mapVersion, lastDlcPack);
+        try
+        {
+            return Copy(plan, project, xmlConverters);
+        }
+        catch
+        {
+            // No half-imported project left behind.
+            try
+            {
+                Directory.Delete(project.Folder, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+            throw;
+        }
     }
 
     // Adds files to an existing project (a new export from Blender...): a file of the same name in its stream folder is
@@ -227,34 +246,51 @@ public static class MappingImport
             string target = Path.Combine(project.StreamFolder, file);
             string temporary = target + ".tmp";
             bool existed = File.Exists(target);
-            if (IsXmlExport(sourceName))
+            try
             {
-                if (xmlConverters?.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant()) is not { } convert)
+                if (IsXmlExport(sourceName))
                 {
-                    plan.Ignored.Add(L($"{sourceName} (XML pas encore pris en charge)"));
-                    continue;
-                }
-                try
-                {
-                    string xml;
-                    using (var reader = new StreamReader(open()))
-                        xml = reader.ReadToEnd();
-                    File.WriteAllBytes(temporary, convert(new XmlExport(sourceName, xml, readSibling)));
+                    if (xmlConverters?.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant()) is not { } convert)
+                    {
+                        plan.Ignored.Add(L($"{sourceName} (XML pas encore pris en charge)"));
+                        continue;
+                    }
+                    byte[] bytes;
+                    try
+                    {
+                        string xml;
+                        using (var reader = new StreamReader(open()))
+                            xml = reader.ReadToEnd();
+                        bytes = convert(new XmlExport(sourceName, xml, readSibling));
+                    }
+                    catch (Exception ex) when (ex is not (OutOfMemoryException or IOException or UnauthorizedAccessException))
+                    {
+                        // Any unexpected XML (a field out of range...) only leaves that file out, never the whole import.
+                        plan.Ignored.Add(L($"{sourceName} (conversion impossible : {ex.Message})"));
+                        continue;
+                    }
+                    File.WriteAllBytes(temporary, bytes);
                     converted++;
                 }
-                catch (InvalidDataException ex)
+                else
                 {
-                    plan.Ignored.Add(L($"{sourceName} (conversion impossible : {ex.Message})"));
-                    continue;
+                    using var input = open();
+                    using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write);
+                    input.CopyTo(output);
                 }
+                File.Move(temporary, target, overwrite: true);
             }
-            else
+            catch
             {
-                using var input = open();
-                using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write);
-                input.CopyTo(output);
+                try
+                {
+                    File.Delete(temporary);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+                throw;
             }
-            File.Move(temporary, target, overwrite: true);
             copied++;
             if (existed)
                 replaced++;

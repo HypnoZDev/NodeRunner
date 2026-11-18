@@ -301,22 +301,31 @@ internal sealed partial class AppState
             return;
         // Each file goes back to the open project it was loaded from.
         var report = new MapFileSaver.Report([], []);
-        foreach (var group in maps.GroupBy(SaveOwner))
+        try
         {
-            var saved = MapFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder);
-            report.Saved.AddRange(saved.Saved);
-            report.Errors.AddRange(saved.Errors);
+            foreach (var group in maps.GroupBy(SaveOwner))
+            {
+                var saved = MapFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder);
+                report.Saved.AddRange(saved.Saved);
+                report.Errors.AddRange(saved.Errors);
+            }
+            foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
+                _savedMaps.Add(map);
+            PathFileSaver.Save(World, paths, folder, report);
+            ScenarioFileSaver.Save(World, scenarioRegions, folder, report);
+            foreach (var group in interiorFiles.GroupBy(ExtraProjectOfFile))
+                InteriorFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder, report);
+            if (collisions)
+                SaveCollisionEdits(folder, report);
+            if (occluders)
+                SaveOccluderEdits(folder, report);
         }
-        foreach (var map in maps.Where(m => m.FilePath is { } p && report.Saved.Contains(Path.GetFileName(p))))
-            _savedMaps.Add(map);
-        PathFileSaver.Save(World, paths, folder, report);
-        ScenarioFileSaver.Save(World, scenarioRegions, folder, report);
-        foreach (var group in interiorFiles.GroupBy(ExtraProjectOfFile))
-            InteriorFileSaver.Save(World, group, group.Key?.StreamFolder ?? folder, report);
-        if (collisions)
-            SaveCollisionEdits(folder, report);
-        if (occluders)
-            SaveOccluderEdits(folder, report);
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // An unexpected error in a writer: reported like the others, the changes stay in memory to be saved again.
+            report.Errors.Add(L($"erreur inattendue ({ex.GetType().Name}) : {ex.Message}"));
+            Diagnostics.ErrorLog.Add(L("Enregistrement"), ex);
+        }
         if (report.Errors.Count == 0)
         {
             _savedCollisionRevision = CollisionEdits.Revision;

@@ -167,6 +167,42 @@ internal static partial class ExportChecker
                 NewGuids: DuplicateGuids.Copies(input.Maps.Select(m => (!m.IsCustom, (IEnumerable<MapEntity>)m.Kept)))));
         }
 
+        // Objects whose model the resource will not carry: one of another open project (exported on its own), or one found
+        // nowhere (game, project, library) in the project's own maps.
+        if (world.Maps is { } types)
+        {
+            var elsewhere = new List<MapEntity>();
+            var unknown = new List<MapEntity>();
+            foreach (var (_, _, isCustom, kept) in input.Maps)
+            {
+                foreach (var entity in kept)
+                {
+                    if (types.GetArchetype(entity.ArchetypeHash) is null)
+                    {
+                        if (isCustom)
+                            unknown.Add(entity);
+                    }
+                    else if (types.GetArchetypeFile(entity.ArchetypeHash) is { } file && world.ProjectFiles?.ExtraStreamOf(file) is not null)
+                        elsewhere.Add(entity);
+                }
+            }
+            void AddModels(List<MapEntity> found, bool problem, string title, string advice)
+            {
+                if (found.Count == 0)
+                    return;
+                var groups = found.GroupBy(e => e.ArchetypeHash).OrderByDescending(g => g.Count()).Take(MaxDetails).ToList();
+                items.Add(new ExportCheckItem(problem, title,
+                    groups.Select(g => g.Count() > 1 ? $"{names.Describe(g.Key)} x{g.Count()}" : names.Describe(g.Key)).ToList(),
+                    advice, Entities: groups.Select(g => g.First()).ToList()));
+            }
+            AddModels(elsewhere, true, L($"{elsewhere.Count} objet(s) utilisent un modèle d'un autre projet ouvert"),
+                L("Ce modèle n'est pas copié dans cette ressource : sur le serveur, l'objet sera invisible sans la ressource de l'autre projet. ")
+                + L("Installez les deux ressources, ou ajoutez les fichiers du modèle à ce projet (Projet > Ajouter des fichiers au projet)."));
+            AddModels(unknown, false, L($"{unknown.Count} objet(s) des YMAP du projet utilisent un modèle introuvable"),
+                L("Ni le jeu (avec la carte et le DLC choisis), ni le projet, ni la bibliothèque n'ont ce modèle : il doit venir d'une autre ")
+                + L("ressource du serveur (pack de props), ou d'un DLC plus récent du jeu (sv_enforceGameBuild)."));
+        }
+
         // Deleted scenery (now or in an earlier session): compared with the game's file.
         var scenery = new List<string>();
         var sceneryEntities = new List<(MapEntity, Archetype?)>();

@@ -101,7 +101,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         string? folder = state.ExportFolder;
         bool nameValid = _solo ? SoloPack.ToPackName(_name) == _name : FiveMResource.IsValidName(_name);
         string? target = folder is not null && nameValid ? Path.Combine(folder, _name) : null;
-        var targetState = target is not null && !_solo ? ResourceExporter.Inspect(target) : ResourceExporter.TargetState.New;
+        var targetState = target is not null && !_solo ? InspectTarget(target) : ResourceExporter.TargetState.New;
 
         if (Widgets.BeginProperties("##export", 0.30f))
         {
@@ -214,6 +214,17 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             DrawResult(result);
         if (_solo)
             DrawInstalled();
+    }
+
+    private (string Target, long Time, ResourceExporter.TargetState State)? _inspected;
+
+    // The target folder read again at most once a second (slow or network disks), not at every frame.
+    private ResourceExporter.TargetState InspectTarget(string target)
+    {
+        long now = Environment.TickCount64;
+        if (_inspected is not { } cached || cached.Target != target || now - cached.Time > 1000)
+            _inspected = cached = (target, now, ResourceExporter.Inspect(target));
+        return cached.State;
     }
 
     private void RefreshInstalled()
@@ -784,6 +795,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     private bool Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target, out string summary)
     {
         _resultInstalled = false;
+        _inspected = null;
         state.ExportResourceName = _name;
         var occlusion = SelectedOcclusionCuts();
         var report = _solo

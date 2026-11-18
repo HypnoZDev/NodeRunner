@@ -74,8 +74,18 @@ internal static class ResourceExporter
             {
                 return new MapFileSaver.Report([], [L($"impossible de préparer l'export dans {work} : {ex.Message}")]);
             }
-            var report = Write(world, maps, pathAreas, staging, collisionCuts, occlusionCuts, collisionEdits, occluderFileName,
-                interiorFiles, projectStream, copied, out fromLibrary);
+            MapFileSaver.Report report;
+            try
+            {
+                report = Write(world, maps, pathAreas, staging, collisionCuts, occlusionCuts, collisionEdits, occluderFileName,
+                    interiorFiles, projectStream, copied, out fromLibrary);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // An unexpected error in a writer: the export stops, the previous one stays as it was.
+                Diagnostics.ErrorLog.Add(L("Export"), ex);
+                report = new MapFileSaver.Report([], [L($"erreur inattendue ({ex.GetType().Name}) : {ex.Message}")]);
+            }
             if (report.Errors.Count > 0)
             {
                 if (state == TargetState.Ours)

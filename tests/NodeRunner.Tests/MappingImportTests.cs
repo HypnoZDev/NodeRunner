@@ -113,8 +113,24 @@ public class MappingImportTests : IDisposable
 
         var result = MappingImport.Import(Path.Combine(_root, @"pack\stream"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null);
 
-        Assert.Equal("pack", result.Project.Name);
+        // Named after its folder, so that both projects export to different FiveM resources.
+        Assert.Equal("pack 2", result.Project.Name);
+        Assert.Equal("pack_2", result.Project.ResourceName);
         Assert.Equal("pack 2", Path.GetFileName(result.Project.Folder));
+    }
+
+    [Fact]
+    public void ABrokenXmlExportIsLeftOutWithoutStoppingTheImport()
+    {
+        Touch(@"pack\a.ymap");
+        Touch(@"pack\b.ybn.xml");
+        var converters = new Dictionary<string, Func<XmlExport, byte[]>> { [".ybn"] = _ => throw new IndexOutOfRangeException("bad") };
+
+        var result = MappingImport.Import(Path.Combine(_root, "pack"), Path.Combine(_root, "projects"), MapVersion.Multiplayer, null, converters);
+
+        Assert.Equal(1, result.Copied);
+        Assert.Contains(result.Ignored, i => i.StartsWith("b.ybn.xml"));
+        Assert.False(File.Exists(Path.Combine(result.Project.StreamFolder, "b.ybn.tmp")));
     }
 
     private const string Assembly = """
