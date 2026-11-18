@@ -540,7 +540,8 @@ public sealed class OnlineSession : IDisposable
     private void SendWelcome(Connection connection, bool withProject)
     {
         var snapshot = _snapshot!;
-        connection.Send(MessageType.Welcome, Payload.Build(w =>
+        long size = 1024 + (withProject ? snapshot.ProjectZip.Length : 0) + _log.Sum(e => 12L + e.Message.Length + e.Author.Length * 3);
+        connection.Send(MessageType.Welcome, w =>
         {
             w.Write(connection.Name);
             w.Write(connection.RejoinKey);
@@ -555,7 +556,7 @@ public sealed class OnlineSession : IDisposable
                 w.Write(author);
                 w.WriteBytes(message);
             }
-        }));
+        }, size);
     }
 
     private void OnGuestEdit(Connection connection, int seen, byte[] message)

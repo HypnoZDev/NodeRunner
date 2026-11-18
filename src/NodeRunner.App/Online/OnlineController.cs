@@ -68,6 +68,10 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     private const long MaxProjectBytes = 8L << 30;
     private const int MaxProjectFiles = 100_000;
 
+    // The compressed project sent to each guest, with room left in its message (Connection.MaxFrame, 1 GB) for the
+    // edits made meanwhile.
+    private const int MaxProjectZip = 768 << 20;
+
     private static void DeleteFolder(string folder)
     {
         if (Directory.Exists(folder))
@@ -199,7 +203,13 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
         {
             _shippedTypes = LibraryFileSaver.PlacedTypes(state.World);
             _typesCheckedAt = -1;
-            var snapshot = new SessionSnapshot(project.Name, PackProject(project), Fingerprint);
+            var zip = PackProject(project);
+            if (zip.Length > MaxProjectZip)
+            {
+                LastError = L($"Projet trop gros pour l'Online : {zip.Length >> 20} Mo une fois compressé, {MaxProjectZip >> 20} Mo au plus. Retirez les fichiers inutiles du dossier du projet.");
+                return;
+            }
+            var snapshot = new SessionSnapshot(project.Name, zip, Fingerprint);
             if (_local)
             {
                 Session = OnlineSession.Host(this, Name, Version, snapshot);

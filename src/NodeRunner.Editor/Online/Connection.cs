@@ -86,6 +86,34 @@ internal sealed class Connection : IDisposable
         BinaryPrimitives.WriteInt32LittleEndian(frame, payload.Length + 1);
         frame[4] = (byte)type;
         payload.CopyTo(frame, 5);
+        Enqueue(frame);
+    }
+
+    // A large message (the project) written straight into its frame: no copy of the whole payload. size: its expected
+    // length, so that the buffer is not grown by doubling.
+    public void Send(MessageType type, Action<BinaryWriter> write, long size)
+    {
+        if (size > MaxFrame - 1)
+        {
+            Close(L("message trop grand pour l'Online"));
+            return;
+        }
+        using var stream = new MemoryStream((int)(size + 5));
+        stream.Write([0, 0, 0, 0, (byte)type]);
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+            write(writer);
+        if (stream.Length - 4 > MaxFrame)
+        {
+            Close(L("message trop grand pour l'Online"));
+            return;
+        }
+        var frame = stream.Length == stream.Capacity ? stream.GetBuffer() : stream.ToArray();
+        BinaryPrimitives.WriteInt32LittleEndian(frame, (int)stream.Length - 4);
+        Enqueue(frame);
+    }
+
+    private void Enqueue(byte[] frame)
+    {
         // The other side no longer takes anything (frozen, very slow link): closed rather than piling up memory; it can
         // come back and is sent the project again.
         if (Interlocked.Add(ref _queued, frame.Length) > MaxQueued)
