@@ -1,3 +1,4 @@
+using NodeRunner.Data.Maps;
 using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Resources;
 using NodeRunner.Editor;
@@ -55,22 +56,23 @@ internal static class LibraryFileSaver
         return found;
     }
 
-    // Library types placed on the loaded map (objects of the maps and of the interiors).
-    public static HashSet<uint> PlacedTypes(WorldLoader world)
+    // Library types placed on the loaded map (objects of the maps and of the interiors, entity sets included, shown or
+    // not: another participant may turn a set on).
+    public static HashSet<uint> PlacedTypes(WorldLoader world) =>
+        world.Maps is { } library && library.LibraryArchetypes() is { Count: > 0 } types ? PlacedTypes(library.Maps, types) : [];
+
+    internal static HashSet<uint> PlacedTypes(IEnumerable<MapData> maps, IReadOnlySet<uint> types)
     {
         var used = new HashSet<uint>();
-        if (world.Maps is not { } library || library.LibraryArchetypes() is not { Count: > 0 } types)
-            return used;
-        foreach (var map in library.Maps)
+        foreach (var map in maps)
         {
             foreach (var entity in map.Entities)
             {
-                if (types.Contains(entity.ArchetypeHash))
-                    used.Add(entity.ArchetypeHash);
-                foreach (var inner in entity.InteriorEntities)
+                var inside = entity.InteriorEntities.Concat(entity.EntitySets.SelectMany(s => s.Entities));
+                foreach (var placed in inside.Prepend(entity))
                 {
-                    if (types.Contains(inner.ArchetypeHash))
-                        used.Add(inner.ArchetypeHash);
+                    if (types.Contains(placed.ArchetypeHash))
+                        used.Add(placed.ArchetypeHash);
                 }
             }
         }
