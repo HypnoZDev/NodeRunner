@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -64,7 +64,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   script prêtes à copier.
 - **Intérieurs (MLO)** : objets, salles, portails et entity sets modifiables, nouvel intérieur, intérieur placé ou
   dupliqué ailleurs sur la carte, avec son **audio** (occlusion du son entre les salles, écho, son de fond) généré à
-  l'export.
+  l'export. **Santé de l'intérieur** : portails mal reliés ou mal formés, objets rangés dans aucune salle, modèles
+  introuvables, salles sans portail.
 - **Véhicules garés** (car generators), **zones de timecycle** et **lumières LOD** : affichés, modifiables, ajoutés ou
   supprimés.
 - **Occlusion** : boîtes et modèles d'occlusion visibles, modifiables, créés automatiquement autour d'un bâtiment.
@@ -91,6 +92,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - Import d'un mapping (dossier, .zip, .oiv) et des fichiers exportés par **Sollumz** ou CodeWalker en XML (`.ydr.xml`,
   `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`) : convertis automatiquement.
 - **Dossier Sollumz surveillé** : chaque nouvel export depuis Blender arrive dans le projet et la carte se recharge seule.
+- **Rapport d'import** : après chaque import, NodeRunner vérifie que les YMAP, types, modèles et textures se trouvent les
+  uns les autres, et liste ce qui manque ou n'a pas pu être converti.
 
 **À plusieurs (Online, bêta)**
 - Jusqu'à 5 personnes sur le même projet avec un code `NRS-XXXX` : chacun voit les modifications, la sélection et la
@@ -105,6 +108,9 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
   et plusieurs projets peuvent être ouverts ensemble.
 - Avant l'export, vérification des routes, des points de scénario et du navmesh (point en l'air, lien cassé, bâtiment
   posé là où marchent les piétons...).
+- Après l'export, la ressource est vérifiée comme FiveM la lira (`fxmanifest.lua`, fichiers en double dans `stream`,
+  fichiers trop gros, liens entre fichiers). **Outils > Vérifier une ressource FiveM** fait de même pour n'importe quel
+  dossier, sans lancer le jeu.
 - **Pack solo** : le même projet exporté en `dlc.rpf` pour le mode histoire, installé dans le dossier `mods` du jeu.
 
 **À votre façon**
@@ -116,7 +122,7 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.

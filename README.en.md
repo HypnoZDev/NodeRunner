@@ -5,7 +5,7 @@
 **The GTA V map in 3D, to explore it, understand it and edit it. Free, portable, built for FiveM mapping.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip">
     <img src="https://img.shields.io/badge/Download-NodeRunner%20Studio%20for%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download NodeRunner Studio for Windows">
   </a>
   <br>
@@ -63,6 +63,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - Interior entity sets (apartment, bunker, club furniture...) toggled live, with ready-to-copy script lines.
 - **Interiors (MLO)**: edit objects, rooms, portals and entity sets, create a new interior, place or duplicate an
   interior elsewhere on the map, with its **audio** (sound occlusion between rooms, echo, ambience) generated on export.
+  **Interior health**: badly linked or badly shaped portals, objects in no room, missing models, rooms without a portal.
 - **Parked vehicles** (car generators), **timecycle zones** and **LOD lights**: shown, edited, added or deleted.
 - **Occlusion**: occlusion boxes and models visible, editable, built automatically around a building.
 - **Roads (path nodes)**: node settings (speed, traffic, highway...), number of lanes, nodes and links added or deleted.
@@ -86,6 +87,8 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - Import a mapping (folder, .zip, .oiv) and files exported as XML by **Sollumz** or CodeWalker (`.ydr.xml`, `.ytd.xml`,
   `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`): converted automatically.
 - **Watched Sollumz folder**: every new export from Blender lands in the project and the map reloads by itself.
+- **Import report**: after each import, NodeRunner checks that YMAPs, types, models and textures find each other, and
+  lists what is missing or could not be converted.
 
 **Together (Online, beta)**
 - Up to 5 people on the same project with an `NRS-XXXX` code: everyone sees the others' changes, selection and camera
@@ -100,6 +103,9 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
   projects can be open together.
 - Before exporting, roads, scenario points and the navmesh are checked (point in mid-air, broken link, building placed
   where pedestrians walk...).
+- After the export, the resource is checked the way FiveM will read it (`fxmanifest.lua`, duplicate files in `stream`,
+  oversized files, links between files). **Tools > Check a FiveM resource** does the same for any folder, without
+  starting the game.
 - **Single-player pack**: the same project exported as a `dlc.rpf` for story mode, installed in the game's `mods` folder.
 
 **Your way**
@@ -111,7 +117,7 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 
 ## Download
 
-**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.6.5/NodeRunner-1.6.5-win-x64.zip)**
+**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip)**
 · other versions are on the [Releases](https://github.com/HypnoZDev/NodeRunner/releases) page.
 
 1. Download the `NodeRunner-x.y.z-win-x64.zip` file.
