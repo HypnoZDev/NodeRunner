@@ -92,6 +92,28 @@ public class CarGeneratorTests
     }
 
     [Fact]
+    public void Objects_are_added_to_a_project_map_saved_without_objects()
+    {
+        var template = DeletionTests.BuildYmap(0x1000, 0, new DeletionTests.Item(0x30, -1, Data.Maps.LodLevel.OrphanHd));
+        var library = Data.Maps.MapLibrary.Create((new YmapReader().Read(template), "template.ymap"));
+        var empty = library.CreateCustomMap("proj_props.ymap");
+        var file = new YmapWriter().Build(template, empty, "proj_props", Editor.MapExtentsCalculator.Compute(empty, _ => null)).Content;
+
+        var map = new YmapReader().Read(file);
+        var loaded = Data.Maps.MapLibrary.Create((map, "proj_props.ymap"));
+        loaded.AddEntity(map, Editor.Adding.NewEntity(0x5001, null, new Vector3(5, 6, 7), Quaternion.Identity));
+        loaded.AddEntity(map, Editor.Adding.NewEntity(0x5002, null, new Vector3(-5, 6, 7), Quaternion.Identity));
+        var extents = Editor.MapExtentsCalculator.Compute(map, _ => null);
+
+        Assert.Throws<InvalidDataException>(() => new YmapWriter().Write(file, map, extents, null));
+        var written = new YmapReader().Read(new YmapWriter().Write(file, map, extents, null, template).Content);
+        Assert.Equal([0x5001u, 0x5002u], written.Entities.Select(e => e.ArchetypeHash));
+        Assert.Equal(new Vector3(-5, 6, 7), written.Entities[1].Position);
+        Assert.Equal(map.Entities[0].StoredRotation, written.Entities[0].StoredRotation);
+        Assert.Equal(Data.Maps.LodLevel.OrphanHd, written.Entities[0].LodLevel);
+    }
+
+    [Fact]
     public void Objects_added_to_a_map_file_with_parking_spots_keep_the_spots()
     {
         var file = BuildYmap((new Vector3(10, 20, 30), new Vector2(0, 5), 2.5f, 0xABCD));

@@ -14,7 +14,10 @@ public sealed class YmapWriter : IMapDataWriter
 
     // borrowed: descriptions of structures (parking spots, timecycle zones) taken from game map files, for a file that
     // does not describe them yet and gets its first ones.
-    public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents, IReadOnlyList<MetaDocument.StructureInfo>? borrowed)
+    // template: a game map file with ordinary objects, whose descriptions are used when objects are added to a file
+    // that has none (saved empty, or with interiors only).
+    public MapFileContent Write(ReadOnlySpan<byte> source, MapData map, MapExtents extents, IReadOnlyList<MetaDocument.StructureInfo>? borrowed,
+        byte[]? template = null)
     {
         var document = MetaDocument.Read(source);
         int root = document.RootBlock;
@@ -33,14 +36,14 @@ public sealed class YmapWriter : IMapDataWriter
 
         var kept = map.KeptEntities.ToList();
         var added = kept.Where(e => e.SourceIndex < 0).ToList();
-        var newItems = added.Count == 0 ? [] : AppendEntities(document, mapData, sources, added);
+        var newItems = added.Count == 0 ? [] : AppendEntities(document, mapData, sources, added, template);
         var items = new List<(int Block, int Offset)>(kept.Count);
         int next = 0;
         foreach (var entity in kept)
             items.Add(entity.SourceIndex >= 0 ? sources[entity.SourceIndex] : newItems[next++]);
         for (int i = 0; i < kept.Count; i++)
             WriteEntity(document, items[i], kept[i]);
-        WriteEntityPointers(document, mapData, items);
+        WriteEntityPointers(document, mapData, items, template);
         WriteArray(document, mapData, SpotArray, map.CarGenerators, s => s.SourceIndex, s => s.IsDeleted, WriteCarGenerator, borrowed);
         WriteArray(document, mapData, ZoneArray, map.TimecycleModifiers, z => z.SourceIndex, z => z.IsDeleted, WriteTimecycle, borrowed);
         WriteLights(document, mapData, map);
@@ -319,16 +322,29 @@ public sealed class YmapWriter : IMapDataWriter
     // Ordinary objects added to an existing file (a map imported or saved earlier): new blocks after the file's, each
     // object starting from one of the file's. Returns where each one is, in the order given.
     private static List<(int Block, int Offset)> AppendEntities(MetaDocument document, byte[] mapData,
-        List<(int Block, int Offset)> sources, List<MapEntity> added)
+        List<(int Block, int Offset)> sources, List<MapEntity> added, byte[]? gameTemplate)
     {
         if (added.Any(e => e.IsInterior))
             throw new InvalidDataException("L'ajout d'un intérieur à ce fichier n'est pas encore pris en charge.");
         int found = sources.FindIndex(i => document.Blocks[i.Block].Structure == YmapReader.EntityStructure);
-        if (found < 0)
-            throw new InvalidDataException("L'ajout d'objets à un fichier sans objet n'est pas encore pris en charge.");
+        byte[] template;
+        if (found >= 0)
+        {
+            var source = sources[found];
+            template = document.Blocks[source.Block].Data.AsSpan(source.Offset, YmapReader.EntitySize).ToArray();
+        }
+        else
+        {
+            // No ordinary object in the file: every field of the new ones is written, they start from zeros.
+            if (document.FindStructure(YmapReader.EntityStructure) is null)
+            {
+                var description = (gameTemplate is null ? null : MetaDocument.Read(gameTemplate).FindStructure(YmapReader.EntityStructure))
+                                  ?? throw new InvalidDataException("Description des objets (CEntityDef) introuvable.");
+                document.Structures.Add(description);
+            }
+            template = new byte[YmapReader.EntitySize];
+        }
         CheckEntityLayout(document);
-        var source = sources[found];
-        var template = document.Blocks[source.Block].Data.AsSpan(source.Offset, YmapReader.EntitySize).ToArray();
 
         var items = new List<(int Block, int Offset)>();
         var current = new List<byte>();
@@ -352,20 +368,21 @@ public sealed class YmapWriter : IMapDataWriter
         return items;
     }
 
-    private static void WriteEntityPointers(MetaDocument document, byte[] mapData, List<(int Block, int Offset)> items)
+    private static void WriteEntityPointers(MetaDocument document, byte[] mapData, List<(int Block, int Offset)> items, byte[]? gameTemplate)
     {
         var field = mapData.AsSpan(YmapReader.MapEntities);
         var (arrayBlock, arrayOffset) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(field));
         int count = BinaryPrimitives.ReadUInt16LittleEndian(field[8..]);
         if (items.Count > count)
         {
-            // More objects than the file's array holds: a new array, same structure.
-            if (arrayBlock < 0)
-                throw new InvalidDataException("L'ajout d'objets à un fichier sans objet n'est pas encore pris en charge.");
+            // More objects than the file's array holds: a new array, same structure (the game file's if the file has none).
+            uint structure = arrayBlock >= 0 && arrayBlock < document.Blocks.Count
+                ? document.Blocks[arrayBlock].Structure
+                : PointerArrayStructure(document, gameTemplate);
             var pointers = new byte[items.Count * PointerSize];
             for (int i = 0; i < items.Count; i++)
                 BinaryPrimitives.WriteUInt64LittleEndian(pointers.AsSpan(i * PointerSize), MetaDocument.Pointer(items[i].Block, items[i].Offset));
-            document.Blocks.Add(new MetaDocument.Block(document.Blocks[arrayBlock].Structure, pointers));
+            document.Blocks.Add(new MetaDocument.Block(structure, pointers));
             BinaryPrimitives.WriteUInt64LittleEndian(field, MetaDocument.Pointer(document.Blocks.Count - 1, 0));
             BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)items.Count);
             BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count);
@@ -381,6 +398,21 @@ public sealed class YmapWriter : IMapDataWriter
         BinaryPrimitives.WriteUInt64LittleEndian(field, items.Count == 0 ? 0 : MetaDocument.Pointer(arrayBlock, arrayOffset));
         BinaryPrimitives.WriteUInt16LittleEndian(field[8..], (ushort)items.Count);  // Count.
         BinaryPrimitives.WriteUInt16LittleEndian(field[10..], (ushort)items.Count); // Capacity.
+    }
+
+    // The type of the block holding the pointers to the objects, taken from a game map file (with its description, if any).
+    private static uint PointerArrayStructure(MetaDocument document, byte[]? gameTemplate)
+    {
+        var game = gameTemplate is null ? null : MetaDocument.Read(gameTemplate);
+        if (game is null || game.RootBlock < 0 || game.RootBlock >= game.Blocks.Count)
+            throw new InvalidDataException("Aucun fichier de carte du jeu utilisable comme modèle pour la liste des objets.");
+        var (block, _) = MetaDocument.DecodePointer(BinaryPrimitives.ReadUInt64LittleEndian(game.Blocks[game.RootBlock].Data.AsSpan(YmapReader.MapEntities)));
+        if (block < 0 || block >= game.Blocks.Count)
+            throw new InvalidDataException("Aucun fichier de carte du jeu utilisable comme modèle pour la liste des objets.");
+        uint structure = game.Blocks[block].Structure;
+        if (document.FindStructure(structure) is null && game.FindStructure(structure) is { } description)
+            document.Structures.Add(description);
+        return structure;
     }
 
     // An array of structures held in CMapData (pointer, count, capacity).

@@ -56,8 +56,9 @@ internal static class MapFileSaver
                 {
                     // A map read from the project's files (imported or saved earlier): starts from it, so that what
                     // the editor does not handle (parking spots, lights, extensions...) is kept.
-                    header = Template(content, library).Header;
-                    written = writer.Write(saved, map, extents, borrowed);
+                    var template = Template(content, library);
+                    header = template.Header;
+                    written = writer.Write(saved, map, extents, borrowed, template.Content);
                 }
                 else if (map.IsCustom)
                 {
