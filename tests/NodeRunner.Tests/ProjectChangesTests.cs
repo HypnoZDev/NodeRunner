@@ -6,9 +6,11 @@ namespace NodeRunner.Tests;
 
 public class ProjectChangesTests
 {
-    private static MapEntity Entity(uint type, float x) => new() { ArchetypeHash = type, Position = new Vector3(x, 0, 0) };
+    private static MapEntity Entity(uint type, float x, int source = -1) =>
+        new() { ArchetypeHash = type, Position = new Vector3(x, 0, 0), SourceIndex = source };
 
-    private static List<MapEntity> Game() => [Entity(1, 0), Entity(2, 10), Entity(3, 20)];
+    // As read from the game's file: each object knows its index in it.
+    private static List<MapEntity> Game() => [Entity(1, 0, 0), Entity(2, 10, 1), Entity(3, 20, 2)];
 
     [Fact]
     public void ListsAddedMovedAndDeletedObjects()

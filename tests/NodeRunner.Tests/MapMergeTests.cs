@@ -62,6 +62,34 @@ public class MapMergeTests
     }
 
     [Fact]
+    public void AMissingCopyInTheMiddleIsDeletedWithoutMovingAnother()
+    {
+        List<MapEntity> game = [Entity(2, 0), Entity(2, 10), Entity(2, 20)];
+        List<MapEntity> theirs = [Entity(2, 20), Entity(2, 0)]; // The middle one deleted, the others reordered.
+        var ours = game.Select(e => Entity(2, e.Position.X)).ToList();
+
+        var plan = MapMerge.Plan(game, ours, theirs);
+
+        Assert.Empty(plan.Moves);
+        Assert.Empty(plan.Conflicts);
+        Assert.Same(ours[1], Assert.Single(plan.Deletions));
+    }
+
+    [Fact]
+    public void MovedDifferentlyOnBothSidesIsAConflict_AndAnUnclearPairingToo()
+    {
+        List<MapEntity> game = [Entity(2, 0), Entity(2, 10), Entity(2, 20)];
+        var plan = MapMerge.Plan(game, [Entity(2, 0), Entity(2, 11), Entity(2, 20)], [Entity(2, 0), Entity(2, 12), Entity(2, 20)]);
+        Assert.Single(plan.Conflicts);
+        Assert.True(plan.IsEmpty);
+
+        // Two copies moved to about the same distance from both old places: no guess.
+        plan = MapMerge.Plan(game, [.. game], [Entity(2, 0), Entity(2, 15), Entity(2, 15.5f)]);
+        Assert.Equal(2, plan.Conflicts.Count);
+        Assert.True(plan.IsEmpty);
+    }
+
+    [Fact]
     public void MatchesByGuidBeforeOrder()
     {
         List<MapEntity> game = [Entity(2, 10, guid: 100), Entity(2, 20, guid: 200)];

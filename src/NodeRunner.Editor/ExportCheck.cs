@@ -121,24 +121,28 @@ public static class ConflictScanner
 // Objects of a game map file that the exported version no longer has (deleted now or in an earlier session).
 public static class RemovedEntities
 {
-    // The entities of original missing from current, compared type by type (a moved object keeps its type, so only
-    // the number of objects of each type counts).
-    public static List<MapEntity> Find(IReadOnlyList<MapEntity> original, IEnumerable<MapEntity> current)
+    // The game's objects deleted in current (a map being edited: its deleted objects are flagged, its new ones have no
+    // SourceIndex), the objects added, and the game's objects that cannot be told apart for sure (EntityMatch): those
+    // are never treated as deleted.
+    public static (List<MapEntity> Removed, List<MapEntity> Added, List<MapEntity> Uncertain) Compare(
+        IReadOnlyList<MapEntity> original, IReadOnlyList<MapEntity> current, bool fromGameFile = false)
     {
-        var remaining = new Dictionary<uint, int>();
-        foreach (var entity in current)
-            remaining[entity.ArchetypeHash] = remaining.GetValueOrDefault(entity.ArchetypeHash) + 1;
-
+        var match = EntityMatch.Find(original, current, inMemory: true, fromGameFile: fromGameFile);
         var removed = new List<MapEntity>();
-        foreach (var entity in original)
+        var uncertain = new List<MapEntity>();
+        var matched = new bool[current.Count];
+        for (int i = 0; i < original.Count; i++)
         {
-            int left = remaining.GetValueOrDefault(entity.ArchetypeHash);
-            if (left > 0)
-                remaining[entity.ArchetypeHash] = left - 1;
-            else
-                removed.Add(entity);
+            int j = match.Match[i];
+            if (j >= 0)
+                matched[j] = true;
+            if (match.Ambiguous[i])
+                uncertain.Add(original[i]);
+            else if (j < 0 || current[j].IsDeleted)
+                removed.Add(original[i]);
         }
-        return removed;
+        var added = current.Where((e, j) => !matched[j] && !match.OtherAmbiguous[j] && !e.IsDeleted).ToList();
+        return (removed, added, uncertain);
     }
 
     // Part of the scenery: a detailed object of the level-of-detail tree whose collision is in the area's .ybn files,

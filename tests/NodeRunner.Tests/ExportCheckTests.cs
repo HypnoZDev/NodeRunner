@@ -85,15 +85,45 @@ public class ExportCheckTests : IDisposable
     private static MapEntity Entity(uint type, LodLevel level = LodLevel.Hd, int parent = -1) =>
         new() { ArchetypeHash = type, Position = Vector3.Zero, LodLevel = level, ParentIndex = parent };
 
-    [Fact]
-    public void Removed_entities_are_counted_type_by_type()
+    private static MapEntity At(uint type, float x, int source = -1, bool deleted = false)
     {
-        var original = new[] { Entity(1), Entity(2), Entity(2), Entity(3) };
-        var current = new[] { Entity(2), Entity(3), Entity(4) }; // One "2" and the "1" are gone, a "4" was added.
+        var entity = new MapEntity { ArchetypeHash = type, Position = new Vector3(x, 0, 0), SourceIndex = source };
+        if (deleted)
+            entity.IsDeleted = true;
+        return entity;
+    }
 
-        var removed = RemovedEntities.Find(original, current);
+    private static MapEntity[] Game() => [At(2, 0, 0), At(2, 10, 1), At(2, 20, 2)];
 
-        Assert.Equal([original[0], original[2]], removed);
+    [Fact]
+    public void The_deleted_copy_is_found_among_identical_buildings()
+    {
+        // Loaded from the game's file: the index tells which one is gone, even after the others moved.
+        var removed = RemovedEntities.Compare(Game(), [At(2, 0, 0), At(2, 25, 2)], fromGameFile: true);
+        Assert.Equal(10f, Assert.Single(removed.Removed).Position.X);
+
+        // From a saved version: the unchanged ones pair by place, the middle one is gone.
+        removed = RemovedEntities.Compare(Game(), [At(2, 0, 5), At(2, 20, 6)]);
+        Assert.Equal(10f, Assert.Single(removed.Removed).Position.X);
+        Assert.Empty(removed.Added);
+
+        // A new copy of the same model elsewhere is an addition, not the deleted one moved.
+        removed = RemovedEntities.Compare(Game(), [At(2, 0, 5), At(2, 20, 6), At(2, 40)]);
+        Assert.Equal(10f, Assert.Single(removed.Removed).Position.X);
+        Assert.Equal(40f, Assert.Single(removed.Added).Position.X);
+
+        // Kept but flagged deleted.
+        removed = RemovedEntities.Compare(Game(), [At(2, 0, 5), At(2, 10, 6, deleted: true), At(2, 20, 7)]);
+        Assert.Equal(10f, Assert.Single(removed.Removed).Position.X);
+    }
+
+    [Fact]
+    public void Copies_that_cannot_be_told_apart_are_never_treated_as_deleted()
+    {
+        // Two of three moved to about the same distance from both old places: which one is which is unknown.
+        var result = RemovedEntities.Compare(Game(), [At(2, 0, 5), At(2, 15, 6)]);
+        Assert.Empty(result.Removed);
+        Assert.Equal(2, result.Uncertain.Count);
     }
 
     [Fact]

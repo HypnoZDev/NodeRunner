@@ -31,12 +31,20 @@ public static class MapMerge
     public static MergePlan Plan(IReadOnlyList<MapEntity> gameEntities, IReadOnlyList<MapEntity> ours, IReadOnlyList<MapEntity> theirs)
     {
         var plan = new MergePlan();
-        var ourMatch = Match(gameEntities, ours);
-        var theirMatch = Match(gameEntities, theirs);
+        var ourResult = EntityMatch.Find(gameEntities, ours);
+        var theirResult = EntityMatch.Find(gameEntities, theirs);
+        var ourMatch = ourResult.Match;
+        var theirMatch = theirResult.Match;
 
         for (int i = 0; i < gameEntities.Count; i++)
         {
             var original = gameEntities[i];
+            if (ourResult.Ambiguous[i] || theirResult.Ambiguous[i])
+            {
+                // Several objects of this type changed near each other: which one is which cannot be told for sure.
+                plan.Conflicts.Add(new(original.ArchetypeHash, original.Position, L("objets du même modèle impossibles à distinguer avec certitude")));
+                continue;
+            }
             var mine = ourMatch[i] >= 0 ? ours[ourMatch[i]] : null;
             var other = theirMatch[i] >= 0 ? theirs[theirMatch[i]] : null;
             var basePlacement = Placement.Of(original);
@@ -77,64 +85,15 @@ public static class MapMerge
         var matched = new HashSet<int>(theirMatch.Where(m => m >= 0));
         for (int j = 0; j < theirs.Count; j++)
         {
-            if (!matched.Contains(j))
+            if (!matched.Contains(j) && !theirResult.OtherAmbiguous[j])
                 plan.Additions.Add((theirs[j].ArchetypeHash, Placement.Of(theirs[j])));
         }
         return plan;
     }
 
-    // For each game entity, the index of the same object in other (-1 if gone). Same type and guid first (when the pair
-    // is unique on both sides), then same type in file order: saved files keep the order of the game's.
-    public static int[] Match(IReadOnlyList<MapEntity> gameEntities, IReadOnlyList<MapEntity> other)
-    {
-        var result = Enumerable.Repeat(-1, gameEntities.Count).ToArray();
-        var used = new bool[other.Count];
-
-        var gameKeys = UniqueKeys(gameEntities);
-        var otherKeys = UniqueKeys(other);
-        foreach (var (key, i) in gameKeys)
-        {
-            if (otherKeys.TryGetValue(key, out int j))
-            {
-                result[i] = j;
-                used[j] = true;
-            }
-        }
-
-        var free = new Dictionary<uint, Queue<int>>();
-        for (int j = 0; j < other.Count; j++)
-        {
-            if (used[j])
-                continue;
-            uint hash = other[j].ArchetypeHash;
-            if (!free.TryGetValue(hash, out var queue))
-                free[hash] = queue = new Queue<int>();
-            queue.Enqueue(j);
-        }
-        for (int i = 0; i < gameEntities.Count; i++)
-        {
-            if (result[i] < 0 && free.TryGetValue(gameEntities[i].ArchetypeHash, out var queue) && queue.Count > 0)
-                result[i] = queue.Dequeue();
-        }
-        return result;
-    }
-
-    private static Dictionary<(uint, uint), int> UniqueKeys(IReadOnlyList<MapEntity> entities)
-    {
-        var keys = new Dictionary<(uint, uint), int>();
-        var repeated = new HashSet<(uint, uint)>();
-        for (int i = 0; i < entities.Count; i++)
-        {
-            if (entities[i].Guid == 0)
-                continue;
-            var key = (entities[i].ArchetypeHash, entities[i].Guid);
-            if (!keys.TryAdd(key, i))
-                repeated.Add(key);
-        }
-        foreach (var key in repeated)
-            keys.Remove(key);
-        return keys;
-    }
+    // For each game entity, the index of the same object in other (-1 if gone or undecided): EntityMatch.
+    public static int[] Match(IReadOnlyList<MapEntity> gameEntities, IReadOnlyList<MapEntity> other) =>
+        EntityMatch.Find(gameEntities, other).Match;
 
     // Equal up to the precision lost when a file is written.
     public static bool Same(Placement a, Placement b) =>

@@ -34,7 +34,10 @@ internal static partial class ExportChecker
         bool RemoveGround = false,
         IReadOnlyList<int>? PathAreas = null,
         IReadOnlyList<ExportChecker.PointCopy>? Scenarios = null,
-        IReadOnlyList<ExportChecker.NodeCopy>? Nodes = null);
+        IReadOnlyList<ExportChecker.NodeCopy>? Nodes = null,
+        // For each map of Maps: all its objects (deleted ones too, to recognise them) and whether it was loaded from the
+        // game's file (not a saved version), so that the objects' SourceIndex is their index in it.
+        IReadOnlyList<(List<MapEntity> All, bool FromGameFile)>? Sources = null);
 
     // Scenario points and road nodes as they are when the check starts (the check runs in the background).
     public sealed record PointCopy(ScenarioPoint Point, Vector3 Position, ScenarioCategory Category, string? TypeName, bool Changed);
@@ -47,12 +50,14 @@ internal static partial class ExportChecker
     {
         var names = state.World.Names ?? new HashNames();
         var maps = new List<(string, string?, bool, List<MapEntity>)>();
+        var sources = new List<(List<MapEntity>, bool)>();
         var stillSeen = new List<string>();
         foreach (var map in state.MapsToExport)
         {
             if (map.FilePath is not { } path)
                 continue;
             maps.Add((Path.GetFileName(path), map.IsCustom ? null : path, map.IsCustom, map.KeptEntities.ToList()));
+            sources.Add((map.Entities.ToList(), !map.IsSaved));
             // Deleted in this session while their simplified model stays (it also stands for other objects).
             foreach (var entity in map.Entities)
             {
@@ -84,7 +89,7 @@ internal static partial class ExportChecker
         var nodes = state.World.PathNetwork?.Areas.SelectMany(a => a.Nodes)
             .Select(n => new NodeCopy(n, n.Position, n.IsMovedOrAdded)).ToList();
         return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others, PathAreas: state.PathAreasToSave,
-            Scenarios: scenarios, Nodes: nodes);
+            Scenarios: scenarios, Nodes: nodes, Sources: sources);
     }
 
     public static Result Run(Input input, WorldLoader world)
@@ -208,7 +213,10 @@ internal static partial class ExportChecker
         var sceneryEntities = new List<(MapEntity, Archetype?)>();
         var removedEntities = new List<(MapEntity, Archetype?)>();
         var addedEntities = new List<MapEntity>();
+        var uncertain = new List<string>();
+        var uncertainEntities = new List<MapEntity>();
         int removedTotal = 0;
+        int mapIndex = -1;
         var removedDoors = new List<string>();
         var movedDoors = new List<DoorCheck.MovedDoor>();
         if (world.Content is { } content)
@@ -216,6 +224,7 @@ internal static partial class ExportChecker
             var reader = new YmapReader();
             foreach (var (fileName, gamePath, isCustom, kept) in input.Maps)
             {
+                mapIndex++;
                 if (isCustom || gamePath is null)
                 {
                     addedEntities.AddRange(kept);
@@ -232,8 +241,15 @@ internal static partial class ExportChecker
                 {
                     continue;
                 }
-                var removed = RemovedEntities.Find(original.Entities, kept);
-                addedEntities.AddRange(RemovedEntities.Find(kept, original.Entities));
+                var (all, fromGameFile) = input.Sources is { } sources && mapIndex < sources.Count ? sources[mapIndex] : (kept, false);
+                var compared = RemovedEntities.Compare(original.Entities, all, fromGameFile);
+                var removed = compared.Removed;
+                addedEntities.AddRange(compared.Added);
+                foreach (var entity in compared.Uncertain)
+                {
+                    uncertain.Add($"{names.Describe(entity.ArchetypeHash)} ({fileName})");
+                    uncertainEntities.Add(entity);
+                }
                 removedTotal += removed.Count;
                 var doors = DoorCheck.Changed(original.Entities, kept, names.TryGet);
                 removedDoors.AddRange(doors.Removed.Select(d => $"{names.Describe(d.ArchetypeHash)} ({fileName})"));
@@ -248,6 +264,14 @@ internal static partial class ExportChecker
                     sceneryEntities.Add((entity, archetype));
                 }
             }
+        }
+        if (uncertain.Count > 0)
+        {
+            items.Add(new ExportCheckItem(true,
+                L($"{uncertain.Count} objet(s) du jeu impossibles à identifier avec certitude"),
+                Limit(uncertain),
+                L("Plusieurs objets du même modèle ont été supprimés, déplacés ou ajoutés près les uns des autres : NodeRunner ne sait pas ")
+                + L("lequel est lequel, et ne retire donc pas leur collision ni leur occlusion. Vérifiez-les en jeu.")));
         }
         // Their collision, in the area's .ybn files: removed polygon by polygon (the files are shared with the neighbours).
         var cuts = new List<CollisionFileCut>();

@@ -22,20 +22,23 @@ public static class ProjectChanges
             return changes;
         }
 
-        var match = MapMerge.Match(gameEntities, current);
+        var result = EntityMatch.Find(gameEntities, current, inMemory: true, fromGameFile: !map.IsSaved);
+        var match = result.Match;
         var matched = new bool[current.Count];
         for (int i = 0; i < gameEntities.Count; i++)
         {
             int j = match[i];
             if (j >= 0)
                 matched[j] = true;
+            if (result.Ambiguous[i])
+                continue; // Undecided: neither listed as deleted nor as moved.
             if (j < 0 || current[j].IsDeleted)
                 changes.Add(new(ChangeKind.Deleted, gameEntities[i], map));
             else if (!MapMerge.Same(Placement.Of(gameEntities[i]), Placement.Of(current[j])))
                 changes.Add(new(ChangeKind.Moved, current[j], map));
         }
         for (int j = 0; j < current.Count; j++)
-            if (!matched[j] && !current[j].IsDeleted)
+            if (!matched[j] && !current[j].IsDeleted && !result.OtherAmbiguous[j])
                 changes.Add(new(ChangeKind.Added, current[j], map));
         return changes;
     }
