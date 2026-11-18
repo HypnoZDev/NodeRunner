@@ -27,6 +27,7 @@ internal static class Program
                 Crash(ex);
         };
 
+        Updater.CleanUp(Updater.AppFolder);
         var paths = AppPaths.Resolve();
         var settings = AppSettings.Load(paths.SettingsFile);
         NodeRunner.Editor.Localization.Loc.Current = settings.InterfaceLanguage;

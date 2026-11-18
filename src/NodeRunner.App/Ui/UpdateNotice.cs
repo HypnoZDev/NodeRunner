@@ -43,17 +43,93 @@ internal sealed class UpdateNotice
             ImGui.PushTextWrapPos(width - 12f);
             ImGui.TextUnformatted(L($"NodeRunner {version} est disponible (vous avez la {Program.Version})."));
             ImGui.PopTextWrapPos();
-            if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Télécharger"), L("Ouvrir la page de la nouvelle version sur GitHub")))
+            if (_task is { } task)
+                DrawProgress(task);
+            else
             {
-                OpenInBrowser(UpdateCheck.ReleasePage);
-                _closed = true;
+                if (_error is { } error)
+                {
+                    ImGui.PushTextWrapPos(width - 12f);
+                    ImGui.TextColored(UiTheme.Error, L($"Mise à jour impossible : {error}"));
+                    ImGui.PopTextWrapPos();
+                }
+                if (_check.Package is { } package && _canWrite)
+                {
+                    bool unsaved = _state.History.HasUnsavedChanges;
+                    if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Mettre à jour"),
+                            unsaved ? L("Enregistre d'abord tes modifications (Ctrl+S)")
+                                : L("Télécharger la nouvelle version, la mettre à la place de celle-ci et relancer NodeRunner (réglages gardés)"),
+                            enabled: !unsaved))
+                        Start(package, version);
+                    ImGui.SameLine();
+                }
+                if (Widgets.Button(L("Page de téléchargement"), L("Ouvrir la page de la nouvelle version sur GitHub")))
+                {
+                    OpenInBrowser(UpdateCheck.ReleasePage);
+                    _closed = true;
+                }
+                ImGui.SameLine();
+                if (Widgets.Button(L("Plus tard"), L("Masquer jusqu'au prochain démarrage (Paramètres > Interface pour ne plus être prévenu)")))
+                    _closed = true;
             }
-            ImGui.SameLine();
-            if (Widgets.Button(L("Plus tard"), L("Masquer jusqu'au prochain démarrage (Paramètres > Interface pour ne plus être prévenu)")))
-                _closed = true;
         }
         ImGui.End();
         ImGui.PopStyleVar();
+    }
+
+    private Task? _task;
+    private volatile float _progress;
+    private string? _error;
+    private readonly bool _canWrite = Updater.CanWrite(Updater.AppFolder);
+
+    private void Start((string Url, string Sha256) package, string version)
+    {
+        _error = null;
+        _progress = 0f;
+        var progress = new Progress<double>(p => _progress = (float)p);
+        _task = Task.Run(async () =>
+        {
+            string zip = await Updater.DownloadAsync(package.Url, package.Sha256, progress, CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                Updater.Install(zip, Updater.AppFolder, version);
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(zip);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        });
+    }
+
+    private void DrawProgress(Task task)
+    {
+        if (!task.IsCompleted)
+        {
+            ImGui.ProgressBar(_progress, new Vector2(-1f, 0f), _progress > 0.999f ? L("Installation...") : L("Téléchargement..."));
+            return;
+        }
+        _task = null;
+        if (task.Exception?.InnerException is { } ex)
+        {
+            _error = ex is HttpRequestException or TaskCanceledException ? L($"téléchargement interrompu ({ex.Message})") : ex.Message;
+            Diagnostics.ErrorLog.Add(L("Mise à jour"), ex);
+            return;
+        }
+        try
+        {
+            Updater.Restart(Updater.AppFolder);
+            System.Windows.Forms.Application.Exit();
+        }
+        catch (Exception restart) when (restart is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _error = L("la nouvelle version est installée : relance NodeRunner toi-même");
+        }
     }
 
     private static void OpenInBrowser(string url)
