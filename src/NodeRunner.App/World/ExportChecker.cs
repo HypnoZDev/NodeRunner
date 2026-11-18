@@ -37,7 +37,9 @@ internal static partial class ExportChecker
         IReadOnlyList<ExportChecker.NodeCopy>? Nodes = null,
         // For each map of Maps: all its objects (deleted ones too, to recognise them) and whether it was loaded from the
         // game's file (not a saved version), so that the objects' SourceIndex is their index in it.
-        IReadOnlyList<(List<MapEntity> All, bool FromGameFile)>? Sources = null);
+        IReadOnlyList<(List<MapEntity> All, bool FromGameFile)>? Sources = null,
+        // The project's own files shipped as they are (models, textures, collisions...): full paths.
+        IReadOnlyList<string>? ProjectFiles = null);
 
     // Scenario points and road nodes as they are when the check starts (the check runs in the background).
     public sealed record PointCopy(ScenarioPoint Point, Vector3 Position, ScenarioCategory Category, string? TypeName, bool Changed);
@@ -89,7 +91,7 @@ internal static partial class ExportChecker
         var nodes = state.World.PathNetwork?.Areas.SelectMany(a => a.Nodes)
             .Select(n => new NodeCopy(n, n.Position, n.IsMovedOrAdded)).ToList();
         return new Input(maps, stillSeen, state.ExportFolder, state.ExportResourceName, others, PathAreas: state.PathAreasToSave,
-            Scenarios: scenarios, Nodes: nodes, Sources: sources);
+            Scenarios: scenarios, Nodes: nodes, Sources: sources, ProjectFiles: ResourceExporter.ProjectFiles(state.SaveFolder));
     }
 
     public static Result Run(Input input, WorldLoader world)
@@ -100,6 +102,17 @@ internal static partial class ExportChecker
         var fileNames = input.Maps.Select(m => m.FileName)
             .Concat(OccluderMaps.Get(world).Where(f => f.HasChanges).Select(f => f.FileName))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // The other shipped files a resource can also ship: modified road files and the project's own files.
+        var mapNames = fileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ownFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string file in input.ProjectFiles ?? [])
+            ownFiles.TryAdd(Path.GetFileName(file), file);
+        fileNames = fileNames.Concat((input.PathAreas ?? []).Select(PathNetwork.FileName)).Concat(ownFiles.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // A copy identical to the project's file (the same prop pack in two resources) changes nothing in game.
+        List<MapConflict> Differing(IEnumerable<MapConflict> found) =>
+            found.Where(c => !ownFiles.TryGetValue(c.FileName, out var own) || !SameContent(own, c.Path)).ToList();
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Same map file elsewhere: in the server's resources, then in the user's other projects.
         int scanned = 0;
@@ -131,15 +144,23 @@ internal static partial class ExportChecker
                     + L("Supprimez l'ancienne copie, ou choisissez le même dossier d'export qu'avant.")));
             }
             ownFolders = [target, .. copies];
-            var conflicts = ConflictScanner.ScanResources(root, ownFolders, fileNames);
+            var conflicts = Differing(ConflictScanner.ScanResources(root, ownFolders, fileNames));
             foreach (var group in conflicts.GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
             {
+                reported.Add(group.Key);
                 items.Add(new ExportCheckItem(true,
                     L($"{group.Key} est aussi livré par {Owners(group, L("la ressource"), L("les ressources"))}"),
                     group.Select(c => c.Path).ToList(),
-                    L("FiveM ne charge qu'une version d'un même YMAP : les changements de l'une des deux ressources seront perdus ")
-                    + L("(objets en double, suppression annulée...). Reprenez ses changements dans ce projet, puis retirez le ")
-                    + L("fichier de l'autre ressource."), group.ToList()));
+                    mapNames.Contains(group.Key)
+                        ? L("FiveM ne charge qu'une version d'un même YMAP : les changements de l'une des deux ressources seront perdus ")
+                          + L("(objets en double, suppression annulée...). Reprenez ses changements dans ce projet, puis retirez le ")
+                          + L("fichier de l'autre ressource.")
+                        : group.Key.EndsWith(".ynd", StringComparison.OrdinalIgnoreCase)
+                            ? L("FiveM ne charge qu'une version d'un fichier de routes : les routes modifiées par l'une des deux ressources ")
+                              + L("seront perdues. Reprenez ses changements dans ce projet, puis retirez le fichier de l'autre ressource.")
+                            : L("FiveM ne charge qu'une version d'un fichier de même nom, et les deux sont différents : celui de l'une des ")
+                              + L("deux ressources sera ignoré. Gardez-en un seul."),
+                    group.ToList()));
             }
             scanned = conflicts.Count;
             summary = L($"Dossier analysé : {root}");
@@ -149,7 +170,7 @@ internal static partial class ExportChecker
             summary = L("Choisissez le dossier « resources » du serveur pour y chercher les conflits.");
         }
 
-        foreach (var group in ConflictScanner.ScanProjects(input.OtherProjects, fileNames).GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in Differing(ConflictScanner.ScanProjects(input.OtherProjects, fileNames)).GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
         {
             items.Add(new ExportCheckItem(true,
                 L($"{group.Key} est aussi modifié par {Owners(group, L("le projet"), L("les projets"))}"),
@@ -281,7 +302,8 @@ internal static partial class ExportChecker
         if (cuts.Count > 0 && scanRoot is not null)
         {
             // A collision file covers a whole block: another resource changing anything in it ships the same file.
-            var collisionConflicts = ConflictScanner.ScanResources(scanRoot, ownFolders, cuts.Select(c => c.FileName).ToList());
+            var collisionConflicts = ConflictScanner.ScanResources(scanRoot, ownFolders,
+                cuts.Select(c => c.FileName).Where(n => !reported.Contains(n)).ToList());
             foreach (var group in collisionConflicts.GroupBy(c => c.FileName, StringComparer.OrdinalIgnoreCase))
             {
                 items.Add(new ExportCheckItem(true,
@@ -547,6 +569,24 @@ internal static partial class ExportChecker
         Add(OccluderIssueKind.Duplicate, false, L("1 boîte d'occlusion en double"), L("boîtes d'occlusion en double"),
             L("Elle est presque entièrement dans une autre boîte : elle ne cache rien de plus. Supprimez-la."),
             i => L($"{Name(checkedBoxes[i.Box])} (dans {Name(i.Other >= 0 ? checkedBoxes[(int)i.Other] : others[(int)(-1 - i.Other)])})"));
+    }
+
+    // Byte for byte; an unreadable file counts as different.
+    private static bool SameContent(string a, string b)
+    {
+        try
+        {
+            var first = new FileInfo(a);
+            var second = new FileInfo(b);
+            if (first.Length != second.Length)
+                return false;
+            return System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(a))
+                .AsSpan().SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(b)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static string Owners(IEnumerable<MapConflict> conflicts, string one, string several)
