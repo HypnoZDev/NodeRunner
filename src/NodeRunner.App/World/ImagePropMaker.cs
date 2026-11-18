@@ -16,37 +16,63 @@ internal static class ImagePropMaker
 {
     private const int MinSize = 64, MaxSize = 2048;
 
+    // The plaque's shape for an image: round when its corners are see-through and the ring just inside its edge is not
+    // (a round badge), otherwise a rectangle of its proportions (height / width).
+    public static (bool Round, float Aspect) Shape(string image)
+    {
+        var (rgba, width, height) = TextureImport.Load(image);
+        return Shape(rgba, width, height);
+    }
+
+    internal static (bool Round, float Aspect) Shape(byte[] rgba, int width, int height)
+    {
+        float aspect = Math.Clamp((float)height / width, ImageProp.MinAspect, ImageProp.MaxAspect);
+        if (MathF.Abs(aspect - 1) > 0.1f)
+            return (false, aspect);
+        float cx = (width - 1) * 0.5f, cy = (height - 1) * 0.5f, side = Math.Min(width, height);
+        int Alpha(float x, float y) => rgba[(Math.Clamp((int)y, 0, height - 1) * width + Math.Clamp((int)x, 0, width - 1)) * 4 + 3];
+        bool cornersClear = new[] { (-1, -1), (1, -1), (1, 1), (-1, 1) }.All(c => Alpha(cx + c.Item1 * 0.45f * side, cy + c.Item2 * 0.45f * side) < 128);
+        float rim = 0;
+        for (int i = 0; i < 64; i++)
+            rim += Alpha(cx + 0.44f * side * MathF.Cos(MathF.Tau * i / 64), cy + 0.44f * side * MathF.Sin(MathF.Tau * i / 64));
+        return cornersClear && rim / 64 > 180 ? (true, 1) : (false, aspect);
+    }
+
     // Writes the files into folder (created).
     public static void Write(string image, ImageProp.Options options, string folder, int material, MetaSchema schema)
     {
         var (rgba, width, height) = TextureImport.Load(image);
         // A disc shows a square image: a longer image keeps its middle.
-        int side = Math.Min(width, height);
-        if (width != height)
+        if (options.Round && width != height)
+        {
+            int side = Math.Min(width, height);
             rgba = Crop(rgba, width, (width - side) / 2, (height - side) / 2, side);
-        int size = Math.Clamp(1 << BitOperations.Log2((uint)side), MinSize, MaxSize);
-        if (size != side)
-            rgba = TextureImport.Resize(rgba, side, side, size, size);
-        Flatten(rgba, size);
+            width = height = side;
+        }
+        int w = Math.Clamp(1 << BitOperations.Log2((uint)width), MinSize, MaxSize);
+        int h = Math.Clamp(1 << BitOperations.Log2((uint)height), MinSize, MaxSize);
+        if (w != width || h != height)
+            rgba = TextureImport.Resize(rgba, width, height, w, h);
+        Flatten(rgba, w, h, options.Round);
 
         // Compressed levels stop at 4 pixels (one block), as in the game's files.
         int levels = 1;
-        while (size >> levels >= 4)
+        while (Math.Min(w, h) >> levels >= 4)
             levels++;
         string name = options.Name;
         var texture = new TextureData
         {
             NameHash = Joaat.Hash(name),
             Name = name,
-            Width = size,
-            Height = size,
+            Width = w,
+            Height = h,
             MipLevels = levels,
             Format = TextureFormat.Bc1,
-            Data = TextureCodec.Encode(rgba, size, size, TextureFormat.Bc1, levels),
+            Data = TextureCodec.Encode(rgba, w, h, TextureFormat.Bc1, levels),
         };
         byte[] dds = DdsFile.Write(texture);
 
-        var relief = options.Relief > 0 ? Relief(rgba, size, options.RaiseDark) : null;
+        var relief = options.Relief > 0 ? Relief(rgba, w, h, options.RaiseDark, options.Round) : null;
         byte[] model = YdrXml.Convert(new XmlExport(name + ".ydr.xml", ImageProp.DrawableXml(options, name, material, relief),
             file => file.EndsWith(".dds", StringComparison.OrdinalIgnoreCase) ? dds : null));
         byte[] types = YtypXml.Convert(new XmlExport(name + ".ytyp.xml", ImageProp.TypesXml(options), _ => null), schema);
@@ -63,59 +89,67 @@ internal static class ImagePropMaker
         return square;
     }
 
-    // How raised each point of the image is (0 to 1): its brightness split into its two main tones inside the disc
+    // How far a pixel is from the image's centre: 0 there, 1 on the edge of the face (the disc's rim, or the
+    // rectangle's border).
+    private static float Reach(float x, float y, int width, int height, bool round)
+    {
+        float px = (x - (width - 1) * 0.5f) / (width * 0.5f), py = (y - (height - 1) * 0.5f) / (height * 0.5f);
+        return round ? MathF.Sqrt(px * px + py * py) : Math.Max(MathF.Abs(px), MathF.Abs(py));
+    }
+
+    // How raised each point of the image is (0 to 1): its brightness split into its two main tones on the face
     // (Otsu's threshold), the brighter one raised (or the darker) with a short slope between them, then softened over a
     // point. Read on at most 256 x 256 points.
-    internal static Func<Vector2, float> Relief(byte[] rgba, int size, bool raiseDark)
+    internal static Func<Vector2, float> Relief(byte[] rgba, int width, int height, bool raiseDark, bool round)
     {
-        int n = Math.Min(size, 256), step = size / n;
-        var light = new float[n * n];
-        for (int y = 0; y < n; y++)
+        int nx = Math.Min(width, 256), ny = Math.Min(height, 256);
+        int sx = width / nx, sy = height / ny;
+        var light = new float[nx * ny];
+        for (int y = 0; y < ny; y++)
         {
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
                 float sum = 0;
-                for (int dy = 0; dy < step; dy++)
+                for (int dy = 0; dy < sy; dy++)
                 {
-                    for (int dx = 0; dx < step; dx++)
+                    for (int dx = 0; dx < sx; dx++)
                     {
-                        int i = ((y * step + dy) * size + x * step + dx) * 4;
+                        int i = ((y * sy + dy) * width + x * sx + dx) * 4;
                         sum += 0.299f * rgba[i] + 0.587f * rgba[i + 1] + 0.114f * rgba[i + 2];
                     }
                 }
-                light[y * n + x] = sum / (step * step);
+                light[y * nx + x] = sum / (sx * sy);
             }
         }
 
         var histogram = new long[256];
-        float center = (n - 1) * 0.5f;
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < ny; y++)
         {
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
-                if (MathF.Sqrt((x - center) * (x - center) + (y - center) * (y - center)) / n < ImageProp.FaceRadius)
-                    histogram[Math.Clamp((int)light[y * n + x], 0, 255)]++;
+                if (Reach(x, y, nx, ny, round) < 2 * ImageProp.FaceRadius)
+                    histogram[Math.Clamp((int)light[y * nx + x], 0, 255)]++;
             }
         }
         var (threshold, dark, bright) = Otsu(histogram);
         float slope = Math.Max(4f, (bright - dark) * 0.2f);
 
-        var height = new float[n * n];
-        for (int i = 0; i < height.Length; i++)
+        var map = new float[nx * ny];
+        for (int i = 0; i < map.Length; i++)
         {
             float s = Math.Clamp((light[i] - (threshold - slope)) / (2 * slope), 0f, 1f);
             s = s * s * (3 - 2 * s);
-            height[i] = raiseDark ? 1 - s : s;
+            map[i] = raiseDark ? 1 - s : s;
         }
-        height = Soften(height, n);
+        map = Soften(map, nx, ny);
 
         return uv =>
         {
-            float fx = Math.Clamp(uv.X * n - 0.5f, 0, n - 1), fy = Math.Clamp(uv.Y * n - 0.5f, 0, n - 1);
-            int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(x0 + 1, n - 1), y1 = Math.Min(y0 + 1, n - 1);
+            float fx = Math.Clamp(uv.X * nx - 0.5f, 0, nx - 1), fy = Math.Clamp(uv.Y * ny - 0.5f, 0, ny - 1);
+            int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(x0 + 1, nx - 1), y1 = Math.Min(y0 + 1, ny - 1);
             float tx = fx - x0, ty = fy - y0;
-            float top = height[y0 * n + x0] + (height[y0 * n + x1] - height[y0 * n + x0]) * tx;
-            float bottom = height[y1 * n + x0] + (height[y1 * n + x1] - height[y1 * n + x0]) * tx;
+            float top = map[y0 * nx + x0] + (map[y0 * nx + x1] - map[y0 * nx + x0]) * tx;
+            float bottom = map[y1 * nx + x0] + (map[y1 * nx + x1] - map[y1 * nx + x0]) * tx;
             return top + (bottom - top) * ty;
         };
     }
@@ -155,12 +189,12 @@ internal static class ImagePropMaker
     }
 
     // Average over 3 x 3 points.
-    private static float[] Soften(float[] map, int n)
+    private static float[] Soften(float[] map, int width, int height)
     {
         var result = new float[map.Length];
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < width; x++)
             {
                 float sum = 0;
                 int count = 0;
@@ -169,31 +203,29 @@ internal static class ImagePropMaker
                     for (int dx = -1; dx <= 1; dx++)
                     {
                         int sx = x + dx, sy = y + dy;
-                        if (sx < 0 || sy < 0 || sx >= n || sy >= n)
+                        if (sx < 0 || sy < 0 || sx >= width || sy >= height)
                             continue;
-                        sum += map[sy * n + sx];
+                        sum += map[sy * width + sx];
                         count++;
                     }
                 }
-                result[y * n + x] = sum / count;
+                result[y * width + x] = sum / count;
             }
         }
         return result;
     }
 
-    // Transparent parts (a round badge's corners, its soft edge) take the rim's colour: the texture has no alpha.
-    internal static void Flatten(byte[] rgba, int size)
+    // Transparent parts (a round badge's corners, a logo's background) take the rim's colour: the texture has no alpha.
+    internal static void Flatten(byte[] rgba, int width, int height, bool round)
     {
         long r = 0, g = 0, b = 0, weight = 0;
-        float center = (size - 1) * 0.5f;
-        for (int y = 0; y < size; y++)
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < size; x++)
+            for (int x = 0; x < width; x++)
             {
-                float d = MathF.Sqrt((x - center) * (x - center) + (y - center) * (y - center)) / size;
-                if (d < ImageProp.RimRadius - 0.02f || d > ImageProp.RimRadius + 0.02f)
+                if (MathF.Abs(Reach(x, y, width, height, round) - 2 * ImageProp.RimRadius) > 0.04f)
                     continue;
-                int i = (y * size + x) * 4;
+                int i = (y * width + x) * 4;
                 int a = rgba[i + 3];
                 r += rgba[i] * a;
                 g += rgba[i + 1] * a;

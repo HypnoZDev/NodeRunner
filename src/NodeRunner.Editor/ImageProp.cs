@@ -4,31 +4,35 @@ using System.Text;
 
 namespace NodeRunner.Editor;
 
-// A round plaque made from an image: a disc with the image on its front (and back), its edge coloured by the image's
-// rim. In the prop's space: the back face on y = 0 (the pivot at its centre, to hang it on a wall), the front towards
-// -y, z up. Written in the XML forms of Sollumz (YdrXml, YtypXml), the texture embedded in the model.
+// A plaque made from an image: round (a disc, for a round badge) or a rectangle of the image's proportions, with the
+// image on its front (and back), its edge coloured by the image's rim. In the prop's space: the back face on y = 0 (the
+// pivot at its centre, to hang it on a wall), the front towards -y, z up. Written in the XML forms of Sollumz (YdrXml,
+// YtypXml), the texture embedded in the model.
 public static class ImageProp
 {
-    // Relief: how far the raised parts stand out of the face (m), 0 for a flat face; RaiseDark: the image's darker
-    // parts raised instead of its brighter ones.
-    public readonly record struct Options(string Name, float Diameter, float Thickness, bool BackImage, float Relief = 0,
-        bool RaiseDark = false);
+    // Width: the diameter of a round plaque. Aspect: height / width of a rectangle. Relief: how far the raised parts
+    // stand out of the face (m), 0 for a flat face; RaiseDark: the image's darker parts raised instead of its brighter
+    // ones.
+    public readonly record struct Options(string Name, float Width, float Thickness, bool BackImage, float Relief = 0,
+        bool RaiseDark = false, bool Round = true, float Aspect = 1);
 
-    public const float MinDiameter = 0.05f, MaxDiameter = 30f;
+    public const float MinWidth = 0.05f, MaxWidth = 30f;
     public const float MinThickness = 0.002f, MaxThickness = 1f;
     public const float MaxRelief = 0.5f;
+    public const float MinAspect = 0.125f, MaxAspect = 8f;
 
-    // Where the disc reads the texture: the image fills it, the face stops just inside its edge (no edge pixels), the
-    // rim is sampled a little further in (the coloured ring of a badge).
+    // Where the face reads the texture, from its centre (half the image across): the image fills it, the face stops
+    // just inside its edge (no edge pixels), the rim is sampled a little further in (the coloured ring of a badge).
     public const float FaceRadius = 0.495f;
     public const float RimRadius = 0.475f;
 
     private const int Sides = 64;
     private const int CollisionSides = 16;
 
-    // A face in relief is a grid of rings, its points about as far apart along a ring as between rings (some 20 000
-    // points: one model with 16-bit indices).
+    // A face in relief is a grid of points about as far apart each way, some 20 000 of them (one model with 16-bit
+    // indices): 80 rings on a disc, or a grid of up to ReliefPoints on a rectangle.
     private const int ReliefRings = 80;
+    private const int ReliefPoints = 24_000;
 
     public readonly record struct Vertex(Vector3 Position, Vector3 Normal, Vector2 TexCoord);
 
@@ -60,70 +64,118 @@ public static class ImageProp
         }
     }
 
+    public static float Height(Options o) => o.Round ? o.Width : o.Width * Math.Clamp(o.Aspect, MinAspect, MaxAspect);
+
+    // A point of the face (from -1 to 1 across it, x to the right and y up) on the image.
+    private static Vector2 Uv(Vector2 p, float radius, bool mirrored) =>
+        new(0.5f + (mirrored ? -1 : 1) * radius * p.X, 0.5f - radius * p.Y);
+
     // The model. height: from a point of the image (texture coordinates) to how raised it is, 0 to 1; null (or no
     // relief) for a flat face.
     public static Mesh Build(Options o, Func<Vector2, float>? height = null)
     {
         bool relief = height is not null && o.Relief > 0;
-        int rings = relief ? ReliefRings : 1;
-        float r = o.Diameter * 0.5f, t = o.Thickness;
-        int Count(int k) => k == 0 ? 1 : rings == 1 ? Sides : Math.Max(8, (int)MathF.Round(MathF.Tau * k));
-        static Vector2 Direction(int i, int n) => new(MathF.Cos(MathF.Tau * i / n), MathF.Sin(MathF.Tau * i / n));
-        static Vector2 Uv(Vector2 dir, float radius, bool mirrored) =>
-            new(0.5f + (mirrored ? -1 : 1) * radius * dir.X, 0.5f - radius * dir.Y);
+        float halfWidth = o.Width * 0.5f, halfHeight = Height(o) * 0.5f, t = o.Thickness;
         var mesh = new Mesh();
 
-        // Front, seen from -y: x to the right, z up, as the image; rings from the centre out.
+        // Front, seen from -y: x to the right, z up, as the image.
         var front = new Vector3(0, -1, 0);
+        int Front(Vector2 p)
+        {
+            var uv = Uv(p, FaceRadius, false);
+            float y = -t - (relief ? o.Relief * Math.Clamp(height!(uv), 0f, 1f) : 0f);
+            return mesh.Add(new(new(p.X * halfWidth, y, p.Y * halfHeight), front, uv));
+        }
+        var outline = o.Round ? RoundFace(mesh, Front, relief) : RectangleFace(mesh, Front, relief, Height(o) / o.Width);
+        if (relief)
+            SmoothNormals(mesh, mesh.Vertices.Count, front);
+        Vector2 Point(int i) => new(mesh.Vertices[i].Position.X / halfWidth, mesh.Vertices[i].Position.Z / halfHeight);
+
+        // Back, seen from +y: the image the right way round, or the rim's colour.
+        var back = new Vector3(0, 1, 0);
+        var rimTop = Uv(Vector2.UnitY, RimRadius, false);
+        int center = mesh.Add(new(Vector3.Zero, back, o.BackImage ? new(0.5f, 0.5f) : rimTop));
+        foreach (int i in outline)
+            mesh.Add(new(mesh.Vertices[i].Position with { Y = 0 }, back, o.BackImage ? Uv(Point(i), FaceRadius, true) : rimTop));
+        for (int i = 0; i < outline.Count; i++)
+            mesh.Triangle(center, center + 1 + i, center + 1 + (i + 1) % outline.Count, back);
+
+        // Edge, coloured by the rim at the same place, from the front's outline (raised or not) to the back: smooth
+        // round a disc, one flat side after another on a rectangle.
+        for (int i = 0; i < outline.Count; i++)
+        {
+            int i0 = outline[i], i1 = outline[(i + 1) % outline.Count];
+            var p0 = mesh.Vertices[i0].Position;
+            var p1 = mesh.Vertices[i1].Position;
+            var side = Vector3.Normalize(new Vector3(p1.Z - p0.Z, 0, p0.X - p1.X));
+            if (Vector3.Dot(side, (p0 + p1) with { Y = 0 }) < 0)
+                side = -side;
+            var n0 = o.Round ? Vector3.Normalize(p0 with { Y = 0 }) : side;
+            var n1 = o.Round ? Vector3.Normalize(p1 with { Y = 0 }) : side;
+            int a = mesh.Add(new(p0, n0, Uv(Point(i0), RimRadius, false)));
+            int b = mesh.Add(new(p1, n1, Uv(Point(i1), RimRadius, false)));
+            int c = mesh.Add(new(p1 with { Y = 0 }, n1, Uv(Point(i1), RimRadius, false)));
+            int d = mesh.Add(new(p0 with { Y = 0 }, n0, Uv(Point(i0), RimRadius, false)));
+            mesh.Triangle(a, b, c, side);
+            mesh.Triangle(a, c, d, side);
+        }
+        return mesh;
+    }
+
+    // A disc of rings from the centre out; returns its outer ring.
+    private static List<int> RoundFace(Mesh mesh, Func<Vector2, int> point, bool relief)
+    {
+        int rings = relief ? ReliefRings : 1;
+        int Count(int k) => k == 0 ? 1 : rings == 1 ? Sides : Math.Max(8, (int)MathF.Round(MathF.Tau * k));
         var starts = new int[rings + 1];
         for (int k = 0; k <= rings; k++)
         {
             starts[k] = mesh.Vertices.Count;
             float part = (float)k / rings;
             for (int i = 0, n = Count(k); i < n; i++)
-            {
-                var dir = Direction(i, n);
-                var uv = Uv(dir, FaceRadius * part, false);
-                float y = -t - (relief ? o.Relief * Math.Clamp(height!(uv), 0f, 1f) : 0f);
-                mesh.Add(new(new(r * part * dir.X, y, r * part * dir.Y), front, uv));
-            }
+                point(part * new Vector2(MathF.Cos(MathF.Tau * i / n), MathF.Sin(MathF.Tau * i / n)));
         }
+        var front = new Vector3(0, -1, 0);
         for (int k = 0; k < rings; k++)
             Stitch(mesh, starts[k], Count(k), starts[k + 1], Count(k + 1), front);
+        return [.. Enumerable.Range(starts[rings], Count(rings))];
+    }
+
+    // A grid of nearly square cells (aspect: height / width); returns its border, going round.
+    private static List<int> RectangleFace(Mesh mesh, Func<Vector2, int> point, bool relief, float aspect)
+    {
+        int across = 1, up = 1;
         if (relief)
-            SmoothNormals(mesh, mesh.Vertices.Count, front);
-        int outer = Count(rings);
-
-        // Back, seen from +y: the image the right way round, or the rim's colour.
-        var back = new Vector3(0, 1, 0);
-        var rimTop = new Vector2(0.5f, 0.5f - RimRadius);
-        int center = mesh.Add(new(Vector3.Zero, back, o.BackImage ? new(0.5f, 0.5f) : rimTop));
-        for (int i = 0; i < outer; i++)
         {
-            var dir = Direction(i, outer);
-            mesh.Add(new(new(r * dir.X, 0, r * dir.Y), back, o.BackImage ? Uv(dir, FaceRadius, true) : rimTop));
+            across = Math.Max(1, (int)MathF.Round(MathF.Sqrt(ReliefPoints / aspect)));
+            up = Math.Max(1, (int)MathF.Round(across * aspect));
         }
-        Stitch(mesh, center, 1, center + 1, outer, back);
-
-        // Edge, coloured by the rim at the same angle, from the front's outer ring (raised or not) to the back.
-        int edge = mesh.Vertices.Count;
-        for (int i = 0; i < outer; i++)
+        int start = mesh.Vertices.Count;
+        for (int j = 0; j <= up; j++)
         {
-            var dir = Direction(i, outer);
-            var normal = new Vector3(dir.X, 0, dir.Y);
-            var uv = Uv(dir, RimRadius, false);
-            mesh.Add(new(mesh.Vertices[starts[rings] + i].Position, normal, uv));
-            mesh.Add(new(new(r * dir.X, 0, r * dir.Y), normal, uv));
+            for (int i = 0; i <= across; i++)
+                point(new(-1 + 2f * i / across, -1 + 2f * j / up));
         }
-        for (int i = 0; i < outer; i++)
+        int At(int i, int j) => start + j * (across + 1) + i;
+        var front = new Vector3(0, -1, 0);
+        for (int j = 0; j < up; j++)
         {
-            int f0 = edge + i * 2, b0 = f0 + 1;
-            int f1 = edge + (i + 1) % outer * 2, b1 = f1 + 1;
-            var outward = Vector3.Normalize(mesh.Vertices[f0].Normal + mesh.Vertices[f1].Normal);
-            mesh.Triangle(f0, f1, b1, outward);
-            mesh.Triangle(f0, b1, b0, outward);
+            for (int i = 0; i < across; i++)
+            {
+                mesh.Triangle(At(i, j), At(i + 1, j), At(i + 1, j + 1), front);
+                mesh.Triangle(At(i, j), At(i + 1, j + 1), At(i, j + 1), front);
+            }
         }
-        return mesh;
+        var border = new List<int>();
+        for (int i = 0; i < across; i++)
+            border.Add(At(i, 0));
+        for (int j = 0; j < up; j++)
+            border.Add(At(across, j));
+        for (int i = across; i > 0; i--)
+            border.Add(At(i, up));
+        for (int j = up; j > 0; j--)
+            border.Add(At(0, j));
+        return border;
     }
 
     // The model as a list of triangles (three vertices each).
@@ -193,15 +245,17 @@ public static class ImageProp
 
     public static (Vector3 Min, Vector3 Max) Box(Options o)
     {
-        float r = o.Diameter * 0.5f;
-        return (new(-r, -o.Thickness - o.Relief, -r), new(r, 0, r));
+        float x = o.Width * 0.5f, z = Height(o) * 0.5f;
+        return (new(-x, -o.Thickness - o.Relief, -z), new(x, 0, z));
     }
 
+    private static float Size(Options o) => Math.Max(o.Width, Height(o));
+
     // LOD distance of the archetype: further for a bigger plaque.
-    public static float LodDistance(Options o) => Math.Clamp(o.Diameter * 100f, 100f, 500f);
+    public static float LodDistance(Options o) => Math.Clamp(Size(o) * 100f, 100f, 500f);
 
     // Up to where the relief is drawn; the flat plaque further away.
-    public static float ReliefDistance(Options o) => Math.Clamp(o.Diameter * 25f, 10f, 100f);
+    public static float ReliefDistance(Options o) => Math.Clamp(Size(o) * 25f, 10f, 100f);
 
     private static string F(float v) => v.ToString("0.######", CultureInfo.InvariantCulture);
 
@@ -316,27 +370,29 @@ public static class ImageProp
             """;
     }
 
-    // The collision: the same disc with fewer sides, closed (front, back, edge), as thick as the relief's top.
+    // The collision: the same shape (a disc with fewer sides), closed (front, back, edge), as thick as the relief's top.
     public static string CollisionXml(Options o, int material)
     {
-        float r = o.Diameter * 0.5f, t = o.Thickness + o.Relief;
+        float halfWidth = o.Width * 0.5f, halfHeight = Height(o) * 0.5f, t = o.Thickness + o.Relief;
+        Vector2[] corners = o.Round
+            ? [.. Enumerable.Range(0, CollisionSides).Select(i => new Vector2(MathF.Cos(MathF.Tau * i / CollisionSides), MathF.Sin(MathF.Tau * i / CollisionSides)))]
+            : [new(-1, -1), new(1, -1), new(1, 1), new(-1, 1)];
         var vertices = new StringBuilder();
         void Vertex(float x, float y, float z) => vertices.Append(F(x)).Append(", ").Append(F(y)).Append(", ").Append(F(z)).Append('\n');
         // 0: front centre, 1: back centre, then front and back of each side.
         Vertex(0, -t, 0);
         Vertex(0, 0, 0);
-        for (int i = 0; i < CollisionSides; i++)
+        foreach (var c in corners)
         {
-            float a = MathF.Tau * i / CollisionSides;
-            Vertex(r * MathF.Cos(a), -t, r * MathF.Sin(a));
-            Vertex(r * MathF.Cos(a), 0, r * MathF.Sin(a));
+            Vertex(c.X * halfWidth, -t, c.Y * halfHeight);
+            Vertex(c.X * halfWidth, 0, c.Y * halfHeight);
         }
         var polygons = new StringBuilder();
         void Triangle(int a, int b, int c) => polygons.Append($"<Triangle m=\"0\" v1=\"{a}\" v2=\"{b}\" v3=\"{c}\" f1=\"0\" f2=\"0\" f3=\"0\" />\n");
-        for (int i = 0; i < CollisionSides; i++)
+        for (int i = 0; i < corners.Length; i++)
         {
             int f0 = 2 + i * 2, b0 = f0 + 1;
-            int f1 = 2 + (i + 1) % CollisionSides * 2, b1 = f1 + 1;
+            int f1 = 2 + (i + 1) % corners.Length * 2, b1 = f1 + 1;
             // Turned outwards (the same order as the model's faces).
             Triangle(0, f0, f1);
             Triangle(1, b1, b0);

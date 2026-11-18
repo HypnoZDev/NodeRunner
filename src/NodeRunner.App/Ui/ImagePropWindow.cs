@@ -20,6 +20,8 @@ internal sealed class ImagePropWindow(AppState state)
     private bool _backImage = true;
     private float _reliefCm = 1f;
     private bool _raiseDark;
+    private bool _round = true;
+    private float _aspect = 1f;
 
     public void Open()
     {
@@ -41,6 +43,15 @@ internal sealed class ImagePropWindow(AppState state)
                 return;
             _image = dialog.FileName;
             _name = ImageProp.SuggestName(dialog.FileName);
+            try
+            {
+                (_round, _aspect) = ImagePropMaker.Shape(dialog.FileName);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+            {
+                // Unreadable: said when the prop is made.
+                (_round, _aspect) = (true, 1f);
+            }
         };
     }
 
@@ -61,9 +72,9 @@ internal sealed class ImagePropWindow(AppState state)
 
     private void DrawContent()
     {
-        Widgets.Hint(L("Un médaillon rond avec l'image sur sa face (un insigne, un logo), son bord de la couleur du tour de l'image, ")
+        Widgets.Hint(L("Une plaque avec l'image sur sa face (un insigne, un logo), son bord de la couleur du tour de l'image, ")
             + L("et sa collision. Il est ajouté à la bibliothèque de props : à placer ensuite comme les autres, puis à exporter pour FiveM. ")
-            + L("Une image carrée donne le meilleur résultat (sinon son centre est gardé)."), wrap: true);
+            + L("La forme suit l'image : ronde si ses coins sont transparents (un insigne rond), sinon un rectangle à ses proportions."), wrap: true);
         ImGui.Dummy(new Vector2(0, 4));
 
         string name = _name.Trim();
@@ -84,10 +95,18 @@ internal sealed class ImagePropWindow(AppState state)
             ImGui.SetNextItemWidth(-1);
             ImGui.InputTextWithHint("##image_prop_name", L("ex. badge_secret_service"), ref _name, 48);
 
-            Widgets.Property(L("Diamètre"), L("Largeur du médaillon dans le jeu"));
+            Widgets.Property(L("Forme"));
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(UiTheme.TextMuted, _round ? L("ronde (coins de l'image transparents)")
+                : L($"rectangle de {_diameter:0.00} x {_diameter * _aspect:0.00} m (proportions de l'image)"));
+
+            if (_round)
+                Widgets.Property(L("Diamètre"), L("Largeur du médaillon dans le jeu"));
+            else
+                Widgets.Property(L("Largeur"), L("Largeur de la plaque dans le jeu (la hauteur suit les proportions de l'image)"));
             ImGui.SetNextItemWidth(-1);
-            if (ImGui.DragFloat("##image_prop_diameter", ref _diameter, 0.01f, ImageProp.MinDiameter, ImageProp.MaxDiameter, "%.2f m"))
-                _diameter = Math.Clamp(_diameter, ImageProp.MinDiameter, ImageProp.MaxDiameter);
+            if (ImGui.DragFloat("##image_prop_diameter", ref _diameter, 0.01f, ImageProp.MinWidth, ImageProp.MaxWidth, "%.2f m"))
+                _diameter = Math.Clamp(_diameter, ImageProp.MinWidth, ImageProp.MaxWidth);
 
             Widgets.Property(L("Épaisseur"));
             ImGui.SetNextItemWidth(-1);
@@ -121,7 +140,7 @@ internal sealed class ImagePropWindow(AppState state)
         ImGui.BeginDisabled(!ready);
         if (Widgets.PrimaryButton(L($"{Icons.Check}  Créer"), 120f) && ready)
         {
-            state.ImagePropRequest = (_image!, new ImageProp.Options(name, _diameter, _thicknessCm / 100f, _backImage, _reliefCm / 100f, _raiseDark));
+            state.ImagePropRequest = (_image!, new ImageProp.Options(name, _diameter, _thicknessCm / 100f, _backImage, _reliefCm / 100f, _raiseDark, _round, _aspect));
             _open = false;
         }
         ImGui.EndDisabled();
