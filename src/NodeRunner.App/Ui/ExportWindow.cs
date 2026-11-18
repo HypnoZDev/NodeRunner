@@ -2,6 +2,7 @@ using System.Numerics;
 using ImGuiNET;
 using NodeRunner.App.World;
 using NodeRunner.Data.Collisions;
+using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Maps;
 using NodeRunner.Editor;
 
@@ -834,8 +835,50 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
                     ? L($". Fichiers d'un ancien export gardés (retire-les s'ils ne servent plus) : {string.Join(", ", report.Kept.Take(8))}{(report.Kept.Count > 8 ? "..." : "")}")
                     : ""), true, folder)
             : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 && !_solo ? target : null);
+        _resourceCheck = null;
+        if (report.Errors.Count == 0 && !_solo && ResourceScan.Resource(state.World, target) is { } scan)
+        {
+            string text = ResourceScan.Report(L($"Export « {_name} »"), target, scan, [], state.World.Names ?? new HashNames());
+            string? path = ResourceScan.Write(state.Project?.Folder ?? Path.GetTempPath(), state.Project is null ? $"noderunner-export-{_name}.md" : ExportReportName, text);
+            _resourceCheck = (scan, path);
+        }
         return report.Errors.Count == 0;
     }
+
+    private const string ExportReportName = "rapport-export.md";
+
+    // The exported resource checked as FiveM will read it (manifest, files, links between them) and its report.
+    private (ResourceScan.Result Scan, string? Report)? _resourceCheck;
+
+    private void DrawResourceCheck()
+    {
+        if (_resourceCheck is not { } check)
+            return;
+        var names = state.World.Names ?? new HashNames();
+        ImGui.Dummy(new Vector2(0, 2));
+        if (check.Scan.Issues.Count == 0)
+            ImGui.TextColored(UiTheme.Success, L($"{Icons.Check}  Ressource vérifiée : {check.Scan.Files} fichier(s), aucun problème"));
+        else
+        {
+            ImGui.TextColored(check.Scan.Errors > 0 ? UiTheme.Error : UiTheme.Warning,
+                L($"{Icons.TriangleAlert}  Ressource vérifiée : {check.Scan.Errors} erreur(s), {check.Scan.Warnings} avertissement(s)"));
+            foreach (var issue in check.Scan.Issues.OrderBy(i => !Editor.DependencyCheck.IsError(i.Kind)).Take(MaxResourceLines))
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, Editor.DependencyCheck.IsError(issue.Kind) ? UiTheme.Error : UiTheme.TextMuted);
+                ImGui.TextWrapped($"{issue.File} : {ResourceScan.Text(issue, names)}");
+                ImGui.PopStyleColor();
+            }
+            if (check.Scan.Issues.Count > MaxResourceLines)
+                Widgets.Hint(L($"... et {check.Scan.Issues.Count - MaxResourceLines} autre(s) dans le rapport."));
+        }
+        if (check.Report is { } path)
+        {
+            if (Widgets.Button(L($"{Icons.File}  Ouvrir le rapport"), path))
+                MainForm.OpenReport(path);
+        }
+    }
+
+    private const int MaxResourceLines = 8;
 
     private void DrawResult((string Text, bool Success, string? Folder) result)
     {
@@ -874,5 +917,7 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
             if (Widgets.Button(L($"{Icons.FolderOpen}  Ouvrir le dossier")) && Directory.Exists(folder))
                 System.Diagnostics.Process.Start("explorer.exe", folder);
         }
+        if (result.Success)
+            DrawResourceCheck();
     }
 }

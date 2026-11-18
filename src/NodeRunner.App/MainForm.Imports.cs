@@ -287,6 +287,7 @@ internal sealed unsafe partial class MainForm
             MessageBox.Show(this, L($"Les fichiers n'ont pas pu être ajoutés :\n{ex.Message}"), L("Ajouter au projet"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+        var (checkText, report, errors) = CheckImported(project, result.Ignored);
         if (!watched)
         {
             string first = Path.GetFullPath(sources[0].TrimEnd('\\', '/'));
@@ -314,15 +315,96 @@ internal sealed unsafe partial class MainForm
         string converted = result.Converted == 0 ? "" : L($"\n\nDont {result.Converted} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.");
         string skipped = result.Skipped.Count == 0 ? "" : L($"\n\n{result.Skipped.Count} fichier(s) en double ignoré(s) (même nom) :\n") + string.Join("\n", result.Skipped.Take(10));
         string ignored = result.Ignored.Count == 0 ? "" : L($"\n\n{result.Ignored.Count} élément(s) non repris :\n") + string.Join("\n", result.Ignored.Take(10));
-        if (result.Copied > 0 && result.Ignored.Count == 0 && result.Skipped.Count == 0)
+        string watchedErrors = errors > 0 ? L($" {errors} erreur(s) de fichiers : voir {ImportReportName}.") : "";
+        if (result.Copied > 0 && result.Ignored.Count == 0 && result.Skipped.Count == 0 && (watched || errors == 0))
         {
             _state.Notify(watched
-                ? L($"Dossier Sollumz : {result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée.")
+                ? L($"Dossier Sollumz : {result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée.") + watchedErrors
                 : L($"{result.Copied} fichier(s) ajouté(s) au projet{replaced}, carte rechargée."));
             return;
         }
-        MessageBox.Show(this, L($"{result.Copied} fichier(s) ajouté(s) au projet « {project.Name} »{replaced}.{converted}{skipped}{ignored}"),
-            L("Ajouter au projet"), MessageBoxButtons.OK, result.Copied > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        ShowImportMessage(L($"{result.Copied} fichier(s) ajouté(s) au projet « {project.Name} »{replaced}.{converted}{skipped}{ignored}") + checkText,
+            L("Ajouter au projet"), result.Copied > 0 && errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning, report);
+    }
+
+    private const string ImportReportName = "rapport-import.md";
+
+    // Any FiveM resource folder checked without the game running; the report goes to the temporary folder (the resource
+    // is left untouched).
+    private void BrowseForResourceCheck()
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = L("Choisis le dossier d'une ressource FiveM (celui qui contient fxmanifest.lua)."),
+            UseDescriptionForTitle = true,
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        string folder = Path.GetFullPath(dialog.SelectedPath).TrimEnd('\\', '/');
+        string title = L("Vérifier une ressource FiveM");
+        World.ResourceScan.Result? scan;
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            scan = World.ResourceScan.Resource(_state.World, folder);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+        if (scan is null)
+        {
+            MessageBox.Show(this, L("La carte du jeu doit être chargée pour vérifier une ressource."), title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string name = Path.GetFileName(folder);
+        string report = World.ResourceScan.Report(L($"Ressource « {name} »"), folder, scan, [], _state.World.Names ?? new NodeRunner.Data.Hashing.HashNames());
+        string? path = World.ResourceScan.Write(Path.GetTempPath(), $"noderunner-{name}.md", report);
+        string text = scan.Issues.Count == 0
+            ? L($"Ressource « {name} » : {scan.Files} fichier(s) dans stream, aucun problème trouvé.")
+            : L($"Ressource « {name} » : {scan.Files} fichier(s) dans stream, {scan.Errors} erreur(s), {scan.Warnings} avertissement(s).");
+        ShowImportMessage(text, title, scan.Errors > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information,
+            scan.Issues.Count > 0 ? path : null);
+    }
+
+    // The links between the project's files after an import (types, models, textures), written in the project's folder.
+    // Text: the line for the import message; Report: the file to offer, when there is something to read in it.
+    private (string Text, string? Report, int Errors) CheckImported(MapProject project, IReadOnlyList<string> notConverted)
+    {
+        if (World.ResourceScan.Project(_state.World, project.StreamFolder) is not { } scan)
+            return ("", null, 0);
+        string report = World.ResourceScan.Report(L("Rapport d'import"),
+            L($"Projet « {project.Name} » : fichiers du dossier stream et ce qu'ils demandent (types, modèles, textures)."),
+            scan, notConverted, _state.World.Names ?? new NodeRunner.Data.Hashing.HashNames());
+        string? path = World.ResourceScan.Write(project.Folder, ImportReportName, report);
+        if (scan.Issues.Count == 0)
+            return ("\n\n" + L("Vérification des fichiers : aucun problème."), null, 0);
+        return ("\n\n" + L($"Vérification des fichiers : {scan.Errors} erreur(s), {scan.Warnings} avertissement(s).")
+            + (path is null ? "" : L($" Détail dans {ImportReportName}.")), path, scan.Errors);
+    }
+
+    // An import message, offering to open the report when there is one.
+    private void ShowImportMessage(string text, string title, MessageBoxIcon icon, string? report)
+    {
+        if (report is null)
+        {
+            MessageBox.Show(this, text, title, MessageBoxButtons.OK, icon);
+            return;
+        }
+        if (MessageBox.Show(this, text + "\n\n" + L("Ouvrir le rapport ?"), title, MessageBoxButtons.YesNo, icon) == DialogResult.Yes)
+            OpenReport(report);
+    }
+
+    internal static void OpenReport(string path)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException)
+        {
+            System.Diagnostics.Process.Start("notepad.exe", $"\"{path}\"");
+        }
     }
 
     // XML exports the import turns into game files, by game extension.
@@ -366,6 +448,7 @@ internal sealed unsafe partial class MainForm
             MessageBox.Show(this, L($"Le mapping n'a pas pu être importé :\n{ex.Message}"), L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+        var (checkText, report, errors) = CheckImported(result.Project, result.Ignored);
         if (_state.OpenProject(result.Project.Folder) is { } error)
         {
             MessageBox.Show(this, L($"Le projet importé n'a pas pu être ouvert :\n{error}"), L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -383,8 +466,8 @@ internal sealed unsafe partial class MainForm
         string converted = result.Converted == 0 ? "" : L($"\n\nDont {result.Converted} export(s) XML (Sollumz, CodeWalker) converti(s) en fichiers du jeu.");
         if (result.ResourceFiles > 0)
             converted += L($"\n\n{result.ResourceFiles} fichier(s) de données de la ressource (sons, ambiance, .meta...) gardé(s) dans le dossier « resource » du projet : ils seront remis à l'export avec leurs lignes du fxmanifest.");
-        MessageBox.Show(this,
-            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} »{author} :\n{result.Project.Folder}\n\nLes fichiers qui portent le nom d'un fichier du jeu le remplacent (comme dans FiveM).\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{converted}{skipped}{ignored}"),
-            L("Importer un mapping"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        ShowImportMessage(
+            L($"{result.Copied} fichier(s) copié(s) dans le projet « {result.Project.Name} »{author} :\n{result.Project.Folder}\n\nLes fichiers qui portent le nom d'un fichier du jeu le remplacent (comme dans FiveM).\nLe panneau Projet liste les objets ajoutés, déplacés et supprimés.{converted}{skipped}{ignored}") + checkText,
+            L("Importer un mapping"), errors == 0 && result.Ignored.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning, report);
     }
 }

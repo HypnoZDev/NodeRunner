@@ -166,6 +166,12 @@ internal sealed unsafe partial class MainForm
             BrowseForWatchedFolder();
         }
 
+        if (_ui.CheckResourceRequested)
+        {
+            _ui.CheckResourceRequested = false;
+            BrowseForResourceCheck();
+        }
+
         if (_ui.UnlinkFolderRequested)
         {
             _ui.UnlinkFolderRequested = false;

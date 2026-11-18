@@ -293,6 +293,8 @@ internal sealed class MainUi
 
     public bool LinkFolderRequested { get; set; }
 
+    public bool CheckResourceRequested { get; set; }
+
     public bool UnlinkFolderRequested { get; set; }
 
     public void ShowProjectPanel()
@@ -743,6 +745,10 @@ internal sealed class MainUi
             ImGui.MenuItem(L(ArchivePanel.Title), "F3", ref _showArchives);
             if (ImGui.MenuItem(L($"{Icons.Users}  Online..."), null, _onlineWindow.IsOpen))
                 _onlineWindow.Toggle();
+            if (ImGui.MenuItem(L($"{Icons.ScanEye}  Vérifier une ressource FiveM..."), null, false, _state.World.Maps is not null && !_state.IsOtherGame))
+                CheckResourceRequested = true;
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Vérifie un dossier de ressource FiveM (le tien ou un mapping téléchargé) sans lancer le jeu : fxmanifest.lua,\nfichiers en double dans stream, objets sans type, types sans modèle ni textures, fichiers trop gros..."));
             ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres..."), "Ctrl+,"))
                 _settingsWindow.Open();

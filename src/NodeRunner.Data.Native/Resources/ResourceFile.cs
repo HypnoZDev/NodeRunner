@@ -35,6 +35,10 @@ public static class ResourceFile
             BinaryPrimitives.ReadUInt32LittleEndian(file[12..]));
     }
 
+    // The larger of the two memory sizes (system, graphics) the file takes once loaded.
+    public static long MemorySize(ResourceHeader header) =>
+        Math.Max(Archives.ResourcePages.Size(header.SystemFlags), Archives.ResourcePages.Size(header.GraphicsFlags));
+
     public static (ResourceHeader Header, byte[] Content) Read(ReadOnlySpan<byte> file)
     {
         var header = ReadHeader(file);
