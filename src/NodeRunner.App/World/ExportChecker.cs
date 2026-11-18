@@ -15,7 +15,7 @@ namespace NodeRunner.App.World;
 internal sealed record ExportCheckItem(bool IsProblem, string Title, IReadOnlyList<string> Details, string? Advice = null,
     IReadOnlyList<MapConflict>? Merge = null, IReadOnlyList<OccluderSelection>? Occluders = null,
     IReadOnlyList<MapEntity>? Entities = null, IReadOnlyList<PathNode>? PathNodes = null,
-    IReadOnlyList<ScenarioPoint>? ScenarioPoints = null);
+    IReadOnlyList<ScenarioPoint>? ScenarioPoints = null, IReadOnlyList<MapEntity>? NewGuids = null);
 
 // Checks a FiveM export before it is written: map files also shipped by another resource of the server or modified by
 // another project (FiveM loads only one of them), deleted scenery whose collision stays in the game, deleted objects
@@ -162,8 +162,9 @@ internal static partial class ExportChecker
                     .Concat(duplicates.Count > MaxDetails ? [L($"... et {duplicates.Count - MaxDetails} autre(s)")] : [])
                     .ToList(),
                 L("Souvent des objets copiés à la main dans un autre éditeur. Le jeu l'accepte, mais un script ou un outil qui ")
-                + L("cherche un objet par son guid peut tomber sur le mauvais. Pour corriger : supprimer la copie et la recréer ")
-                + L("(Ctrl+C / Ctrl+V dans NodeRunner donne un nouveau guid).")));
+                + L("cherche un objet par son guid peut tomber sur le mauvais. Le bouton ci-dessous donne un nouveau guid aux copies ")
+                + L("(l'objet d'origine garde le sien, annulable avec Ctrl+Z)."),
+                NewGuids: DuplicateGuids.Copies(input.Maps.Select(m => (!m.IsCustom, (IEnumerable<MapEntity>)m.Kept)))));
         }
 
         // Deleted scenery (now or in an earlier session): compared with the game's file.

@@ -100,7 +100,8 @@ public sealed class EditCodecs
         .Add(new LodLightAddCodec())
         .Add(new LodLightDeleteCodec())
         .Add(new ArchetypeCodec())
-        .Add(new DoorReplaceCodec());
+        .Add(new DoorReplaceCodec())
+        .Add(new GuidCodec());
 
     public bool CanShare(IEdit edit) => _byType.ContainsKey(edit.GetType());
 

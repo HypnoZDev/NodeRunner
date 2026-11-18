@@ -176,4 +176,77 @@ public static class DuplicateGuids
             .OrderBy(d => d.Files[0], StringComparer.OrdinalIgnoreCase).ThenBy(d => d.Guid)
             .ToList();
     }
+
+    // The objects to give a new guid so that each one is used once: every object sharing its guid with another but
+    // one, the one of a game map file kept first (door lock scripts and the game's own data refer to it).
+    public static List<MapEntity> Copies(IEnumerable<(bool IsGameFile, IEnumerable<MapEntity> Entities)> maps)
+    {
+        var copies = new List<MapEntity>();
+        foreach (var group in maps.SelectMany(m => m.Entities.Select(e => (m.IsGameFile, Entity: e)))
+                     .Where(x => x.Entity.Guid != 0)
+                     .GroupBy(x => x.Entity.Guid))
+        {
+            var ordered = group.OrderByDescending(x => x.IsGameFile).ThenByDescending(x => x.Entity.SourceIndex >= 0).ToList();
+            copies.AddRange(ordered.Skip(1).Select(x => x.Entity));
+        }
+        return copies;
+    }
+
+    // count new guids, none of them in used nor 0.
+    public static List<uint> NewGuids(int count, IReadOnlySet<uint> used, Random random)
+    {
+        var taken = new HashSet<uint>(used);
+        var guids = new List<uint>(count);
+        while (guids.Count < count)
+        {
+            uint guid = (uint)random.Next(1, int.MaxValue);
+            if (taken.Add(guid))
+                guids.Add(guid);
+        }
+        return guids;
+    }
+}
+
+// Objects given a new guid each (copies sharing one with another object).
+public sealed class GuidEdit : IEdit
+{
+    private readonly MapEntity[] _entities;
+    private readonly uint[] _before;
+
+    private GuidEdit(MapEntity[] entities, uint[] before, uint[] after, string description)
+    {
+        _entities = entities;
+        _before = before;
+        Guids = after;
+        Description = description;
+    }
+
+    public string Description { get; }
+    public MapEntity? Subject => _entities[^1];
+    public IEnumerable<MapEntity> Entities => _entities;
+    public IReadOnlyList<MapEntity> Selection => _entities;
+
+    // The new guids, one per object.
+    public IReadOnlyList<uint> Guids { get; }
+
+    public static GuidEdit Apply(IReadOnlyList<MapEntity> entities, IReadOnlyList<uint> guids, string description)
+    {
+        if (entities.Count == 0 || entities.Count != guids.Count)
+            throw new ArgumentException("One new guid per object.", nameof(guids));
+        var edit = new GuidEdit([.. entities], [.. entities.Select(e => e.Guid)], [.. guids], description);
+        edit.Redo();
+        return edit;
+    }
+
+    public void Undo()
+    {
+        for (int i = 0; i < _entities.Length; i++)
+            _entities[i].SetGuid(_before[i]);
+    }
+
+    public void Redo()
+    {
+        for (int i = 0; i < _entities.Length; i++)
+            _entities[i].SetGuid(Guids[i]);
+    }
 }

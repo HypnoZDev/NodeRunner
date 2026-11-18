@@ -519,6 +519,20 @@ internal sealed partial class AppState
         Notify(L($"{what} remplacé(s) par {name}."));
     }
 
+    // A new guid for each of these objects (copies sharing theirs with another object), unused anywhere on the map.
+    public void GiveNewGuids(IReadOnlyList<Data.Maps.MapEntity> copies)
+    {
+        if (World.Maps is not { } library)
+            return;
+        var alive = copies.Where(e => !e.IsDeleted).ToList();
+        if (alive.Count == 0)
+            return;
+        var used = library.Maps.SelectMany(m => m.Entities).Select(e => e.Guid).ToHashSet();
+        var guids = DuplicateGuids.NewGuids(alive.Count, used, Random.Shared);
+        History.Add(GuidEdit.Apply(alive, guids, L($"Nouveau guid pour {alive.Count} copie(s)")));
+        NotifyUndoable(L($"{alive.Count} copie(s) ont reçu un nouveau guid. Ctrl+Z pour annuler."));
+    }
+
     // Gives the selected doors another door model, fitted in their frame.
     public void ReplaceSelectedDoors(uint archetypeHash)
     {

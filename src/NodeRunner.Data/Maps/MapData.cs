@@ -274,7 +274,11 @@ public sealed class MapEntity
     }
 
     public uint Flags { get; init; }
-    public uint Guid { get; init; }
+    public uint Guid { get => _guid; init => _guid = value; }
+    private uint _guid;
+
+    // Gives the object another identifier (two objects of the exported files with the same one).
+    public void SetGuid(uint guid) => _guid = guid;
 
     public int SourceIndex { get; init; } = -1;
 

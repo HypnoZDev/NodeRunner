@@ -65,6 +65,7 @@ public sealed class YmapWriter : IMapDataWriter
     }
 
     // Fields of CEntityDef written for a new object (offsets checked against the file's description of the structure).
+    private const int EntityGuid = 16;
     private const int EntityPriority = 92;
     private const int EntityExtensions = 96;
     private const int EntityAmbientOcclusion = 112;
@@ -317,6 +318,7 @@ public sealed class YmapWriter : IMapDataWriter
         var data = document.Blocks[item.Block].Data;
         int o = item.Offset;
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + YmapReader.EntityArchetype), entity.ArchetypeHash);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(o + EntityGuid), entity.Guid);
         WriteVector3(data, o + YmapReader.EntityPosition, entity.Position);
         var r = entity.StoredRotation;
         WriteVector3(data, o + YmapReader.EntityRotation, new Vector3(r.X, r.Y, r.Z));

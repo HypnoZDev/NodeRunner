@@ -606,6 +606,14 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
                     state.FocusOn(alive[0]);
                 }
             }
+            if (item.NewGuids is { Count: > 0 } copies
+                && Widgets.Button(L($"{Icons.RefreshCw}  Donner un nouveau guid aux copies ({copies.Count})##guids{index}"),
+                    L("Chaque objet qui partage son guid avec un autre en reçoit un nouveau ; celui d'origine (fichier du jeu, ")
+                    + L("sinon le premier trouvé) garde le sien. Annulable (Ctrl+Z).")))
+            {
+                state.GiveNewGuids(copies);
+                StartCheck();
+            }
             foreach (var (conflict, n) in (item.Merge ?? []).Select((c, n) => (c, n)))
             {
                 if (Widgets.Button(L($"{Icons.ArrowDownToLine}  Reprendre les changements de « {conflict.Owner} »##merge{index}_{n}"),

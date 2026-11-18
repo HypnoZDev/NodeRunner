@@ -178,6 +178,23 @@ internal sealed class ArchetypeCodec : EditCodec<ArchetypeEdit>
     }
 }
 
+internal sealed class GuidCodec : EditCodec<GuidEdit>
+{
+    public override string Tag => "guid";
+
+    protected override void Write(GuidEdit edit, EditWriter w)
+    {
+        w.WriteEntities(edit.Selection);
+        w.WriteList(edit.Guids, w.Write);
+    }
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var entities = r.ReadEntities();
+        return GuidEdit.Apply(entities, r.ReadList(r.ReadUInt), description);
+    }
+}
+
 internal sealed class DoorReplaceCodec : EditCodec<DoorReplaceEdit>
 {
     public override string Tag => "door-replace";
