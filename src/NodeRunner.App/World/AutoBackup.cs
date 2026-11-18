@@ -81,9 +81,21 @@ internal sealed class AutoBackup
         if (_version == _writtenVersion || now - _lastWrite < minutes * 60.0)
             return;
         _lastWrite = now;
-        _writtenVersion = _version;
-        Write();
+        if (Write())
+        {
+            _writtenVersion = _version;
+            _failedVersion = -1;
+        }
+        else
+        {
+            // Disk unavailable for a moment: tried again soon, without waiting for another change.
+            _lastWrite = now - minutes * 60.0 + RetrySeconds;
+            _failedVersion = _version;
+        }
     }
+
+    private const double RetrySeconds = 30.0;
+    private int _failedVersion = -1;
 
     // The changes are saved or given up: the copy goes.
     public void Discard()
@@ -150,7 +162,8 @@ internal sealed class AutoBackup
 
     private string Key => $"{_state.Settings.MapVersion}|{_state.Settings.LastDlcPack}|{_state.Online.Fingerprint}|{Codecs.Signature}";
 
-    private void Write()
+    // False when the file could not be written (to try again); true when written or when there is nothing that can be.
+    private bool Write()
     {
         var history = _state.History;
         var done = history.Done;
@@ -159,7 +172,7 @@ internal sealed class AutoBackup
         {
             start = IndexOf(done, saved) + 1;
             if (start == 0)
-                return; // Saved changes were undone: not a list of changes to replay.
+                return true; // Saved changes were undone: not a list of changes to replay.
         }
         var messages = new List<(string Description, byte[] Data)>();
         for (int i = start; i < done.Count; i++)
@@ -167,17 +180,17 @@ internal sealed class AutoBackup
             if (!_messages.TryGetValue(done[i], out var message))
             {
                 if (Codecs.CanShare(done[i]))
-                    return;
+                    return true;
                 continue; // View only (LocalEdit).
             }
             if (message is null)
-                return;
+                return true; // A change that cannot be replayed: no copy until the next save.
             messages.Add((done[i].Description, message));
         }
         if (messages.Count == 0)
         {
             Discard();
-            return;
+            return true;
         }
 
         string file = FilePath();
@@ -202,10 +215,13 @@ internal sealed class AutoBackup
             }
             File.Move(temporary, file, overwrite: true);
             _writtenFile = file;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Diagnostics.ErrorLog.Add(L("Copie de secours"), L($"Écriture impossible ({file}) : {ex.Message}"));
+            if (_failedVersion != _version)
+                Diagnostics.ErrorLog.Add(L("Copie de secours"), L($"Écriture impossible ({file}) : {ex.Message}"));
+            return false;
         }
     }
 
