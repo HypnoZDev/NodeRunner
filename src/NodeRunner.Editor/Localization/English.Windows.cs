@@ -1170,6 +1170,7 @@ public static partial class English
         ("Type (ex. palm)", "Type (e.g. palm)"),
         ("Eau de {0}", "{0} water"),
         ("erreur inattendue ({0}) : {1}", "unexpected error ({0}): {1}"),
+        (". Fichiers d'un ancien export gardés (retire-les s'ils ne servent plus) : {0}{1}", ". Files of an older export kept (remove them if they are no longer used): {0}{1}"),
         ("{0} objet(s) utilisent un modèle d'un autre projet ouvert", "{0} object(s) use a model of another open project"),
         ("Ce modèle n'est pas copié dans cette ressource : sur le serveur, l'objet sera invisible sans la ressource de l'autre projet. ",
             "This model is not copied into this resource: on the server, the object will be invisible without the other project's resource. "),

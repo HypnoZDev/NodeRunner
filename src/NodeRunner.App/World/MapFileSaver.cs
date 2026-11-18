@@ -10,7 +10,11 @@ namespace NodeRunner.App.World;
 // resource streams them in (they replace the game's file of the same name).
 internal static class MapFileSaver
 {
-    public sealed record Report(List<string> Saved, List<string> Errors);
+    public sealed record Report(List<string> Saved, List<string> Errors)
+    {
+        // Files of a previous export no longer written, left in place (export made before NodeRunner listed its files).
+        public List<string> Kept { get; } = [];
+    }
 
     public static Report Save(WorldLoader world, IEnumerable<MapData> maps, string folder, bool markSaved = true)
     {

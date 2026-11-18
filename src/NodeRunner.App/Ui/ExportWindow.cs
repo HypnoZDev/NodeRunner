@@ -829,7 +829,10 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
         string? folder = _solo ? Path.GetDirectoryName(target) : target;
         summary = $"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText}";
         _result = report.Errors.Count == 0
-            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}"), true, folder)
+            ? (L($"{report.Saved.Count - collisionFiles - occlusionFiles - pathFiles - typeFiles - audioFiles} YMAP{extraText} exporté(s) dans {target}")
+                + (report.Kept.Count > 0
+                    ? L($". Fichiers d'un ancien export gardés (retire-les s'ils ne servent plus) : {string.Join(", ", report.Kept.Take(8))}{(report.Kept.Count > 8 ? "..." : "")}")
+                    : ""), true, folder)
             : (L($"Échec de l'export : {string.Join(" ; ", report.Errors)}"), false, report.Saved.Count > 0 && !_solo ? target : null);
         return report.Errors.Count == 0;
     }

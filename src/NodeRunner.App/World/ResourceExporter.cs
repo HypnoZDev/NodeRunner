@@ -92,9 +92,10 @@ internal static class ResourceExporter
                     report.Errors.Add(L("l'export précédent n'a pas été modifié"));
                 return report;
             }
-            string? error = Commit(staging, resourceFolder, Path.Combine(work, "old"), out keepWork);
+            string? error = Commit(staging, resourceFolder, Path.Combine(work, "old"), out keepWork, out var kept);
             if (error is not null)
                 report.Errors.Add(error);
+            report.Kept.AddRange(kept);
             return report;
         }
         finally
@@ -114,21 +115,34 @@ internal static class ResourceExporter
 
     private const string WorkFolderName = ".noderunner-export";
 
-    // Puts the staged files in place of the previous export's (map, collision, audio settings files..., so that a file no
-    // longer modified does not stay in it); the files the user added to the resource are kept. On failure, the previous
-    // files are put back. Returns the error, if any; keepWork when the previous files could not all be put back.
-    internal static string? Commit(string staging, string resourceFolder, string backup, out bool keepWork)
+    // Files written by the last export, so that the next one removes only those (relative paths, one per line).
+    internal const string InventoryFileName = ".noderunner-files";
+
+    // Puts the staged files in place of the previous export's (a file no longer exported does not stay in it). Only the
+    // files listed by the previous export's inventory are removed: those the user added are kept. An export made before
+    // the inventory existed has none: its streamed files no longer written are kept and listed in kept. On failure, the
+    // previous files are put back. Returns the error, if any; keepWork when the previous files could not all be put back.
+    internal static string? Commit(string staging, string resourceFolder, string backup, out bool keepWork, out List<string> kept)
     {
         keepWork = false;
+        kept = [];
         var added = Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(staging, f)).ToList();
+        var addedSet = added.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var removed = new List<string>();
-        string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
-        if (Directory.Exists(stream))
-            removed.AddRange(Directory.EnumerateFiles(stream).Where(IsStreamedFile).Select(f => Path.GetRelativePath(resourceFolder, f)));
-        string audio = Path.Combine(resourceFolder, FiveMResource.AudioFolderName);
-        if (Directory.Exists(audio))
-            removed.AddRange(Directory.EnumerateFiles(audio, "*_game.dat151.rel").Select(f => Path.GetRelativePath(resourceFolder, f)));
+        if (ReadInventory(resourceFolder) is { } previous)
+            removed.AddRange(previous.Where(r => File.Exists(Path.Combine(resourceFolder, r))));
+        else
+        {
+            var old = new List<string>();
+            string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
+            if (Directory.Exists(stream))
+                old.AddRange(Directory.EnumerateFiles(stream).Where(IsStreamedFile).Select(f => Path.GetRelativePath(resourceFolder, f)));
+            string audio = Path.Combine(resourceFolder, FiveMResource.AudioFolderName);
+            if (Directory.Exists(audio))
+                old.AddRange(Directory.EnumerateFiles(audio, "*_game.dat151.rel").Select(f => Path.GetRelativePath(resourceFolder, f)));
+            kept.AddRange(old.Where(r => !addedSet.Contains(r)).Select(Path.GetFileName).OfType<string>());
+        }
         removed.AddRange(added.Where(r => File.Exists(Path.Combine(resourceFolder, r))));
         removed = removed.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
@@ -145,6 +159,14 @@ internal static class ResourceExporter
             {
                 MoveFile(Path.Combine(staging, file), Path.Combine(resourceFolder, file));
                 placed.Add(file);
+            }
+            try
+            {
+                File.WriteAllLines(Path.Combine(resourceFolder, InventoryFileName), added);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Without it, the next export keeps the files it does not write: nothing is lost.
             }
             return null;
         }
@@ -163,6 +185,27 @@ internal static class ResourceExporter
                 return L($"impossible de remplacer l'export précédent ({ex.Message}) ni de le remettre en place ({restore.Message}) : ses fichiers sont dans {backup}");
             }
             return L($"impossible de remplacer l'export précédent, il est conservé : {ex.Message}");
+        }
+    }
+
+    // The previous export's files, null when it has no inventory (none yet, or made before it existed).
+    private static List<string>? ReadInventory(string resourceFolder)
+    {
+        string path = Path.Combine(resourceFolder, InventoryFileName);
+        try
+        {
+            if (!File.Exists(path))
+                return null;
+            string root = Path.GetFullPath(resourceFolder) + Path.DirectorySeparatorChar;
+            return File.ReadAllLines(path).Where(l => l.Length > 0)
+                .Where(l => Path.GetFullPath(Path.Combine(root, l)).StartsWith(root, StringComparison.OrdinalIgnoreCase)
+                    && !l.Equals(InventoryFileName, StringComparison.OrdinalIgnoreCase)
+                    && !l.StartsWith(WorkFolderName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
         }
     }
 

@@ -21,6 +21,9 @@ public class ResourceCommitTests : IDisposable
         Write(_resource, "stream/b.ymap", "old b");
         Write(_resource, "stream/readme.txt", "user notes");
         Write(_resource, "client.lua", "user script");
+        Write(_resource, ResourceExporter.InventoryFileName, "fxmanifest.lua\nstream\\a.ymap\nstream\\b.ymap\n..\\outside.txt");
+        Write(_resource, "stream/custom_sign.ydr", "user model");
+        Write(_root, "outside.txt", "not ours");
         Write(_staging, "fxmanifest.lua", "new manifest");
         Write(_staging, "stream/a.ymap", "new a");
         Write(_staging, "stream/c.ytyp", "new c");
@@ -40,7 +43,7 @@ public class ResourceCommitTests : IDisposable
     [Fact]
     public void Commit_ReplacesTheExportedFiles_AndKeepsTheUsersOwn()
     {
-        string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork);
+        string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork, out _);
 
         Assert.Null(error);
         Assert.False(keepWork);
@@ -50,6 +53,29 @@ public class ResourceCommitTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_resource, "stream", "b.ymap"))); // No longer exported.
         Assert.Equal("user notes", Read("stream/readme.txt"));
         Assert.Equal("user script", Read("client.lua"));
+        Assert.Equal("user model", Read("stream/custom_sign.ydr"));
+        Assert.True(File.Exists(Path.Combine(_root, "outside.txt")));
+
+        // The next export removes c.ytyp if it no longer writes it, and still keeps the user's model.
+        Directory.Delete(_staging, recursive: true);
+        Write(_staging, "fxmanifest.lua", "newer manifest");
+        Assert.Null(ResourceExporter.Commit(_staging, _resource, _backup + "2", out _, out var kept));
+        Assert.False(File.Exists(Path.Combine(_resource, "stream", "c.ytyp")));
+        Assert.Equal("user model", Read("stream/custom_sign.ydr"));
+        Assert.Empty(kept);
+    }
+
+    [Fact]
+    public void Commit_OverAnExportWithoutInventory_KeepsAndListsTheFilesItNoLongerWrites()
+    {
+        File.Delete(Path.Combine(_resource, ResourceExporter.InventoryFileName));
+
+        Assert.Null(ResourceExporter.Commit(_staging, _resource, _backup, out _, out var kept));
+
+        Assert.Equal("new a", Read("stream/a.ymap"));
+        Assert.Equal("old b", Read("stream/b.ymap"));
+        Assert.Equal(["b.ymap", "custom_sign.ydr"], kept.Order());
+        Assert.True(File.Exists(Path.Combine(_resource, ResourceExporter.InventoryFileName)));
     }
 
     [Fact]
@@ -58,7 +84,7 @@ public class ResourceCommitTests : IDisposable
         // b.ymap is open in another program: it cannot be moved, after a.ymap already was.
         using (File.Open(Path.Combine(_resource, "stream", "b.ymap"), FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork);
+            string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork, out _);
             Assert.NotNull(error);
             Assert.False(keepWork);
         }
@@ -72,7 +98,7 @@ public class ResourceCommitTests : IDisposable
         // The old files are already set aside and some new ones placed when c.ytyp cannot be moved.
         using (File.Open(Path.Combine(_staging, "stream", "c.ytyp"), FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork);
+            string? error = ResourceExporter.Commit(_staging, _resource, _backup, out bool keepWork, out _);
             Assert.NotNull(error);
             Assert.False(keepWork);
         }
