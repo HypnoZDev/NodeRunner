@@ -22,6 +22,14 @@ internal sealed record PlayClips(AnimationClip Idle, AnimationClip Walk, Animati
 
     // The same for swimming at the surface (its Jump is not used); null: she cannot swim (she walks on the bottom).
     public PlayClips? Swimming { get; init; }
+
+    // Climbing onto what is ahead (Space at a ledge): clips chosen by the height their mover climbs, from standing,
+    // running or swimming; then the clip standing her up on top, and the one running on. None: Space only jumps.
+    public IReadOnlyList<AnimationClip> StandClimbs { get; init; } = [];
+    public IReadOnlyList<AnimationClip> RunClimbs { get; init; } = [];
+    public IReadOnlyList<AnimationClip> SwimClimbs { get; init; } = [];
+    public AnimationClip? ClimbExit { get; init; }
+    public AnimationClip? RunClimbExit { get; init; }
 }
 
 // What play mode takes from a game: who walks, how she moves and what she bumps into. Moving, the camera, the walls

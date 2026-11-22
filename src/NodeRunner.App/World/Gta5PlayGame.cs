@@ -20,6 +20,7 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
     private const string JumpClip = "jump_launch_l";
     private const string SwimDictionary = "swimming@swim";
     private const string SwimIdleDictionary = "swimming@base";
+    private const string ClimbDictionary = "move_climb";
     // Seconds into the jump clip: feet leaving the ground (its crouch is skipped: she leaves at once); legs tucked in
     // the air. A 0.94 s jump then lands when the clip stretches the legs down (1.2 s).
     private const float JumpStart = 0.25f;
@@ -52,6 +53,8 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
         {
             var moves = ReadDictionary(content, MoveDictionary);
             var jumps = ReadDictionary(content, JumpDictionary);
+            var climbs = ReadDictionary(content, ClimbDictionary);
+            var swims = ReadDictionary(content, SwimDictionary);
             if (Find(moves, "idle") is not { } idle || Find(moves, "walk") is not { } walk || Find(moves, "run") is not { } run
                 || Find(moves, "sprint") is not { } sprint)
                 return null;
@@ -66,6 +69,12 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
                 WalkTurns = All("walk_turn_180_l", "walk_turn_180_r"),
                 RunTurns = All("run_turn_180_l", "run_turn_180_r"),
                 Swimming = ReadSwimming(content),
+                // Climbing 0.8, 1.4, 1.8, 2.2 and 2.95 m from standing or running, 1.4 and 2.2 m out of the water.
+                StandClimbs = Clips(climbs, "standclimbup_80", "standclimbup_140_low", "standclimbup_180_low", "standclimbup_220", "standclimbup_295_low"),
+                RunClimbs = Clips(climbs, "runclimbup_80", "runclimbup_140_low", "runclimbup_180_low", "runclimbup_220", "runclimbup_295_low"),
+                SwimClimbs = Clips(swims, "swimclimbup_40", "swimclimbup_80"),
+                ClimbExit = Find(climbs, "standclimbup_exit"),
+                RunClimbExit = Find(climbs, "run_climbup_exit_l"),
             };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -169,6 +178,9 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
             return new Dictionary<uint, AnimationClip>();
         return ClipDictionaryReader.Read(data, header);
     }
+
+    private static IReadOnlyList<AnimationClip> Clips(IReadOnlyDictionary<uint, AnimationClip> clips, params string[] names) =>
+        names.Select(n => Find(clips, n)).OfType<AnimationClip>().ToList();
 
     private static AnimationClip? Find(IReadOnlyDictionary<uint, AnimationClip> clips, string name) =>
         clips.GetValueOrDefault(Joaat.Hash(name))

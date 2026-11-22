@@ -125,6 +125,32 @@ internal sealed class PlayCollision
         return feet;
     }
 
+    // A ledge ahead to climb onto: a wall within reach at the height of her knees (from), and on its top a surface
+    // between minRise and maxRise above the feet, with nothing over the wall's edge and room to stand up on top.
+    // Returns the top's height and how far ahead the wall is; null when there is none.
+    public (float Top, float Distance)? Ledge(Vector3 feet, Vector2 ahead, float from, float minRise, float maxRise)
+    {
+        const float Reach = 1f; // From the body's edge.
+        const float Beyond = 0.3f; // Where on the top she lands, past the wall's face.
+        const float Headroom = 1.6f;
+        ahead = Vector2.Normalize(ahead);
+        var knees = feet with { Z = feet.Z + from };
+        float length = BodyRadius + Reach;
+        if (Hit(knees, knees + new Vector3(ahead * length, 0f)) is not { } share)
+            return null;
+        float distance = share * length;
+        var on = new Vector2(feet.X, feet.Y) + ahead * (distance + Beyond);
+        if (Ground(on, feet.Z + maxRise) is not { } top || top - feet.Z < minRise)
+            return null;
+        // Over the edge: open, else the surface found is a floor behind a higher wall.
+        var over = feet with { Z = top + 0.3f };
+        if (Hit(over, new Vector3(on.X, on.Y, top + 0.3f)) is not null)
+            return null;
+        if (Hit(new Vector3(on.X, on.Y, top + 0.1f), new Vector3(on.X, on.Y, top + Headroom)) is not null)
+            return null;
+        return (top, distance);
+    }
+
     // Where a line from a point to another first meets a surface, as a share of its length (0 to 1); null when it
     // meets none.
     public float? Hit(Vector3 from, Vector3 to)

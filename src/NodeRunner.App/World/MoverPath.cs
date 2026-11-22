@@ -12,6 +12,7 @@ internal sealed class MoverPath
 
     private readonly float[] _yaw;
     private readonly Vector2[] _position;
+    private readonly float[] _height;
 
     public AnimationClip Clip { get; }
 
@@ -34,6 +35,7 @@ internal sealed class MoverPath
         int count = Math.Max(2, (int)MathF.Ceiling(Duration * Rate) + 1);
         _yaw = new float[count];
         _position = new Vector2[count];
+        _height = new float[count];
         var (firstPosition, firstRotation) = Root(clip, 0f);
         float first = Yaw(firstRotation), previous = first, turned = 0f;
         for (int i = 0; i < count; i++)
@@ -45,6 +47,7 @@ internal sealed class MoverPath
             _yaw[i] = turned;
             var moved = position - firstPosition;
             _position[i] = Turn(new Vector2(moved.X, moved.Y), -first);
+            _height[i] = moved.Z;
         }
         if (Turns)
         {
@@ -56,6 +59,14 @@ internal sealed class MoverPath
     public float YawAt(float time) => Sample(_yaw, time, (a, b, t) => a + (b - a) * t);
 
     public Vector2 PositionAt(float time) => Sample(_position, time, Vector2.Lerp);
+
+    // How far up the clip has carried its ped (climbing).
+    public float HeightAt(float time) => Sample(_height, time, (a, b, t) => a + (b - a) * t);
+
+    public float TotalHeight => _height[^1];
+
+    // How far ahead it has carried it by its end.
+    public float TotalReach => _position[^1].Y;
 
     // Speed the clip carries its ped at, at a time (metres per second).
     public float SpeedAt(float time)

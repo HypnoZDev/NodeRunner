@@ -22,6 +22,10 @@ public class PlayModeTests
         Quad(new(2, -10, 0.3f), new(10, -10, 0.3f), new(10, 10, 0.3f), new(2, 10, 0.3f));
         Quad(new(2, -10, 0), new(2, 10, 0), new(2, 10, 0.3f), new(2, -10, 0.3f));
         Quad(new(5, -10, 0), new(5, 10, 0), new(5, 10, 3), new(5, -10, 3));
+        // Past that wall, a 1.5 m block on the raised floor, from x = 7 to 9.
+        Quad(new(7, -10, 0.3f), new(7, 10, 0.3f), new(7, 10, 1.8f), new(7, -10, 1.8f));
+        Quad(new(7, -10, 1.8f), new(9, -10, 1.8f), new(9, 10, 1.8f), new(7, 10, 1.8f));
+        Quad(new(9, -10, 0.3f), new(9, 10, 0.3f), new(9, 10, 1.8f), new(9, -10, 1.8f));
         var mesh = new CollisionMesh
         {
             BoundsMin = new Vector3(-10, -10, 0),
@@ -68,6 +72,22 @@ public class PlayModeTests
             feet = room.PushOut(feet + new Vector3(0.03f, 0.01f, 0));
         Assert.InRange(feet.X, 4.6f, 5f - PlayCollision.BodyRadius + 0.01f);
         Assert.True(feet.Y > 3f); // Slid along it.
+    }
+
+    [Fact]
+    public void A_ledge_is_found_on_top_of_a_block_not_on_a_bare_wall()
+    {
+        var room = Room();
+        var ledge = room.Ledge(new Vector3(6, 0, 0.3f), Vector2.UnitX, 0.5f, 0.6f, 3.2f);
+        Assert.NotNull(ledge);
+        Assert.Equal(1.8f, ledge!.Value.Top, 3);
+        Assert.Equal(1f, ledge.Value.Distance, 2);
+        // The 3 m wall has no top to stand on: past it is the floor.
+        Assert.Null(room.Ledge(new Vector3(4.5f, 0, 0.3f), Vector2.UnitX, 0.5f, 0.6f, 3.2f));
+        // Too high for the clips.
+        Assert.Null(room.Ledge(new Vector3(6, 0, 0.3f), Vector2.UnitX, 0.5f, 0.6f, 1.2f));
+        // Facing away from the block: nothing.
+        Assert.Null(room.Ledge(new Vector3(6, 0, 0.3f), -Vector2.UnitY, 0.5f, 0.6f, 3.2f));
     }
 
     [Fact]
