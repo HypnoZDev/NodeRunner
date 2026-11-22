@@ -13,7 +13,7 @@ internal sealed class PlayOverlay(AppState state)
     {
         var viewport = ImGui.GetMainViewport();
         var keys = state.Keys;
-        string hint = L($"{keys.MoveText()} : se déplacer   ·   Maj : sprinter   ·   Alt : marcher   ·   Espace : sauter   ·   Molette : distance   ·   Échap : quitter");
+        string hint = L($"{keys.MoveText()} : se déplacer   ·   Maj : sprinter   ·   Alt : marcher   ·   Espace : sauter ou grimper   ·   Molette : distance   ·   Échap : quitter");
         Panel("##play_keys", hint, viewport.Pos + new Vector2(viewport.Size.X * 0.5f, viewport.Size.Y - 24f), new Vector2(0.5f, 1f), UiTheme.TextMuted);
         if (state.Play.Waiting is { } waiting)
             Panel("##play_wait", waiting, viewport.Pos + viewport.Size * 0.5f + new Vector2(0f, 90f), new Vector2(0.5f, 0.5f), UiTheme.Text);

@@ -70,7 +70,7 @@ internal sealed class ShortcutsWindow(AppState state)
                 (state.Keys.MoveText(), L("Se déplacer (course)")),
                 (L("Maj"), L("Sprinter")),
                 (L("Alt"), L("Marcher")),
-                (L("Espace"), L("Sauter")),
+                (L("Espace"), L("Sauter, ou grimper face à un rebord (aussi pour sortir de l'eau)")),
                 (L("Souris"), L("Tourner la caméra")),
                 (L("Molette"), L("Rapprocher ou éloigner la caméra")),
                 (L("Échap"), L("Quitter le mode Play")));

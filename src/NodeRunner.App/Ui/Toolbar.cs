@@ -113,7 +113,7 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
         bool ready = state.PlayGame?.Data is not null && !state.MapCovered;
         string keys = state.Keys.First(KeyAction.Play) is { } key ? $" ({key})" : "";
         string tip = ready
-            ? L($"Marcher sur la carte avec un personnage, comme dans le jeu{keys} : {state.Keys.MoveText()} pour se déplacer, Maj pour sprinter, Alt pour marcher, Espace pour sauter, Échap pour revenir.")
+            ? L($"Marcher sur la carte avec un personnage, comme dans le jeu{keys} : {state.Keys.MoveText()} pour se déplacer, Maj pour sprinter, Alt pour marcher, Espace pour sauter ou grimper, Échap pour revenir.")
             : state.MapCovered ? L("Revenez d'abord à l'onglet Carte.") : L("La carte est en cours de chargement.");
         if (Widgets.ToolbarButton(Icons.Play, "Play", tip, ready, active: true))
             state.PlayRequest = true;
