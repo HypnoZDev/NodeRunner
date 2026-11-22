@@ -82,4 +82,19 @@ public class WaterTests
             Assert.Equal(3, triangle.Distinct().Count());
         }
     }
+
+    [Fact]
+    public void Height_is_the_highest_surface_covering_a_point_and_the_ocean_beyond_the_map()
+    {
+        var map = new WaterMap { OceanBounds = new Vector4(-100, -100, 100, 100), OceanHeight = 0f };
+        map.Quads.Add(new WaterQuad(-50, 50, -50, 50, 0f, WaterQuadShape.Rectangle));
+        // A lake higher up, cut along its diagonal: only its south-west half.
+        map.Quads.Add(new WaterQuad(0, 10, 0, 10, 30f, WaterQuadShape.WithoutNorthEast));
+
+        Assert.Equal(0f, map.HeightAt(-20, -20));
+        Assert.Equal(30f, map.HeightAt(2, 2));
+        Assert.Equal(0f, map.HeightAt(8, 8)); // The cut-off half: only the sea below.
+        Assert.Null(map.HeightAt(70, 70)); // Land inside the map.
+        Assert.Equal(0f, map.HeightAt(500, 0)); // Open ocean.
+    }
 }

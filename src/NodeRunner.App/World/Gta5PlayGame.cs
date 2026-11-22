@@ -18,6 +18,8 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
     private const string MoveDictionary = "move_f@generic";
     private const string JumpDictionary = "move_jump";
     private const string JumpClip = "jump_launch_l";
+    private const string SwimDictionary = "swimming@swim";
+    private const string SwimIdleDictionary = "swimming@base";
     // Seconds into the jump clip: feet leaving the ground (its crouch is skipped: she leaves at once); legs tucked in
     // the air. A 0.94 s jump then lands when the clip stretches the legs down (1.2 s).
     private const float JumpStart = 0.25f;
@@ -63,12 +65,32 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
                 RunStops = All("rstop_l", "rstop_r"),
                 WalkTurns = All("walk_turn_180_l", "walk_turn_180_r"),
                 RunTurns = All("run_turn_180_l", "run_turn_180_r"),
+                Swimming = ReadSwimming(content),
             };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return null;
         }
+    }
+
+    public float? WaterAt(Vector2 point) => world.Water?.HeightAt(point.X, point.Y);
+
+    // Breaststroke (walk), crawl (run), fast crawl (sprint), treading water (idle); setting off in four directions
+    // and stopping. Swimming pools are model meshes, not in the water files: not swum in.
+    private static PlayClips? ReadSwimming(GameContent content)
+    {
+        var swim = ReadDictionary(content, SwimDictionary);
+        var still = ReadDictionary(content, SwimIdleDictionary);
+        if (Find(still, "idle") is not { } idle || Find(swim, "walk") is not { } walk || Find(swim, "run") is not { } run
+            || Find(swim, "sprint") is not { } sprint)
+            return null;
+        return new PlayClips(idle, walk, run, sprint, null, SpeedOf(walk, 1.5f), SpeedOf(run, 3f), SpeedOf(sprint, 4f))
+        {
+            RunStarts = new[] { "swim_start_0", "swim_start_90l", "swim_start_90r", "swim_start_180l", "swim_start_180r" }
+                .Select(n => Find(swim, n)).OfType<AnimationClip>().ToList(),
+            RunStops = Find(swim, "run_stop_r") is { } stop ? [stop] : [],
+        };
     }
 
     public Func<Vector3, Vector3, IEnumerable<PlacedCollision>> CollisionReader()

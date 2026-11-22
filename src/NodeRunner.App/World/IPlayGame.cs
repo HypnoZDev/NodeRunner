@@ -19,6 +19,9 @@ internal sealed record PlayClips(AnimationClip Idle, AnimationClip Walk, Animati
     public IReadOnlyList<AnimationClip> RunStops { get; init; } = [];
     public IReadOnlyList<AnimationClip> WalkTurns { get; init; } = [];
     public IReadOnlyList<AnimationClip> RunTurns { get; init; } = [];
+
+    // The same for swimming at the surface (its Jump is not used); null: she cannot swim (she walks on the bottom).
+    public PlayClips? Swimming { get; init; }
 }
 
 // What play mode takes from a game: who walks, how she moves and what she bumps into. Moving, the camera, the walls
@@ -37,6 +40,9 @@ internal interface IPlayGame
 
     // Read in the background; null when the game has no such clips.
     PlayClips? ReadClips();
+
+    // Height of the water surface at a point (sea, lakes, rivers), null where there is none.
+    float? WaterAt(Vector2 point);
 
     // Called on the main thread when an area is to be read; the function returned then reads it in the background
     // (never two at once): the collision placed between two corners, map files and objects alike.

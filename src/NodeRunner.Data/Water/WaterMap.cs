@@ -39,6 +39,23 @@ public readonly record struct WaterQuad(float MinX, float MaxX, float MinY, floa
         };
         return corners;
     }
+
+    // Whether the surface covers a point (seen from above).
+    public bool Contains(float x, float y)
+    {
+        if (x < MinX || x > MaxX || y < MinY || y > MaxY)
+            return false;
+        float u = MaxX > MinX ? (x - MinX) / (MaxX - MinX) : 0f;
+        float v = MaxY > MinY ? (y - MinY) / (MaxY - MinY) : 0f;
+        return Shape switch
+        {
+            WaterQuadShape.WithoutNorthEast => u + v <= 1f,
+            WaterQuadShape.WithoutSouthEast => v >= u,
+            WaterQuadShape.WithoutSouthWest => u + v >= 1f,
+            WaterQuadShape.WithoutNorthWest => v <= u,
+            _ => true,
+        };
+    }
 }
 
 // Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles.
@@ -59,6 +76,22 @@ public sealed class WaterMap
     public float OceanHeight { get; set; }
 
     public List<string> Errors { get; } = [];
+
+    // Height of the water surface at a point (the highest one when several cover it), the open ocean's outside the
+    // map's water file; null where there is no water.
+    public float? HeightAt(float x, float y)
+    {
+        float? best = null;
+        foreach (var quad in Quads)
+        {
+            if (quad.Contains(x, y) && (best is null || quad.Z > best))
+                best = quad.Z;
+        }
+        if (best is null && OceanBounds != Vector4.Zero
+            && (x < OceanBounds.X || y < OceanBounds.Y || x > OceanBounds.Z || y > OceanBounds.W))
+            return OceanHeight;
+        return best;
+    }
 
     public static WaterMap Load(IGameFileSystem files)
     {

@@ -21,6 +21,12 @@ internal sealed class PlayMode : IDisposable
     private const float MaxSubstep = 0.12f; // Metres moved at once, less than the body's radius.
     private const float FallBack = 60f; // Metres fallen with no ground below: back to the start.
     private const float BlendIn = 10f; // Clip changes (jump, landing), 1 / seconds.
+    // Swimming: her feet this far under the surface (her head just above it, as the swimming clips hold it). She
+    // swims where the water is deeper, and stands up again where it is this shallow.
+    private const float SwimDepth = 1.36f;
+    private const float StandDepth = 1.2f;
+    private const float Surfacing = 4f; // How fast she floats up to the surface (1 / seconds).
+    private const float SwimBlend = 6f; // From walking into swimming clips, 1 / seconds.
     // Camera: around a point above the feet, at a distance the wheel changes.
     private const float PivotHeight = 1.45f;
     private const float MinDistance = 1.2f;
@@ -34,7 +40,13 @@ internal sealed class PlayMode : IDisposable
     private readonly PreviewModel _model = new();
     private readonly PlayCollision _collision = new();
     private IPlayGame? _game;
-    private Task<PlayGait?>? _clips; // Her clips, and how she moves with them.
+    // How she moves on the ground and in the water, with her clips.
+    private sealed record Gaits(PlayGait Ground, PlayGait? Swim)
+    {
+        public IEnumerable<AnimationClip> FeetClips => Swim is null ? Ground.FeetClips : Ground.FeetClips.Concat(Swim.FeetClips);
+    }
+
+    private Task<Gaits?>? _clips;
     private object? _clipsFor;
     private Task<FootPoses?>? _feet;
     private readonly List<ClipLayer> _layers = [];
@@ -51,6 +63,8 @@ internal sealed class PlayMode : IDisposable
     private float _jumpTime;
     private float _jumpWeight;
     private bool _jumped;
+    private bool _swimming;
+    private float _swimWeight;
 
     private float _cameraYaw;
     private float _cameraPitch;
@@ -83,7 +97,7 @@ internal sealed class PlayMode : IDisposable
         Position = _start = at;
         _heading = _startHeading = camera.Yaw - MathF.PI / 2f; // The model faces +Y.
         (_verticalSpeed, _grounded, _waiting, _fallen, _placed) = (0f, true, true, 0f, false);
-        (_jumpTime, _jumpWeight, _jumped) = (0f, 0f, false);
+        (_jumpTime, _jumpWeight, _jumped, _swimming, _swimWeight) = (0f, 0f, false, false, 0f);
         _cameraYaw = camera.Yaw;
         _cameraPitch = -0.25f;
         _pivotZ = Position.Z + PivotHeight;
@@ -92,14 +106,19 @@ internal sealed class PlayMode : IDisposable
         if (!ReferenceEquals(_clipsFor, data))
         {
             _clipsFor = data;
-            _clips = Task.Run(() => game.ReadClips() is { } read ? new PlayGait(read) : null);
+            _clips = Task.Run(() => game.ReadClips() is { } read
+                ? new Gaits(new PlayGait(read), read.Swimming is { } swimming ? new PlayGait(swimming) : null)
+                : null);
         }
         // The model is read again: its skeleton too.
         _feet = null;
-        if (_clips is { IsCompletedSuccessfully: true, Result: { } gait })
+        if (_clips is { IsCompletedSuccessfully: true, Result: { } gaits })
         {
-            gait.Reset();
-            gait.UseFeet(null);
+            foreach (var gait in new[] { gaits.Ground, gaits.Swim }.OfType<PlayGait>())
+            {
+                gait.Reset();
+                gait.UseFeet(null);
+            }
         }
         _collision.Clear();
         IsActive = true;
@@ -129,15 +148,17 @@ internal sealed class PlayMode : IDisposable
         _cameraPitch = Math.Clamp(_cameraPitch - input.Look.Y * MouseSensitivity * sensitivity * (invertY ? -1f : 1f), MinPitch, MaxPitch);
         _distance = Math.Clamp(_distance * MathF.Pow(0.88f, input.Wheel), MinDistance, MaxDistance);
 
-        var gait = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
-        if (gait is not null && _feet is null && _model.Data?.Skeleton is { } skeleton)
+        var gaits = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
+        if (gaits is not null && _feet is null && _model.Data?.Skeleton is { } skeleton)
         {
-            var clips = gait.FeetClips.ToList();
+            var clips = gaits.FeetClips.ToList();
             _feet = Task.Run(() => FootPoses.Build(skeleton, clips));
         }
-        if (gait is not null && _feet is { IsCompleted: true } feet)
+        if (gaits is not null && _feet is { IsCompleted: true } feet)
         {
-            gait.UseFeet(feet.IsCompletedSuccessfully ? feet.Result : null);
+            var poses = feet.IsCompletedSuccessfully ? feet.Result : null;
+            gaits.Ground.UseFeet(poses);
+            gaits.Swim?.UseFeet(poses);
             _feet = Task.FromResult<FootPoses?>(null); // Given: not again.
         }
         _waiting = !_collision.IsReady(Position);
@@ -148,12 +169,12 @@ internal sealed class PlayMode : IDisposable
             if (_collision.Ground(new Vector2(Position.X, Position.Y), Position.Z + StartRise) is { } ground)
                 Position = _start = Position with { Z = ground };
         }
-        if (gait is not null && _model.Model is not null && !_waiting)
-            Move(gait, input, step);
+        if (gaits is not null && _model.Model is not null && !_waiting)
+            Move(game, gaits, input, step);
         PlaceCamera(camera, step);
     }
 
-    private void Move(PlayGait gait, PlayInput input, float step)
+    private void Move(IPlayGame game, Gaits gaits, PlayInput input, float step)
     {
         // Where she is asked to go, from the camera's point of view.
         var forward = new Vector2(MathF.Cos(_cameraYaw), MathF.Sin(_cameraYaw));
@@ -162,6 +183,56 @@ internal sealed class PlayMode : IDisposable
         float? goal = wanted.LengthSquared() > 1e-4f ? MathF.Atan2(-wanted.X, wanted.Y) : null;
         var pace = input.Sprint ? PlayGait.Pace.Sprint : input.Walk ? PlayGait.Pace.Walk : PlayGait.Pace.Run;
 
+        if (_swimming && gaits.Swim is { } swim)
+            Swim(game, gaits.Ground, swim, goal, pace, step);
+        else
+            Walk(game, gaits, goal, pace, input.Jump, step);
+
+        _jumpTime += step;
+        bool inAir = !_grounded && !_swimming && (_jumped || _fallen > 0.4f);
+        _jumpWeight += ((inAir ? 1f : 0f) - _jumpWeight) * (1f - MathF.Exp(-BlendIn * step));
+        _swimWeight += ((_swimming ? 1f : 0f) - _swimWeight) * (1f - MathF.Exp(-SwimBlend * step));
+    }
+
+    // At the surface: her swimming gait moves her and she floats at the swimming height; she stands up where the
+    // water gets shallow (or falls where the water files end).
+    private void Swim(IPlayGame game, PlayGait ground, PlayGait swim, float? goal, PlayGait.Pace pace, float step)
+    {
+        (var ahead, _heading) = swim.Step(goal, pace, _heading, step);
+        var flat = Slide(ahead);
+        if (step > 0f)
+            swim.Blocked(Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step);
+        float z = Position.Z;
+        float? surface = game.WaterAt(flat);
+        float? bottom = surface is { } level ? _collision.Ground(flat, level) : null;
+        if (surface is not { } water || bottom is { } floor && floor >= water - StandDepth)
+        {
+            // Footing again (or no water there any more): walking out, at her swimming speed.
+            swim.Release();
+            ground.Continue(MathF.Min(swim.Speed, ground.Clips.RunSpeed));
+            (_swimming, _grounded, _verticalSpeed, _jumped) = (false, bottom is not null, 0f, false);
+            Position = new Vector3(flat.X, flat.Y, bottom ?? z);
+            return;
+        }
+        z += (water - SwimDepth - z) * (1f - MathF.Exp(-Surfacing * step));
+        if (bottom is { } seabed && z < seabed)
+            z = seabed;
+        Position = new Vector3(flat.X, flat.Y, z);
+    }
+
+    // Moved ahead in short steps so that no wall is crossed: the walls push her back, and she slides along them.
+    private Vector2 Slide(Vector2 ahead)
+    {
+        var feet = Position;
+        int steps = Math.Max(1, (int)MathF.Ceiling(ahead.Length() / MaxSubstep));
+        for (int i = 0; i < steps; i++)
+            feet = _collision.PushOut(feet + new Vector3(ahead / steps, 0f));
+        return new Vector2(feet.X, feet.Y);
+    }
+
+    private void Walk(IPlayGame game, Gaits gaits, float? goal, PlayGait.Pace pace, bool jump, float step)
+    {
+        var gait = gaits.Ground;
         // On the ground, her gait moves her; in the air, she keeps her speed and heading.
         Vector2 ahead;
         if (_grounded)
@@ -169,17 +240,12 @@ internal sealed class PlayMode : IDisposable
         else
             ahead = MoverPath.Turn(Vector2.UnitY, _heading) * gait.Speed * step;
 
-        // In short steps so that no wall is crossed; the walls push her back, and she slides along them.
         float z = Position.Z;
-        var feet = Position;
-        int steps = Math.Max(1, (int)MathF.Ceiling(ahead.Length() / MaxSubstep));
-        for (int i = 0; i < steps; i++)
-            feet = _collision.PushOut(feet + new Vector3(ahead / steps, 0f));
-        var flat = new Vector2(feet.X, feet.Y);
+        var flat = Slide(ahead);
         if (_grounded && step > 0f)
             gait.Blocked(Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step);
 
-        if (_grounded && input.Jump)
+        if (_grounded && jump)
         {
             gait.Release();
             _grounded = false;
@@ -220,6 +286,16 @@ internal sealed class PlayMode : IDisposable
             }
         }
         Position = new Vector3(flat.X, flat.Y, z);
+
+        // Deep water under her (walked in, or fallen in): she swims from there, floating up to the surface.
+        if (gaits.Swim is { } swim && game.WaterAt(flat) is { } water && water - z > SwimDepth && (_grounded || _verticalSpeed <= 0f))
+        {
+            gait.Release();
+            swim.Continue(MathF.Min(gait.Speed, swim.Clips.RunSpeed));
+            (_swimming, _grounded, _jumped, _verticalSpeed, _fallen) = (true, false, false, 0f, 0f);
+            return;
+        }
+
         if (_fallen > FallBack)
         {
             // Through the map, or off its edge: back to where play started.
@@ -228,10 +304,6 @@ internal sealed class PlayMode : IDisposable
             (_verticalSpeed, _grounded, _fallen) = (0f, true, 0f);
             gait.Reset();
         }
-
-        _jumpTime += step;
-        bool inAir = !_grounded && (_jumped || _fallen > 0.4f);
-        _jumpWeight += ((inAir ? 1f : 0f) - _jumpWeight) * (1f - MathF.Exp(-BlendIn * step));
     }
 
     private void PlaceCamera(Camera camera, float step)
@@ -255,21 +327,24 @@ internal sealed class PlayMode : IDisposable
     {
         if (!IsActive || _model.Model is not { } model)
             return;
-        var gait = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
+        var gaits = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
         bool posed = false;
-        if (gait is not null && model.IsSkinned && _model.Data?.Skeleton is { } skeleton)
+        if (gaits is not null && model.IsSkinned && _model.Data?.Skeleton is { } skeleton)
         {
             if (_pose is null || _pose.Length != skeleton.Count)
                 _pose = new Matrix4x4[skeleton.Count];
-            var clips = gait.Clips;
-            float ground = 1f - (clips.Jump is null ? 0f : _jumpWeight);
+            var clips = gaits.Ground.Clips;
+            float swim = gaits.Swim is null ? 0f : _swimWeight;
+            float air = (1f - swim) * (clips.Jump is null ? 0f : _jumpWeight);
             _layers.Clear();
-            gait.Layers(_layers, ground);
+            gaits.Ground.Layers(_layers, 1f - swim - air);
+            gaits.Swim?.Layers(_layers, swim);
             // From where the feet leave the ground, held on its last pose (legs down for the landing).
             _layers.Add(new ClipLayer(clips.Jump ?? clips.Idle,
-                Math.Min(_jumpTime + (_jumped ? clips.JumpStart : clips.FallStart), (clips.Jump?.Duration ?? 1f) - 0.02f), 1f - ground));
+                Math.Min(_jumpTime + (_jumped ? clips.JumpStart : clips.FallStart), (clips.Jump?.Duration ?? 1f) - 0.02f), air));
             SkeletonAnimator.Pose(skeleton, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_layers), _pose);
-            gait.Observe(_pose);
+            gaits.Ground.Observe(_pose);
+            gaits.Swim?.Observe(_pose);
             posed = true;
         }
         var world = Placement();

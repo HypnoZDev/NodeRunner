@@ -84,6 +84,13 @@ internal sealed class PlayGait
         (_feetNow, _feetBefore) = (null, null);
     }
 
+    // Going on at a speed after another gait (from walking into swimming...), on the looped clips.
+    public void Continue(float speed)
+    {
+        Reset();
+        Speed = speed;
+    }
+
     // Standing still, on the looped clips.
     public void Reset()
     {
