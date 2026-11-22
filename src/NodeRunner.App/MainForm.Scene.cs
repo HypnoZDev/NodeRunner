@@ -106,7 +106,7 @@ internal sealed unsafe partial class MainForm
         {
             _shadowMaps ??= new ShadowMaps(_graphics!.Device, _graphics.Context);
             _shadowMaps.Update(camera, (float)scene.Width / scene.Height, lighting.SunDirection, settings.ShadowDistance);
-            _modelLayer.DrawShadows(_modelRenderer, _shadowMaps);
+            _modelLayer.DrawShadows(_modelRenderer, _shadowMaps, _state.Play.IsActive ? light => _state.Play.DrawShadow(_modelRenderer, light) : null);
             _graphics!.BindBackBuffer();
             _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
         }

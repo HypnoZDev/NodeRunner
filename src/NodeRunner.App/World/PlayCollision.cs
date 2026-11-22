@@ -1,5 +1,8 @@
 using System.Numerics;
 using NodeRunner.Data.Collisions;
+using NodeRunner.Data.FileSystem;
+using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Collisions;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
@@ -30,6 +33,12 @@ internal sealed class PlayCollision
     }
 
     private readonly CollisionQuery _query = new();
+    // Collision of the models read so far (null: none in the model), by file; used by the reading task only.
+    private readonly Dictionary<string, CollisionMesh?> _models = new(StringComparer.OrdinalIgnoreCase);
+    private object? _modelsFor;
+    private const int MaxModels = 3000;
+    // Interiors are found by their position, their objects being up to this far from it.
+    private const float InteriorReach = 100f;
     private Area? _area;
     private Task<Area>? _reading;
 
@@ -50,7 +59,8 @@ internal sealed class PlayCollision
             && Vector2.Distance(area.Centre, Flat(position)) < ReadAgain)
             return;
         int revision = edits.Revision;
-        _reading = Task.Run(() => Read(world, catalog, edits, revision, position));
+        var doors = world.DoorTunings; // Read here: its first use starts loading it.
+        _reading = Task.Run(() => Read(world, catalog, edits, revision, position, doors));
     }
 
     // A reading under way goes on (it uses the query): its area is replaced once the character is elsewhere.
@@ -204,10 +214,66 @@ internal sealed class PlayCollision
         return a + ab * (vb * denominator) + ac * (vc * denominator);
     }
 
-    private Area Read(WorldLoader world, CollisionCatalog catalog, CollisionEdits edits, int revision, Vector3 position)
+    private Area Read(WorldLoader world, CollisionCatalog catalog, CollisionEdits edits, int revision, Vector3 position, DoorTunings? doors)
     {
         var (min, max) = AreaAround(position);
-        return Build(catalog, revision, position, _query.CollisionIn(world, min, max, edits));
+        var collisions = _query.CollisionIn(world, min, max, edits);
+        collisions.AddRange(ObjectsAround(world, position, doors));
+        return Build(catalog, revision, position, collisions);
+    }
+
+    // The objects placed around (the project's included, deleted ones left out) with a collision of their own in
+    // their model: props, fences, street furniture. Doors are left open, as the player pushes them.
+    private IEnumerable<PlacedCollision> ObjectsAround(WorldLoader world, Vector3 position, DoorTunings? doors)
+    {
+        if (world.Maps is not { } library || world.Models is not { } models || world.ModelFiles is not { } files)
+            yield break;
+        if (!ReferenceEquals(_modelsFor, files))
+        {
+            _modelsFor = files;
+            _models.Clear();
+        }
+        if (_models.Count > MaxModels)
+            _models.Clear();
+        var centre = Flat(position);
+        var seen = new HashSet<MapEntity>();
+        var placed = new List<MapEntity>();
+        foreach (var entity in library.EntitiesAround(centre, Radius + InteriorReach))
+        {
+            if (entity.IsInterior)
+                placed.AddRange(entity.InteriorEntities.Where(e => !e.IsDeleted && Vector2.Distance(Flat(e.Position), centre) <= Radius));
+            else if (Vector2.Distance(Flat(entity.Position), centre) <= Radius)
+                placed.Add(entity);
+        }
+        foreach (var entity in placed)
+        {
+            if (entity.LodLevel is not (LodLevel.Hd or LodLevel.OrphanHd) || !seen.Add(entity))
+                continue;
+            uint hash = entity.ArchetypeHash;
+            if (doors?.OfModel(hash) is not null || Doors.IsDoor(world.Names?.TryGet(hash)))
+                continue;
+            if (library.GetArchetype(hash) is not { } archetype || models.Locate(archetype) is not { } location)
+                continue;
+            if (!_models.TryGetValue(location.Path, out var mesh))
+                _models[location.Path] = mesh = ReadModel(files, location.Path);
+            if (mesh is not null)
+                yield return new PlacedCollision(mesh, entity.Transform);
+        }
+    }
+
+    private static CollisionMesh? ReadModel(IGameFileSystem files, string path)
+    {
+        string extension = Path.GetExtension(path);
+        if (!extension.Equals(".ydr", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".yft", StringComparison.OrdinalIgnoreCase))
+            return null;
+        try
+        {
+            return files.ReadFile(path) is { } data ? YbnReader.ReadEmbedded(data, extension) : null;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            return null;
+        }
     }
 
     // Collision given as it is (tests): the area around a point.

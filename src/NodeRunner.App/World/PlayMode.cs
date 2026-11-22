@@ -295,9 +295,7 @@ internal sealed class PlayMode : IDisposable
             SkeletonAnimator.Pose(skeleton, layers, _pose);
             posed = true;
         }
-        // The model's feet (lowest point) on her position, facing her heading.
-        var world = Matrix4x4.CreateTranslation(0f, 0f, -_model.BoundsMin.Z) * Matrix4x4.CreateRotationZ(_heading)
-                    * Matrix4x4.CreateTranslation(Position);
+        var world = Placement();
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
             renderer.Begin(pass);
@@ -306,6 +304,20 @@ internal sealed class PlayMode : IDisposable
         }
         renderer.BonePose = null;
     }
+
+    // Her shadow in one of the sun's images, in the pose of the last image drawn.
+    public void DrawShadow(ModelRenderer renderer, Matrix4x4 lightViewProjection)
+    {
+        if (!IsActive || _model.Model is not { } model)
+            return;
+        renderer.BonePose = _pose;
+        renderer.DrawShadow(model, Placement(), lightViewProjection);
+        renderer.BonePose = null;
+    }
+
+    // The model's feet (lowest point) on her position, facing her heading.
+    private Matrix4x4 Placement() =>
+        Matrix4x4.CreateTranslation(0f, 0f, -_model.BoundsMin.Z) * Matrix4x4.CreateRotationZ(_heading) * Matrix4x4.CreateTranslation(Position);
 
     private static Clips? ReadClips(GameContent content)
     {

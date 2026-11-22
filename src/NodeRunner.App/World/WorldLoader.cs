@@ -66,6 +66,9 @@ internal sealed class WorldLoader : IDisposable
 
     public IModelReader? ModelReader { get; private set; }
 
+    // The files the models are read from: the game with the project's and the library's files over it.
+    public IGameFileSystem? ModelFiles { get; private set; }
+
     public TextureCatalog? Textures { get; private set; }
 
     public ITextureReader? TextureReader { get; private set; }
@@ -277,6 +280,7 @@ internal sealed class WorldLoader : IDisposable
             Collisions = null;
             Models = null;
             ModelReader = null;
+            ModelFiles = null;
             Textures = null;
             TextureReader = null;
             Names = null;
@@ -558,6 +562,7 @@ internal sealed class WorldLoader : IDisposable
                 ProjectFiles = source as LooseFileOverlay;
                 Models = models;
                 ModelReader = new DrawableReader(source);
+                ModelFiles = source;
                 Textures = textures;
                 TextureReader = new YtdReader(source);
                 Names = names;

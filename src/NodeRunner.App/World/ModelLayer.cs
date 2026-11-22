@@ -375,7 +375,8 @@ internal sealed class ModelLayer : IDisposable
 
     // Draws the objects around the camera into the sun's shadow images, also those off screen (their shadow may fall
     // in view).
-    public void DrawShadows(ModelRenderer renderer, ShadowMaps shadows)
+    // alsoCasting: draws what else casts a shadow into each image, seen through the light's matrix.
+    public void DrawShadows(ModelRenderer renderer, ShadowMaps shadows, Action<Matrix4x4>? alsoCasting = null)
     {
         renderer.BeginShadow();
         double now = _clock.Elapsed.TotalSeconds;
@@ -413,6 +414,7 @@ internal sealed class ModelLayer : IDisposable
                     ? opened * entity.Transform : entity.Transform;
                 renderer.DrawShadow(model, transform, lightViewProjection);
             }
+            alsoCasting?.Invoke(lightViewProjection);
         }
     }
 

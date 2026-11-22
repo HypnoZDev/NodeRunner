@@ -33,6 +33,42 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
         return builder.Build();
     }
 
+    // Offsets of the pointers leading to the collision kept in a model: a drawable's own bounds; for a fragment, its
+    // physics LOD group, that group's first LOD, and that LOD's bounds.
+    private const int DrawableBounds = 0xC8;
+    private const int FragmentPhysics = 0xF0;
+    private const int PhysicsFirstLod = 0x10;
+    private const int PhysicsLodBounds = 0xE8;
+    private const int DrawableSize = 0xD0, FragmentSize = 0x130, PhysicsGroupSize = 0x30, PhysicsLodSize = 0x130, BoundsSize = 0x70;
+
+    // The collision kept inside a model file (.ydr: the drawable's bounds; .yft: the fragment's physics bounds), in the
+    // model's own space: the one objects placed on the map use. Null when it has none.
+    public static CollisionMesh? ReadEmbedded(byte[] data, string extension)
+    {
+        try
+        {
+            var file = new BoundsFile(data);
+            int bounds = extension.ToLowerInvariant() switch
+            {
+                ".ydr" => file.Follow(0, DrawableSize, DrawableBounds, BoundsSize),
+                ".yft" when file.Follow(0, FragmentSize, FragmentPhysics, PhysicsGroupSize) is >= 0 and var group
+                    && file.Follow(group, PhysicsGroupSize, PhysicsFirstLod, PhysicsLodSize) is >= 0 and var lod
+                    => file.Follow(lod, PhysicsLodSize, PhysicsLodBounds, BoundsSize),
+                _ => -1,
+            };
+            if (bounds < 0)
+                return null;
+            var builder = new CollisionMeshBuilder();
+            int polygon = 0;
+            file.Add(builder, bounds, Matrix4x4.Identity, ref polygon);
+            return builder.Build();
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
     public (Vector3 Min, Vector3 Max)? ReadBox(string path)
     {
         if (_files.ReadFile(path) is not { } data)
@@ -204,6 +240,14 @@ internal sealed partial class BoundsFile(byte[] data)
 
     // The box of the whole file, as written in it.
     public (Vector3 Min, Vector3 Max) RootBox() => (Vec3(BoxMinOffset), Vec3(BoxMaxOffset));
+
+    // The structure a pointer of a structure (at o, of size bytes) leads to, of targetSize bytes; -1 when null.
+    public int Follow(int o, int size, int pointer, int targetSize)
+    {
+        if (o < 0 || o + size > _data.Length)
+            return -1;
+        return Resolve(U64(o + pointer), 1, targetSize);
+    }
 
     public void Add(CollisionMeshBuilder builder, int o, Matrix4x4 transform, ref int polygon)
     {
