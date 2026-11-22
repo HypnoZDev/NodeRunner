@@ -199,6 +199,12 @@ internal sealed unsafe partial class MainForm
             ImportDropped(dropped);
         }
 
+        if (_state.MapSelectionRequest is { } mapChange)
+        {
+            _state.MapSelectionRequest = null;
+            if (ConfirmLeaveChanges())
+                _state.ApplyMapSelection(mapChange.Version, mapChange.LastPack);
+        }
         if (_ui.CloseProjectRequested)
         {
             _ui.CloseProjectRequested = false;

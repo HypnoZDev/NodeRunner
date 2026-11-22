@@ -349,6 +349,9 @@ internal sealed partial class AppState
             SaveSettings();
     }
 
+    // A map change waiting for the user to save or leave the changes in progress (MainForm asks, then applies it).
+    public (MapVersion Version, string? LastPack)? MapSelectionRequest { get; set; }
+
     // Map version and "map after this DLC" (toolbar): changing them reloads the map; kept by the open project.
     public void SetMapSelection(MapVersion version, string? lastPack)
     {
@@ -359,6 +362,17 @@ internal sealed partial class AppState
             Notify(blocked, warning: true);
             return;
         }
+        // The reload would drop the changes not saved yet.
+        if (History.HasUnsavedChanges && PendingSaveCount > 0)
+        {
+            MapSelectionRequest = (version, lastPack);
+            return;
+        }
+        ApplyMapSelection(version, lastPack);
+    }
+
+    public void ApplyMapSelection(MapVersion version, string? lastPack)
+    {
         Settings.MapVersion = version;
         Settings.LastDlcPack = lastPack;
         SaveSettings();
