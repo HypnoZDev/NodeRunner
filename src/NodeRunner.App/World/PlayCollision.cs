@@ -1,14 +1,10 @@
 using System.Numerics;
-using NodeRunner.Data.Collisions;
-using NodeRunner.Data.FileSystem;
-using NodeRunner.Data.Maps;
-using NodeRunner.Data.Native.Collisions;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
 
-// The collision around the character of the play mode, as triangles sorted into square cells: read again in the
-// background when she walks away from where it was read.
+// The collision around the character of the play mode, as triangles sorted into square cells: read from the game
+// again in the background when she walks away from where it was read.
 internal sealed class PlayCollision
 {
     private const float Radius = 50f;
@@ -22,30 +18,23 @@ internal sealed class PlayCollision
     // Surfaces this close to flat are floors or ceilings: left to the ground test.
     private const float FlatNormal = 0.7f;
 
-    private sealed class Area(object catalog, int edits, Vector2 centre, Vector3[] triangles, bool[] walls, Dictionary<(int, int), List<int>> cells)
+    private sealed class Area(object data, int revision, Vector2 centre, Vector3[] triangles, bool[] walls, Dictionary<(int, int), List<int>> cells)
     {
-        public readonly object Catalog = catalog;
-        public readonly int Edits = edits;
+        public readonly object Data = data; // IPlayGame.Data and CollisionRevision when read.
+        public readonly int Revision = revision;
         public readonly Vector2 Centre = centre;
         public readonly Vector3[] Triangles = triangles; // Three corners each.
         public readonly bool[] Walls = walls; // Per triangle: steep enough to stop the body.
         public readonly Dictionary<(int, int), List<int>> Cells = cells;
     }
 
-    private readonly CollisionQuery _query = new();
-    // Collision of the models read so far (null: none in the model), by file; used by the reading task only.
-    private readonly Dictionary<string, CollisionMesh?> _models = new(StringComparer.OrdinalIgnoreCase);
-    private object? _modelsFor;
-    private const int MaxModels = 3000;
-    // Interiors are found by their position, their objects being up to this far from it.
-    private const float InteriorReach = 100f;
     private Area? _area;
     private Task<Area>? _reading;
 
     // The collision under the character is known (false while the first area is read, or without collisions).
     public bool IsReady(Vector3 position) => _area is { } area && Vector2.Distance(area.Centre, Flat(position)) < Radius - 5f;
 
-    public void Update(WorldLoader world, CollisionEdits edits, Vector3 position)
+    public void Update(IPlayGame game, Vector3 position)
     {
         if (_reading is { IsCompleted: true } done)
         {
@@ -53,17 +42,19 @@ internal sealed class PlayCollision
                 _area = done.Result;
             _reading = null;
         }
-        if (_reading is not null || world.Collisions is not { } catalog)
+        if (_reading is not null || game.Data is not { } data)
             return;
-        if (_area is { } area && ReferenceEquals(area.Catalog, catalog) && area.Edits == edits.Revision
+        int revision = game.CollisionRevision;
+        if (_area is { } area && ReferenceEquals(area.Data, data) && area.Revision == revision
             && Vector2.Distance(area.Centre, Flat(position)) < ReadAgain)
             return;
-        int revision = edits.Revision;
-        var doors = world.DoorTunings; // Read here: its first use starts loading it.
-        _reading = Task.Run(() => Read(world, catalog, edits, revision, position, doors));
+        var read = game.CollisionReader();
+        var (min, max) = AreaAround(position);
+        _reading = Task.Run(() => Build(data, revision, position, read(min, max)));
     }
 
-    // A reading under way goes on (it uses the query): its area is replaced once the character is elsewhere.
+    // A reading under way goes on (the game reads one area at a time): its area is replaced once the character is
+    // elsewhere.
     public void Clear() => _area = null;
 
     // Height of the highest surface under (x, y) that is not above fromZ; null when there is none (or not read yet).
@@ -214,75 +205,13 @@ internal sealed class PlayCollision
         return a + ab * (vb * denominator) + ac * (vc * denominator);
     }
 
-    private Area Read(WorldLoader world, CollisionCatalog catalog, CollisionEdits edits, int revision, Vector3 position, DoorTunings? doors)
-    {
-        var (min, max) = AreaAround(position);
-        var collisions = _query.CollisionIn(world, min, max, edits);
-        collisions.AddRange(ObjectsAround(world, position, doors));
-        return Build(catalog, revision, position, collisions);
-    }
-
-    // The objects placed around (the project's included, deleted ones left out) with a collision of their own in
-    // their model: props, fences, street furniture. Doors are left open, as the player pushes them.
-    private IEnumerable<PlacedCollision> ObjectsAround(WorldLoader world, Vector3 position, DoorTunings? doors)
-    {
-        if (world.Maps is not { } library || world.Models is not { } models || world.ModelFiles is not { } files)
-            yield break;
-        if (!ReferenceEquals(_modelsFor, files))
-        {
-            _modelsFor = files;
-            _models.Clear();
-        }
-        if (_models.Count > MaxModels)
-            _models.Clear();
-        var centre = Flat(position);
-        var seen = new HashSet<MapEntity>();
-        var placed = new List<MapEntity>();
-        foreach (var entity in library.EntitiesAround(centre, Radius + InteriorReach))
-        {
-            if (entity.IsInterior)
-                placed.AddRange(entity.InteriorEntities.Where(e => !e.IsDeleted && Vector2.Distance(Flat(e.Position), centre) <= Radius));
-            else if (Vector2.Distance(Flat(entity.Position), centre) <= Radius)
-                placed.Add(entity);
-        }
-        foreach (var entity in placed)
-        {
-            if (entity.LodLevel is not (LodLevel.Hd or LodLevel.OrphanHd) || !seen.Add(entity))
-                continue;
-            uint hash = entity.ArchetypeHash;
-            if (doors?.OfModel(hash) is not null || Doors.IsDoor(world.Names?.TryGet(hash)))
-                continue;
-            if (library.GetArchetype(hash) is not { } archetype || models.Locate(archetype) is not { } location)
-                continue;
-            if (!_models.TryGetValue(location.Path, out var mesh))
-                _models[location.Path] = mesh = ReadModel(files, location.Path);
-            if (mesh is not null)
-                yield return new PlacedCollision(mesh, entity.Transform);
-        }
-    }
-
-    private static CollisionMesh? ReadModel(IGameFileSystem files, string path)
-    {
-        string extension = Path.GetExtension(path);
-        if (!extension.Equals(".ydr", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".yft", StringComparison.OrdinalIgnoreCase))
-            return null;
-        try
-        {
-            return files.ReadFile(path) is { } data ? YbnReader.ReadEmbedded(data, extension) : null;
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException)
-        {
-            return null;
-        }
-    }
-
     // Collision given as it is (tests): the area around a point.
     internal void Use(IEnumerable<PlacedCollision> collisions, Vector3 position) => _area = Build(this, 0, position, collisions);
 
     private static (Vector3 Min, Vector3 Max) AreaAround(Vector3 position) =>
         (new Vector3(position.X - Radius, position.Y - Radius, -1000f), new Vector3(position.X + Radius, position.Y + Radius, position.Z + 300f));
 
-    private static Area Build(object catalog, int revision, Vector3 position, IEnumerable<PlacedCollision> collisions)
+    private static Area Build(object data, int revision, Vector3 position, IEnumerable<PlacedCollision> collisions)
     {
         var (min, max) = AreaAround(position);
         var triangles = new List<Vector3>();
@@ -330,7 +259,7 @@ internal sealed class PlayCollision
                 }
             }
         }
-        return new Area(catalog, revision, Flat(position), triangles.ToArray(), walls.ToArray(), cells);
+        return new Area(data, revision, Flat(position), triangles.ToArray(), walls.ToArray(), cells);
     }
 
     private static (int, int) CellOf(Vector2 point) => ((int)MathF.Floor(point.X / CellSize), (int)MathF.Floor(point.Y / CellSize));

@@ -15,7 +15,7 @@ internal sealed unsafe partial class MainForm
         if (!_state.PlayRequest)
             return;
         _state.PlayRequest = false;
-        if (!_state.Features.Play || _state.MapCovered || _state.Play.IsActive || _modelRenderer is null || _pickBuffer is null)
+        if (_state.PlayGame is not { } game || _state.MapCovered || _state.Play.IsActive || _modelRenderer is null || _pickBuffer is null)
             return;
         var camera = _state.Camera;
         Vector3? hit = null;
@@ -26,14 +26,14 @@ internal sealed unsafe partial class MainForm
         }
         if (hit is not { } point || Vector3.Distance(point, camera.Position) > PlayFarthestStart)
             point = camera.Position + camera.Forward * 8f;
-        _state.Play.Start(_state.World, camera, point, _state.GroundHeightAt(point));
+        _state.Play.Start(game, camera, point);
     }
 
     private void UpdatePlay(float step)
     {
         var play = _state.Play;
         // Another tab or game took the 3D view.
-        if (_state.MapCovered || _state.IsOtherGame || _modelRenderer is null)
+        if (_state.MapCovered || _state.PlayGame is null || _modelRenderer is null)
         {
             play.Stop(_state.Camera);
             ReleaseMouse();
@@ -52,8 +52,7 @@ internal sealed unsafe partial class MainForm
         if (move != Vector2.Zero)
             move = Vector2.Normalize(move);
         var input = new PlayInput(move, io.KeyShift, io.KeyAlt, ImGui.IsKeyPressed(ImGuiKey.Space, false), CaptureMouse(), io.MouseWheel);
-        play.Update(_state.World, _state.CollisionEdits, _modelRenderer, _state.Camera, input, _state.Settings.InvertMouseY,
-            _cameraController.Sensitivity, step);
+        play.Update(_modelRenderer, _state.Camera, input, _state.Settings.InvertMouseY, _cameraController.Sensitivity, step);
     }
 
     private bool _mouseCaptured;

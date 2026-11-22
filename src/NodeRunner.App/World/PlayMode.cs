@@ -1,9 +1,5 @@
 using System.Numerics;
-using NodeRunner.Data.Collisions;
-using NodeRunner.Data.FileSystem;
-using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Models;
-using NodeRunner.Data.Native.Models;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -13,13 +9,10 @@ namespace NodeRunner.App.World;
 internal readonly record struct PlayInput(Vector2 Move, bool Sprint, bool Walk, bool Jump, Vector2 Look, float Wheel);
 
 // Play mode: one ped walked on the map with the movement keys, the camera behind her, with the game's own clips for
-// standing, walking, running, sprinting and jumping. No gameplay: only moving around, to see the map as a player.
+// standing, walking, running, sprinting and jumping. No gameplay: only moving around, to see the map as a player. The
+// same in every game: what is proper to one (the walker, her clips, the collision) comes from its IPlayGame.
 internal sealed class PlayMode : IDisposable
 {
-    public const string PedName = "ig_agatha";
-    private const string MoveDictionary = "move_f@generic";
-    private const string JumpDictionary = "move_jump";
-
     private const float Acceleration = 9f; // Metres per second, each second.
     private const float Deceleration = 12f;
     private const float TurnRate = 10f; // How fast she turns to where she is asked to go (1 / seconds).
@@ -27,14 +20,10 @@ internal sealed class PlayMode : IDisposable
     private const float JumpSpeed = 4.6f; // Upwards, at the start of a jump: about 1 m high.
     private const float StepUp = 0.45f; // Highest step climbed without jumping.
     private const float StepDown = 0.6f; // Lowest step walked down without falling.
+    private const float StartRise = 2f; // Ground looked for this far above the point she starts at.
     private const float MaxSubstep = 0.12f; // Metres moved at once, less than the body's radius.
     private const float FallBack = 60f; // Metres fallen with no ground below: back to the start.
     private const float BlendIn = 10f; // Clip changes (jump, landing), 1 / seconds.
-    // Seconds into jump_launch_l: feet leaving the ground; legs tucked in the air. With JumpSpeed, she lands about
-    // when the clip stretches the legs down (1.2 s).
-    private const float JumpClipStart = 0.25f;
-    private const float FallClipStart = 0.6f;
-
     // Camera: around a point above the feet, at a distance the wheel changes.
     private const float PivotHeight = 1.45f;
     private const float MinDistance = 1.2f;
@@ -45,13 +34,12 @@ internal sealed class PlayMode : IDisposable
     private const float MinPitch = -1.25f;
     private const float MaxPitch = 0.7f;
 
-    private sealed record Clips(AnimationClip Idle, AnimationClip Walk, AnimationClip Run, AnimationClip Sprint, AnimationClip? Jump,
-        float WalkSpeed, float RunSpeed, float SprintSpeed);
-
     private readonly PreviewModel _model = new();
     private readonly PlayCollision _collision = new();
-    private Task<Clips?>? _clips;
+    private IPlayGame? _game;
+    private Task<PlayClips?>? _clips;
     private object? _clipsFor;
+    private bool _placed; // Put on the ground under where she started, once the collision there is read.
     private Matrix4x4[]? _pose;
 
     private Vector3 _start;
@@ -88,25 +76,27 @@ internal sealed class PlayMode : IDisposable
         : _waiting ? L("Lecture des collisions...")
         : null;
 
-    // Starts at a point of the map (on the ground when known), facing the way the camera looks.
-    public void Start(WorldLoader world, Camera camera, Vector3 at, float? ground)
+    // Starts at a point of the map (put on the ground below once its collision is read), facing the way the camera
+    // looks.
+    public void Start(IPlayGame game, Camera camera, Vector3 at)
     {
-        if (world.Models is not { } models)
+        if (game.Data is not { } data)
             return;
+        _game = game;
         _saved = (camera.Position, camera.Yaw, camera.Pitch, camera.NearPlane);
-        Position = _start = at with { Z = ground ?? at.Z };
+        Position = _start = at;
         _heading = _startHeading = camera.Yaw - MathF.PI / 2f; // The model faces +Y.
-        (_speed, _verticalSpeed, _grounded, _waiting, _fallen) = (0f, 0f, true, true, 0f);
+        (_speed, _verticalSpeed, _grounded, _waiting, _fallen, _placed) = (0f, 0f, true, true, 0f, false);
         (_phase, _idleTime, _jumpTime, _jumpWeight, _jumped) = (0f, 0f, 0f, 0f, false);
         _cameraYaw = camera.Yaw;
         _cameraPitch = -0.25f;
         _pivotZ = Position.Z + PivotHeight;
         _shownDistance = _distance;
-        _model.Open(ViewerCatalog.Ped(models, PedName, null), world);
-        if (!ReferenceEquals(_clipsFor, world.Content) && world.Content is { } content)
+        game.OpenCharacter(_model);
+        if (!ReferenceEquals(_clipsFor, data))
         {
-            _clipsFor = content;
-            _clips = Task.Run(() => ReadClips(content));
+            _clipsFor = data;
+            _clips = Task.Run(game.ReadClips);
         }
         _collision.Clear();
         IsActive = true;
@@ -126,25 +116,31 @@ internal sealed class PlayMode : IDisposable
         _pose = null;
     }
 
-    public void Update(WorldLoader world, CollisionEdits edits, ModelRenderer renderer, Camera camera, PlayInput input, bool invertY,
-        float sensitivity, float step)
+    public void Update(ModelRenderer renderer, Camera camera, PlayInput input, bool invertY, float sensitivity, float step)
     {
-        if (!IsActive)
+        if (!IsActive || _game is not { } game)
             return;
         _model.Update(renderer);
-        _collision.Update(world, edits, Position);
+        _collision.Update(game, Position);
         _cameraYaw -= input.Look.X * MouseSensitivity * sensitivity;
         _cameraPitch = Math.Clamp(_cameraPitch - input.Look.Y * MouseSensitivity * sensitivity * (invertY ? -1f : 1f), MinPitch, MaxPitch);
         _distance = Math.Clamp(_distance * MathF.Pow(0.88f, input.Wheel), MinDistance, MaxDistance);
 
         var clips = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
         _waiting = !_collision.IsReady(Position);
+        if (!_waiting && !_placed)
+        {
+            // Started at the point looked at: on the surface just below it (a step or less above: the same).
+            _placed = true;
+            if (_collision.Ground(new Vector2(Position.X, Position.Y), Position.Z + StartRise) is { } ground)
+                Position = _start = Position with { Z = ground };
+        }
         if (clips is not null && _model.Model is not null && !_waiting)
             Move(clips, input, step);
         PlaceCamera(camera, step);
     }
 
-    private void Move(Clips clips, PlayInput input, float step)
+    private void Move(PlayClips clips, PlayInput input, float step)
     {
         // Where she is asked to go, from the camera's point of view.
         var forward = new Vector2(MathF.Cos(_cameraYaw), MathF.Sin(_cameraYaw));
@@ -236,7 +232,7 @@ internal sealed class PlayMode : IDisposable
     }
 
     // Shares of the standing, walking, running and sprinting clips at a speed.
-    private static (float Idle, float Walk, float Run, float Sprint) Weights(Clips clips, float speed)
+    private static (float Idle, float Walk, float Run, float Sprint) Weights(PlayClips clips, float speed)
     {
         if (speed <= clips.WalkSpeed)
         {
@@ -287,9 +283,8 @@ internal sealed class PlayMode : IDisposable
                 new(clips.Walk, _phase * clips.Walk.Duration, walk * ground),
                 new(clips.Run, _phase * clips.Run.Duration, run * ground),
                 new(clips.Sprint, _phase * clips.Sprint.Duration, sprint * ground),
-                // From the push off the ground (its crouch is skipped: she leaves at once), held on its last pose
-                // (legs down for the landing); a fall without a jump starts with the legs tucked.
-                new(clips.Jump ?? clips.Idle, Math.Min(_jumpTime + (_jumped ? JumpClipStart : FallClipStart), (clips.Jump?.Duration ?? 1f) - 0.02f),
+                // From where the feet leave the ground, held on its last pose (legs down for the landing).
+                new(clips.Jump ?? clips.Idle, Math.Min(_jumpTime + (_jumped ? clips.JumpStart : clips.FallStart), (clips.Jump?.Duration ?? 1f) - 0.02f),
                     1f - ground),
             ];
             SkeletonAnimator.Pose(skeleton, layers, _pose);
@@ -318,50 +313,6 @@ internal sealed class PlayMode : IDisposable
     // The model's feet (lowest point) on her position, facing her heading.
     private Matrix4x4 Placement() =>
         Matrix4x4.CreateTranslation(0f, 0f, -_model.BoundsMin.Z) * Matrix4x4.CreateRotationZ(_heading) * Matrix4x4.CreateTranslation(Position);
-
-    private static Clips? ReadClips(GameContent content)
-    {
-        try
-        {
-            var moves = Read(content, MoveDictionary);
-            var jumps = Read(content, JumpDictionary);
-            if (Find(moves, "idle") is not { } idle || Find(moves, "walk") is not { } walk || Find(moves, "run") is not { } run
-                || Find(moves, "sprint") is not { } sprint)
-                return null;
-            return new Clips(idle, walk, run, sprint, Find(jumps, "jump_launch_l"),
-                SpeedOf(walk, 1.8f), SpeedOf(run, 3.7f), SpeedOf(sprint, 5.8f));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return null;
-        }
-    }
-
-    private static IReadOnlyDictionary<uint, AnimationClip> Read(GameContent content, string dictionary)
-    {
-        // The last one listed: a DLC's version over the base game's.
-        string? path = content.EnumerateFiles(".ycd")
-            .LastOrDefault(p => Path.GetFileNameWithoutExtension(p).Equals(dictionary, StringComparison.OrdinalIgnoreCase));
-        if (path is null || content.ReadFile(path) is not { } data || content.GetResourceHeader(path) is not { } header)
-            return new Dictionary<uint, AnimationClip>();
-        return ClipDictionaryReader.Read(data, header);
-    }
-
-    private static AnimationClip? Find(IReadOnlyDictionary<uint, AnimationClip> clips, string name) =>
-        clips.GetValueOrDefault(Joaat.Hash(name))
-        ?? clips.Values.FirstOrDefault(c => c.Name is { } full
-            && Path.GetFileNameWithoutExtension(full.Replace('\\', '/').Split('/')[^1]).Equals(name, StringComparison.OrdinalIgnoreCase));
-
-    // How fast a looping clip moves its ped forward, from its mover track (metres per second).
-    private static float SpeedOf(AnimationClip clip, float fallback)
-    {
-        if (clip.Duration <= 0f)
-            return fallback;
-        var a = clip.Root(0f, AnimationTrackKind.MoverTranslation, AnimationTrackKind.MoverRotation).Position;
-        var b = clip.Root(clip.Duration - 0.001f, AnimationTrackKind.MoverTranslation, AnimationTrackKind.MoverRotation).Position;
-        float speed = a is { } from && b is { } to ? (to - from).Length() / clip.Duration : 0f;
-        return speed is > 0.5f and < 12f ? speed : fallback;
-    }
 
     private static float Wrap(float angle)
     {

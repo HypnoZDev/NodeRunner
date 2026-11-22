@@ -110,7 +110,7 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
             ImGui.SetCursorPosX(centre);
         else
             Widgets.ToolbarSeparator();
-        bool ready = state.World.Models is not null && state.World.Content is not null && !state.MapCovered;
+        bool ready = state.PlayGame?.Data is not null && !state.MapCovered;
         string keys = state.Keys.First(KeyAction.Play) is { } key ? $" ({key})" : "";
         string tip = ready
             ? L($"Marcher sur la carte avec un personnage, comme dans le jeu{keys} : {state.Keys.MoveText()} pour se déplacer, Maj pour sprinter, Alt pour marcher, Espace pour sauter, Échap pour revenir.")

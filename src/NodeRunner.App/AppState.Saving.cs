@@ -79,6 +79,11 @@ internal sealed partial class AppState
 
     public bool PlayRequest { get; set; }
 
+    // The game's side of play mode (walker, clips, collision); null in a game play mode does not know yet.
+    public IPlayGame? PlayGame => IsOtherGame || !Features.Play ? null : _gta5Play ??= new Gta5PlayGame(World, () => CollisionEdits);
+
+    private Gta5PlayGame? _gta5Play;
+
     // Clips played by the peds of the selected point and of the simulation.
     public ScenarioClips ScenarioClips { get; } = new();
 
