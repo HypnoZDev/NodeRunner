@@ -31,6 +31,9 @@ internal sealed class CameraController
 
     public bool IsLooking => _looking;
 
+    // Play mode moves the camera: the mouse buttons and wheel are left alone.
+    public bool Paused { get; set; }
+
     public void Attach(Control control)
     {
         control.KeyDown += (_, e) =>
@@ -45,7 +48,7 @@ internal sealed class CameraController
         control.MouseDown += (_, e) =>
         {
             // Clicks on an ImGui window belong to the interface, not to the camera.
-            if (e.Button == MouseButtons.Right && !ImGuiWantsMouse())
+            if (e.Button == MouseButtons.Right && !ImGuiWantsMouse() && !Paused)
             {
                 _looking = true;
                 _lastMouse = e.Location;
@@ -65,9 +68,9 @@ internal sealed class CameraController
         };
         control.MouseWheel += (_, e) =>
         {
-            if (ImGuiWantsMouse())
+            if (ImGuiWantsMouse() || Paused)
                 return;
-            Speed = Math.Clamp(Speed * MathF.Pow(WheelSpeedFactor, e.Delta / 120f), MinSpeed, MaxSpeed);
+            Speed =Math.Clamp(Speed * MathF.Pow(WheelSpeedFactor, e.Delta / 120f), MinSpeed, MaxSpeed);
         };
     }
 

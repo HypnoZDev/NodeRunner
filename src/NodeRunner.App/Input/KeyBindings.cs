@@ -38,6 +38,7 @@ public enum KeyAction
     Archives,
     Peds,
     Cutscenes,
+    Play,
 }
 
 // The base the user's changes apply to.
@@ -137,6 +138,7 @@ public static class KeyBindings
             [KeyAction.Archives] = [K(ImGuiKey.F3)],
             [KeyAction.Peds] = [K(ImGuiKey.F4)],
             [KeyAction.Cutscenes] = [K(ImGuiKey.F5)],
+            [KeyAction.Play] = [new KeyChord(ImGuiKey.P, Alt: true)],
         };
         if (preset == KeyPreset.CodeWalker)
         {

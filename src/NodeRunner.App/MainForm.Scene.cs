@@ -142,6 +142,9 @@ internal sealed unsafe partial class MainForm
             c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsOtherGame && _state.Cutscenes.Cutscene is null);
         _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
 
+        // The character of the play mode.
+        _state.Play.Draw(_modelRenderer, viewProjection);
+
         // The cutscene chosen in the cutscene viewer, at its place.
         _state.Cutscenes.Update(_state.World, _modelRenderer);
         _state.Cutscenes.Draw(_modelRenderer, viewProjection);
@@ -216,6 +219,9 @@ internal sealed unsafe partial class MainForm
             lines.Flush(viewProjection, camera.Position, fadeDistance);
         }
 
+        // Play mode: the map as in the game, without the editor's marks.
+        if (_state.Play.IsActive)
+            return;
         DrawSelectionBox(lines, viewProjection);
         if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);

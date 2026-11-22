@@ -73,6 +73,12 @@ internal sealed partial class AppState
 
     public ScenarioLife ScenarioLife { get; } = new();
 
+    // Play mode: a ped walked on the map. PlayRequest: started by the main form at the next frame (it needs the
+    // centre of the 3D view).
+    public PlayMode Play { get; } = new();
+
+    public bool PlayRequest { get; set; }
+
     // Clips played by the peds of the selected point and of the simulation.
     public ScenarioClips ScenarioClips { get; } = new();
 

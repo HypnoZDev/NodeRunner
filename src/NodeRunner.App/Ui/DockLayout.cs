@@ -15,6 +15,9 @@ internal static unsafe partial class DockLayout
     private const float LeftBottomRatio = 0.48f;
     private const float CenterBottomRatio = 0.26f;
 
+    // Renamed when the panel window IDs change, so that the default layout is rebuilt.
+    private const string DockSpaceName = "NodeRunnerDockSpace7";
+
     public static (Vector2 Position, Vector2 Size) SceneArea { get; private set; }
 
     // Submits the dock space; call each frame before the panels. reset rebuilds the default layout: two panels
@@ -22,14 +25,21 @@ internal static unsafe partial class DockLayout
     public static void Draw(bool reset, string leftTop, string leftBottom, string rightTop, string rightBottom, string bottom)
     {
         var viewport = ImGui.GetMainViewport();
-        // Renamed when the panel window IDs change, so that the default layout is rebuilt.
-        uint id = ImGui.GetID("NodeRunnerDockSpace7");
+        uint id = ImGui.GetID(DockSpaceName);
         if (reset || igDockBuilderGetNode(id) is null)
             BuildDefault(id, viewport.WorkSize, leftTop, leftBottom, rightTop, rightBottom, bottom);
 
         ImGui.DockSpaceOverViewport(id, viewport,
             ImGuiDockNodeFlags.PassthruCentralNode | ImGuiDockNodeFlags.NoDockingOverCentralNode);
         SceneArea = FindSceneArea(id, viewport);
+    }
+
+    // The panels hidden (play mode) and the 3D view on the whole window; their layout is kept for afterwards.
+    public static void DrawHidden()
+    {
+        var viewport = ImGui.GetMainViewport();
+        ImGui.DockSpaceOverViewport(ImGui.GetID(DockSpaceName), viewport, ImGuiDockNodeFlags.KeepAliveOnly);
+        SceneArea = (viewport.Pos, viewport.Size);
     }
 
     // A bar along the top of the 3D view (the tabs): the scene starts below it.

@@ -15,6 +15,8 @@ internal sealed unsafe partial class MainForm
     private const int WmNcLButtonDblClk = 0xA3;
     private const int WmNcMouseLeave = 0x2A2;
     private const int WmMouseMove = 0x200;
+    private const int WmSysCommand = 0x112;
+    private const int ScKeyMenu = 0xF100;
     private const int HtClient = 1;
     private const int HtCaption = 2;
     private const int HtMaxButton = 9;
@@ -65,6 +67,10 @@ internal sealed unsafe partial class MainForm
             case WmMouseMove:
                 WindowChrome.MaximizePressed = false;
                 break;
+            // Alt walks in play mode: released alone, it would open the window menu and keep the next keys.
+            case WmSysCommand when ((long)m.WParam & 0xFFF0) == ScKeyMenu && _state.Play.IsActive:
+                m.Result = IntPtr.Zero;
+                return;
         }
         base.WndProc(ref m);
     }
@@ -82,6 +88,9 @@ internal sealed unsafe partial class MainForm
         int edge = FrameThickness();
         if (!IsZoomed(Handle) && p.Y < edge)
             return p.X < edge * 2 ? HtTopLeft : p.X >= ClientSize.Width - edge * 2 ? HtTopRight : HtTop;
+        // Play mode: no title bar is drawn, the whole window is the 3D view.
+        if (_state.Play.IsActive)
+            return HtClient;
         return WindowChrome.HitTest(new PointF(p.X / UiTheme.Scale, p.Y / UiTheme.Scale)) switch
         {
             WindowChrome.Part.MaximizeButton => HtMaxButton,

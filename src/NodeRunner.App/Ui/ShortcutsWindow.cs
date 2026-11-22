@@ -65,6 +65,15 @@ internal sealed class ShortcutsWindow(AppState state)
                 (L("Flèche gauche / droite"), L("Image précédente / suivante")),
                 (L("Origine / Fin"), L("Début / fin de l'animation")),
                 ("F", L("Vue par défaut")));
+            Group(L("Mode Play"),
+                A(KeyAction.Play),
+                (state.Keys.MoveText(), L("Se déplacer (course)")),
+                (L("Maj"), L("Sprinter")),
+                (L("Alt"), L("Marcher")),
+                (L("Espace"), L("Sauter")),
+                (L("Souris"), L("Tourner la caméra")),
+                (L("Molette"), L("Rapprocher ou éloigner la caméra")),
+                (L("Échap"), L("Quitter le mode Play")));
         }
         ImGui.End();
     }

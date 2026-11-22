@@ -215,6 +215,9 @@ internal sealed unsafe partial class MainForm : Form
     {
         Application.Idle -= OnApplicationIdle;
         PlatformWindows.Shutdown();
+        // The free camera is kept, not the one following the character.
+        _state.Play.Stop(_state.Camera);
+        ReleaseMouse();
         SaveCamera();
         _state.World.Dispose();
         _pathNodeLayer.Dispose();
@@ -239,6 +242,7 @@ internal sealed unsafe partial class MainForm : Form
         _state.ScenarioPreview.Dispose();
         _state.ScenarioLife.Dispose();
         _state.ScenarioClips.Dispose();
+        _state.Play.Dispose();
         _modelRenderer?.Dispose();
         _modelRenderer = null;
         _skyRenderer?.Dispose();
@@ -375,7 +379,14 @@ internal sealed unsafe partial class MainForm : Form
         _cameraController.Sensitivity = Math.Clamp(_state.Settings.MouseSensitivity, MinMouseSensitivity, MaxMouseSensitivity);
         _cameraController.InvertY = _state.Settings.InvertMouseY;
         _cameraController.Keys = _state.Keys;
-        _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f), KeysOnSceneView() && !_state.IsCapturingKey);
+        _cameraController.Paused = _state.Play.IsActive;
+        if (_state.Play.IsActive)
+            UpdatePlay(Math.Min(deltaTime, 0.1f));
+        else
+        {
+            ReleaseMouse();
+            _cameraController.Update(_state.Camera, Math.Min(deltaTime, 0.1f), KeysOnSceneView() && !_state.IsCapturingKey);
+        }
 
         UiTheme.ApplyPending();
         UiTheme.FollowAccent(GameAccent(), deltaTime);
@@ -404,6 +415,7 @@ internal sealed unsafe partial class MainForm : Form
         PickContextObject(scene);
         PickCollision(scene);
         PlaceRequestedObject(scene);
+        StartRequestedPlay(scene);
         graphics.BeginFrame(BackgroundColor);
         graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
         // A tab covers the 3D view: only the map's loading goes on.

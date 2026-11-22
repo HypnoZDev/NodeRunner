@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.App.Input;
 using NodeRunner.App.World;
 using NodeRunner.Data.FileSystem;
 
@@ -93,6 +94,29 @@ internal sealed class Toolbar(AppState state, Action drawProjectMenu, Action bro
                 active: online.IsActive))
             toggleOnline();
         DrawGlow();
+        DrawPlay();
+    }
+
+    // Play, in the middle of the bar when there is room (after the other buttons otherwise).
+    private void DrawPlay()
+    {
+        if (!state.Features.Play)
+            return;
+        string label = $"{Icons.Play}  Play";
+        float width = ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f;
+        float centre = (ImGui.GetWindowWidth() - width) * 0.5f;
+        ImGui.SameLine();
+        if (centre > ImGui.GetCursorPosX() + 16f)
+            ImGui.SetCursorPosX(centre);
+        else
+            Widgets.ToolbarSeparator();
+        bool ready = state.World.Models is not null && state.World.Content is not null && !state.MapCovered;
+        string keys = state.Keys.First(KeyAction.Play) is { } key ? $" ({key})" : "";
+        string tip = ready
+            ? L($"Marcher sur la carte avec un personnage, comme dans le jeu{keys} : {state.Keys.MoveText()} pour se déplacer, Maj pour sprinter, Alt pour marcher, Espace pour sauter, Échap pour revenir.")
+            : state.MapCovered ? L("Revenez d'abord à l'onglet Carte.") : L("La carte est en cours de chargement.");
+        if (Widgets.ToolbarButton(Icons.Play, "Play", tip, ready, active: true))
+            state.PlayRequest = true;
     }
 
     // Eye-catcher on the Online button: pulsing accent halo and a light sweep every few seconds.

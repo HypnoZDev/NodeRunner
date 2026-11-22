@@ -6,10 +6,11 @@ public sealed record GameFeatures(
     bool Gta5Exports,
     bool Online,
     bool PedViewer,
-    bool CutsceneViewer)
+    bool CutsceneViewer,
+    bool Play)
 {
-    private static readonly GameFeatures Everything = new(true, true, true, true, true);
-    private static readonly GameFeatures BrowseOnly = new(false, false, false, false, false);
+    private static readonly GameFeatures Everything = new(true, true, true, true, true, true);
+    private static readonly GameFeatures BrowseOnly = new(false, false, false, false, false, false);
 
     // Editing: projects, creating and placing objects, saving, the model workshop.
     // Gta5Exports: FiveM resource, solo pack, FiveM scripts.

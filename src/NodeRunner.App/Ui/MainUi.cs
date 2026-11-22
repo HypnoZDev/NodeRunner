@@ -89,6 +89,7 @@ internal sealed class MainUi
         _imagePropWindow = new ImagePropWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
         _shortcutsWindow.OpenSettings = _settingsWindow.OpenKeys;
+        _playOverlay = new PlayOverlay(state);
     }
 
     // What the search palette (Ctrl+K) can run besides finding things: the usual actions, by name.
@@ -132,6 +133,8 @@ internal sealed class MainUi
                 if (!_state.CutsceneOpen) ToggleCutscenes();
             }, features.CutsceneViewer),
             new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", KeyText(KeyAction.Peds), _pedStudio.Open, features.PedViewer),
+            new(Icons.Play, L("Mode Play : marcher sur la carte"), "play jouer jeu marcher personnage tester", KeyText(KeyAction.Play),
+                () => _state.PlayRequest = true, features.Play && !_state.MapCovered),
             new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", KeyText(KeyAction.Archives), () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, features.Editing),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, features.Online),
@@ -275,6 +278,7 @@ internal sealed class MainUi
     private readonly ShortcutsWindow _shortcutsWindow;
     private readonly WelcomeWindow _welcomeWindow;
     private readonly ProtectedMappingWindow _protectedWindow = new();
+    private readonly PlayOverlay _playOverlay;
 
     public bool BrowseGameFolderRequested { get; set; }
 
@@ -409,6 +413,11 @@ internal sealed class MainUi
     public void Draw()
     {
         _state.Online.Update();
+        if (_state.Play.IsActive)
+        {
+            DrawPlaying();
+            return;
+        }
         _viewerPanel.BeginFrame();
         _pedStudio.BeginFrame();
         _cutscenePanel.BeginFrame();
@@ -484,6 +493,16 @@ internal sealed class MainUi
         _searchPalette.Draw(); // Last: above the panels.
     }
 
+    // Play mode: the 3D view on the whole window, the keys over it; Échap (or the Play key again) goes back.
+    private void DrawPlaying()
+    {
+        DockLayout.DrawHidden();
+        _playOverlay.Draw();
+        _noticeToast.Draw();
+        if (ImGui.IsKeyPressed(ImGuiKey.Escape, false) || _state.Keys.Pressed(KeyAction.Play))
+            _state.Play.Stop(_state.Camera);
+    }
+
     private void HandleShortcuts()
     {
         if (_state.IsCapturingKey)
@@ -545,6 +564,8 @@ internal sealed class MainUi
             ToggleCutscenes();
         if (!map)
             return;
+        if (keys.Pressed(KeyAction.Play) && _state.Features.Play)
+            _state.PlayRequest = true;
         if (keys.Pressed(KeyAction.Copy))
             _state.CopySelection();
         else if (keys.Pressed(KeyAction.Paste) && _state.Copied.Count > 0)
@@ -791,6 +812,8 @@ internal sealed class MainUi
                 _pedStudio.Open();
             if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), KeyText(KeyAction.Cutscenes), _state.CutsceneOpen, _state.Features.CutsceneViewer))
                 ToggleCutscenes();
+            if (ImGui.MenuItem(L($"{Icons.Play}  Mode Play (marcher sur la carte)"), KeyText(KeyAction.Play), false, _state.Features.Play && !_state.MapCovered))
+                _state.PlayRequest = true;
             if (ImGui.BeginMenu(L($"{Icons.LibraryBig}  Bibliothèque de props")))
             {
                 bool shown = _showLibrary;
