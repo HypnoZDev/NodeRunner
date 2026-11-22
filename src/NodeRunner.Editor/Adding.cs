@@ -32,6 +32,18 @@ public static class Adding
         };
     }
 
+    // Turn around Z so that the object's front (+Y) looks at viewer, rounded to stepDegrees; none if viewer is above it.
+    public static Quaternion Facing(Vector3 position, Vector3 viewer, float stepDegrees = 5f)
+    {
+        var d = viewer - position;
+        if (d.X * d.X + d.Y * d.Y < 1e-4f)
+            return Quaternion.Identity;
+        float degrees = MathF.Atan2(-d.X, d.Y) * 180f / MathF.PI;
+        if (stepDegrees > 0f)
+            degrees = MathF.Round(degrees / stepDegrees) * stepDegrees;
+        return Quaternion.CreateFromAxisAngle(Vector3.UnitZ, degrees * MathF.PI / 180f);
+    }
+
     // The definition of a new object of an interior, from the object placed in the world: placed relative to the
     // interior instance, in room.
     public static MapEntity InteriorDefinition(MapEntity placed, MapEntity instance, int room)

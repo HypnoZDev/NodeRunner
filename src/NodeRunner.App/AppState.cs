@@ -412,7 +412,8 @@ internal sealed partial class AppState
         if (World.Maps is not { } library || ProjectMap(library) is not { } map)
             return;
         var archetype = library.GetArchetype(archetypeHash);
-        var entity = Adding.NewEntity(archetypeHash, archetype, Adding.StandingOn(ground, archetype), System.Numerics.Quaternion.Identity);
+        // Front turned towards the camera, as the user usually looks at where the object goes.
+        var entity = Adding.NewEntity(archetypeHash, archetype, Adding.StandingOn(ground, archetype), Adding.Facing(ground, Camera.Position));
         // The point found in the picture may be a tree top or a model without collision: rest on the collision below.
         if (GroundPosition(entity, archetype) is { } onCollision)
             entity.SetPlacement(onCollision, entity.Orientation, entity.Scale);

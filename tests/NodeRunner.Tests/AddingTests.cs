@@ -7,6 +7,18 @@ namespace NodeRunner.Tests;
 public class AddingTests
 {
     [Fact]
+    public void New_object_faces_the_viewer()
+    {
+        var at = new Vector3(100, 100, 0);
+        // Viewer to the east: the front (+Y) turns to +X, i.e. -90 degrees around Z.
+        var turn = Adding.Facing(at, at + new Vector3(50, 2, 30));
+        var front = Vector3.Transform(Vector3.UnitY, turn);
+        Assert.Equal(1f, front.X, 3);
+        Assert.Equal(0f, front.Y, 3);
+        Assert.Equal(Quaternion.Identity, Adding.Facing(at, at + new Vector3(0, 0, 10)));
+    }
+
+    [Fact]
     public void Adding_can_be_undone_and_redone()
     {
         var library = new MapLibrary();
