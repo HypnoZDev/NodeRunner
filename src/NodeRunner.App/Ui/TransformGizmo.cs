@@ -749,6 +749,8 @@ internal sealed class TransformGizmo(AppState state)
 
         if (_drag is { Feedback.Length: > 0 } drag)
             DrawFeedback(drawList, mouse + new Vector2(18f, 16f), drag.Feedback);
+        else if (_drag is null && tool == TransformTool.Rotate && _hovered.Kind == Kind.Ring)
+            DrawFeedback(drawList, mouse + new Vector2(18f, 16f), AxisNames[_hovered.Axis]);
         drawList.PopClipRect();
     }
 
@@ -786,7 +788,17 @@ internal sealed class TransformGizmo(AppState state)
             var point = tip + direction * 13f;
             drawList.AddTriangleFilled(point + direction * 1.5f, tip + normal * 6.5f, tip - normal * 6.5f, Shadow);
             drawList.AddTriangleFilled(point, tip + normal * 5.5f, tip - normal * 5.5f, color);
+            AxisLetter(drawList, point + direction * 9f, a, color);
         }
+    }
+
+    // The axis named by its letter, not only by its colour (colour-blind users).
+    private static void AxisLetter(ImDrawListPtr drawList, Vector2 at, int axis, uint color)
+    {
+        string text = AxisNames[axis];
+        var corner = at - ImGui.CalcTextSize(text) * 0.5f;
+        drawList.AddText(corner + new Vector2(1f, 1f), Shadow, text);
+        drawList.AddText(corner, color, text);
     }
 
     private void DrawGuide(ImDrawListPtr drawList, Vector3 start, Vector3 axis, Vector4 color)
@@ -859,6 +871,8 @@ internal sealed class TransformGizmo(AppState state)
             Line(drawList, center, tip, color, 2.5f);
             drawList.AddRectFilled(tip - new Vector2(6f), tip + new Vector2(6f), Shadow, 2f);
             drawList.AddRectFilled(tip - new Vector2(5f), tip + new Vector2(5f), color, 2f);
+            if (Vector2.Distance(tip, center) > 1f)
+                AxisLetter(drawList, tip + Vector2.Normalize(tip - center) * 16f, a, color);
         }
 
         var uniform = new Handle(Kind.ScaleUniform);
