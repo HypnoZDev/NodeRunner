@@ -27,6 +27,7 @@ internal sealed class PlayMode : IDisposable
     private const float JumpSpeed = 4.6f; // Upwards, at the start of a jump: about 1 m high.
     private const float StepUp = 0.45f; // Highest step climbed without jumping.
     private const float StepDown = 0.6f; // Lowest step walked down without falling.
+    private const float MaxSubstep = 0.12f; // Metres moved at once, less than the body's radius.
     private const float FallBack = 60f; // Metres fallen with no ground below: back to the start.
     private const float BlendIn = 10f; // Clip changes (jump, landing), 1 / seconds.
     // Seconds into jump_launch_l: feet leaving the ground; legs tucked in the air. With JumpSpeed, she lands about
@@ -39,6 +40,8 @@ internal sealed class PlayMode : IDisposable
     private const float MinDistance = 1.2f;
     private const float MaxDistance = 12f;
     private const float MouseSensitivity = 0.004f;
+    private const float CameraMargin = 0.25f; // Kept between the camera and a wall behind it.
+    private const float NearestCamera = 0.35f;
     private const float MinPitch = -1.25f;
     private const float MaxPitch = 0.7f;
 
@@ -67,7 +70,8 @@ internal sealed class PlayMode : IDisposable
 
     private float _cameraYaw;
     private float _cameraPitch;
-    private float _distance = 3.6f;
+    private float _distance = 3.6f; // Asked with the wheel.
+    private float _shownDistance = 3.6f; // Shorter while a wall is behind her.
     private float _pivotZ;
     private (Vector3 Position, float Yaw, float Pitch, float NearPlane) _saved;
 
@@ -97,6 +101,7 @@ internal sealed class PlayMode : IDisposable
         _cameraYaw = camera.Yaw;
         _cameraPitch = -0.25f;
         _pivotZ = Position.Z + PivotHeight;
+        _shownDistance = _distance;
         _model.Open(ViewerCatalog.Ped(models, PedName, null), world);
         if (!ReferenceEquals(_clipsFor, world.Content) && world.Content is { } content)
         {
@@ -155,10 +160,22 @@ internal sealed class PlayMode : IDisposable
         if (_grounded)
             _speed += Math.Clamp(target - _speed, -Deceleration * step, Acceleration * step);
 
-        // Ahead, the way she faces (she turns in an arc, as in the game).
+        // Ahead, the way she faces (she turns in an arc, as in the game), in short steps so that no wall is crossed;
+        // the walls push her back, and she slides along them.
         var facing = new Vector2(-MathF.Sin(_heading), MathF.Cos(_heading));
-        var flat = new Vector2(Position.X, Position.Y) + facing * _speed * step;
         float z = Position.Z;
+        var feet = Position;
+        float distance = _speed * step;
+        int steps = Math.Max(1, (int)MathF.Ceiling(distance / MaxSubstep));
+        for (int i = 0; i < steps; i++)
+        {
+            var next = feet + new Vector3(facing * (distance / steps), 0f);
+            feet = _collision.PushOut(next);
+        }
+        var flat = new Vector2(feet.X, feet.Y);
+        // Against a wall: the clips slow down with her.
+        if (_grounded && step > 0f)
+            _speed = MathF.Min(_speed, Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step + 0.05f);
 
         if (_grounded && input.Jump)
         {
@@ -241,7 +258,13 @@ internal sealed class PlayMode : IDisposable
         _pivotZ += (Position.Z + PivotHeight - _pivotZ) * (1f - MathF.Exp(-15f * step));
         var pivot = Position with { Z = _pivotZ };
         var forward = new Vector3(MathF.Cos(_cameraPitch) * MathF.Cos(_cameraYaw), MathF.Cos(_cameraPitch) * MathF.Sin(_cameraYaw), MathF.Sin(_cameraPitch));
-        camera.Position = pivot - forward * _distance;
+        // A wall or the ground between her and the camera: the camera comes in front of it at once, and goes back
+        // out smoothly.
+        float room = _distance;
+        if (_collision.Hit(pivot, pivot - forward * (_distance + CameraMargin)) is { } share)
+            room = Math.Max(share * (_distance + CameraMargin) - CameraMargin, NearestCamera);
+        _shownDistance = room < _shownDistance ? room : _shownDistance + (room - _shownDistance) * (1f - MathF.Exp(-4f * step));
+        camera.Position = pivot - forward * _shownDistance;
         camera.Yaw = _cameraYaw;
         camera.Pitch = _cameraPitch;
     }
