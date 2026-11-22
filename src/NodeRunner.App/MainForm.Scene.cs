@@ -114,7 +114,8 @@ internal sealed unsafe partial class MainForm
 
         if (settings.ShowSky)
             _skyRenderer!.Draw(viewProjection, lighting);
-        bool occlusionPreview = modelsEnabled && settings.OcclusionPreview;
+        // Play mode shows the map as the game does: always without what the occluders hide.
+        bool occlusionPreview = modelsEnabled && (settings.OcclusionPreview || _state.Play.IsActive);
         _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
         if (occlusionPreview)
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
@@ -388,8 +389,9 @@ internal sealed unsafe partial class MainForm
     }
 
     // The selected objects of the map shown (GTA V, or the one GTA IV object).
+    // None in play mode: no tint, and the occluders hide them as the others.
     private IReadOnlyList<Data.Maps.MapEntity> SelectedForDrawing =>
-        !_state.IsOtherGame ? _state.SelectedEntities : _state.Gta4Selection is { } gta4 ? [gta4] : [];
+        _state.Play.IsActive ? [] : !_state.IsOtherGame ? _state.SelectedEntities : _state.Gta4Selection is { } gta4 ? [gta4] : [];
 
     private void DrawSelectionBox(ColorRenderer lines, Matrix4x4 viewProjection)
     {
