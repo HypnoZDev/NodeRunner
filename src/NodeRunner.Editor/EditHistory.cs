@@ -44,6 +44,9 @@ public sealed class EditHistory
 
     public IEdit? SavedTop => _savedTop;
 
+    // Changes undone, the next one to redo last.
+    public IReadOnlyList<IEdit> UndoneEdits => _undone;
+
     public void MarkSaved() => _savedTop = NextUndo;
 
     // Raised after a change is recorded, undone or redone (an online session sends it to the others).

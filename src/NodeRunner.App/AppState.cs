@@ -946,6 +946,17 @@ internal sealed partial class AppState
 
     public void Redo() => UndoOrRedo(undo: false);
 
+    // Undoes or redoes changes until doneCount of them are done (History panel); not for an online guest.
+    public void UndoTo(int doneCount)
+    {
+        if (Online.IsGuest)
+            return;
+        while (History.Count > doneCount && History.CanUndo)
+            Undo();
+        while (History.Count < doneCount && History.CanRedo)
+            Redo();
+    }
+
     // In an online session, a guest asks the host, which undoes the session's last change for everyone.
     private void UndoOrRedo(bool undo)
     {

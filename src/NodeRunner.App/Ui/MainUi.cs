@@ -24,6 +24,7 @@ internal sealed class MainUi
     private bool _showLibrary = true;
     private bool _showArchives;
     private bool _showProject;
+    private bool _showHistory;
     private bool _showImGuiDemo;
     private bool _resetLayout;
     private readonly OnlineWindow _onlineWindow;
@@ -50,6 +51,7 @@ internal sealed class MainUi
         _propertiesPanel.Search = _searchPalette.Open;
         _propertiesPanel.ShowLibrary = ShowLibrary;
         _archivePanel = new ArchivePanel(state, OpenFileInViewer, _scenePanel.RevealMap, OpenTypeInViewer);
+        _historyPanel = new HistoryPanel(state);
         _projectPanel = new ProjectPanel(state)
         {
             NewProject = () => ProjectWindow!.Open(),
@@ -139,6 +141,7 @@ internal sealed class MainUi
             new(Icons.SlidersHorizontal, L("Afficher le panneau Propriétés"), "properties panel", "", () => _showProperties = true),
             new(Icons.Activity, L("Afficher le panneau État"), "status panel", "", () => _showStatus = true),
             new(Icons.FolderOpen, L("Afficher le panneau Projet"), "project fichiers panel", "", ShowProjectPanel, features.Editing),
+            new(Icons.Undo, L("Afficher le panneau Historique"), "history annuler undo panel", "", () => _showHistory = true, features.Editing),
             new(Icons.Monitor, L("Remettre la disposition des panneaux par défaut"), "layout reset fenêtres", "", () => _resetLayout = true),
             new(Icons.Info, L("À propos de NodeRunner Studio"), "about version crédits", "", () => _showAbout = true),
         ];
@@ -241,6 +244,7 @@ internal sealed class MainUi
 
     private readonly ArchivePanel _archivePanel;
     private readonly ProjectPanel _projectPanel;
+    private readonly HistoryPanel _historyPanel;
     private readonly PropertiesPanel _propertiesPanel;
     private readonly ScenePanel _scenePanel;
     private readonly SearchPalette _searchPalette;
@@ -450,6 +454,7 @@ internal sealed class MainUi
         if (_showStatus) _statusPanel.Draw(ref _showStatus);
         if (_showArchives) _archivePanel.Draw(ref _showArchives);
         if (_showProject) _projectPanel.Draw(ref _showProject);
+        if (_showHistory) _historyPanel.Draw(ref _showHistory);
         if (_focusLibrary && _showLibrary)
         {
             _focusLibrary = false;
@@ -815,6 +820,7 @@ internal sealed class MainUi
             ImGui.MenuItem(L(PropertiesPanel.Title), null, ref _showProperties);
             ImGui.MenuItem(L(StatusPanel.Title), null, ref _showStatus);
             ImGui.MenuItem(L(ProjectPanel.Title), null, ref _showProject);
+            ImGui.MenuItem(L(HistoryPanel.Title), null, ref _showHistory);
             ImGui.Separator();
             bool showGrid = _state.Settings.ShowGrid;
             if (ImGui.MenuItem(L("Grille au sol"), "G", ref showGrid))
