@@ -88,6 +88,7 @@ internal sealed class MainUi
         _interiorWindow = new InteriorWindow(state);
         _imagePropWindow = new ImagePropWindow(state);
         _settingsWindow = new SettingsWindow(state, () => BrowseGameFolderRequested = true, () => ChooseProjectsFolderRequested = true);
+        _shortcutsWindow.OpenSettings = _settingsWindow.OpenKeys;
     }
 
     // What the search palette (Ctrl+K) can run besides finding things: the usual actions, by name.
@@ -102,21 +103,21 @@ internal sealed class MainUi
         }
         return
         [
-            new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", "Ctrl+S", () => SaveRequested = true, features.Editing),
-            new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", "Ctrl+E", _exportWindow.Open, features.Gta5Exports),
-            new(Icons.FolderPlus, L("Nouveau projet"), "créer new", "Ctrl+N", () => ProjectWindow.Open(), features.Editing),
-            new(Icons.FolderOpen, L("Ouvrir un projet"), "open", "Ctrl+O", () => OpenProjectRequested = true, features.Editing),
-            new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", "Ctrl+Z", _state.Undo, features.Editing),
-            new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", "Ctrl+Y", _state.Redo, features.Editing),
+            new(Icons.Save, L("Enregistrer le projet"), "sauvegarder save", KeyText(KeyAction.Save), () => SaveRequested = true, features.Editing),
+            new(Icons.Package, L("Exporter en ressource FiveM"), "export fxmanifest serveur", KeyText(KeyAction.Export), _exportWindow.Open, features.Gta5Exports),
+            new(Icons.FolderPlus, L("Nouveau projet"), "créer new", KeyText(KeyAction.NewProject), () => ProjectWindow.Open(), features.Editing),
+            new(Icons.FolderOpen, L("Ouvrir un projet"), "open", KeyText(KeyAction.OpenProject), () => OpenProjectRequested = true, features.Editing),
+            new(Icons.Undo, L("Annuler la dernière modification"), "undo retour", KeyText(KeyAction.Undo), _state.Undo, features.Editing),
+            new(Icons.Redo, L("Rétablir la modification annulée"), "redo refaire", KeyText(KeyAction.Redo), _state.Redo, features.Editing),
             new(Icons.MousePointer, L("Outil Sélection"), "select choisir", "1", () => _state.Tool = TransformTool.Select, features.Editing),
             new(Icons.Move, L("Outil Déplacer"), "move bouger", "2", () => _state.Tool = TransformTool.Move, features.Editing),
             new(Icons.Rotate, L("Outil Tourner"), "rotate rotation pivoter", "3", () => _state.Tool = TransformTool.Rotate, features.Editing),
             new(Icons.Scale, L("Outil Échelle"), "scale taille agrandir", "4", () => _state.Tool = TransformTool.Scale, features.Editing),
             new(Icons.Mountain, L("Outil Collisions"), "collision surface", "5", () => _state.Tool = TransformTool.Collision, features.Editing),
-            new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", L("Fin"), _state.PutSelectionOnGround, features.Editing && _state.Selection is not null),
+            new(Icons.ArrowDownToLine, L("Poser la sélection au sol"), "ground sol", KeyText(KeyAction.PutOnGround), _state.PutSelectionOnGround, features.Editing && _state.Selection is not null),
             new(Icons.Box, L("Modifier le modèle sélectionné dans l'Atelier"), "atelier workshop morceau texture percer", L("Double-clic"),
                 () => _state.WorkshopRequest = _state.Selection, features.Editing && _state.Selection is not null),
-            new(Icons.Grid, L("Afficher ou masquer la grille au sol"), "grid quadrillage", "G", () =>
+            new(Icons.Grid, L("Afficher ou masquer la grille au sol"), "grid quadrillage", KeyText(KeyAction.Grid), () =>
             {
                 settings.ShowGrid = !settings.ShowGrid;
                 _state.SaveSettings();
@@ -125,17 +126,17 @@ internal sealed class MainUi
             new(Icons.Sun, L("Heure : midi"), "jour time", "", () => Hour(13f)),
             new(Icons.Sunset, L("Heure : soir"), "coucher time", "", () => Hour(19f)),
             new(Icons.Moon, L("Heure : nuit"), "night time", "", () => Hour(23f)),
-            new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", "F2", ToggleViewer),
-            new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", "F5", () =>
+            new(Icons.Box, L("Ouvrir la Visionneuse"), "viewer modèles véhicules catalogue", KeyText(KeyAction.Viewer), ToggleViewer),
+            new(Icons.Film, L("Ouvrir la visionneuse de cinématiques"), "cinématique cutscene cut film scène mission", KeyText(KeyAction.Cutscenes), () =>
             {
                 if (!_state.CutsceneOpen) ToggleCutscenes();
             }, features.CutsceneViewer),
-            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", "F4", _pedStudio.Open, features.PedViewer),
-            new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", "F3", () => _showArchives = true),
+            new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", KeyText(KeyAction.Peds), _pedStudio.Open, features.PedViewer),
+            new(Icons.HardDrive, L("Ouvrir l'explorateur d'archives"), "rpf fichiers archives", KeyText(KeyAction.Archives), () => _showArchives = true),
             new(Icons.LibraryBig, L("Ouvrir la Bibliothèque"), "props packs addons library", "", ShowLibrary, features.Editing),
             new(Icons.Users, L("Ouvrir NodeRunner Online"), "multijoueur session inviter", "", _onlineWindow.Toggle, features.Online),
-            new(Icons.Settings, L("Ouvrir les paramètres"), "réglages options settings qualité langue", "Ctrl+,", _settingsWindow.Open),
-            new(Icons.Keyboard, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", "F1", _shortcutsWindow.Toggle),
+            new(Icons.Settings, L("Ouvrir les paramètres"), "réglages options settings qualité langue", KeyText(KeyAction.Settings), _settingsWindow.Open),
+            new(Icons.Keyboard, L("Ouvrir les raccourcis clavier"), "touches aide help shortcuts", KeyText(KeyAction.Shortcuts), _shortcutsWindow.Toggle),
             new(Icons.ListTree, L("Afficher le panneau Scène"), "objets liste panel", "", () => _showScene = true),
             new(Icons.Layers, L("Afficher le panneau Calques"), "layers panel", "", () => _showLayers = true),
             new(Icons.SlidersHorizontal, L("Afficher le panneau Propriétés"), "properties panel", "", () => _showProperties = true),
@@ -209,11 +210,11 @@ internal sealed class MainUi
     private void DrawOpenMenu()
     {
         var features = _state.Features;
-        if (ImGui.MenuItem(L(ViewerPanel.Title), "F2", _showViewer))
+        if (ImGui.MenuItem(L(ViewerPanel.Title), KeyText(KeyAction.Viewer), _showViewer))
             ToggleViewer();
-        if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, features.PedViewer))
+        if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), KeyText(KeyAction.Peds), _state.PedOpen, features.PedViewer))
             _pedStudio.Open();
-        if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, features.CutsceneViewer))
+        if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), KeyText(KeyAction.Cutscenes), _state.CutsceneOpen, features.CutsceneViewer))
             ToggleCutscenes();
         ImGui.Separator();
         if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic"), false, features.Editing && _state.Selection is not null))
@@ -374,19 +375,19 @@ internal sealed class MainUi
             if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic")))
                 _state.WorkshopRequest = entity;
             ImGui.Separator();
-            if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"), "Ctrl+C"))
+            if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"), KeyText(KeyAction.Copy)))
                 _state.CopySelection();
         }
         int copied = _state.Copied.Count;
-        if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), "Ctrl+V", false, copied > 0))
+        if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), KeyText(KeyAction.Paste), false, copied > 0))
             _state.PasteRequest = true;
         if (entity is not null)
         {
-            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Fin"), false, _state.EditableSelection.Count > 0))
+            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), KeyText(KeyAction.PutOnGround), false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             int group = _state.DeletableSelection.Count;
             if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer l'objet sélectionné..."),
-                    L("Suppr"), false, group > 0))
+                    KeyText(KeyAction.Delete), false, group > 0))
                 _state.RequestDelete();
             ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.X}  Désélectionner"), L("Échap")))
@@ -395,7 +396,7 @@ internal sealed class MainUi
         else
         {
             ImGui.Separator();
-            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
+            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), KeyText(KeyAction.Search)))
                 _searchPalette.Open();
         }
         ImGui.EndPopup();
@@ -485,15 +486,18 @@ internal sealed class MainUi
 
     private void HandleShortcuts()
     {
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.K) && !_searchPalette.IsOpen)
+        if (_state.IsCapturingKey)
+            return;
+        var keys = _state.Keys;
+        if (keys.Pressed(KeyAction.Search) && !_searchPalette.IsOpen)
             _searchPalette.Open();
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.S))
+        if (keys.Pressed(KeyAction.Save))
             SaveRequested = true;
         if (ImGui.GetIO().WantTextInput || _searchPalette.IsOpen || IsGizmoDragging || _state.PendingDeletion is not null)
             return;
         // While the workshop is shown, the keys that edit the map do nothing.
         bool map = !_state.WorkshopShown && !_state.PedShown;
-        if (map && ImGui.IsKeyPressed(ImGuiKey.Delete, false))
+        if (map && keys.Pressed(KeyAction.Delete))
         {
             if (_state.Tool == TransformTool.Collision)
                 _state.DeleteSelectedCollision();
@@ -516,40 +520,40 @@ internal sealed class MainUi
             else
                 _state.RequestDelete();
         }
-        if (map && ImGui.IsKeyPressed(ImGuiKey.End, false))
+        if (map && keys.Pressed(KeyAction.PutOnGround))
             _state.PutSelectionOnGround();
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.N))
+        if (keys.Pressed(KeyAction.NewProject))
             ProjectWindow.Open();
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.O))
+        if (keys.Pressed(KeyAction.OpenProject))
             OpenProjectRequested = true;
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.E) && _state.Features.Gta5Exports)
+        if (keys.Pressed(KeyAction.Export) && _state.Features.Gta5Exports)
             _exportWindow.Open();
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Comma))
+        if (keys.Pressed(KeyAction.Settings))
             _settingsWindow.Open();
-        if (ImGui.IsKeyPressed(ImGuiKey.F1, false))
+        if (keys.Pressed(KeyAction.Shortcuts))
             _shortcutsWindow.Toggle();
-        if (ImGui.IsKeyPressed(ImGuiKey.F2, false))
+        if (keys.Pressed(KeyAction.Viewer))
             ToggleViewer();
-        if (ImGui.IsKeyPressed(ImGuiKey.F3, false))
+        if (keys.Pressed(KeyAction.Archives))
             _showArchives = !_showArchives;
-        if (ImGui.IsKeyPressed(ImGuiKey.F4, false))
+        if (keys.Pressed(KeyAction.Peds))
         {
             if (_state.PedShown) _pedStudio.Close();
             else _pedStudio.Open();
         }
-        if (ImGui.IsKeyPressed(ImGuiKey.F5, false) && _state.Features.CutsceneViewer)
+        if (keys.Pressed(KeyAction.Cutscenes) && _state.Features.CutsceneViewer)
             ToggleCutscenes();
         if (!map)
             return;
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.C))
+        if (keys.Pressed(KeyAction.Copy))
             _state.CopySelection();
-        else if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.V) && _state.Copied.Count > 0)
+        else if (keys.Pressed(KeyAction.Paste) && _state.Copied.Count > 0)
             _state.PasteRequest = true;
-        if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Z))
+        if (keys.Pressed(KeyAction.Undo))
             _state.Undo();
-        else if (ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.Y) || ImGui.IsKeyChordPressed(ImGuiKey.ModCtrl | ImGuiKey.ModShift | ImGuiKey.Z))
+        else if (keys.Pressed(KeyAction.Redo))
             _state.Redo();
-        else if (ImGui.IsKeyChordPressed(ImGuiKey.G))
+        else if (keys.Pressed(KeyAction.Grid))
         {
             _state.Settings.ShowGrid = !_state.Settings.ShowGrid;
             _state.SaveSettings();
@@ -560,16 +564,15 @@ internal sealed class MainUi
             if (io.KeyShift) _state.SaveCameraBookmark(slot);
             else _state.GoToCameraBookmark(slot);
         }
-        else if (!ImGui.GetIO().KeyCtrl)
-        {
-            // Shift allowed: on an AZERTY keyboard the digits of the top row need it.
-            if (ToolKeyPressed(ImGuiKey._1, ImGuiKey.Keypad1)) _state.Tool = TransformTool.Select;
-            else if (ToolKeyPressed(ImGuiKey._2, ImGuiKey.Keypad2)) _state.Tool = TransformTool.Move;
-            else if (ToolKeyPressed(ImGuiKey._3, ImGuiKey.Keypad3)) _state.Tool = TransformTool.Rotate;
-            else if (ToolKeyPressed(ImGuiKey._4, ImGuiKey.Keypad4)) _state.Tool = TransformTool.Scale;
-            else if (ToolKeyPressed(ImGuiKey._5, ImGuiKey.Keypad5)) _state.Tool = TransformTool.Collision;
-        }
+        else if (keys.Pressed(KeyAction.ToolSelect)) _state.Tool = TransformTool.Select;
+        else if (keys.Pressed(KeyAction.ToolMove)) _state.Tool = TransformTool.Move;
+        else if (keys.Pressed(KeyAction.ToolRotate)) _state.Tool = TransformTool.Rotate;
+        else if (keys.Pressed(KeyAction.ToolScale)) _state.Tool = TransformTool.Scale;
+        else if (keys.Pressed(KeyAction.ToolCollision)) _state.Tool = TransformTool.Collision;
     }
+
+    // The first key of action, for menus; "" if it has none.
+    private string KeyText(KeyAction action) => _state.Keys.First(action) ?? "";
 
     private static bool ToolKeyPressed(ImGuiKey digit, ImGuiKey keypad) =>
         ImGui.IsKeyPressed(digit, false) || ImGui.IsKeyPressed(keypad, false);
@@ -661,9 +664,9 @@ internal sealed class MainUi
             DrawFileProjectItems();
             ImGui.Separator();
             int toSave = _state.PendingSaveCount;
-            if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), "Ctrl+S", false, toSave > 0))
+            if (ImGui.MenuItem(L($"{Icons.Save}  Enregistrer les fichiers modifiés{(toSave > 0 ? $" ({toSave})" : "")}"), KeyText(KeyAction.Save), false, toSave > 0))
                 SaveRequested = true;
-            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), "Ctrl+E", false, _state.Features.Gta5Exports))
+            if (ImGui.MenuItem(L($"{Icons.Package}  Exporter en ressource FiveM..."), KeyText(KeyAction.Export), false, _state.Features.Gta5Exports))
                 _exportWindow.Open();
             if (!_state.Features.Gta5Exports && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
@@ -680,26 +683,26 @@ internal sealed class MainUi
         if (Menu(L("Édition")))
         {
             var history = _state.History;
-            if (ImGui.MenuItem(history.NextUndo is { } undo ? L($"Annuler : {undo.Description}") : L("Annuler"), "Ctrl+Z", false, history.CanUndo))
+            if (ImGui.MenuItem(history.NextUndo is { } undo ? L($"Annuler : {undo.Description}") : L("Annuler"), KeyText(KeyAction.Undo), false, history.CanUndo))
                 _state.Undo();
-            if (ImGui.MenuItem(history.NextRedo is { } redo ? L($"Rétablir : {redo.Description}") : L("Rétablir"), "Ctrl+Y", false, history.CanRedo))
+            if (ImGui.MenuItem(history.NextRedo is { } redo ? L($"Rétablir : {redo.Description}") : L("Rétablir"), KeyText(KeyAction.Redo), false, history.CanRedo))
                 _state.Redo();
             ImGui.Separator();
             int selected = _state.SelectedEntities.Count;
             if (ImGui.MenuItem(selected > 1 ? L($"{Icons.Copy}  Copier les {selected} objets sélectionnés") : L($"{Icons.Copy}  Copier l'objet sélectionné"),
-                "Ctrl+C", false, selected > 0))
+                KeyText(KeyAction.Copy), false, selected > 0))
                 _state.CopySelection();
             int copied = _state.Copied.Count;
-            if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), "Ctrl+V", false, copied > 0))
+            if (ImGui.MenuItem(copied > 1 ? L($"{Icons.Copy}  Coller les {copied} objets") : L($"{Icons.Copy}  Coller"), KeyText(KeyAction.Paste), false, copied > 0))
                 _state.PasteRequest = true;
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Ajoute une copie au sol, au centre de la vue 3D, dans le YMAP du projet (le groupe garde sa disposition)."));
             int group = _state.DeletableSelection.Count;
             if (ImGui.MenuItem(group > 1 ? L($"{Icons.Trash}  Supprimer les {group} objets sélectionnés...") : L($"{Icons.Trash}  Supprimer l'objet sélectionné..."),
-                L("Suppr"), false, group > 0))
+                KeyText(KeyAction.Delete), false, group > 0))
                 _state.RequestDelete();
             ImGui.Separator();
-            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), L("Fin"), false, _state.EditableSelection.Count > 0))
+            if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Poser au sol"), KeyText(KeyAction.PutOnGround), false, _state.EditableSelection.Count > 0))
                 _state.PutSelectionOnGround();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Monte ou descend chaque objet sélectionné jusqu'à ce que le bas de sa boîte touche la collision en dessous."));
@@ -712,7 +715,7 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Pendant un déplacement avec les flèches X / Y ou le carré au sol, l'objet reste posé sur la collision."));
             ImGui.Separator();
-            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), "Ctrl+K"))
+            if (ImGui.MenuItem(L($"{Icons.Search}  Rechercher..."), KeyText(KeyAction.Search)))
                 _searchPalette.Open();
             ImGui.Separator();
             ImGui.TextDisabled(history.Count == 0 ? L("Aucune modification") : L($"{history.Count} modification(s), pas encore enregistrée(s)"));
@@ -783,10 +786,10 @@ internal sealed class MainUi
 
         if (Menu(L("Outils")))
         {
-            ImGui.MenuItem(L(ViewerPanel.Title), "F2", ref _showViewer);
-            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), "F4", _state.PedOpen, _state.Features.PedViewer))
+            ImGui.MenuItem(L(ViewerPanel.Title), KeyText(KeyAction.Viewer), ref _showViewer);
+            if (ImGui.MenuItem(L($"{Icons.PersonStanding}  Visionneuse de personnages"), KeyText(KeyAction.Peds), _state.PedOpen, _state.Features.PedViewer))
                 _pedStudio.Open();
-            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), "F5", _state.CutsceneOpen, _state.Features.CutsceneViewer))
+            if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), KeyText(KeyAction.Cutscenes), _state.CutsceneOpen, _state.Features.CutsceneViewer))
                 ToggleCutscenes();
             if (ImGui.BeginMenu(L($"{Icons.LibraryBig}  Bibliothèque de props")))
             {
@@ -800,7 +803,7 @@ internal sealed class MainUi
                 DrawLibraryItems();
                 ImGui.EndMenu();
             }
-            ImGui.MenuItem(L(ArchivePanel.Title), "F3", ref _showArchives);
+            ImGui.MenuItem(L(ArchivePanel.Title), KeyText(KeyAction.Archives), ref _showArchives);
             if (ImGui.MenuItem(L($"{Icons.Users}  Online..."), null, _onlineWindow.IsOpen))
                 _onlineWindow.Toggle();
             if (ImGui.MenuItem(L($"{Icons.ScanEye}  Vérifier une ressource FiveM..."), null, false, _state.World.Maps is not null && !_state.IsOtherGame))
@@ -808,7 +811,7 @@ internal sealed class MainUi
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Vérifie un dossier de ressource FiveM (le tien ou un mapping téléchargé) sans lancer le jeu : fxmanifest.lua,\nfichiers en double dans stream, objets sans type, types sans modèle ni textures, fichiers trop gros..."));
             ImGui.Separator();
-            if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres..."), "Ctrl+,"))
+            if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres..."), KeyText(KeyAction.Settings)))
                 _settingsWindow.Open();
             ImGui.EndMenu();
         }
@@ -823,7 +826,7 @@ internal sealed class MainUi
             ImGui.MenuItem(L(HistoryPanel.Title), null, ref _showHistory);
             ImGui.Separator();
             bool showGrid = _state.Settings.ShowGrid;
-            if (ImGui.MenuItem(L("Grille au sol"), "G", ref showGrid))
+            if (ImGui.MenuItem(L("Grille au sol"), KeyText(KeyAction.Grid), ref showGrid))
             {
                 _state.Settings.ShowGrid = showGrid;
                 _state.SaveSettings();
@@ -845,7 +848,7 @@ internal sealed class MainUi
         {
             if (ImGui.MenuItem(L("Écran d'accueil")))
                 _welcomeWindow.Open();
-            if (ImGui.MenuItem(L($"{Icons.Keyboard}  Raccourcis clavier"), "F1"))
+            if (ImGui.MenuItem(L($"{Icons.Keyboard}  Raccourcis clavier"), KeyText(KeyAction.Shortcuts)))
                 _shortcutsWindow.Toggle();
             if (ImGui.MenuItem(L($"{Icons.TriangleAlert}  Erreurs et rapport...")))
                 _errorWindow.Open();
@@ -882,7 +885,7 @@ internal sealed class MainUi
             ImGui.SetTooltip(L("Une boîte par bâtiment fermé, à l'intérieur des murs de la collision (sinon dans la boîte du modèle). ")
                 + L("Pour un intérieur (MLO) : des boîtes fines dans ses murs extérieurs, portes et fenêtres laissées libres."));
         var occluder = _state.SelectedOccluder;
-        if (ImGui.MenuItem(L($"{Icons.Trash}  Supprimer l'occluder sélectionné"), L("Suppr"), false, occluder is not null))
+        if (ImGui.MenuItem(L($"{Icons.Trash}  Supprimer l'occluder sélectionné"), KeyText(KeyAction.Delete), false, occluder is not null))
             _state.DeleteSelectedOccluder();
     }
 
@@ -897,9 +900,9 @@ internal sealed class MainUi
     // File menu: new, open, recent, close.
     private void DrawFileProjectItems()
     {
-        if (ImGui.MenuItem(L($"{Icons.FolderPlus}  Nouveau projet..."), "Ctrl+N"))
+        if (ImGui.MenuItem(L($"{Icons.FolderPlus}  Nouveau projet..."), KeyText(KeyAction.NewProject)))
             ProjectWindow.Open();
-        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet..."), "Ctrl+O"))
+        if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir un projet..."), KeyText(KeyAction.OpenProject)))
             OpenProjectRequested = true;
         var recent = _state.Settings.RecentProjects.Where(f => !string.Equals(f, _state.Project?.Folder, StringComparison.OrdinalIgnoreCase)).ToList();
         if (ImGui.BeginMenu(L("Projets récents"), recent.Count > 0))

@@ -71,6 +71,11 @@ public sealed class AppSettings
 
     public NodeRunner.App.Input.MovementKeys MovementKeys { get; set; }
 
+    // Keyboard shortcuts: the preset, and the actions whose keys the user changed (action name -> keys, e.g.
+    // "Ctrl+Shift+Z"); the other actions keep the preset's.
+    public NodeRunner.App.Input.KeyPreset KeyPreset { get; set; }
+    public Dictionary<string, List<string>> KeyBindings { get; set; } = new();
+
     // Steps of the 3D handles while Ctrl is held: metres, degrees, scale.
     public float SnapMove { get; set; } = 0.5f;
     public float SnapRotate { get; set; } = 15f;

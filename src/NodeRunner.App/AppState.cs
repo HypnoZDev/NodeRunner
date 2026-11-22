@@ -14,6 +14,16 @@ namespace NodeRunner.App;
 internal sealed partial class AppState
 {
     public AppPaths Paths { get; }
+    // Keyboard shortcuts in use (Paramètres > Raccourcis).
+    public Input.KeyMap Keys => _keys ??= new Input.KeyMap(Settings);
+    private Input.KeyMap? _keys;
+
+    // Paramètres > Raccourcis waiting for a key (set each frame while it waits): shortcuts and camera keys do nothing
+    // then, nor on the frame after.
+    public int KeyCaptureFrame { get; set; } = int.MinValue / 2;
+
+    public bool IsCapturingKey => ImGuiNET.ImGui.GetFrameCount() - KeyCaptureFrame <= 1;
+
     public AppSettings Settings { get; }
 
     public GameInstallation? Game { get; private set; }

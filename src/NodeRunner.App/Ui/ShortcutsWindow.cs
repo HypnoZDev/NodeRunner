@@ -13,6 +13,9 @@ internal sealed class ShortcutsWindow(AppState state)
 
     public void Toggle() => _open = !_open;
 
+    // Opens Paramètres > Raccourcis.
+    public Action? OpenSettings { get; set; }
+
     public void Draw()
     {
         if (!_open)
@@ -25,53 +28,36 @@ internal sealed class ShortcutsWindow(AppState state)
         ImGui.PopStyleVar();
         if (visible)
         {
-            string moveKeys = state.Settings.MovementKeys switch
-            {
-                MovementKeys.Zqsd => "Z Q S D",
-                MovementKeys.Wasd => "W A S D",
-                _ => "Z Q S D / W A S D",
-            };
+            // Keys as set in Paramètres > Raccourcis.
+            var keys = state.Keys;
+            string K(KeyAction action) => keys.Text(action) is { Length: > 0 } text ? text : "-";
+            (string, string) A(KeyAction action) => (K(action), KeyBindingsPage.Name(action));
+            if (Widgets.Button(L($"{Icons.Keyboard}  Changer les touches...")))
+                OpenSettings?.Invoke();
             Group(L("Caméra"),
-                (moveKeys + L(" ou flèches"), L("Se déplacer")),
+                A(KeyAction.MoveForward), A(KeyAction.MoveBackward), A(KeyAction.MoveLeft), A(KeyAction.MoveRight),
+                A(KeyAction.MoveUp), A(KeyAction.MoveDown),
                 (L("Clic droit maintenu + souris"), L("Regarder autour")),
                 (L("Maj"), L("Aller plus vite")),
                 (L("Molette"), L("Changer la vitesse")),
-                (L("Espace / E"), L("Monter")),
-                ("C", L("Descendre")));
+                A(KeyAction.SpeedDown), A(KeyAction.SpeedUp), A(KeyAction.FrameModel));
             Group(L("Sélection et outils"),
                 (L("Clic gauche"), L("Sélectionner")),
                 (L("Ctrl + clic"), L("Ajouter ou retirer de la sélection")),
                 (L("Double-clic sur une porte"), L("L'ouvrir ou la fermer (vue 3D seulement)")),
                 (L("Double-clic sur un objet"), L("Modifier son modèle dans l'onglet Atelier")),
-                (L("1 à 5 dans l'Atelier"), L("Outils : Choisir, Déplacer, Percer, Ajouter, Textures")),
+                (L("Touches des 5 outils, dans l'Atelier"), L("Outils : Choisir, Déplacer, Percer, Ajouter, Textures")),
                 (L("Échap"), L("Désélectionner")),
-                ("1", L("Outil Sélection")),
-                ("2", L("Outil Déplacer")),
-                ("3", L("Outil Tourner")),
-                ("4", L("Outil Échelle")),
-                ("5", L("Outil Collisions")),
+                A(KeyAction.ToolSelect), A(KeyAction.ToolMove), A(KeyAction.ToolRotate), A(KeyAction.ToolScale), A(KeyAction.ToolCollision),
                 (L("Ctrl (en glissant une poignée)"), L("Avancer par crans")));
             Group(L("Édition"),
-                ("Ctrl+Z", L("Annuler")),
-                (L("Ctrl+Y / Ctrl+Maj+Z"), L("Rétablir")),
-                ("Ctrl+C", L("Copier les objets sélectionnés")),
-                ("Ctrl+V", L("Coller")),
-                (L("Suppr"), L("Supprimer")),
-                (L("Fin"), L("Poser au sol")),
-                ("Ctrl+K", L("Rechercher (objet, YMAP, type, position)")));
+                A(KeyAction.Undo), A(KeyAction.Redo), A(KeyAction.Copy), A(KeyAction.Paste), A(KeyAction.Delete), A(KeyAction.PutOnGround),
+                A(KeyAction.Search));
             Group(L("Projet"),
-                ("Ctrl+N", L("Nouveau projet")),
-                ("Ctrl+O", L("Ouvrir un projet")),
-                ("Ctrl+S", L("Enregistrer")),
-                ("Ctrl+E", L("Exporter en ressource FiveM")));
+                A(KeyAction.NewProject), A(KeyAction.OpenProject), A(KeyAction.Save), A(KeyAction.Export));
             Group(L("Outils et affichage"),
-                ("F1", L("Raccourcis clavier")),
-                ("F2", L("Visionneuse de modèles")),
-                ("F3", L("Explorateur d'archives")),
-                ("F4", L("Visionneuse de personnages")),
-                ("F5", L("Visionneuse de cinématiques")),
-                ("Ctrl+,", L("Paramètres")),
-                ("G", L("Grille au sol")),
+                A(KeyAction.Shortcuts), A(KeyAction.Viewer), A(KeyAction.Archives), A(KeyAction.Peds), A(KeyAction.Cutscenes),
+                A(KeyAction.Settings), A(KeyAction.Grid),
                 (L("Ctrl+Maj+1 à 9"), L("Enregistrer la vue dans un signet de caméra")),
                 (L("Ctrl+1 à 9"), L("Revenir à un signet de caméra")));
             Group(L("Visionneuse de personnages"),

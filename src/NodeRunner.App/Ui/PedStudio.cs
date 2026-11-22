@@ -210,7 +210,7 @@ internal sealed partial class PedStudio(AppState state)
             return;
         if (io.MouseWheel != 0)
             Viewer.Distance = Math.Clamp(Viewer.Distance * MathF.Pow(0.88f, io.MouseWheel), Viewer.MinDistance, Viewer.MaxDistance);
-        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) || !io.WantTextInput && ImGui.IsKeyPressed(ImGuiKey.F, false))
+        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) || !io.WantTextInput && state.Keys.Pressed(Input.KeyAction.FrameModel))
             Viewer.ResetView();
     }
 

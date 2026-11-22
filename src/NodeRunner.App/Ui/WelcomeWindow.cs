@@ -130,12 +130,13 @@ internal sealed class WelcomeWindow(AppState state, MainUi ui, Action showShortc
 
         // 3. First steps.
         Step("3", L("Premiers pas"));
-        string moveKeys = state.Settings.MovementKeys == Input.MovementKeys.Wasd ? "W A S D" : "Z Q S D";
+        var keys = state.Keys;
+        string moveKeys = keys.MoveText();
         Tip(L($"{moveKeys} + clic droit maintenu"), L("se déplacer et regarder autour (Maj = plus vite)"));
         Tip(L("Clic gauche"), L("sélectionner un objet, ses propriétés s'affichent à droite"));
         Tip(L("Clic droit sur un objet"), L("menu rapide (aller à, copier la position, supprimer...)"));
-        Tip("2 / 3 / 4", L("déplacer, tourner, mettre à l'échelle avec les poignées"));
-        Tip("Ctrl+K", L("rechercher un objet, un YMAP ou une position FiveM"));
+        Tip($"{keys.First(Input.KeyAction.ToolMove) ?? "-"} / {keys.First(Input.KeyAction.ToolRotate) ?? "-"} / {keys.First(Input.KeyAction.ToolScale) ?? "-"}", L("déplacer, tourner, mettre à l'échelle avec les poignées"));
+        Tip(keys.First(Input.KeyAction.Search) ?? "-", L("rechercher un objet, un YMAP ou une position FiveM"));
         Tip("Ctrl+S", L("enregistrer, puis Ctrl+E pour exporter en ressource FiveM"));
         if (Widgets.Button(L("Tous les raccourcis clavier (F1)"), null, width))
             showShortcuts();

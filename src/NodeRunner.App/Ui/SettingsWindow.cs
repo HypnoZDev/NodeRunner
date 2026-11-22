@@ -28,6 +28,15 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
 
     public void Open() => _open = true;
 
+    // Opens the shortcuts page.
+    public void OpenKeys()
+    {
+        _open = true;
+        _page = KeysPage;
+    }
+
+    private const int KeysPage = 7;
+
     public void Draw()
     {
         if (!_open)
@@ -65,8 +74,10 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
     private static (string Icon, string Name)[] Pages =>
     [
         (Icons.Gauge, L("Qualité")), (Icons.Camera, L("Caméra")), (Icons.Move, L("Édition")), (Icons.Layers, L("Calques")),
-        (Icons.Monitor, L("Interface")), (Icons.Sun, L("Ambiance")), (Icons.FolderOpen, L("Dossiers")),
+        (Icons.Monitor, L("Interface")), (Icons.Sun, L("Ambiance")), (Icons.FolderOpen, L("Dossiers")), (Icons.Keyboard, L("Raccourcis")),
     ];
+
+    private KeyBindingsPage? _keysPage;
 
     private void DrawPages()
     {
@@ -284,7 +295,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     state.SaveSettings();
                 }
 
-                Widgets.Property(L("Touches de déplacement"), L("Lettres qui déplacent la caméra (avancer, gauche, reculer, droite). Les deux = ZQSD et WASD en même temps. Les flèches marchent toujours."));
+                Widgets.Property(L("Touches de déplacement"), L("Lettres qui déplacent la caméra (avancer, gauche, reculer, droite). Les deux = ZQSD et WASD en même temps. Les flèches marchent toujours. Toutes les touches se changent dans Raccourcis."));
                 ImGui.SetNextItemWidth(-1f);
                 string[] keyNames = [L("ZQSD et WASD"), L("ZQSD (clavier AZERTY)"), L("WASD (clavier QWERTY)")];
                 int keys = Math.Clamp((int)settings.MovementKeys, 0, keyNames.Length - 1);
@@ -536,6 +547,9 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                 Widgets.EndProperties();
             }
         }
+
+        if (Page(KeysPage))
+            (_keysPage ??= new KeyBindingsPage(state)).Draw();
 
         ImGui.Dummy(new Vector2(0, 4));
         if (Page(6))

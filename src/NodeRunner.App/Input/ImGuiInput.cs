@@ -93,7 +93,7 @@ internal sealed class ImGuiInput
             io.AddKeyEvent(key, down);
     }
 
-    private static ImGuiKey MapKey(Keys key)
+    public static ImGuiKey MapKey(Keys key)
     {
         if (key >= Keys.A && key <= Keys.Z)
             return ImGuiKey.A + (key - Keys.A);

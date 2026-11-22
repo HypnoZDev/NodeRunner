@@ -157,10 +157,11 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
             return workshop;
         if (state.PedShown && PedHints?.Invoke() is { } ped)
             return ped;
-        string move = state.Settings.MovementKeys == Input.MovementKeys.Wasd ? "W A S D" : state.Settings.MovementKeys == Input.MovementKeys.Zqsd ? "Z Q S D" : "Z Q S D / W A S D";
+        var keys = state.Keys;
+        string move = keys.MoveText();
         if (IsLooking?.Invoke() == true)
         {
-            return [(move, L("se déplacer")), (L("Espace / C"), L("monter / descendre")), (L("Maj"), L("5 fois plus vite")), (L("Molette"), L("vitesse"))];
+            return [(move, L("se déplacer")), ($"{keys.First(Input.KeyAction.MoveUp) ?? "-"} / {keys.First(Input.KeyAction.MoveDown) ?? "-"}", L("monter / descendre")), (L("Maj"), L("5 fois plus vite")), (L("Molette"), L("vitesse"))];
         }
         if (IsDragging?.Invoke() == true)
             return [("Ctrl", L("par pas")), (L("Échap"), L("annuler le déplacement"))];

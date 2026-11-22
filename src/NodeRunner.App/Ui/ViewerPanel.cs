@@ -910,37 +910,22 @@ internal sealed unsafe class ViewerPanel(AppState state)
         _workshopRevision = -1;
     }
 
-    // Workshop: the map's keys move the camera (speed from the model's size, Shift faster), F frames the model.
+    // Workshop: the map's keys move the camera (speed from the model's size, Shift faster), and frame the model.
     private void FlyWithKeys()
     {
         var io = ImGui.GetIO();
         if (io.WantTextInput || io.KeyCtrl || io.KeyAlt)
             return;
-        if (ImGui.IsKeyPressed(ImGuiKey.F, false))
+        var keys = state.Keys;
+        if (keys.Pressed(Input.KeyAction.FrameModel))
             Viewer.Frame();
-        var (forward, left) = state.Settings.MovementKeys switch
-        {
-            Input.MovementKeys.Zqsd => (ImGuiKey.Z, ImGuiKey.Q),
-            Input.MovementKeys.Wasd => (ImGuiKey.W, ImGuiKey.A),
-            _ => (ImGuiKey.None, ImGuiKey.None),
-        };
-        bool both = forward == ImGuiKey.None;
-        static bool Down(params ReadOnlySpan<ImGuiKey> keys)
-        {
-            foreach (var key in keys)
-            {
-                if (key != ImGuiKey.None && ImGui.IsKeyDown(key))
-                    return true;
-            }
-            return false;
-        }
         var move = Vector3.Zero;
-        if (Down(ImGuiKey.UpArrow, forward) || both && Down(ImGuiKey.W, ImGuiKey.Z)) move += Viewer.Forward;
-        if (Down(ImGuiKey.S, ImGuiKey.DownArrow)) move -= Viewer.Forward;
-        if (Down(ImGuiKey.D, ImGuiKey.RightArrow)) move += Viewer.Right;
-        if (Down(ImGuiKey.LeftArrow, left) || both && Down(ImGuiKey.A, ImGuiKey.Q)) move -= Viewer.Right;
-        if (Down(ImGuiKey.Space, ImGuiKey.E, ImGuiKey.PageUp)) move += Vector3.UnitZ;
-        if (Down(ImGuiKey.C, ImGuiKey.PageDown)) move -= Vector3.UnitZ;
+        if (keys.Held(Input.KeyAction.MoveForward)) move += Viewer.Forward;
+        if (keys.Held(Input.KeyAction.MoveBackward)) move -= Viewer.Forward;
+        if (keys.Held(Input.KeyAction.MoveRight)) move += Viewer.Right;
+        if (keys.Held(Input.KeyAction.MoveLeft)) move -= Viewer.Right;
+        if (keys.Held(Input.KeyAction.MoveUp)) move += Vector3.UnitZ;
+        if (keys.Held(Input.KeyAction.MoveDown)) move -= Vector3.UnitZ;
         if (move == Vector3.Zero)
             return;
         // The model's size crossed in about two seconds.
@@ -1154,14 +1139,13 @@ internal sealed unsafe class ViewerPanel(AppState state)
                 Viewer.OverlayEdges.AddRange(placed.Edges().Select(e => (Vector3.Transform(e.From, toModel), Vector3.Transform(e.To, toModel))));
         }
         FinishTextureJob(item, tool);
-        // Keys 1 to 5: the tools, as on the map.
-        if (!ImGui.GetIO().WantTextInput && !ImGui.GetIO().KeyCtrl)
+        // The map's five tool keys choose the workshop's five tools.
+        if (!ImGui.GetIO().WantTextInput)
         {
-            ImGuiKey[] digits = [ImGuiKey._1, ImGuiKey._2, ImGuiKey._3, ImGuiKey._4, ImGuiKey._5];
-            ImGuiKey[] keypad = [ImGuiKey.Keypad1, ImGuiKey.Keypad2, ImGuiKey.Keypad3, ImGuiKey.Keypad4, ImGuiKey.Keypad5];
-            for (int i = 0; i < digits.Length; i++)
+            Input.KeyAction[] tools = [Input.KeyAction.ToolSelect, Input.KeyAction.ToolMove, Input.KeyAction.ToolRotate, Input.KeyAction.ToolScale, Input.KeyAction.ToolCollision];
+            for (int i = 0; i < tools.Length; i++)
             {
-                if (ImGui.IsKeyPressed(digits[i], false) || ImGui.IsKeyPressed(keypad[i], false))
+                if (state.Keys.Pressed(tools[i]))
                     ChooseWorkshopTool((WorkshopTool)i);
             }
         }
