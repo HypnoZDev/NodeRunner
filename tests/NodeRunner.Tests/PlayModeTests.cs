@@ -91,6 +91,35 @@ public class PlayModeTests
     }
 
     [Fact]
+    public void A_canal_water_surface_is_water_not_ground()
+    {
+        // As in the Vespucci canals: the bed (material 1) at -2.2 m, the surface (material 7, water) at -0.37 m.
+        static (Vector3[], int[]) Flat(float z) => ([new(-10, -10, z), new(10, -10, z), new(10, 10, z), new(-10, 10, z)], [0, 1, 2, 0, 2, 3]);
+        var (bed, bedIndices) = Flat(-2.2f);
+        var (surface, surfaceIndices) = Flat(-0.37f);
+        var mesh = new CollisionMesh
+        {
+            BoundsMin = new Vector3(-10, -10, -2.2f),
+            BoundsMax = new Vector3(10, 10, -0.37f),
+            Vertices = [.. bed, .. surface],
+            Indices = [.. bedIndices, .. surfaceIndices.Select(i => i + 4)],
+            Materials = [1, 1, 7, 7],
+        };
+        var water = new bool[256];
+        water[7] = true;
+        var canal = new PlayCollision();
+        canal.Use([new PlacedCollision(mesh, Matrix4x4.Identity)], Vector3.Zero, water);
+
+        Assert.Equal(-2.2f, canal.Ground(Vector2.Zero, 1f));
+        Assert.Equal(-0.37f, canal.WaterAt(Vector2.Zero, 1f));
+        // Without the water materials, the surface would be the ground.
+        var solid = new PlayCollision();
+        solid.Use([new PlacedCollision(mesh, Matrix4x4.Identity)], Vector3.Zero);
+        Assert.Equal(-0.37f, solid.Ground(Vector2.Zero, 1f));
+        Assert.Null(solid.WaterAt(Vector2.Zero, 1f));
+    }
+
+    [Fact]
     public void The_camera_stops_in_front_of_a_wall()
     {
         var room = Room();

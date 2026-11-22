@@ -27,6 +27,7 @@ internal sealed class PlayMode : IDisposable
     private const float StandDepth = 1.2f;
     private const float Surfacing = 4f; // How fast she floats up to the surface (1 / seconds).
     private const float SwimBlend = 6f; // From walking into swimming clips, 1 / seconds.
+    private const float WaterReach = 4f; // Water surfaces of the collision looked for up to this far above her.
     // Climbing: from this high, up to the highest clip and a little more; running clips above this speed.
     private const float LowestClimb = 0.6f;
     private const float ClimbMargin = 0.25f;
@@ -40,6 +41,7 @@ internal sealed class PlayMode : IDisposable
     private const float MouseSensitivity = 0.004f;
     private const float CameraMargin = 0.25f; // Kept between the camera and a wall behind it.
     private const float NearestCamera = 0.35f;
+    private const float AboveWater = 0.3f; // Lowest the camera goes over a water surface.
     private const float MinPitch = -1.25f;
     private const float MaxPitch = 0.7f;
 
@@ -280,7 +282,7 @@ internal sealed class PlayMode : IDisposable
         if (step > 0f)
             swim.Blocked(Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step);
         float z = Position.Z;
-        float? surface = game.WaterAt(flat);
+        float? surface = WaterAt(game, flat, Position.Z, inside: true);
         float? bottom = surface is { } level ? _collision.Ground(flat, level) : null;
         if (surface is not { } water || bottom is { } floor && floor >= water - StandDepth)
         {
@@ -295,6 +297,19 @@ internal sealed class PlayMode : IDisposable
         if (bottom is { } seabed && z < seabed)
             z = seabed;
         Position = new Vector3(flat.X, flat.Y, z);
+    }
+
+    // The water surface at a point, for her (or the camera) at a height: the game's flat water (sea, lakes) or that of
+    // the collision (canals, rivers, pools), with no floor between it and that height (a pool on a terrace overhead,
+    // the sea over a tunnel: none) unless she is inside it already (a step of the bottom is no floor over her).
+    private float? WaterAt(IPlayGame game, Vector2 point, float height, bool inside = false)
+    {
+        float? water = game.WaterAt(point);
+        if (_collision.WaterAt(point, height + WaterReach) is { } surface && (water is null || surface > water))
+            water = surface;
+        if (!inside && water is { } level && level > height && _collision.Ground(point, level - 0.05f) is { } floor && floor > height + StepUp)
+            return null;
+        return water;
     }
 
     // Moved ahead in short steps so that no wall is crossed: the walls push her back, and she slides along them.
@@ -368,7 +383,7 @@ internal sealed class PlayMode : IDisposable
         Position = new Vector3(flat.X, flat.Y, z);
 
         // Deep water under her (walked in, or fallen in): she swims from there, floating up to the surface.
-        if (gaits.Swim is { } swim && game.WaterAt(flat) is { } water && water - z > SwimDepth && (_grounded || _verticalSpeed <= 0f))
+        if (gaits.Swim is { } swim && WaterAt(game, flat, z) is { } water && water - z > SwimDepth && (_grounded || _verticalSpeed <= 0f))
         {
             gait.Release();
             swim.Continue(MathF.Min(gait.Speed, swim.Clips.RunSpeed));
@@ -401,6 +416,12 @@ internal sealed class PlayMode : IDisposable
         camera.Position = pivot - forward * _shownDistance;
         camera.Yaw = _cameraYaw;
         camera.Pitch = _cameraPitch;
+        // Never under the water (nothing shows what is under it from below): above the surface, still looking at her.
+        if (_game is { } game && WaterAt(game, new Vector2(camera.Position.X, camera.Position.Y), camera.Position.Z) is { } water && camera.Position.Z < water + AboveWater)
+        {
+            camera.Position = camera.Position with { Z = water + AboveWater };
+            camera.LookAt(pivot);
+        }
     }
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection)

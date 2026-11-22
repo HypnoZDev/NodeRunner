@@ -118,11 +118,17 @@ internal sealed unsafe partial class MainForm
         _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
         if (occlusionPreview)
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
+        // The character of the play mode before the water: what is under the surface is seen through it.
+        void PlayerAndWater()
+        {
+            _state.Play.Draw(_modelRenderer, viewProjection);
+            DrawWater(viewProjection, lighting, scene);
+        }
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
-                () => DrawWater(viewProjection, lighting, scene), occlusionPreview ? _occlusionCuller : null);
+                PlayerAndWater, occlusionPreview ? _occlusionCuller : null);
         else
-            DrawWater(viewProjection, lighting, scene);
+            PlayerAndWater();
 
         // The car of the selected parking spot.
         var previewSpot = _state.IsLayerVisible(CarGeneratorLayer.LayerName) ? _state.SelectedCarGenerator : null;
@@ -141,9 +147,6 @@ internal sealed unsafe partial class MainForm
         _state.ScenarioLife.Update(_state.World, _modelRenderer, _state.ScenarioClips, camera.Position, hour, settings.MapVersion == NodeRunner.Data.FileSystem.MapVersion.Multiplayer,
             c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsOtherGame && _state.Cutscenes.Cutscene is null);
         _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
-
-        // The character of the play mode.
-        _state.Play.Draw(_modelRenderer, viewProjection);
 
         // The cutscene chosen in the cutscene viewer, at its place.
         _state.Cutscenes.Update(_state.World, _modelRenderer);

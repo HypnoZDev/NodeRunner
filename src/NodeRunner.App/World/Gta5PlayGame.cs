@@ -85,6 +85,28 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
 
     public float? WaterAt(Vector2 point) => world.Water?.HeightAt(point.X, point.Y);
 
+    // Canals, rivers and swimming pools are not in the water files: their surface is collision of the WATER material
+    // (their beds are MUD_UNDERWATER, SAND_UNDERWATER...: ground).
+    public bool[]? WaterMaterials
+    {
+        get
+        {
+            if (world.Collisions?.Materials is not { Count: > 0 } materials)
+                return null;
+            if (!ReferenceEquals(_waterFor, materials))
+            {
+                _waterFor = materials;
+                _water = new bool[256];
+                for (int i = 0; i < Math.Min(materials.Count, 256); i++)
+                    _water[i] = materials.Name((byte)i).Equals("WATER", StringComparison.OrdinalIgnoreCase);
+            }
+            return _water;
+        }
+    }
+
+    private object? _waterFor;
+    private bool[]? _water;
+
     // Breaststroke (walk), crawl (run), fast crawl (sprint), treading water (idle); setting off in four directions
     // and stopping. Swimming pools are model meshes, not in the water files: not swum in.
     private static PlayClips? ReadSwimming(GameContent content)

@@ -26,6 +26,7 @@ internal sealed class PlayCollision
         public readonly Vector3[] Triangles = triangles; // Three corners each.
         public readonly bool[] Walls = walls; // Per triangle: steep enough to stop the body.
         public readonly Dictionary<(int, int), List<int>> Cells = cells;
+        public WaterSurfaces? Water { get; init; }
     }
 
     private Area? _area;
@@ -49,8 +50,9 @@ internal sealed class PlayCollision
             && Vector2.Distance(area.Centre, Flat(position)) < ReadAgain)
             return;
         var read = game.CollisionReader();
+        var water = game.WaterMaterials;
         var (min, max) = AreaAround(position);
-        _reading = Task.Run(() => Build(data, revision, position, read(min, max)));
+        _reading = Task.Run(() => Build(data, revision, position, read(min, max), water));
     }
 
     // A reading under way goes on (the game reads one area at a time): its area is replaced once the character is
@@ -232,24 +234,49 @@ internal sealed class PlayCollision
     }
 
     // Collision given as it is (tests): the area around a point.
-    internal void Use(IEnumerable<PlacedCollision> collisions, Vector3 position) => _area = Build(this, 0, position, collisions);
+    internal void Use(IEnumerable<PlacedCollision> collisions, Vector3 position, bool[]? water = null) =>
+        _area = Build(this, 0, position, collisions, water);
+
+    // Height of the highest water surface (of the collision: canals, rivers, pools) under (x, y) that is not above
+    // fromZ; null when there is none.
+    public float? WaterAt(Vector2 point, float fromZ)
+    {
+        if (_area is not { Water: { } water } || !water.Cells.TryGetValue(CellOf(point), out var list))
+            return null;
+        var triangles = water.Triangles;
+        float? best = null;
+        foreach (int t in list)
+        {
+            if (GroundSnap.HeightAt(triangles[t * 3], triangles[t * 3 + 1], triangles[t * 3 + 2], point) is { } z && z <= fromZ
+                && (best is null || z > best))
+                best = z;
+        }
+        return best;
+    }
 
     private static (Vector3 Min, Vector3 Max) AreaAround(Vector3 position) =>
         (new Vector3(position.X - Radius, position.Y - Radius, -1000f), new Vector3(position.X + Radius, position.Y + Radius, position.Z + 300f));
 
-    private static Area Build(object data, int revision, Vector3 position, IEnumerable<PlacedCollision> collisions)
+    // Water triangles, sorted into cells as the others.
+    private sealed record WaterSurfaces(Vector3[] Triangles, Dictionary<(int, int), List<int>> Cells);
+
+    private static Area Build(object data, int revision, Vector3 position, IEnumerable<PlacedCollision> collisions, bool[]? waterMaterials)
     {
         var (min, max) = AreaAround(position);
         var triangles = new List<Vector3>();
         var walls = new List<bool>();
         var cells = new Dictionary<(int, int), List<int>>();
+        var water = new List<Vector3>();
+        var waterCells = new Dictionary<(int, int), List<int>>();
         foreach (var (mesh, transform) in collisions)
         {
             bool identity = transform.IsIdentity;
             var vertices = mesh.Vertices;
             var indices = mesh.Indices;
+            var materials = mesh.Materials;
             for (int i = 0; i + 2 < indices.Count; i += 3)
             {
+                bool isWater = waterMaterials is not null && i / 3 < materials.Count && waterMaterials[materials[i / 3]];
                 var a = vertices[indices[i]];
                 var b = vertices[indices[i + 1]];
                 var c = vertices[indices[i + 2]];
@@ -267,25 +294,33 @@ internal sealed class PlayCollision
                 var (x1, y1) = CellOf(new Vector2(Math.Min(high.X, max.X), Math.Min(high.Y, max.Y)));
                 if ((long)(x1 - x0 + 1) * (y1 - y0 + 1) > MaxCellsPerTriangle)
                     continue;
-                int index = triangles.Count / 3;
-                triangles.Add(a);
-                triangles.Add(b);
-                triangles.Add(c);
-                var normal = Vector3.Cross(b - a, c - a);
-                float area = normal.Length();
-                walls.Add(area > 1e-8f && MathF.Abs(normal.Z / area) < FlatNormal);
+                // A water surface is neither ground nor wall: she goes into it.
+                var (into, intoCells) = isWater ? (water, waterCells) : (triangles, cells);
+                int index = into.Count / 3;
+                into.Add(a);
+                into.Add(b);
+                into.Add(c);
+                if (!isWater)
+                {
+                    var normal = Vector3.Cross(b - a, c - a);
+                    float area = normal.Length();
+                    walls.Add(area > 1e-8f && MathF.Abs(normal.Z / area) < FlatNormal);
+                }
                 for (int x = x0; x <= x1; x++)
                 {
                     for (int y = y0; y <= y1; y++)
                     {
-                        if (!cells.TryGetValue((x, y), out var list))
-                            cells[(x, y)] = list = [];
+                        if (!intoCells.TryGetValue((x, y), out var list))
+                            intoCells[(x, y)] = list = [];
                         list.Add(index);
                     }
                 }
             }
         }
-        return new Area(data, revision, Flat(position), triangles.ToArray(), walls.ToArray(), cells);
+        return new Area(data, revision, Flat(position), triangles.ToArray(), walls.ToArray(), cells)
+        {
+            Water = water.Count > 0 ? new WaterSurfaces(water.ToArray(), waterCells) : null,
+        };
     }
 
     private static (int, int) CellOf(Vector2 point) => ((int)MathF.Floor(point.X / CellSize), (int)MathF.Floor(point.Y / CellSize));
