@@ -38,7 +38,9 @@ internal static unsafe partial class DockLayout
     public static void DrawHidden()
     {
         var viewport = ImGui.GetMainViewport();
-        ImGui.DockSpaceOverViewport(ImGui.GetID(DockSpaceName), viewport, ImGuiDockNodeFlags.KeepAliveOnly);
+        // Passthru as in Draw: without it, the window holding the dock space paints its background over the 3D view.
+        ImGui.DockSpaceOverViewport(ImGui.GetID(DockSpaceName), viewport,
+            ImGuiDockNodeFlags.PassthruCentralNode | ImGuiDockNodeFlags.NoDockingOverCentralNode | ImGuiDockNodeFlags.KeepAliveOnly);
         SceneArea = (viewport.Pos, viewport.Size);
     }
 
