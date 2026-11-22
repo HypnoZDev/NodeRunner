@@ -13,9 +13,6 @@ internal readonly record struct PlayInput(Vector2 Move, bool Sprint, bool Walk, 
 // same in every game: what is proper to one (the walker, her clips, the collision) comes from its IPlayGame.
 internal sealed class PlayMode : IDisposable
 {
-    private const float Acceleration = 9f; // Metres per second, each second.
-    private const float Deceleration = 12f;
-    private const float TurnRate = 10f; // How fast she turns to where she is asked to go (1 / seconds).
     private const float Gravity = 9.81f;
     private const float JumpSpeed = 4.6f; // Upwards, at the start of a jump: about 1 m high.
     private const float StepUp = 0.45f; // Highest step climbed without jumping.
@@ -37,21 +34,20 @@ internal sealed class PlayMode : IDisposable
     private readonly PreviewModel _model = new();
     private readonly PlayCollision _collision = new();
     private IPlayGame? _game;
-    private Task<PlayClips?>? _clips;
+    private Task<PlayGait?>? _clips; // Her clips, and how she moves with them.
     private object? _clipsFor;
+    private Task<FootPoses?>? _feet;
+    private readonly List<ClipLayer> _layers = [];
     private bool _placed; // Put on the ground under where she started, once the collision there is read.
     private Matrix4x4[]? _pose;
 
     private Vector3 _start;
     private float _startHeading;
     private float _heading;
-    private float _speed;
     private float _verticalSpeed;
     private bool _grounded;
     private bool _waiting; // Collision under her not read yet: she stays where she is.
     private float _fallen;
-    private float _phase; // Where the walk / run / sprint cycle is (0 to 1).
-    private float _idleTime;
     private float _jumpTime;
     private float _jumpWeight;
     private bool _jumped;
@@ -86,8 +82,8 @@ internal sealed class PlayMode : IDisposable
         _saved = (camera.Position, camera.Yaw, camera.Pitch, camera.NearPlane);
         Position = _start = at;
         _heading = _startHeading = camera.Yaw - MathF.PI / 2f; // The model faces +Y.
-        (_speed, _verticalSpeed, _grounded, _waiting, _fallen, _placed) = (0f, 0f, true, true, 0f, false);
-        (_phase, _idleTime, _jumpTime, _jumpWeight, _jumped) = (0f, 0f, 0f, 0f, false);
+        (_verticalSpeed, _grounded, _waiting, _fallen, _placed) = (0f, true, true, 0f, false);
+        (_jumpTime, _jumpWeight, _jumped) = (0f, 0f, false);
         _cameraYaw = camera.Yaw;
         _cameraPitch = -0.25f;
         _pivotZ = Position.Z + PivotHeight;
@@ -96,7 +92,14 @@ internal sealed class PlayMode : IDisposable
         if (!ReferenceEquals(_clipsFor, data))
         {
             _clipsFor = data;
-            _clips = Task.Run(game.ReadClips);
+            _clips = Task.Run(() => game.ReadClips() is { } read ? new PlayGait(read) : null);
+        }
+        // The model is read again: its skeleton too.
+        _feet = null;
+        if (_clips is { IsCompletedSuccessfully: true, Result: { } gait })
+        {
+            gait.Reset();
+            gait.UseFeet(null);
         }
         _collision.Clear();
         IsActive = true;
@@ -126,7 +129,17 @@ internal sealed class PlayMode : IDisposable
         _cameraPitch = Math.Clamp(_cameraPitch - input.Look.Y * MouseSensitivity * sensitivity * (invertY ? -1f : 1f), MinPitch, MaxPitch);
         _distance = Math.Clamp(_distance * MathF.Pow(0.88f, input.Wheel), MinDistance, MaxDistance);
 
-        var clips = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
+        var gait = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
+        if (gait is not null && _feet is null && _model.Data?.Skeleton is { } skeleton)
+        {
+            var clips = gait.FeetClips.ToList();
+            _feet = Task.Run(() => FootPoses.Build(skeleton, clips));
+        }
+        if (gait is not null && _feet is { IsCompleted: true } feet)
+        {
+            gait.UseFeet(feet.IsCompletedSuccessfully ? feet.Result : null);
+            _feet = Task.FromResult<FootPoses?>(null); // Given: not again.
+        }
         _waiting = !_collision.IsReady(Position);
         if (!_waiting && !_placed)
         {
@@ -135,46 +148,40 @@ internal sealed class PlayMode : IDisposable
             if (_collision.Ground(new Vector2(Position.X, Position.Y), Position.Z + StartRise) is { } ground)
                 Position = _start = Position with { Z = ground };
         }
-        if (clips is not null && _model.Model is not null && !_waiting)
-            Move(clips, input, step);
+        if (gait is not null && _model.Model is not null && !_waiting)
+            Move(gait, input, step);
         PlaceCamera(camera, step);
     }
 
-    private void Move(PlayClips clips, PlayInput input, float step)
+    private void Move(PlayGait gait, PlayInput input, float step)
     {
         // Where she is asked to go, from the camera's point of view.
         var forward = new Vector2(MathF.Cos(_cameraYaw), MathF.Sin(_cameraYaw));
         var right = new Vector2(MathF.Sin(_cameraYaw), -MathF.Cos(_cameraYaw));
         var wanted = forward * input.Move.Y + right * input.Move.X;
-        float target = 0f;
-        if (wanted.LengthSquared() > 1e-4f && _grounded)
-        {
-            float goal = MathF.Atan2(-wanted.X, wanted.Y);
-            _heading += Wrap(goal - _heading) * (1f - MathF.Exp(-TurnRate * step));
-            target = input.Sprint ? clips.SprintSpeed : input.Walk ? clips.WalkSpeed : clips.RunSpeed;
-        }
-        if (_grounded)
-            _speed += Math.Clamp(target - _speed, -Deceleration * step, Acceleration * step);
+        float? goal = wanted.LengthSquared() > 1e-4f ? MathF.Atan2(-wanted.X, wanted.Y) : null;
+        var pace = input.Sprint ? PlayGait.Pace.Sprint : input.Walk ? PlayGait.Pace.Walk : PlayGait.Pace.Run;
 
-        // Ahead, the way she faces (she turns in an arc, as in the game), in short steps so that no wall is crossed;
-        // the walls push her back, and she slides along them.
-        var facing = new Vector2(-MathF.Sin(_heading), MathF.Cos(_heading));
+        // On the ground, her gait moves her; in the air, she keeps her speed and heading.
+        Vector2 ahead;
+        if (_grounded)
+            (ahead, _heading) = gait.Step(goal, pace, _heading, step);
+        else
+            ahead = MoverPath.Turn(Vector2.UnitY, _heading) * gait.Speed * step;
+
+        // In short steps so that no wall is crossed; the walls push her back, and she slides along them.
         float z = Position.Z;
         var feet = Position;
-        float distance = _speed * step;
-        int steps = Math.Max(1, (int)MathF.Ceiling(distance / MaxSubstep));
+        int steps = Math.Max(1, (int)MathF.Ceiling(ahead.Length() / MaxSubstep));
         for (int i = 0; i < steps; i++)
-        {
-            var next = feet + new Vector3(facing * (distance / steps), 0f);
-            feet = _collision.PushOut(next);
-        }
+            feet = _collision.PushOut(feet + new Vector3(ahead / steps, 0f));
         var flat = new Vector2(feet.X, feet.Y);
-        // Against a wall: the clips slow down with her.
         if (_grounded && step > 0f)
-            _speed = MathF.Min(_speed, Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step + 0.05f);
+            gait.Blocked(Vector2.Distance(flat, new Vector2(Position.X, Position.Y)) / step);
 
         if (_grounded && input.Jump)
         {
+            gait.Release();
             _grounded = false;
             _jumped = true;
             _verticalSpeed = JumpSpeed;
@@ -188,6 +195,7 @@ internal sealed class PlayMode : IDisposable
             else
             {
                 // Off an edge: falling, without a jump.
+                gait.Release();
                 _grounded = false;
                 _jumped = false;
                 _verticalSpeed = 0f;
@@ -217,35 +225,13 @@ internal sealed class PlayMode : IDisposable
             // Through the map, or off its edge: back to where play started.
             Position = _start;
             _heading = _startHeading;
-            (_speed, _verticalSpeed, _grounded, _fallen) = (0f, 0f, true, 0f);
+            (_verticalSpeed, _grounded, _fallen) = (0f, true, 0f);
+            gait.Reset();
         }
 
-        // Clips: the cycle goes on at the pace of the clips mixed now.
-        var (idle, walk, run, sprint) = Weights(clips, _speed);
-        float moving = walk + run + sprint;
-        if (moving > 0f)
-            _phase = (_phase + step * (walk / clips.Walk.Duration + run / clips.Run.Duration + sprint / clips.Sprint.Duration) / moving) % 1f;
-        _idleTime += step;
         _jumpTime += step;
         bool inAir = !_grounded && (_jumped || _fallen > 0.4f);
         _jumpWeight += ((inAir ? 1f : 0f) - _jumpWeight) * (1f - MathF.Exp(-BlendIn * step));
-    }
-
-    // Shares of the standing, walking, running and sprinting clips at a speed.
-    private static (float Idle, float Walk, float Run, float Sprint) Weights(PlayClips clips, float speed)
-    {
-        if (speed <= clips.WalkSpeed)
-        {
-            float t = speed / clips.WalkSpeed;
-            return (1f - t, t, 0f, 0f);
-        }
-        if (speed <= clips.RunSpeed)
-        {
-            float t = (speed - clips.WalkSpeed) / (clips.RunSpeed - clips.WalkSpeed);
-            return (0f, 1f - t, t, 0f);
-        }
-        float s = Math.Clamp((speed - clips.RunSpeed) / (clips.SprintSpeed - clips.RunSpeed), 0f, 1f);
-        return (0f, 0f, 1f - s, s);
     }
 
     private void PlaceCamera(Camera camera, float step)
@@ -269,25 +255,21 @@ internal sealed class PlayMode : IDisposable
     {
         if (!IsActive || _model.Model is not { } model)
             return;
-        var clips = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
+        var gait = _clips is { IsCompletedSuccessfully: true } read ? read.Result : null;
         bool posed = false;
-        if (clips is not null && model.IsSkinned && _model.Data?.Skeleton is { } skeleton)
+        if (gait is not null && model.IsSkinned && _model.Data?.Skeleton is { } skeleton)
         {
             if (_pose is null || _pose.Length != skeleton.Count)
                 _pose = new Matrix4x4[skeleton.Count];
-            var (idle, walk, run, sprint) = Weights(clips, _speed);
+            var clips = gait.Clips;
             float ground = 1f - (clips.Jump is null ? 0f : _jumpWeight);
-            Span<ClipLayer> layers =
-            [
-                new(clips.Idle, _idleTime, idle * ground),
-                new(clips.Walk, _phase * clips.Walk.Duration, walk * ground),
-                new(clips.Run, _phase * clips.Run.Duration, run * ground),
-                new(clips.Sprint, _phase * clips.Sprint.Duration, sprint * ground),
-                // From where the feet leave the ground, held on its last pose (legs down for the landing).
-                new(clips.Jump ?? clips.Idle, Math.Min(_jumpTime + (_jumped ? clips.JumpStart : clips.FallStart), (clips.Jump?.Duration ?? 1f) - 0.02f),
-                    1f - ground),
-            ];
-            SkeletonAnimator.Pose(skeleton, layers, _pose);
+            _layers.Clear();
+            gait.Layers(_layers, ground);
+            // From where the feet leave the ground, held on its last pose (legs down for the landing).
+            _layers.Add(new ClipLayer(clips.Jump ?? clips.Idle,
+                Math.Min(_jumpTime + (_jumped ? clips.JumpStart : clips.FallStart), (clips.Jump?.Duration ?? 1f) - 0.02f), 1f - ground));
+            SkeletonAnimator.Pose(skeleton, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_layers), _pose);
+            gait.Observe(_pose);
             posed = true;
         }
         var world = Placement();
@@ -313,12 +295,6 @@ internal sealed class PlayMode : IDisposable
     // The model's feet (lowest point) on her position, facing her heading.
     private Matrix4x4 Placement() =>
         Matrix4x4.CreateTranslation(0f, 0f, -_model.BoundsMin.Z) * Matrix4x4.CreateRotationZ(_heading) * Matrix4x4.CreateTranslation(Position);
-
-    private static float Wrap(float angle)
-    {
-        angle %= MathF.Tau;
-        return angle > MathF.PI ? angle - MathF.Tau : angle < -MathF.PI ? angle + MathF.Tau : angle;
-    }
 
     public void Dispose() => _model.Dispose();
 }

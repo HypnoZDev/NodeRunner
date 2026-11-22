@@ -53,8 +53,17 @@ internal sealed class Gta5PlayGame(WorldLoader world, Func<CollisionEdits> edits
             if (Find(moves, "idle") is not { } idle || Find(moves, "walk") is not { } walk || Find(moves, "run") is not { } run
                 || Find(moves, "sprint") is not { } sprint)
                 return null;
+            IReadOnlyList<AnimationClip> All(params string[] names) => names.Select(n => Find(moves, n)).OfType<AnimationClip>().ToList();
             return new PlayClips(idle, walk, run, sprint, Find(jumps, JumpClip),
-                SpeedOf(walk, 1.8f), SpeedOf(run, 3.7f), SpeedOf(sprint, 5.8f), JumpStart, FallStart);
+                SpeedOf(walk, 1.8f), SpeedOf(run, 3.7f), SpeedOf(sprint, 5.8f), JumpStart, FallStart)
+            {
+                WalkStarts = All("wstart_l_0", "wstart_r_0", "wstart_l_-90", "wstart_r_90", "wstart_l_-180", "wstart_r_180"),
+                RunStarts = All("rstart_l_0", "rstart_r_0", "rstart_l_-90", "rstart_r_90", "rstart_l_-180", "rstart_r_180"),
+                WalkStops = All("wstop_l_0", "wstop_r_0"),
+                RunStops = All("rstop_l", "rstop_r"),
+                WalkTurns = All("walk_turn_180_l", "walk_turn_180_r"),
+                RunTurns = All("run_turn_180_l", "run_turn_180_r"),
+            };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
