@@ -5,7 +5,7 @@
 **The GTA V map in 3D, to explore it, understand it and edit it. Free, portable, built for FiveM mapping.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.8.0/NodeRunner-1.8.0-win-x64.zip">
     <img src="https://img.shields.io/badge/Download-NodeRunner%20Studio%20for%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download NodeRunner Studio for Windows">
   </a>
   <br>
@@ -51,7 +51,8 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 **Edit**
 - Click an object, move it, rotate it or scale it with the 3D gizmo (hold Ctrl to snap).
 - **Snap to ground** with one key (End): the object lands on the game's real collision, interiors included.
-- Multi-selection, copy / paste (`Ctrl+C` / `Ctrl+V`), unlimited undo / redo.
+- Multi-selection, copy / paste (`Ctrl+C` / `Ctrl+V`), unlimited undo / redo, and a **History** panel to go back to
+  any change in one click.
 - Add any game object, picked in the model viewer (which also shows vehicles).
 - **Clean deletion**: the object goes away with its levels of detail, its collision and its occlusion boxes. No more
   invisible walls or ghost buildings in the distance. A preview shows everything that will be removed before you confirm.
@@ -78,6 +79,13 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 **Characters and cutscenes**
 - **Character viewer**: the game's 1,119 pedestrians and animals, with every animation of the game.
 - **Cutscene viewer**: the game's cutscenes played on the map, in their place, with the film camera.
+
+**Play mode: the map at player height**
+- One **Play** button (`Alt+P`) and you walk the map with a game character, full screen: running, sprinting, walking,
+  jumping, **climbing** low walls and roofs, **swimming** in the sea, the canals and the pools, with the game's
+  animations (setting off, stopping, turning round).
+- Walls, objects and your props stop her, and the map is shown as the game shows it, without what the occluders hide:
+  spot a blocked path or a building that vanishes before you export. `Esc` to come back.
 
 **Your props and mappings**
 - A **prop library** shared by all your projects: packs (folder or .zip) with thumbnails, favourites, and placement by
@@ -112,12 +120,14 @@ engine (shadows, water, time-of-day sky) to see the map as it really is.
 - Interface in **English or French** (automatic, from the Windows language), switched live.
 - Settings for every PC: quality, frame rate, graphics card, video memory, camera (sensitivity, field of view,
   ZQSD / WASD), gizmo snap steps, accent colour, automatic rescue copy of your changes.
+- **Customisable keyboard shortcuts** (Settings > Shortcuts), with a CodeWalker preset, and **camera bookmarks**
+  (`Ctrl+Shift+1` to `9` to save a view, `Ctrl+1` to `9` to go back to it).
 
 ---
 
 ## Download
 
-**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip)**
+**[Download the latest version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.8.0/NodeRunner-1.8.0-win-x64.zip)**
 · other versions are on the [Releases](https://github.com/HypnoZDev/NodeRunner/releases) page.
 
 1. Download the `NodeRunner-x.y.z-win-x64.zip` file.
@@ -144,6 +154,7 @@ for the folder. A splash screen shows while the map loads.
 | Change tool | `1` select, `2` move, `3` rotate, `4` scale |
 | Snap the object to the ground | `End` |
 | Search for anything | `Ctrl+K` |
+| Walk the map | `Alt+P` (Play mode), `Esc` to come back |
 | Save | `Ctrl+S` |
 
 Then: **Fichier > Exporter en ressource FiveM** (File > Export as FiveM resource), pick your server's `resources` folder,

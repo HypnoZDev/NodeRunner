@@ -5,7 +5,7 @@
 **La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v1.8.0/NodeRunner-1.8.0-win-x64.zip">
     <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
   </a>
   <br>
@@ -51,7 +51,8 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 **Modifier**
 - Cliquez sur un objet, déplacez-le, tournez-le ou changez sa taille avec les poignées 3D (Ctrl pour aller par crans).
 - **Poser au sol** en une touche (Fin) : l'objet se pose sur la vraie collision du jeu, intérieurs compris.
-- Sélection multiple, copier / coller (`Ctrl+C` / `Ctrl+V`), annuler / rétablir sans limite.
+- Sélection multiple, copier / coller (`Ctrl+C` / `Ctrl+V`), annuler / rétablir sans limite, et un panneau
+  **Historique** pour revenir d'un clic à n'importe quelle modification.
 - Ajout de n'importe quel objet du jeu, choisi dans la visionneuse de modèles (qui montre aussi les véhicules).
 - **Suppression propre** : l'objet part avec ses niveaux de détail, sa collision et ses boîtes d'occlusion. Plus de mur
   invisible ni de bâtiment fantôme au loin. Un aperçu montre tout ce qui va partir avant de confirmer.
@@ -83,6 +84,13 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 **Personnages et cinématiques**
 - **Visionneuse de personnages** : les 1 119 piétons et animaux du jeu, avec toutes les animations du jeu.
 - **Visionneuse de cinématiques** : les cinématiques du jeu jouées sur la carte, à leur place, avec la caméra du film.
+
+**Mode Play : la carte à hauteur de joueur**
+- Un bouton **Play** (`Alt+P`) et vous marchez sur la carte avec un personnage du jeu, en plein écran : course, sprint,
+  marche, saut, **escalade** des murets et des toits bas, **nage** en mer, dans les canaux et les piscines, avec les
+  animations du jeu (départs, arrêts, demi-tours).
+- Les murs, les objets et vos props l'arrêtent, et la carte est montrée comme le jeu, sans ce que cachent les
+  occluders : de quoi repérer un passage bloqué ou un bâtiment qui disparaît avant d'exporter. `Échap` pour revenir.
 
 **Vos props et vos mappings**
 - **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
@@ -117,12 +125,14 @@ NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces
 - Interface en **français ou en anglais** (automatique selon la langue de Windows), changée en direct.
 - Réglages pour tous les PC : qualité, images par seconde, carte graphique, mémoire vidéo, caméra (sensibilité, champ de
   vision, ZQSD / WASD), crans des poignées, couleur d'accent, copie de secours automatique des modifications.
+- **Raccourcis clavier modifiables** (Paramètres > Raccourcis), avec un préréglage CodeWalker, et des **signets de
+  caméra** (`Ctrl+Maj+1` à `9` pour enregistrer une vue, `Ctrl+1` à `9` pour y revenir).
 
 ---
 
 ## Télécharger
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.7.0/NodeRunner-1.7.0-win-x64.zip)**
+**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v1.8.0/NodeRunner-1.8.0-win-x64.zip)**
 · les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
 
 1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
@@ -149,6 +159,7 @@ demande le dossier. Un écran de démarrage s'affiche le temps de charger la car
 | Changer d'outil | `1` sélection, `2` déplacer, `3` tourner, `4` échelle |
 | Poser l'objet au sol | `Fin` |
 | Chercher n'importe quoi | `Ctrl+K` |
+| Marcher sur la carte | `Alt+P` (mode Play), `Échap` pour revenir |
 | Enregistrer | `Ctrl+S` |
 
 Ensuite : **Fichier > Exporter en ressource FiveM**, choisissez le dossier `resources` de votre serveur, ajoutez la ligne
