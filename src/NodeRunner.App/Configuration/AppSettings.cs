@@ -32,6 +32,9 @@ public sealed class AppSettings
     public GameKind LastClassicGame { get; set; } = GameKind.SanAndreas;
     public Dictionary<GameKind, CameraSettings> ClassicCameras { get; set; } = new();
 
+    // Camera bookmarks of each game, slots 1 to 9 (Ctrl+Shift+digit saves, Ctrl+digit goes back).
+    public Dictionary<GameKind, Dictionary<int, CameraSettings>> CameraBookmarks { get; set; } = new();
+
     public bool VSync { get; set; } = true;
 
     // Images per second at most; 0 = no limit (other than VSync).

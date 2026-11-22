@@ -874,6 +874,46 @@ internal sealed partial class AppState
 
     public (System.Numerics.Vector3 Position, System.Numerics.Vector2? Facing)? Marker { get; set; }
 
+    public const int BookmarkSlots = 9;
+
+    // Camera bookmarks of the game shown, by slot (1 to 9).
+    public IReadOnlyDictionary<int, Configuration.CameraSettings> CameraBookmarks =>
+        Settings.CameraBookmarks.TryGetValue(ActiveGame, out var slots) ? slots : new Dictionary<int, Configuration.CameraSettings>();
+
+    public void SaveCameraBookmark(int slot)
+    {
+        if (!Settings.CameraBookmarks.TryGetValue(ActiveGame, out var slots))
+            Settings.CameraBookmarks[ActiveGame] = slots = [];
+        slots[slot] = new Configuration.CameraSettings
+        {
+            X = Camera.Position.X,
+            Y = Camera.Position.Y,
+            Z = Camera.Position.Z,
+            Yaw = Camera.Yaw,
+            Pitch = Camera.Pitch,
+        };
+        SaveSettings();
+        Notify(L($"Vue enregistrée dans le signet {slot} : Ctrl+{slot} pour y revenir."));
+    }
+
+    public void GoToCameraBookmark(int slot)
+    {
+        if (!CameraBookmarks.TryGetValue(slot, out var saved))
+        {
+            Notify(L($"Signet {slot} vide : Ctrl+Maj+{slot} enregistre la vue actuelle."), warning: true);
+            return;
+        }
+        Camera.Position = new System.Numerics.Vector3(saved.X, saved.Y, saved.Z);
+        Camera.Yaw = saved.Yaw;
+        Camera.Pitch = saved.Pitch;
+    }
+
+    public void ForgetCameraBookmark(int slot)
+    {
+        if (Settings.CameraBookmarks.TryGetValue(ActiveGame, out var slots) && slots.Remove(slot))
+            SaveSettings();
+    }
+
     // Moves the camera above and behind a point (e.g. a position pasted from a FiveM script), looking down at it:
     // from behind facing if given (the heading of a vector4), otherwise in the current direction.
     public void LookFromAbove(System.Numerics.Vector3 target, System.Numerics.Vector2? facing = null)

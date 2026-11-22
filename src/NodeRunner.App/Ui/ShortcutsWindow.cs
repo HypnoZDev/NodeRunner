@@ -71,7 +71,9 @@ internal sealed class ShortcutsWindow(AppState state)
                 ("F4", L("Visionneuse de personnages")),
                 ("F5", L("Visionneuse de cinématiques")),
                 ("Ctrl+,", L("Paramètres")),
-                ("G", L("Grille au sol")));
+                ("G", L("Grille au sol")),
+                (L("Ctrl+Maj+1 à 9"), L("Enregistrer la vue dans un signet de caméra")),
+                (L("Ctrl+1 à 9"), L("Revenir à un signet de caméra")));
             Group(L("Visionneuse de personnages"),
                 (L("Espace"), L("Lecture / pause de l'animation")),
                 (L("Flèche gauche / droite"), L("Image précédente / suivante")),

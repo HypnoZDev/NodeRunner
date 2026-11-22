@@ -549,6 +549,12 @@ internal sealed class MainUi
             _state.Settings.ShowGrid = !_state.Settings.ShowGrid;
             _state.SaveSettings();
         }
+        else if (ImGui.GetIO() is { KeyCtrl: true, KeyAlt: false } io && BookmarkKeyPressed() is int slot)
+        {
+            // Alt left out: Ctrl+Alt is AltGr, which types characters on some keyboards.
+            if (io.KeyShift) _state.SaveCameraBookmark(slot);
+            else _state.GoToCameraBookmark(slot);
+        }
         else if (!ImGui.GetIO().KeyCtrl)
         {
             // Shift allowed: on an AZERTY keyboard the digits of the top row need it.
@@ -562,6 +568,53 @@ internal sealed class MainUi
 
     private static bool ToolKeyPressed(ImGuiKey digit, ImGuiKey keypad) =>
         ImGui.IsKeyPressed(digit, false) || ImGui.IsKeyPressed(keypad, false);
+
+    private static int? BookmarkKeyPressed()
+    {
+        for (int slot = 1; slot <= AppState.BookmarkSlots; slot++)
+        {
+            if (ToolKeyPressed(ImGuiKey._0 + slot, ImGuiKey.Keypad0 + slot))
+                return slot;
+        }
+        return null;
+    }
+
+    // Affichage > Signets de caméra: go to a bookmark, save the view in one, forget one.
+    private void DrawBookmarkMenu()
+    {
+        if (!ImGui.BeginMenu(L($"{Icons.MapPinned}  Signets de caméra")))
+            return;
+        var bookmarks = _state.CameraBookmarks;
+        for (int slot = 1; slot <= AppState.BookmarkSlots; slot++)
+        {
+            string label = bookmarks.TryGetValue(slot, out var b)
+                ? L($"Signet {slot} : {b.X:0}, {b.Y:0}, {b.Z:0}")
+                : L($"Signet {slot} (vide)");
+            if (ImGui.MenuItem($"{label}###goto{slot}", $"Ctrl+{slot}", false, b is not null))
+                _state.GoToCameraBookmark(slot);
+        }
+        ImGui.Separator();
+        if (ImGui.BeginMenu(L("Enregistrer la vue actuelle dans")))
+        {
+            for (int slot = 1; slot <= AppState.BookmarkSlots; slot++)
+            {
+                string label = bookmarks.ContainsKey(slot) ? L($"Signet {slot} (remplace)") : L($"Signet {slot}");
+                if (ImGui.MenuItem($"{label}###save{slot}", L($"Ctrl+Maj+{slot}")))
+                    _state.SaveCameraBookmark(slot);
+            }
+            ImGui.EndMenu();
+        }
+        if (ImGui.BeginMenu(L("Oublier un signet"), bookmarks.Count > 0))
+        {
+            for (int slot = 1; slot <= AppState.BookmarkSlots; slot++)
+            {
+                if (bookmarks.ContainsKey(slot) && ImGui.MenuItem(L($"Signet {slot}") + $"###forget{slot}"))
+                    _state.ForgetCameraBookmark(slot);
+            }
+            ImGui.EndMenu();
+        }
+        ImGui.EndMenu();
+    }
 
     private const float MenuBarPaddingY = 9f;
 
@@ -769,6 +822,7 @@ internal sealed class MainUi
                 _state.Settings.ShowGrid = showGrid;
                 _state.SaveSettings();
             }
+            DrawBookmarkMenu();
             if (ImGui.MenuItem(L("Réinitialiser la disposition des panneaux")))
             {
                 _showLayers = _showScene = _showProperties = _showStatus = _showLibrary = true;
