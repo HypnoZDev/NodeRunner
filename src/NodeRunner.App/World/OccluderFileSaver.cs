@@ -71,7 +71,7 @@ internal static class OccluderFileSaver
                 }
                 else
                 {
-                    var source = content.ReadFile(file.GamePath) ?? throw new InvalidDataException(L("fichier du jeu introuvable"));
+                    var source = file.Source ?? content.ReadFile(file.GamePath) ?? throw new InvalidDataException(L("fichier du jeu introuvable"));
                     header = content.GetResourceHeader(file.GamePath) ?? throw new InvalidDataException(L("en-tête de ressource introuvable"));
                     output = writer.WriteOccluders(source, boxes, triangles);
                 }

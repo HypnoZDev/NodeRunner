@@ -1,5 +1,7 @@
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Maps;
+using NodeRunner.Data.Native.Resources;
 using NodeRunner.Editor;
 
 namespace NodeRunner.App.World;
@@ -7,9 +9,13 @@ namespace NodeRunner.App.World;
 // An occluder map file of the loaded map, with its occluders as read from the game (Occluders), its boxes as edited
 // (Boxes: same indices, new boxes at the end) and what was deleted. The project's own file (IsProject) starts empty and
 // holds the boxes created by hand.
-internal sealed class OccluderMapFile(string gamePath, MapOccluders occluders, bool isProject = false)
+internal sealed class OccluderMapFile(string gamePath, MapOccluders occluders, bool isProject = false, byte[]? source = null)
 {
     public string GamePath { get; } = gamePath;
+
+    // The decompressed file the occluders were read from when it is not the game's: the version of the project's
+    // stream folder (a mapping that removed some of the game's occluders). Saving starts from it.
+    public byte[]? Source { get; } = source;
 
     public MapOccluders Occluders { get; } = occluders;
 
@@ -176,12 +182,16 @@ internal static class OccluderMaps
             var files = new List<OccluderMapFile>();
             foreach (var map in library.Maps)
             {
-                if (map.IsCustom || map.FilePath is not { } path || map.Entities.Count > 0 || content.ReadFile(path) is not { } bytes)
+                if (map.IsCustom || map.FilePath is not { } path || map.Entities.Count > 0)
                     continue;
                 try
                 {
+                    // The project's version of the file replaces the game's, as in the game.
+                    var source = map.SavedContent ?? ProjectOriginal(world.SaveFolder, Path.GetFileName(path));
+                    if ((source ?? content.ReadFile(path)) is not { } bytes)
+                        continue;
                     if (reader.ReadOccluders(bytes) is { IsEmpty: false } occluders)
-                        files.Add(new OccluderMapFile(path, occluders));
+                        files.Add(new OccluderMapFile(path, occluders, source: source));
                 }
                 catch (InvalidDataException)
                 {
@@ -196,6 +206,15 @@ internal static class OccluderMaps
             return [.. files];
         }
     }
+
+    // Where the project's own version of a game's occluder file is kept once NodeRunner writes its changes over it.
+    public static string? OriginalPath(string? streamFolder, string fileName) =>
+        streamFolder is null ? null
+            : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(streamFolder)) ?? streamFolder, LooseFileOverlay.OriginalsFolderName, fileName);
+
+    // The decompressed content of that kept version, null when there is none.
+    private static byte[]? ProjectOriginal(string? streamFolder, string fileName) =>
+        OriginalPath(streamFolder, fileName) is { } file && File.Exists(file) ? ResourceFile.Read(File.ReadAllBytes(file)).Content : null;
 
     // The project's occluder file (boxes created by hand), made on first use.
     public static OccluderMapFile? ProjectFile(WorldLoader world, string fileName)

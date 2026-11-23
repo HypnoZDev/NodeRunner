@@ -412,6 +412,9 @@ internal sealed class WorldLoader : IDisposable
     // Reads the DLC configuration, then the map objects, models and textures of this selection.
     private volatile string? _saveFolder;
 
+    // The open project's stream folder, null without a project.
+    public string? SaveFolder => _saveFolder;
+
     // Stream folders of the other projects shown with the open one.
     private volatile IReadOnlyList<string> _extraFolders = [];
 

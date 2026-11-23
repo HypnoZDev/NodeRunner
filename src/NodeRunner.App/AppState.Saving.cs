@@ -191,6 +191,23 @@ internal sealed partial class AppState
             return;
         var edits = OccluderEdits;
         int errors = report.Errors.Count;
+        // The project's own version of a game's occluder file (from an imported mapping) is kept before being written over.
+        foreach (var changed in OccluderMaps.Get(World).Where(f => f.Source is not null && f.HasChanges))
+        {
+            string current = Path.Combine(stream, changed.FileName);
+            if (OccluderMaps.OriginalPath(stream, changed.FileName) is not { } original || File.Exists(original) || !File.Exists(current))
+                continue;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(original)!);
+                File.Copy(current, original);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                report.Errors.Add($"{changed.FileName} : {ex.Message}");
+                return;
+            }
+        }
         var written = OccluderFileSaver.Save(World, [], OccluderFileName, stream, report);
         if (report.Errors.Count > errors)
             return;
@@ -199,8 +216,11 @@ internal sealed partial class AppState
         {
             foreach (var old in OccluderMaps.Saved.StreamFileNames.Except(written, StringComparer.OrdinalIgnoreCase))
             {
+                // No change left: the project's own version comes back, or the game's file is used again.
                 string path = Path.Combine(stream, old);
-                if (File.Exists(path))
+                if (OccluderMaps.OriginalPath(stream, old) is { } original && File.Exists(original))
+                    File.Move(original, path, overwrite: true);
+                else if (File.Exists(path))
                     File.Delete(path);
             }
             if (edits.IsEmpty)
