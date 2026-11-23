@@ -128,6 +128,7 @@ public static class DdsFile
         U32(16, (uint)texture.Width);
         var (row, slice) = TextureLayout.Pitch(format, texture.Width, texture.Height);
         U32(20, (uint)(compressed ? slice : row));
+        U32(24, 1);
         U32(28, (uint)texture.MipLevels);
         U32(76, 32);
         (uint flags, uint fourCc, uint bits, uint r, uint g, uint b, uint a) pf = format switch
@@ -135,8 +136,8 @@ public static class DdsFile
             TextureFormat.Bc1 => (FourCcFlag, FourCc("DXT1"), 0, 0, 0, 0, 0),
             TextureFormat.Bc2 => (FourCcFlag, FourCc("DXT3"), 0, 0, 0, 0, 0),
             TextureFormat.Bc3 => (FourCcFlag, FourCc("DXT5"), 0, 0, 0, 0, 0),
-            TextureFormat.Bc4 => (FourCcFlag, FourCc("ATI1"), 0, 0, 0, 0, 0),
-            TextureFormat.Bc5 => (FourCcFlag, FourCc("ATI2"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc4 => (FourCcFlag, FourCc("BC4U"), 0, 0, 0, 0, 0),
+            TextureFormat.Bc5 => (FourCcFlag, FourCc("BC5U"), 0, 0, 0, 0, 0),
             TextureFormat.Bc7 => (FourCcFlag, FourCc("DX10"), 0, 0, 0, 0, 0),
             TextureFormat.B8G8R8A8 => (RgbFlag | 0x1, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000),
             TextureFormat.B8G8R8X8 => (RgbFlag, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0),

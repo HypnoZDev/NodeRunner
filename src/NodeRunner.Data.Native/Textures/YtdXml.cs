@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Xml.Linq;
 using NodeRunner.Data.FileSystem;
+using NodeRunner.Data.Native.Archives;
+using NodeRunner.Data.Native.Resources;
 using NodeRunner.Data.Textures;
 
 namespace NodeRunner.Data.Native.Textures;
@@ -43,6 +45,78 @@ public static class YtdXml
             throw new InvalidDataException("Le dictionnaire ne contient aucune texture.");
         return YtdBuilder.Build(textures);
     }
+
+    // A .ytd of the game as XML, with one .dds per texture in the folder named after it.
+    public static XmlConversion Export(string fileName, ReadOnlySpan<byte> data, ResourceHeader header)
+    {
+        var res = new ResourceData(data, ResourcePages.Size(header.SystemFlags)) { Enhanced = header.Version == YtdReader.EnhancedVersion };
+        var xml = new XmlText();
+        var files = new List<(string, byte[])>();
+        var textures = YtdReader.ReadWithSettings(res, 0);
+        if (textures.Count == 0)
+            xml.Empty("TextureDictionary");
+        else
+        {
+            xml.Open("TextureDictionary");
+            WriteTextures(xml, textures, XmlBaseName(fileName), files);
+            xml.Close("TextureDictionary");
+        }
+        return new XmlConversion(fileName + ".xml", xml.ToString(), files);
+    }
+
+    // "name.ytd" -> "name": the folder of the images.
+    internal static string XmlBaseName(string fileName) => Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+
+    internal static void WriteTextures(XmlText xml, List<XmlTexture> textures, string folder, List<(string, byte[])> files)
+    {
+        foreach (var texture in textures)
+        {
+            var t = texture.Data;
+            xml.Open("Item");
+            xml.Text("Name", t.Name);
+            xml.Value("Unk32", texture.Unknown32);
+            xml.Text("Usage", (texture.UsageData & 0x1F) is var usage && usage < UsageNames.Length ? UsageNames[usage] : usage.ToString(CultureInfo.InvariantCulture));
+            xml.Text("UsageFlags", FlagNames(texture.UsageData >> 5));
+            xml.Value("ExtraFlags", texture.ExtraFlags);
+            xml.Value("Width", t.Width);
+            xml.Value("Height", t.Height);
+            xml.Value("MipLevels", t.MipLevels);
+            xml.Text("Format", FormatName(t.Format));
+            xml.Text("FileName", t.Name + ".dds");
+            xml.Close("Item");
+            files.Add((folder + "/" + t.Name + ".dds", DdsFile.Write(t)));
+        }
+    }
+
+    private static string FlagNames(uint flags)
+    {
+        if (flags == 0)
+            return "0";
+        var names = new List<string>();
+        for (int bit = 0; bit < 32; bit++)
+        {
+            if ((flags & 1u << bit) != 0)
+                names.Add(bit < UsageFlagNames.Length ? UsageFlagNames[bit] : (1u << bit).ToString(CultureInfo.InvariantCulture));
+        }
+        return string.Join(", ", names);
+    }
+
+    private static string FormatName(TextureFormat format) => format switch
+    {
+        TextureFormat.Bc1 => "D3DFMT_DXT1",
+        TextureFormat.Bc2 => "D3DFMT_DXT3",
+        TextureFormat.Bc3 => "D3DFMT_DXT5",
+        TextureFormat.Bc4 => "D3DFMT_ATI1",
+        TextureFormat.Bc5 => "D3DFMT_ATI2",
+        TextureFormat.Bc7 => "D3DFMT_BC7",
+        TextureFormat.B8G8R8A8 => "D3DFMT_A8R8G8B8",
+        TextureFormat.B8G8R8X8 => "D3DFMT_X8R8G8B8",
+        TextureFormat.B5G5R5A1 => "D3DFMT_A1R5G5B5",
+        TextureFormat.A8 => "D3DFMT_A8",
+        TextureFormat.R8G8B8A8 => "D3DFMT_A8B8G8R8",
+        TextureFormat.L8 => "D3DFMT_L8",
+        _ => "",
+    };
 
     // The <Item> textures of a dictionary element, pixels read from their .dds file.
     internal static List<XmlTexture> ReadTextures(XElement dictionary, XmlExport export)

@@ -56,6 +56,7 @@ public sealed class YtdReader : ITextureReader
     private const int EnhancedFormat = 0x1F;
     private const int EnhancedLevels = 0x22;
     private const int EnhancedData = 0x38;
+    private const int EnhancedUsage = 0x40;
     private const int EnhancedLength = 0x80;
 
     internal static Dictionary<uint, TextureData> ReadDictionary(ResourceData res, int offset)
@@ -117,6 +118,39 @@ public sealed class YtdReader : ITextureReader
         if (!replaced)
             throw new InvalidDataException($"Texture {replacement.Name} absente du dictionnaire.");
         return YtdBuilder.Build(textures);
+    }
+
+    // Every texture of the dictionary at offset with its settings, under the name written in the file (for an XML
+    // export). Enhanced textures keep their usage; their other settings are not stored there.
+    internal static List<XmlTexture> ReadWithSettings(ResourceData res, int offset)
+    {
+        var textures = new List<XmlTexture>();
+        int count = res.UInt16(offset + TexturesCount);
+        int list = res.ResolveArray(res.UInt64(offset + TexturesPointer), count, 8, "liste des textures");
+        for (int i = 0; i < count; i++)
+        {
+            ulong pointer = res.UInt64(list + i * 8);
+            if (pointer == 0)
+                continue;
+            int t = res.ResolveArray(pointer, 1, res.Enhanced ? EnhancedLength : TextureLength, "texture");
+            var stored = res.Enhanced ? LocateEnhancedTexture(res, t) : LocateTexture(res, t);
+            string? name = res.Text(res.UInt64(t + NamePointer), "nom de texture");
+            if (stored is null || name is null)
+                continue;
+            var data = res.Bytes(stored.DataAt, stored.Length).ToArray();
+            textures.Add(new XmlTexture
+            {
+                Data = new TextureData
+                {
+                    NameHash = stored.NameHash, Name = name, Width = stored.Width, Height = stored.Height,
+                    MipLevels = stored.MipLevels, Format = stored.Format, Data = data,
+                },
+                Unknown32 = res.Enhanced ? (ushort)128 : res.UInt16(t + Unknown32Offset),
+                UsageData = res.Enhanced ? res.UInt32(t + EnhancedUsage) & 0x1F : res.UInt32(t + UsageOffset),
+                ExtraFlags = res.Enhanced ? 0 : res.UInt32(t + ExtraFlagsOffset),
+            });
+        }
+        return textures;
     }
 
     // The texture under the name written in the file (stored names are lower case).
