@@ -1367,5 +1367,15 @@ public static partial class English
             "{0} MB once loaded: FiveM reports it as an oversized asset, it may be missing for some players"),
         ("{0} · {1} fichier(s) vérifié(s) · {2} erreur(s) · {3} avertissement(s)",
             "{0} · {1} file(s) checked · {2} error(s) · {3} warning(s)"),
+
+        // Export as XML (Sollumz / CodeWalker)
+        ("{0}  Exporter en XML (Sollumz / Blender)...", "{0}  Export as XML (Sollumz / Blender)..."),
+        ("Dossier où écrire {0}.xml (et ses textures en .dds), à ouvrir dans Blender avec Sollumz.",
+            "Folder where to write {0}.xml (and its textures as .dds), to open in Blender with Sollumz."),
+        ("Export XML impossible : {0}", "XML export failed: {0}"),
+        ("Ce fichier n'est pas une ressource du jeu.", "This file is not a game resource."),
+        ("Type de fichier non pris en charge.", "File type not supported."),
+        ("{0} écrit dans {1}", "{0} written to {1}"),
+        ("{0} et {1} texture(s) .dds écrits dans {2}", "{0} and {1} .dds texture(s) written to {2}"),
     ];
 }

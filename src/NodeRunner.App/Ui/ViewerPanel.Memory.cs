@@ -155,6 +155,9 @@ internal sealed partial class ViewerPanel
             ToggleFavorite(item);
         if (ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom")))
             ImGui.SetClipboardText(item.Name);
+        if (item.Ped is null && state.CanExportXml(item.Location.Path)
+            && ImGui.MenuItem(L($"{Icons.Package}  Exporter en XML (Sollumz / Blender)..."), null, false, !state.IsExportingXml))
+            state.RequestXmlExport(item.Location.Path);
         if (item.Kind == ViewerKind.Object && item.Name.LastIndexOf('_') > 0
             && ImGui.MenuItem(L($"{Icons.Search}  Voir la même famille ({item.Name[..(item.Name.LastIndexOf('_') + 1)]}...)")))
             ShowFamily(item);

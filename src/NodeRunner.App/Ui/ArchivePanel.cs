@@ -240,6 +240,9 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
                 ShowTypes(node);
             if (IsTextFile(node.Name) && ImGui.MenuItem(L($"{Icons.File}  Afficher le texte")))
                 ShowText(node);
+            if (state.CanExportXml(node.Path)
+                && ImGui.MenuItem(L($"{Icons.Package}  Exporter en XML (Sollumz / Blender)..."), null, false, !state.IsExportingXml))
+                state.RequestXmlExport(node.Path);
             if (ImGui.MenuItem(L($"{Icons.ArrowDownToLine}  Extraire...")))
                 ExtractRequested = node;
         }

@@ -32,6 +32,8 @@ internal sealed unsafe partial class MainForm
 
         HandleProjectRequests();
 
+        _state.PollXmlExport();
+
         if (_state.DialogRequest is { } dialog)
         {
             _state.DialogRequest = null;
