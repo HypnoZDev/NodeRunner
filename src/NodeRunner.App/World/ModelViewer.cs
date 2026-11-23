@@ -309,7 +309,7 @@ internal sealed class ModelViewer : IDisposable
         var min = _model.BoundsMin + offset;
         var max = _model.BoundsMax + offset;
         if (ShowGround)
-            AddGround(lines, min, max);
+            AddGround(lines, _model.BoundsMin, _model.BoundsMax, offset);
         if (ShowBounds)
             lines.AddBox(min, max, Matrix4x4.Identity, new Vector4(1f, 0.75f, 0.2f, 0.9f));
         lines.Flush(viewProjection, _camera.Position);
@@ -322,13 +322,14 @@ internal sealed class ModelViewer : IDisposable
     }
 
     // Grid under the model: 1 m squares (5 m for big models), one line in two brighter.
-    private void AddGround(ColorRenderer lines, Vector3 min, Vector3 max)
+    // Snapped in model space, then moved with the model: snapping after the pan would make the grid slide under it.
+    private void AddGround(ColorRenderer lines, Vector3 min, Vector3 max, Vector3 offset)
     {
         float step = _radius > 12f ? 5f : _radius > 4f ? 1f : 0.25f;
         float extent = MathF.Ceiling(_radius * 1.6f / step) * step;
         var middle = (min + max) * 0.5f;
-        float cx = MathF.Round(middle.X / step) * step, cy = MathF.Round(middle.Y / step) * step;
-        float z = min.Z;
+        float cx = MathF.Round(middle.X / step) * step + offset.X, cy = MathF.Round(middle.Y / step) * step + offset.Y;
+        float z = min.Z + offset.Z;
         int count = (int)(extent / step);
         for (int i = -count; i <= count; i++)
         {
