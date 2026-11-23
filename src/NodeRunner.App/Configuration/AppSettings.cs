@@ -271,6 +271,7 @@ public sealed class ViewerSettings
     public float ListWidth { get; set; } = 230f;
     public float InspectorWidth { get; set; } = 340f;
     public bool InspectorOpen { get; set; } = true;
+    public int Order { get; set; }
     public Dictionary<GameKind, List<string>> Recents { get; set; } = new();
     public Dictionary<GameKind, List<string>> Favorites { get; set; } = new();
 }

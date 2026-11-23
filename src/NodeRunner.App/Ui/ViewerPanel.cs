@@ -46,7 +46,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
     private int _filter;
     private string _search = "";
     private List<ViewerItem> _rows = [];
-    private (int Filter, string Search, ViewerCatalog? Catalog, bool Short, int Favorites) _rowsBuiltFor;
+    private (int Filter, string Search, ViewerCatalog? Catalog, bool Short, int Favorites, int Filters) _rowsBuiltFor;
     private bool _scrollToItem;
 
     private readonly int[] _paint = (int[])DefaultPaint.Clone();
@@ -575,6 +575,8 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             ImGui.SameLine();
             if (Widgets.IconButton(Icons.Star, "viewer_shortlist", L("Favoris et récents : seulement les modèles mis en favori (clic droit sur une ligne, ou étoile sous la vue), puis les derniers ouverts"), active: _shortList))
                 _shortList = !_shortList;
+            if (!_shortList)
+                DrawFilterBar();
         }
         if (_filter == 2)
             DrawLibraryButtons();
@@ -675,9 +677,9 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
     private void UpdateRows()
     {
-        if (_rowsBuiltFor == (_filter, _search, _catalog, _shortList, _favoritesRevision))
+        if (_rowsBuiltFor == (_filter, _search, _catalog, _shortList, _favoritesRevision, _filtersRevision))
             return;
-        _rowsBuiltFor = (_filter, _search, _catalog, _shortList, _favoritesRevision);
+        _rowsBuiltFor = (_filter, _search, _catalog, _shortList, _favoritesRevision, _filtersRevision);
         string search = _search.Trim().ToLowerInvariant();
         if (_shortList)
         {
@@ -686,11 +688,10 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         }
         var source = _filter switch { 0 => _catalog!.Vehicles, 1 => _catalog!.Objects, _ => _catalog!.Library };
         var words = SearchWords(search);
-        _rows = words.Length == 0
-            ? source.ToList()
-            : source.Where(r => Matches(r, words))
-                .OrderBy(r => r.Name.StartsWith(words[0], StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-                .ToList();
+        IEnumerable<ViewerItem> rows = source.Where(r => PassesFilters(r) && (words.Length == 0 || Matches(r, words)));
+        if (words.Length > 0 && _order == ListOrder.Name)
+            rows = rows.OrderBy(r => r.Name.StartsWith(words[0], StringComparison.OrdinalIgnoreCase) ? 0 : 1);
+        _rows = Ordered(rows).ToList();
     }
 
     private static string[] SearchWords(string search) => search.Split(' ', StringSplitOptions.RemoveEmptyEntries);

@@ -42,6 +42,7 @@ internal sealed partial class ViewerPanel
         _listWidth = Math.Clamp(saved.ListWidth, MinListWidth, MaxListWidth);
         _inspectorWidth = Math.Clamp(saved.InspectorWidth, MinInspectorWidth, MaxInspectorWidth);
         _inspectorOpen = saved.InspectorOpen;
+        _order = Enum.IsDefined((ListOrder)saved.Order) ? (ListOrder)saved.Order : ListOrder.Name;
     }
 
     // Copied each frame; written to settings.json when NodeRunner closes.
@@ -64,6 +65,7 @@ internal sealed partial class ViewerPanel
         saved.ListWidth = _listWidth;
         saved.InspectorWidth = _inspectorWidth;
         saved.InspectorOpen = _inspectorOpen;
+        saved.Order = (int)_order;
     }
 
     private static string? KeyOf(ViewerItem item) => item.Kind switch
@@ -153,6 +155,9 @@ internal sealed partial class ViewerPanel
             ToggleFavorite(item);
         if (ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom")))
             ImGui.SetClipboardText(item.Name);
+        if (item.Kind == ViewerKind.Object && item.Name.LastIndexOf('_') > 0
+            && ImGui.MenuItem(L($"{Icons.Search}  Voir la même famille ({item.Name[..(item.Name.LastIndexOf('_') + 1)]}...)")))
+            ShowFamily(item);
         ImGui.EndPopup();
     }
 
