@@ -1161,7 +1161,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
         bool canPlace = item.Kind == ViewerKind.Object && state.Features.Editing && state.World.Maps is not null && !_inWorkshop;
         bool canEdit = state.Features.Editing && item.Kind != ViewerKind.Ped && !_inWorkshop;
-        float buttons = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
+        float buttons = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + ImGui.CalcTextSize(L("Copier le nom")).X + 70f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
             + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
         if (canEdit)
@@ -1188,9 +1188,17 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 ToggleFavorite(item);
             ImGui.SameLine();
         }
-        if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), state.IsOtherGame ? L("Nom du modèle")
-                : item.Kind == ViewerKind.Vehicle ? L("Nom de spawn du véhicule (ex. pour un script FiveM)") : L("Nom du type d'objet")))
-            ImGui.SetClipboardText(item.Name);
+        if (state.IsOtherGame)
+        {
+            if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), L("Nom du modèle")))
+                ImGui.SetClipboardText(item.Name);
+        }
+        else
+        {
+            if (Widgets.Button(L($"{Icons.Copy}  Copier {Icons.ChevronDown}"), L("Nom, hash ou code Lua pour le faire apparaître dans FiveM")))
+                ImGui.OpenPopup("##viewer_copy");
+            DrawCopyMenu(item);
+        }
     }
 
     // ---- Inspector ----
