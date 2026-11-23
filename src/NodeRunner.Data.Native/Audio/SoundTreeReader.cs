@@ -13,6 +13,10 @@ public sealed class SoundTreeReader : ISoundTreeReader
 {
     internal const int SoundsType = 54;
     internal const byte SimpleSoundType = 12;
+    internal const byte SpeechSoundType = 4;
+
+    // Size of the optional header fields, by flag bit; a flags byte of 0xAA has none of its fields.
+    private static readonly byte[] HeaderFieldSizes = [4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 2, 2, 2, 4, 2, 2, 2, 2, 4, 2, 1, 1, 1, 4, 4, 2, 2, 2, 2, 2];
 
     public IEnumerable<(uint Name, SoundNode Sound)> Read(byte[] data)
     {
@@ -77,9 +81,34 @@ public sealed class SoundTreeReader : ISoundTreeReader
         for (int k = 0; k < byOffset.Length; k++)
         {
             var item = byOffset[k];
-            result[k] = (item.Name, new SoundNode(span[8 + item.Offset], children[k]?.ToArray() ?? [], banks[k].Bank, banks[k].Wave));
+            var itemSpan = span.Slice(8 + item.Offset, item.Length);
+            var node = new SoundNode(itemSpan[0], children[k]?.ToArray() ?? [], banks[k].Bank, banks[k].Wave);
+            if (itemSpan[0] == SpeechSoundType && Speech(itemSpan) is { } speech)
+                node = node with { Voice = speech.Voice, Context = speech.Context };
+            result[k] = (item.Name, node);
         }
         return result;
+    }
+
+    // Speech sound: header, last variation, dynamic field name, voice name hash, then the context name (a byte of
+    // length and its characters).
+    private static (uint Voice, string Context)? Speech(ReadOnlySpan<byte> item)
+    {
+        if (item.Length < 5)
+            return null;
+        uint flags = U32(item, 1);
+        int at = 5;
+        for (int bit = 0; bit < 32; bit++)
+            if (((flags >> (bit & ~7)) & 0xFF) != 0xAA && ((flags >> bit) & 1) != 0)
+                at += HeaderFieldSizes[bit];
+        at += 8;
+        if (at + 5 > item.Length)
+            return null;
+        uint voice = U32(item, at);
+        int length = item[at + 4];
+        if (length == 0 || length > 127 || at + 5 + length > item.Length)
+            return null;
+        return (voice, System.Text.Encoding.ASCII.GetString(item.Slice(at + 5, length)));
     }
 
     private static void Check(ReadOnlySpan<byte> span, int at, long length)

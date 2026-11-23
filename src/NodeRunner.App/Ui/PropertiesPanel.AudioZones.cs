@@ -90,7 +90,7 @@ internal sealed partial class PropertiesPanel
                 ImGui.SameLine();
                 ImGui.AlignTextToFramePadding();
                 string bank = tree.BankPath(wave.Bank) is { } path ? BankLabel(path) : name(wave.Bank);
-                ImGui.TextUnformatted($"{bank}  ·  {name(wave.Wave)}");
+                ImGui.TextUnformatted($"{bank}  ·  {tree.WaveName(wave) ?? name(wave.Wave)}");
             }
             if (more)
                 ImGui.TextDisabled(L($"Seuls les {MaxWavesListed} premiers sons sont listés."));

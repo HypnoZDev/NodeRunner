@@ -249,7 +249,9 @@ internal sealed class WorldLoader : IDisposable
                 _soundTreeContent = content;
                 _soundTree = ReadWhenAsked(L("Sons du jeu"), () =>
                 {
-                    var tree = Data.Audio.SoundTree.Load(content, new SoundTreeReader());
+                    var bankReader = new SoundBankReader(_files?.AudioKey);
+                    var tree = Data.Audio.SoundTree.Load(content, new SoundTreeReader(), path =>
+                        content.ReadFile(path) is { } bank ? bankReader.Read(bank).Tracks.Select(t => t.Id) : []);
                     foreach (var error in tree.Errors)
                         Diagnostics.ErrorLog.Add(L("Sons du jeu"), error);
                     return tree;
