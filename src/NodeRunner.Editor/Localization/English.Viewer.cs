@@ -416,5 +416,10 @@ public static partial class English
         ("{0}  Écouter dans la visionneuse", "{0}  Listen in the viewer"),
         ("{0} Hz, stéréo", "{0} Hz, stereo"),
         ("{0} fichier(s) de sons", "{0} sound file(s)"),
+        ("Favoris et récents : seulement les modèles mis en favori (clic droit sur une ligne, ou étoile sous la vue), puis les derniers ouverts", "Favourites and recent: only the models marked as favourite (right-click a row, or the star under the view), then the last ones opened"),
+        ("Aucun favori ni modèle récent ici. Clic droit sur une ligne : Ajouter aux favoris.", "No favourite or recent model here. Right-click a row: Add to favourites."),
+        ("{0} favoris, puis derniers ouverts", "{0} favourites, then last opened"),
+        ("Retirer des favoris", "Remove from favourites"),
+        ("Ajouter aux favoris (bouton étoile au-dessus de la liste pour les retrouver)", "Add to favourites (star button above the list to find them again)"),
     ];
 }

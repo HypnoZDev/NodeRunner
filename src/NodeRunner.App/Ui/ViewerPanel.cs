@@ -42,7 +42,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
     private int _filter;
     private string _search = "";
     private List<ViewerItem> _rows = [];
-    private (int Filter, string Search, ViewerCatalog? Catalog) _rowsBuiltFor;
+    private (int Filter, string Search, ViewerCatalog? Catalog, bool Short, int Favorites) _rowsBuiltFor;
     private bool _scrollToItem;
 
     private readonly int[] _paint = (int[])DefaultPaint.Clone();
@@ -523,14 +523,21 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                  L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource."),
                  L("Tous les sons du jeu (fichiers .awc), à écouter ici")]);
         }
-        ImGui.SetNextItemWidth(-float.Epsilon);
+        bool sounds = _filter == SoundsFilter;
+        float starWidth = sounds ? 0f : ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X;
         Widgets.SearchField("##viewer_search", _filter switch
         {
             0 => state.IsOtherGame ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
             SoundsFilter => L("Fichier de sons (ex. doors, ambience)"),
             1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : state.IsClassic ? L("Type (ex. palm)") : L("Type (ex. prop_bench)"),
             _ => L("Prop ou pack"),
-        }, ref _search);
+        }, ref _search, width: ImGui.GetContentRegionAvail().X - starWidth);
+        if (!sounds)
+        {
+            ImGui.SameLine();
+            if (Widgets.IconButton(Icons.Star, "viewer_shortlist", L("Favoris et récents : seulement les modèles mis en favori (clic droit sur une ligne, ou étoile sous la vue), puis les derniers ouverts"), active: _shortList))
+                _shortList = !_shortList;
+        }
         if (_filter == 2)
             DrawLibraryButtons();
         if (_filter == SoundsFilter)
@@ -551,7 +558,10 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             Widgets.Hint(L("Bibliothèque vide. Ajoute un pack de props addons (dossier d'une ressource FiveM ou .zip avec ses .ytyp, .ydr et .ytd) : ses props seront disponibles dans tous les projets."), wrap: true);
             return;
         }
-        Widgets.Hint(_rows.Count == 0 ? L("Aucun résultat") : L($"{Widgets.Count(_rows.Count)} modèle(s)"));
+        if (_shortList)
+            Widgets.Hint(_rows.Count == 0 ? L("Aucun favori ni modèle récent ici. Clic droit sur une ligne : Ajouter aux favoris.") : L($"{Icons.Star} favoris, puis derniers ouverts"), wrap: true);
+        else
+            Widgets.Hint(_rows.Count == 0 ? L("Aucun résultat") : L($"{Widgets.Count(_rows.Count)} modèle(s)"));
         if (!ImGui.BeginChild("##viewer_rows", Vector2.Zero, ImGuiChildFlags.None))
         {
             ImGui.EndChild();
@@ -591,13 +601,21 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 string icon = item.Kind == ViewerKind.Vehicle ? Icons.Car : item.Pack is null ? Icons.Box : Icons.Package;
                 if (ImGui.Selectable($"{icon}  {item.Name}", item.Location == Viewer.Item?.Location))
                     Open(item);
+                DrawFavoriteMenu(item);
+                float right = ImGui.GetItemRectMax().X - 4f;
+                if (IsFavorite(item))
+                {
+                    float star = ImGui.CalcTextSize(Icons.Star).X;
+                    right -= star;
+                    ImGui.GetWindowDrawList().AddText(new Vector2(right, ImGui.GetItemRectMin().Y), ImGui.GetColorU32(new Vector4(1f, 0.78f, 0.25f, 1f)), Icons.Star);
+                    right -= 6f;
+                }
                 if (_filter == 2 && !string.IsNullOrEmpty(item.Pack))
                 {
                     // Pack name, dimmed, on the right of the row.
                     string pack = Widgets.Fit(item.Pack, ImGui.GetItemRectSize().X * 0.45f);
                     float width = ImGui.CalcTextSize(pack).X;
-                    var max = ImGui.GetItemRectMax();
-                    ImGui.GetWindowDrawList().AddText(new Vector2(max.X - width - 4f, ImGui.GetItemRectMin().Y),
+                    ImGui.GetWindowDrawList().AddText(new Vector2(right - width, ImGui.GetItemRectMin().Y),
                         ImGui.GetColorU32(UiTheme.TextMuted), pack);
                 }
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
@@ -619,11 +637,16 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
     private void UpdateRows()
     {
-        if (_rowsBuiltFor == (_filter, _search, _catalog))
+        if (_rowsBuiltFor == (_filter, _search, _catalog, _shortList, _favoritesRevision))
             return;
-        _rowsBuiltFor = (_filter, _search, _catalog);
-        var source = _filter switch { 0 => _catalog!.Vehicles, 1 => _catalog!.Objects, _ => _catalog!.Library };
+        _rowsBuiltFor = (_filter, _search, _catalog, _shortList, _favoritesRevision);
         string search = _search.Trim().ToLowerInvariant();
+        if (_shortList)
+        {
+            _rows = ShortList(search);
+            return;
+        }
+        var source = _filter switch { 0 => _catalog!.Vehicles, 1 => _catalog!.Objects, _ => _catalog!.Library };
         _rows = search.Length == 0
             ? source.ToList()
             : source.Where(r => r.Name.Contains(search, StringComparison.Ordinal) || r.Pack?.Contains(search, StringComparison.OrdinalIgnoreCase) == true)
@@ -1043,7 +1066,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
         bool canPlace = item.Kind == ViewerKind.Object && state.Features.Editing && state.World.Maps is not null && !_inWorkshop;
         bool canEdit = state.Features.Editing && item.Kind != ViewerKind.Ped && !_inWorkshop;
-        float buttons = ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
+        float buttons = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + ImGui.CalcTextSize(L("Copier le nom")).X + 50f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
             + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f);
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
         if (canEdit)
@@ -1061,6 +1084,13 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 ImGui.SetTooltip(state.Project is null
                     ? L("Ajouter cet objet à la carte : ouvre ou crée d'abord un projet.")
                     : L($"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler."));
+            ImGui.SameLine();
+        }
+        if (KeyOf(item) is not null)
+        {
+            bool favorite = IsFavorite(item);
+            if (Widgets.IconButton(Icons.Star, "viewer_favorite", favorite ? L("Retirer des favoris") : L("Ajouter aux favoris (bouton étoile au-dessus de la liste pour les retrouver)"), active: favorite))
+                ToggleFavorite(item);
             ImGui.SameLine();
         }
         if (Widgets.Button(L($"{Icons.Copy}  Copier le nom"), state.IsOtherGame ? L("Nom du modèle")

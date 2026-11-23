@@ -1,3 +1,4 @@
+using ImGuiNET;
 using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
 
@@ -10,6 +11,12 @@ internal sealed partial class ViewerPanel
 
     private bool _settingsApplied;
     private ViewerCatalog? _restoredFor;
+
+    // The list shows the favourites and recent models instead of everything.
+    private bool _shortList;
+    private int _favoritesRevision;
+    private readonly Dictionary<string, ViewerItem?> _found = new(StringComparer.OrdinalIgnoreCase);
+    private ViewerCatalog? _foundFor;
 
     private ViewerSettings Saved => state.Settings.Viewer;
 
@@ -78,16 +85,69 @@ internal sealed partial class ViewerPanel
             recents.RemoveRange(MaxRecents, recents.Count - MaxRecents);
     }
 
-    // The catalogue's item saved under that key (null if it is no longer in the game or the library).
-    private ViewerItem? Find(string key)
+    // The catalogue's item saved under that key, in one list (0 vehicles, 1 objects, 2 library), null if it is no
+    // longer there. Kept: the object list is long.
+    private ViewerItem? Find(string key, int filter)
     {
-        if (_catalog is not { } catalog || key.Length < 3)
+        if (_catalog is not { } catalog || key.Length < 3 || (key[0] == 'v') != (filter == 0))
             return null;
+        if (_foundFor != catalog)
+        {
+            _foundFor = catalog;
+            _found.Clear();
+        }
+        string cacheKey = $"{filter}|{key}";
+        if (_found.TryGetValue(cacheKey, out var found))
+            return found;
         string name = key[2..];
-        bool Same(ViewerItem i) => i.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
-        return key[0] == 'v'
-            ? catalog.Vehicles.FirstOrDefault(Same)
-            : catalog.Objects.FirstOrDefault(Same) ?? catalog.Library.FirstOrDefault(Same);
+        var source = filter switch { 0 => catalog.Vehicles, 1 => catalog.Objects, _ => catalog.Library };
+        return _found[cacheKey] = source.FirstOrDefault(i => i.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private ViewerItem? Find(string key) => Find(key, 0) ?? Find(key, 1) ?? Find(key, 2);
+
+    private bool IsFavorite(ViewerItem item) =>
+        KeyOf(item) is { } key && Saved.Favorites.TryGetValue(state.ActiveGame, out var list)
+        && list.Exists(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+
+    private void ToggleFavorite(ViewerItem item)
+    {
+        if (KeyOf(item) is not { } key)
+            return;
+        var favorites = SavedList(Saved.Favorites);
+        if (favorites.RemoveAll(k => k.Equals(key, StringComparison.OrdinalIgnoreCase)) == 0)
+            favorites.Add(key);
+        _favoritesRevision++;
+        state.SaveSettings();
+    }
+
+    // The short list: favourites of the list shown, then the models opened lately (newest first).
+    private List<ViewerItem> ShortList(string search)
+    {
+        var rows = new List<ViewerItem>();
+        var seen = new HashSet<ViewerItem>();
+        foreach (var list in new[] { SavedList(Saved.Favorites), SavedList(Saved.Recents) })
+        {
+            foreach (string key in list)
+            {
+                if (Find(key, _filter) is { } item && seen.Add(item)
+                    && (search.Length == 0 || item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)))
+                    rows.Add(item);
+            }
+        }
+        return rows;
+    }
+
+    private void DrawFavoriteMenu(ViewerItem item)
+    {
+        if (!ImGui.BeginPopupContextItem("##row_menu"))
+            return;
+        bool favorite = IsFavorite(item);
+        if (ImGui.MenuItem(favorite ? L($"{Icons.Star}  Retirer des favoris") : L($"{Icons.Star}  Ajouter aux favoris")))
+            ToggleFavorite(item);
+        if (ImGui.MenuItem(L($"{Icons.Copy}  Copier le nom")))
+            ImGui.SetClipboardText(item.Name);
+        ImGui.EndPopup();
     }
 
     // Once the list of a game is ready: its last model opened again.
