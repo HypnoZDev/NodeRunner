@@ -1557,6 +1557,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(L("Écrit le fichier du modèle dans le dossier stream du projet, puis recharge la carte une seule fois.\n")
                     + L("Toutes les copies de cet objet changent. « Remettre le modèle d'origine » annule ensuite."));
+            DrawSaveAsNewProp(item, tool, width);
             if (Widgets.Button(L("Tout abandonner"), L("Oublie les morceaux retirés, déplacés ou dupliqués et les textures remplacées depuis le dernier enregistrement."), width))
             {
                 _workshopFor = null;
@@ -1571,6 +1572,55 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             _reopen = (item, state.World.ModelReader);
             _workshopFor = null;
         }
+    }
+
+    // "Save as a new prop": the changed model under another name, the original staying as it is on the whole map.
+    private string? _newPropName; // Null while the name field is closed.
+    private bool _newPropReplace = true;
+
+    private void DrawSaveAsNewProp(ViewerItem item, ModelPartTool tool, float width)
+    {
+        if (_newPropName is null)
+        {
+            if (Widgets.Button(L($"{Icons.Copy}  Enregistrer comme nouveau prop..."),
+                    L("Enregistre le modèle modifié sous un autre nom (son propre .ydr / .yft et .ytyp dans le projet).\n")
+                    + L("L'objet du jeu ne change pas : ses autres copies sur la carte restent comme avant."),
+                    width, enabled: tool.CanSaveAsNew))
+                _newPropName = state.SuggestPropName(item.ArchetypeHash);
+            if (!tool.CanSaveAsNew && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("Ce modèle est rangé dans un dictionnaire (.ydd) avec d'autres : pas encore possible."));
+            return;
+        }
+        ImGui.Spacing();
+        ImGui.SeparatorText(L("Nouveau prop"));
+        string text = _newPropName;
+        ImGui.SetNextItemWidth(width);
+        bool enter = ImGui.InputTextWithHint("##new_prop_name", L("ex. prop_barrel_seul"), ref text, 48, ImGuiInputTextFlags.EnterReturnsTrue);
+        _newPropName = text;
+        string name = text.Trim();
+        bool free = state.IsFreeCopyName(name);
+        ImGui.TextColored(free ? UiTheme.TextMuted : UiTheme.Error, Widgets.Fit(
+            !NodeRunner.Editor.PropCopy.IsValidName(name) ? L("lettres minuscules, chiffres et _ seulement, en commençant par une lettre")
+            : !free ? L("ce nom est déjà utilisé") : L($"stream/{name}.ytyp"), width));
+        bool canReplace = state.WorkshopEntity is { } opened && NodeRunner.Editor.ArchetypeEdit.CanChange(opened) && opened.ArchetypeHash == item.ArchetypeHash;
+        if (canReplace)
+        {
+            ImGui.Checkbox(L("Remplacer l'objet ouvert sur la carte"), ref _newPropReplace);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip(L("L'objet double-cliqué prend le nouveau prop, les autres copies gardent l'original.\nLe projet est enregistré en même temps."));
+        }
+        ImGui.BeginDisabled(!free);
+        if ((Widgets.PrimaryButton(L($"{Icons.Check}  Enregistrer le nouveau prop"), width) || enter) && free
+            && state.SaveAsNewProp(tool, item.ArchetypeHash, name, canReplace && _newPropReplace))
+        {
+            _newPropName = null;
+            _reopen = (new ViewerItem(name, ViewerKind.Object, item.Location), state.World.ModelReader);
+            _workshopFor = null;
+        }
+        ImGui.EndDisabled();
+        if (Widgets.Button(L("Annuler"), null, width))
+            _newPropName = null;
+        Widgets.Hint(L("La collision reste celle du modèle d'origine."), wrap: true);
     }
 
     // An opening through a wall (a door painted on the building): the triangles inside the rectangle go, those across its

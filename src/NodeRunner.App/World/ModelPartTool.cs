@@ -675,6 +675,78 @@ internal sealed class ModelPartTool
             : L($"{names} enregistré(s) ({pieces} morceau(x) retiré(s), {moved} déplacement(s), {textures} texture(s) remplacée(s)). Rechargement de la carte..."));
     }
 
+    // Whether the model can be saved under a new name: a .ydr or a .yft (a model of a .ydd shares its file with others).
+    public bool CanSaveAsNew => _extension.Equals(".ydr", StringComparison.OrdinalIgnoreCase) || _extension.Equals(".yft", StringComparison.OrdinalIgnoreCase);
+
+    // Writes the model with its changes under a new name into the project's stream folder, beside the original that
+    // stays as it was: <name>.ydr / .yft, its type <name>.ytyp (a copy of source's) and <name>.ytd when a texture of
+    // the type's own dictionary changed. Returns an error message, or null. The map is not reloaded.
+    public string? SaveAsNew(AppState state, Archetype source, string name)
+    {
+        if (state.SaveFolder is not { } stream)
+            return L("Ouvrez ou créez un projet : le nouveau prop y est enregistré (dossier stream).");
+        if (!CanSaveAsNew)
+            return L("Ce modèle est rangé dans un dictionnaire (.ydd) avec d'autres : il ne peut pas encore être enregistré sous un nouveau nom.");
+        if (state.World.Content is not { } content || state.World.Maps is not { } library)
+            return L("Carte en cours de chargement.");
+        var names = state.World.Names;
+        string textures = PropCopy.TypeName(source.TextureDictionaryHash, names?.TryGet(source.TextureDictionaryHash));
+        var dictionaries = _dictionaries.Where(d => _changes.Any(c => Same(c.File, d.Key))).ToList();
+        foreach (var (path, _) in dictionaries)
+        {
+            if (Data.Hashing.Joaat.Hash(System.IO.Path.GetFileNameWithoutExtension(path).ToLowerInvariant()) != source.TextureDictionaryHash)
+                return L($"Une texture changée est dans {System.IO.Path.GetFileName(path)}, partagé avec d'autres objets : « Enregistrer le modèle » seulement, ou annulez ce changement.");
+        }
+        if (dictionaries.Count > 0)
+            textures = name;
+        var (min, max) = VisibleBox() ?? (source.BoundsMin, source.BoundsMax);
+        string physics = PropCopy.TypeName(source.PhysicsDictionaryHash, names?.TryGet(source.PhysicsDictionaryHash));
+        string xml = PropCopy.TypesXml(name, _extension.Equals(".yft", StringComparison.OrdinalIgnoreCase), textures, physics, source.Flags,
+            source.LodDistance, min, max);
+        try
+        {
+            var schemaFiles = new List<byte[]>();
+            if (library.GetArchetypeFile(source.NameHash) is { } typesFile && content.ReadFile(typesFile) is { } typesData)
+                schemaFiles.Add(typesData);
+            schemaFiles.AddRange(content.EnumerateFiles(".ytyp").Take(20).Select(content.ReadFile).OfType<byte[]>());
+            var types = Data.Native.Maps.YtypXml.Convert(new XmlExport(name + ".ytyp.xml", xml, _ => null),
+                new Data.Native.Resources.MetaSchema(schemaFiles, []));
+            Directory.CreateDirectory(stream);
+            SafeFile.WriteAllBytes(System.IO.Path.Combine(stream, name + _extension.ToLowerInvariant()), Data.Native.Resources.ResourceFile.Write(_header, _content));
+            foreach (var (_, (header, data)) in dictionaries)
+                SafeFile.WriteAllBytes(System.IO.Path.Combine(stream, name + ".ytd"), Data.Native.Resources.ResourceFile.Write(header, data));
+            SafeFile.WriteAllBytes(System.IO.Path.Combine(stream, name + ".ytyp"), types);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return L($"Enregistrement impossible : {ex.Message}");
+        }
+        _changes.Clear();
+        _dictionaries.Clear();
+        names?.Add(name);
+        return null;
+    }
+
+    // Box of the detailed version as it is now (removed pieces left out); null when nothing is left.
+    private (Vector3 Min, Vector3 Max)? VisibleBox()
+    {
+        var (min, max) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
+        foreach (var (positions, indices) in _meshes)
+        {
+            for (int t = 0; t < indices.Length / 3; t++)
+            {
+                if (ModelParts.IsEmpty(positions, indices, t))
+                    continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    min = Vector3.Min(min, positions[indices[t * 3 + k]]);
+                    max = Vector3.Max(max, positions[indices[t * 3 + k]]);
+                }
+            }
+        }
+        return min.X <= max.X ? (min, max) : null;
+    }
+
     // One file into the project's stream folder; an error message, or null.
     private static string? WriteFile(AppState state, string path, ResourceHeader header, byte[] content)
     {
