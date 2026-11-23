@@ -145,6 +145,8 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
             DrawTimecycle(timecycle, zone, state.World.Names ?? new HashNames());
         else if (state.SelectedLodLight is { Light: { } light } lodLight)
             DrawLodLight(lodLight, light);
+        else if (state.SelectedAudio is { } audio)
+            DrawAudioPlacement(audio, state.World.Names ?? new HashNames());
         else if (state.SelectedRoom is { } room && state.World.Maps is { } roomLibrary
                  && roomLibrary.GetArchetype(room.Interior.ArchetypeHash) is { } roomInterior && room.Index < roomInterior.InteriorRooms.Count)
             DrawRoom(room, roomInterior, roomLibrary);

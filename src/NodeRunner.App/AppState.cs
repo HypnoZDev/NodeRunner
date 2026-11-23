@@ -263,6 +263,20 @@ internal sealed partial class AppState
     }
 
     private LodLightSelection? _selectedLodLight;
+
+    // An ambient zone or a static emitter selected in the 3D view (read-only). Forgotten when the map is loaded again.
+    public AudioSelection? SelectedAudio
+    {
+        get => _selectedAudioLibrary == World.Maps ? _selectedAudio : null;
+        set
+        {
+            _selectedAudio = value;
+            _selectedAudioLibrary = World.Maps;
+        }
+    }
+
+    private AudioSelection? _selectedAudio;
+    private MapLibrary? _selectedAudioLibrary;
     private MapLibrary? _selectedLodLightLibrary;
     private MapLibrary? _selectedCarGeneratorLibrary;
 
@@ -278,6 +292,7 @@ internal sealed partial class AppState
         SelectedCarGenerator = null;
         SelectedTimecycle = null;
         SelectedLodLight = null;
+        SelectedAudio = null;
         SelectedRoom = null;
         SelectedPortal = null;
         if (entity is not null)
@@ -1077,7 +1092,8 @@ internal sealed partial class AppState
         IsOtherGame && layer.StartsWith("Entity.", StringComparison.Ordinal)
         || layer.StartsWith(CollisionLayer.LayerPrefix, StringComparison.Ordinal) || layer.StartsWith(RoomLayer.LayerPrefix, StringComparison.Ordinal)
         || layer.StartsWith(OcclusionLayer.LayerPrefix, StringComparison.Ordinal) || layer == CarGeneratorLayer.LayerName
-        || layer == TimecycleLayer.LayerName || layer == LodLightLayer.LayerName;
+        || layer == TimecycleLayer.LayerName || layer == LodLightLayer.LayerName
+        || layer == AudioZoneLayer.ZonesLayerName || layer == AudioZoneLayer.EmittersLayerName;
 
     public void SetLayerVisible(string layer, bool visible)
     {

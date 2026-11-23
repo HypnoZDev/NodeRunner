@@ -213,6 +213,12 @@ internal sealed unsafe partial class MainForm
         if (lodLightsEnabled)
             _lodLightLayer.Draw(lines, viewProjection, camera.Position);
 
+        bool audioZonesEnabled = _state.IsLayerVisible(AudioZoneLayer.ZonesLayerName);
+        bool audioEmittersEnabled = _state.IsLayerVisible(AudioZoneLayer.EmittersLayerName);
+        _audioZoneLayer.Update(_state.World, lines, camera.Position, audioZonesEnabled, audioEmittersEnabled);
+        if (audioZonesEnabled || audioEmittersEnabled)
+            _audioZoneLayer.Draw(lines, viewProjection, camera.Position);
+
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));
 
@@ -239,6 +245,8 @@ internal sealed unsafe partial class MainForm
             TimecycleLayer.DrawSelected(lines, selectedZone, viewProjection, camera.Position);
         if (_state.SelectedLodLight is { } selectedLight)
             LodLightLayer.DrawSelected(lines, selectedLight, viewProjection, camera.Position);
+        if (_state.SelectedAudio is { } selectedAudio)
+            AudioZoneLayer.DrawSelected(lines, selectedAudio, viewProjection, camera.Position);
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);

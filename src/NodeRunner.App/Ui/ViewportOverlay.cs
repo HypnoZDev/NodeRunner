@@ -30,6 +30,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         (L("Véhicules garés"), Icons.Car, [CarGeneratorLayer.LayerName]),
         (L("Zones de timecycle"), Icons.Sunset, [TimecycleLayer.LayerName]),
         (L("Lumières LOD"), Icons.Moon, [LodLightLayer.LayerName]),
+        (L("Zones audio"), Icons.AudioLines, [AudioZoneLayer.ZonesLayerName, AudioZoneLayer.EmittersLayerName]),
     ];
 
     private static readonly (Vector3 Direction, string Label, Vector4 Color)[] Axes =

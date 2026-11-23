@@ -265,6 +265,15 @@ internal sealed unsafe partial class MainForm
             _state.SelectedTimecycle = zone;
             return;
         }
+        // Audio zones and sound sources, while their layers are shown.
+        bool audioZones = _state.IsLayerVisible(AudioZoneLayer.ZonesLayerName), audioEmitters = _state.IsLayerVisible(AudioZoneLayer.EmittersLayerName);
+        if (!control && (audioZones || audioEmitters)
+            && _audioZoneLayer.Pick(viewProjection, new Vector2(click.X - scene.X, click.Y - scene.Y), new Vector2(scene.Width, scene.Height), audioZones, audioEmitters) is { } audio)
+        {
+            _state.Select(null);
+            _state.SelectedAudio = audio;
+            return;
+        }
         if (!_state.IsLayerVisible(ModelLayer.LayerName))
             return;
         int x = click.X - scene.X, y = click.Y - scene.Y;

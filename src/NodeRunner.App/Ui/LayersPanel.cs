@@ -6,7 +6,7 @@ namespace NodeRunner.App.Ui;
 
 // Layers (tab of the side panel): one section per family with an eye for the whole group, one row per category
 // (click: show or hide), the related settings, and the list of the maps loaded by scripts.
-internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer, LodLightLayer lodLightLayer)
+internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer, LodLightLayer lodLightLayer, AudioZoneLayer audioZoneLayer)
 {
     private const int MaxScriptedMapsListed = 300;
 
@@ -24,7 +24,8 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
     private static readonly string[] MapLayers = [ModelLayer.LayerName, WaterLayer.LayerName];
 
     private static IEnumerable<string> AllLayers => MapLayers.Concat(PathLayers).Concat(ScenarioLayers).Concat(NavMeshLayers)
-        .Concat(CollisionLayers).Concat(EntityLayers).Concat(RoomLayers).Concat(OcclusionLayers).Append(CarGeneratorLayer.LayerName).Append(TimecycleLayer.LayerName).Append(LodLightLayer.LayerName);
+        .Concat(CollisionLayers).Concat(EntityLayers).Concat(RoomLayers).Concat(OcclusionLayers).Append(CarGeneratorLayer.LayerName).Append(TimecycleLayer.LayerName).Append(LodLightLayer.LayerName)
+        .Append(AudioZoneLayer.ZonesLayerName).Append(AudioZoneLayer.EmittersLayerName);
 
     // Ready-made sets of layers: the map plus what one kind of work needs, everything else hidden.
     private static readonly (string Name, string Tooltip, Func<IEnumerable<string>> Layers)[] Presets =
@@ -37,6 +38,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         ("Véhicules garés", "Carte + places des car generators.", () => MapLayers.Append(CarGeneratorLayer.LayerName)),
         ("Ambiance (timecycle)", "Carte + zones de timecycle (lumière, couleurs, brouillard).", () => MapLayers.Append(TimecycleLayer.LayerName)),
         ("Lumières de nuit", "Carte + lumières LOD (lampadaires, fenêtres vues de loin la nuit).", () => MapLayers.Append(LodLightLayer.LayerName)),
+        ("Sons", "Carte + zones d'ambiance et sources sonores du jeu.", () => MapLayers.Append(AudioZoneLayer.ZonesLayerName).Append(AudioZoneLayer.EmittersLayerName)),
     ];
 
     private void DrawPresets()
@@ -136,6 +138,13 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         {
             LayerRow(LodLightLayer.LayerName, LodLightLayer.Color, L("Lumières lointaines"), Widgets.Count(lodLightLayer.Count));
             Widgets.Hint(L($"Lumières à moins de {LodLightLayer.Radius:0} m que le jeu affiche de loin la nuit (lampadaires, fenêtres), dans leur couleur. Cliquez sur une lumière pour voir ses détails."), wrap: true);
+        }
+
+        if (LayerSection(L("Zones audio"), "audio", [AudioZoneLayer.ZonesLayerName, AudioZoneLayer.EmittersLayerName], defaultOpen: false))
+        {
+            LayerRow(AudioZoneLayer.ZonesLayerName, AudioZoneLayer.ZoneColor, L("Zones d'ambiance"), Widgets.Count(audioZoneLayer.ZoneCount));
+            LayerRow(AudioZoneLayer.EmittersLayerName, AudioZoneLayer.EmitterColor, L("Sources sonores"), Widgets.Count(audioZoneLayer.EmitterCount));
+            Widgets.Hint(L($"Zones à moins de {AudioZoneLayer.ZoneRadius:0} m où le jeu joue une ambiance (oiseaux, bruit de la ville, eau...) et sources à moins de {AudioZoneLayer.EmitterRadius:0} m qui jouent un son ou une radio à un point fixe (bars, magasins, alarmes...). Cliquez dessus pour voir leurs détails."), wrap: true);
         }
 
         if (LayerSection(L("Occlusion"), "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))

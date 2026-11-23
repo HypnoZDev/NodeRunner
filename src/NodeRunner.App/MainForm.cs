@@ -52,6 +52,7 @@ internal sealed unsafe partial class MainForm : Form
     private readonly FolderWatch _folderWatch = new();
     private readonly TimecycleLayer _timecycleLayer = new();
     private readonly LodLightLayer _lodLightLayer = new();
+    private readonly AudioZoneLayer _audioZoneLayer = new();
     private readonly OcclusionCuller _occlusionCuller = new();
     private readonly ModelLayer _modelLayer = new();
     private readonly ClassicLighting _classicLighting = new();
@@ -64,7 +65,7 @@ internal sealed unsafe partial class MainForm : Form
     public MainForm(AppState state)
     {
         _state = state;
-        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer, _timecycleLayer, _lodLightLayer);
+        _ui = new MainUi(state, _cameraController, _pathNodeLayer, _scenarioLayer, _navMeshLayer, _collisionLayer, _entityBoxLayer, _roomLayer, _occlusionLayer, _occlusionCuller, _modelLayer, _carGeneratorLayer, _timecycleLayer, _lodLightLayer, _audioZoneLayer);
 
         Text = Program.Name; // Credit and version are in the menu bar and the About window.
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -233,6 +234,7 @@ internal sealed unsafe partial class MainForm : Form
         _folderWatch.Dispose();
         _timecycleLayer.Dispose();
         _lodLightLayer.Dispose();
+        _audioZoneLayer.Dispose();
         DisposeCollisionPreview();
         _modelLayer.Dispose();
         _state.Viewer.Dispose();

@@ -23,6 +23,67 @@ public class AudioOcclusionTests
     }
 
     [Fact]
+    public void GameDataReaderReadsAmbientZonesAndStaticEmitters()
+    {
+        var zone = new byte[232 + 2 * 4 + 4 + 8];
+        var z = zone.AsSpan();
+        z[0] = 37;
+        BitConverter.TryWriteBytes(z[4..], 0x5u);
+        z[8] = 2; // line
+        void V(Span<byte> s, int at, float x, float y, float h)
+        {
+            BitConverter.TryWriteBytes(s[at..], x); BitConverter.TryWriteBytes(s[(at + 4)..], y); BitConverter.TryWriteBytes(s[(at + 8)..], h);
+        }
+        V(z, 16, 1, 2, 3); V(z, 32, 40, 50, 60); BitConverter.TryWriteBytes(z[80..], (ushort)45);
+        V(z, 96, 10, 20, 30); V(z, 112, 11, 21, 31);
+        BitConverter.TryWriteBytes(z[176..], 0.5f);
+        BitConverter.TryWriteBytes(z[220..], 0x77u);
+        z[228] = 3; z[230] = 2;
+        BitConverter.TryWriteBytes(z[232..], 0xA1u); BitConverter.TryWriteBytes(z[236..], 0xA2u);
+        z[240] = 1;
+        BitConverter.TryWriteBytes(z[244..], 0xD1u); BitConverter.TryWriteBytes(z[248..], 0.25f);
+
+        var emitter = new byte[92];
+        var e = emitter.AsSpan();
+        e[0] = 6;
+        BitConverter.TryWriteBytes(e[8..], 0xC1u); BitConverter.TryWriteBytes(e[12..], 0xC2u);
+        V(e, 16, -100, 200, 30);
+        BitConverter.TryWriteBytes(e[28..], 2f); BitConverter.TryWriteBytes(e[32..], 25f); BitConverter.TryWriteBytes(e[36..], -300);
+        BitConverter.TryWriteBytes(e[48..], 0xE1u);
+        BitConverter.TryWriteBytes(e[80..], (ushort)1200); BitConverter.TryWriteBytes(e[82..], (ushort)360);
+
+        using var file = new MemoryStream();
+        using (var w = new BinaryWriter(file, System.Text.Encoding.ASCII, leaveOpen: true))
+        {
+            w.Write(151); w.Write(zone.Length + emitter.Length); w.Write(zone); w.Write(emitter);
+            w.Write(0);
+            w.Write(2);
+            w.Write(0x1111u); w.Write(0); w.Write(zone.Length);
+            w.Write(0x2222u); w.Write(zone.Length); w.Write(emitter.Length);
+        }
+        var content = new GameDataReader().Read(file.ToArray(), "test.dat151.rel");
+
+        var read = Assert.Single(content.AmbientZones);
+        Assert.Equal(0x1111u, read.NameHash);
+        Assert.Equal(AudioZoneShape.Line, read.Shape);
+        Assert.Equal(new AudioZoneVolume(new Vector3(1, 2, 3), new Vector3(40, 50, 60), 45), read.Activation);
+        Assert.Equal(new Vector3(11, 21, 31), read.Positioning.Size);
+        Assert.Equal(0.5f, read.BuiltUpFactor);
+        Assert.Equal(0x77u, read.PedWalla);
+        Assert.Equal(3, read.RulesToPlay);
+        Assert.Equal([0xA1u, 0xA2u], read.Rules);
+        Assert.Equal([new DirectionalAmbience(0xD1u, 0.25f)], read.DirectionalAmbiences);
+
+        var source = Assert.Single(content.StaticEmitters);
+        Assert.Equal(0x2222u, source.NameHash);
+        Assert.Equal((0xC1u, 0xC2u), (source.ChildSound, source.RadioStation));
+        Assert.Equal(new Vector3(-100, 200, 30), source.Position);
+        Assert.Equal((2f, 25f, -300), (source.MinDistance, source.MaxDistance, source.Volume));
+        Assert.Equal(0xE1u, source.Interior);
+        Assert.Equal((1200, 360), (source.StartMinutes, source.EndMinutes));
+    }
+
+    [Fact]
     public void GameDataReaderReadsInteriorAndRoomItems()
     {
         using var data = new MemoryStream();

@@ -29,7 +29,7 @@ internal sealed class MainUi
     private bool _resetLayout;
     private readonly OnlineWindow _onlineWindow;
 
-    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, ModelLayer modelLayer, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer, LodLightLayer lodLightLayer)
+    public MainUi(AppState state, CameraController cameraController, PathNodeLayer pathNodeLayer, ScenarioLayer scenarioLayer, NavMeshLayer navMeshLayer, CollisionLayer collisionLayer, EntityBoxLayer entityBoxLayer, RoomLayer roomLayer, OcclusionLayer occlusionLayer, OcclusionCuller occlusionCuller, ModelLayer modelLayer, CarGeneratorLayer carGeneratorLayer, TimecycleLayer timecycleLayer, LodLightLayer lodLightLayer, AudioZoneLayer audioZoneLayer)
     {
         _state = state;
         _viewerPanel = new ViewerPanel(state);
@@ -45,7 +45,7 @@ internal sealed class MainUi
         _scenePanel.PedContent = _pedStudio.DrawList;
         _scenePanel.CutsceneContent = _cutscenePanel.DrawList;
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
-        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer);
+        _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer, audioZoneLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
         _searchPalette = new SearchPalette(state, _scenePanel.RevealMap, OpenInViewer) { Commands = PaletteCommands };
         _propertiesPanel.Search = _searchPalette.Open;

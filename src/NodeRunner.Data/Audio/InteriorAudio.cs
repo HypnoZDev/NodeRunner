@@ -13,7 +13,11 @@ public sealed record RoomAudioSettings(uint NameHash, uint Flags, uint RoomName,
     float RoomOcclusionDamping, float NonMarkedPortalOcclusion, float DistanceFromPortalForOcclusion,
     float DistanceFromPortalFadeDistance, uint WeaponMetrics, uint WallaSoundSet, string File);
 
-public sealed record GameDataContent(IReadOnlyList<InteriorAudioSettings> Interiors, IReadOnlyList<RoomAudioSettings> Rooms);
+public sealed record GameDataContent(IReadOnlyList<InteriorAudioSettings> Interiors, IReadOnlyList<RoomAudioSettings> Rooms)
+{
+    public IReadOnlyList<AmbientZone> AmbientZones { get; init; } = [];
+    public IReadOnlyList<StaticEmitter> StaticEmitters { get; init; } = [];
+}
 
 public interface IAudioGameDataReader
 {
@@ -21,7 +25,8 @@ public interface IAudioGameDataReader
     GameDataContent Read(byte[] data, string file);
 }
 
-// Interior and room audio settings of every game data file, later files overriding earlier ones by name.
+// Interior and room audio settings, ambient zones and static emitters of every game data file, later files overriding
+// earlier ones by name.
 public sealed class AudioGameData
 {
     private readonly Dictionary<uint, InteriorAudioSettings> _interiors;
@@ -30,12 +35,15 @@ public sealed class AudioGameData
     private readonly Dictionary<(uint Interior, uint RoomName), RoomAudioSettings> _byRoomName = new();
 
     private AudioGameData(Dictionary<uint, InteriorAudioSettings> interiors, Dictionary<uint, RoomAudioSettings> rooms,
-        Dictionary<uint, string> names, IReadOnlyList<string> errors)
+        Dictionary<uint, string> names, IReadOnlyList<string> errors, IReadOnlyList<AmbientZone> zones,
+        IReadOnlyList<StaticEmitter> emitters)
     {
         _interiors = interiors;
         _rooms = rooms;
         _names = names;
         Errors = errors;
+        AmbientZones = zones;
+        StaticEmitters = emitters;
         foreach (var interior in interiors.Values)
             foreach (uint item in interior.Rooms)
                 if (rooms.TryGetValue(item, out var room))
@@ -43,6 +51,9 @@ public sealed class AudioGameData
     }
 
     public IReadOnlyList<string> Errors { get; }
+
+    public IReadOnlyList<AmbientZone> AmbientZones { get; }
+    public IReadOnlyList<StaticEmitter> StaticEmitters { get; }
 
     public int InteriorCount => _interiors.Count;
 
@@ -62,6 +73,8 @@ public sealed class AudioGameData
         var interiors = new Dictionary<uint, InteriorAudioSettings>();
         var rooms = new Dictionary<uint, RoomAudioSettings>();
         var names = new Dictionary<uint, string>();
+        var zones = new Dictionary<uint, AmbientZone>();
+        var emitters = new Dictionary<uint, StaticEmitter>();
         var errors = new List<string>();
         foreach (var path in content.EnumerateAllVersions(".dat151.rel"))
         {
@@ -74,6 +87,10 @@ public sealed class AudioGameData
                     interiors[interior.NameHash] = interior;
                 foreach (var room in read.Rooms)
                     rooms[room.NameHash] = room;
+                foreach (var zone in read.AmbientZones)
+                    zones[zone.NameHash] = zone;
+                foreach (var emitter in read.StaticEmitters)
+                    emitters[emitter.NameHash] = emitter;
                 if (content.ReadFile(path[..^".rel".Length] + ".nametable") is { } table)
                     foreach (var name in System.Text.Encoding.ASCII.GetString(table).Split('\0', StringSplitOptions.RemoveEmptyEntries))
                         names.TryAdd(Joaat.Hash(name), name);
@@ -83,6 +100,6 @@ public sealed class AudioGameData
                 errors.Add($"{Path.GetFileName(path)} : {ex.Message}");
             }
         }
-        return new AudioGameData(interiors, rooms, names, errors);
+        return new AudioGameData(interiors, rooms, names, errors, zones.Values.ToList(), emitters.Values.ToList());
     }
 }
