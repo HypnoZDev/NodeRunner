@@ -23,7 +23,7 @@ internal static class DrawableXml
     private const int LightLength = 0xA8;
     private const int TextureNamePointer = 0x28;
 
-    private static readonly string[] Semantics =
+    internal static readonly string[] Semantics =
     [
         "Position", "BlendWeights", "BlendIndices", "Normal", "Colour0", "Colour1", "TexCoord0", "TexCoord1", "TexCoord2",
         "TexCoord3", "TexCoord4", "TexCoord5", "TexCoord6", "TexCoord7", "Tangent", "Binormal",
@@ -47,7 +47,8 @@ internal static class DrawableXml
     }
 
     // The fields of the drawable at offset (its name when it has one), inside an element already opened.
-    internal static void WriteDrawable(XmlText xml, ResourceData res, int d, Output output, bool withName)
+    // withSkeleton: false for the parts of a fragment, which use the main drawable's.
+    internal static void WriteDrawable(XmlText xml, ResourceData res, int d, Output output, bool withName, bool withSkeleton = true)
     {
         if (withName)
         {
@@ -65,8 +66,10 @@ internal static class DrawableXml
 
         if (res.UInt64(d + 0x10) is not 0 and var group)
             WriteShaderGroup(xml, res, res.ResolveArray(group, 1, ShaderGroupLength, "groupe de shaders"), output);
-        if (res.UInt64(d + 0x18) is not 0 and var skeleton)
+        if (withSkeleton && res.UInt64(d + 0x18) is not 0 and var skeleton)
             WriteSkeleton(xml, res, res.ResolveArray(skeleton, 1, SkeletonLength, "squelette"));
+        if (res.UInt64(d + 0x90) is not 0 and var joints)
+            WriteJoints(xml, res, res.ResolveArray(joints, 1, 0x40, "limites des articulations"));
 
         for (int level = 0; level < 4; level++)
         {
@@ -224,6 +227,56 @@ internal static class DrawableXml
         xml.Close("Skeleton");
     }
 
+    // Rotation limits (0xC0 bytes each: bone 0x08, min 0x5C, max 0x68) and translation limits (0x40: bone 0x08,
+    // min 0x20, max 0x30) of the skeleton's joints.
+    private static void WriteJoints(XmlText xml, ResourceData res, int j)
+    {
+        xml.Open("Joints");
+        int rotations = res.UInt16(j + 0x30);
+        if (res.UInt64(j + 0x10) is not 0 and var r)
+        {
+            int at = rotations == 0 ? -1 : res.ResolveArray(r, rotations, 0xC0, "limites de rotation");
+            WriteLimits(xml, res, "RotationLimits", at, rotations, 0xC0, rotation: true);
+        }
+        int translations = res.UInt16(j + 0x32);
+        if (res.UInt64(j + 0x18) is not 0 and var t)
+        {
+            int at = translations == 0 ? -1 : res.ResolveArray(t, translations, 0x40, "limites de déplacement");
+            WriteLimits(xml, res, "TranslationLimits", at, translations, 0x40, rotation: false);
+        }
+        xml.Close("Joints");
+    }
+
+    private static void WriteLimits(XmlText xml, ResourceData res, string name, int at, int count, int size, bool rotation)
+    {
+        if (count == 0)
+        {
+            xml.Empty(name);
+            return;
+        }
+        xml.Open(name);
+        for (int i = 0; i < count; i++)
+        {
+            int o = at + i * size;
+            xml.Open("Item");
+            if (rotation)
+            {
+                xml.Value("BoneId", res.UInt16(o + 0x08));
+                xml.Value("UnknownA", res.UInt16(o + 0x0A));
+                xml.Vector("Min", Vec3(res, o + 0x5C));
+                xml.Vector("Max", Vec3(res, o + 0x68));
+            }
+            else
+            {
+                xml.Value("BoneId", res.UInt32(o + 0x08));
+                xml.Vector("Min", Vec3(res, o + 0x20));
+                xml.Vector("Max", Vec3(res, o + 0x30));
+            }
+            xml.Close("Item");
+        }
+        xml.Close(name);
+    }
+
     // ---- Models ----
 
     private static void WriteModels(XmlText xml, ResourceData res, int header, string name, Output output)
@@ -339,7 +392,7 @@ internal static class DrawableXml
         }
     }
 
-    private static string LayoutName(ulong types) => types switch
+    internal static string LayoutName(ulong types) => types switch
     {
         0x7755555555996996 => "GTAV1",
         0x030000000199A006 => "GTAV2",
@@ -402,7 +455,9 @@ internal static class DrawableXml
 
     // ---- Lights ----
 
-    private static void WriteLights(XmlText xml, ResourceData res, int at, int count)
+    internal const int LightRecordLength = LightLength;
+
+    internal static void WriteLights(XmlText xml, ResourceData res, int at, int count)
     {
         xml.Open("Lights");
         for (int i = 0; i < count; i++)
@@ -467,12 +522,12 @@ internal static class DrawableXml
         return string.Join(", ", list);
     }
 
-    private static string Vector4Attributes(Vector4 v) =>
+    internal static string Vector4Attributes(Vector4 v) =>
         $"x=\"{XmlText.Number(v.X)}\" y=\"{XmlText.Number(v.Y)}\" z=\"{XmlText.Number(v.Z)}\" w=\"{XmlText.Number(v.W)}\"";
 
-    private static float Float(ResourceData res, int offset) => BitConverter.UInt32BitsToSingle(res.UInt32(offset));
+    internal static float Float(ResourceData res, int offset) => BitConverter.UInt32BitsToSingle(res.UInt32(offset));
 
-    private static Vector3 Vec3(ResourceData res, int o) => new(Float(res, o), Float(res, o + 4), Float(res, o + 8));
+    internal static Vector3 Vec3(ResourceData res, int o) => new(Float(res, o), Float(res, o + 4), Float(res, o + 8));
 
-    private static Vector4 Vec4(ResourceData res, int o) => new(Float(res, o), Float(res, o + 4), Float(res, o + 8), Float(res, o + 12));
+    internal static Vector4 Vec4(ResourceData res, int o) => new(Float(res, o), Float(res, o + 4), Float(res, o + 8), Float(res, o + 12));
 }

@@ -25,8 +25,9 @@ public static partial class YbnXml
     // The composite child's transform and flags, when the bounds is one.
     internal readonly record struct ChildInfo(Matrix4x4 Transform, uint Flags1, uint Flags2);
 
-    // Bounds at offset (or a "None" element when offset is negative), under the given element name.
-    internal static void WriteBound(XmlText xml, ResourceData res, int offset, string name, ChildInfo? child)
+    // Bounds at offset (or a "None" element when offset is negative), under the given element name. In a fragment, the
+    // parts of a composite are written without their collision types (as CodeWalker does).
+    internal static void WriteBound(XmlText xml, ResourceData res, int offset, string name, ChildInfo? child, bool fragment = false)
     {
         if (offset < 0)
         {
@@ -74,18 +75,21 @@ public static partial class YbnXml
                 Row(m.M11, m.M12, m.M13, m.M14), Row(m.M21, m.M22, m.M23, m.M24),
                 Row(m.M31, m.M32, m.M33, m.M34), Row(m.M41, m.M42, m.M43, m.M44),
             ]);
-            xml.Text("CompositeFlags1", FlagNames(c.Flags1, CompositeFlagNames));
-            xml.Text("CompositeFlags2", FlagNames(c.Flags2, CompositeFlagNames));
+            if (!fragment)
+            {
+                xml.Text("CompositeFlags1", FlagNames(c.Flags1, CompositeFlagNames));
+                xml.Text("CompositeFlags2", FlagNames(c.Flags2, CompositeFlagNames));
+            }
         }
 
         if (type is XmlBound.Geometry or XmlBound.GeometryBvh)
             WriteGeometry(xml, res, offset);
         else if (type == XmlBound.Composite)
-            WriteChildren(xml, res, offset);
+            WriteChildren(xml, res, offset, fragment);
         xml.Close(name);
     }
 
-    private static void WriteChildren(XmlText xml, ResourceData res, int o)
+    private static void WriteChildren(XmlText xml, ResourceData res, int o, bool fragment)
     {
         int count = res.UInt16(o + 0xA0);
         if (count == 0 || res.UInt64(o + 0x70) == 0)
@@ -115,7 +119,7 @@ public static partial class YbnXml
             var info = new ChildInfo(transform, flags >= 0 ? res.UInt32(flags + i * 8) : 0, flags >= 0 ? res.UInt32(flags + i * 8 + 4) : 0);
             if (at >= 0)
                 res.ResolveArray(pointer, 1, BlockLength(res.Byte(at + 0x10)), "morceau du composite");
-            WriteBound(xml, res, at, "Item", info);
+            WriteBound(xml, res, at, "Item", info, fragment);
         }
         xml.Close("Children");
     }

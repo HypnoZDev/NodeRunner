@@ -69,6 +69,24 @@ internal sealed class XmlText
         Close(name);
     }
 
+    // A list of values, rowSize per line (on the element's own line when they fit one row), empty element when none.
+    public void RawArray(string name, IReadOnlyList<string> values, int rowSize)
+    {
+        if (values.Count == 0)
+            Empty(name);
+        else if (values.Count <= rowSize)
+            Line().Append('<').Append(name).Append('>').Append(string.Join(" ", values)).Append("</").Append(name).Append(">\r\n");
+        else
+            Lines(name, null, values.Chunk(rowSize).Select(row => string.Join(" ", row)));
+    }
+
+    // Rows of values inside an element already opened.
+    public void Rows(IReadOnlyList<string> values, int rowSize)
+    {
+        foreach (var row in values.Chunk(rowSize))
+            Line().Append(string.Join(" ", row)).Append("\r\n");
+    }
+
     public static string Number(float value) => value.ToString(CultureInfo.InvariantCulture);
 
     public static string Escape(string text) => SecurityElement.Escape(text) ?? "";

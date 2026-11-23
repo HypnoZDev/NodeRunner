@@ -8,7 +8,7 @@ namespace NodeRunner.App;
 // Export of a game file as the XML read by Sollumz (Blender) and CodeWalker, from the archive explorer or the viewer.
 internal sealed partial class AppState
 {
-    private static readonly string[] XmlExtensions = [".ydr", ".ydd", ".ytd", ".ybn"];
+    private static readonly string[] XmlExtensions = [".ydr", ".ydd", ".yft", ".ytd", ".ybn"];
 
     private Task<string>? _xmlExport;
     private string? _xmlExportFolder;
@@ -67,6 +67,7 @@ internal sealed partial class AppState
             ".ybn" => YbnXml.Export(name, data, header),
             ".ydr" => YdrXml.Export(name, data, header, ShaderNames(game)),
             ".ydd" => YddXml.Export(name, data, header, ShaderNames(game), models is null ? null : models.TryGet),
+            ".yft" => YftXml.Export(name, data, header, ShaderNames(game)),
             _ => throw new InvalidDataException(L("Type de fichier non pris en charge.")),
         };
         File.WriteAllText(Path.Combine(folder, conversion.FileName), conversion.Text);
