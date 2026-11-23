@@ -168,4 +168,49 @@ internal sealed partial class ViewerPanel
             }
         }
     }
+
+    // ---- History (back / forward, as in a web browser) ----
+
+    private const int MaxHistory = 50;
+    private readonly List<ViewerItem> _back = [], _forward = [];
+    private bool _goingThroughHistory;
+
+    private void AddToHistory(ViewerItem item)
+    {
+        if (_goingThroughHistory || state.Viewer.Item is not { } current || current == item)
+            return;
+        _back.Add(current);
+        if (_back.Count > MaxHistory)
+            _back.RemoveAt(0);
+        _forward.Clear();
+    }
+
+    private void GoBack() => GoThroughHistory(_back, _forward);
+
+    private void GoForward() => GoThroughHistory(_forward, _back);
+
+    private void GoThroughHistory(List<ViewerItem> from, List<ViewerItem> to)
+    {
+        if (from.Count == 0)
+            return;
+        var item = from[^1];
+        from.RemoveAt(from.Count - 1);
+        if (state.Viewer.Item is { } current)
+            to.Add(current);
+        _goingThroughHistory = true;
+        Open(item);
+        _goingThroughHistory = false;
+        // The list where it is, so that it shows selected.
+        _filter = item.Kind == ViewerKind.Vehicle ? 0 : item.Pack is not null ? 2 : 1;
+        _scrollToItem = true;
+    }
+
+    private void HandleCatalogKeys()
+    {
+        var keys = state.Keys;
+        if (keys.Pressed(Input.KeyAction.ViewerBack))
+            GoBack();
+        else if (keys.Pressed(Input.KeyAction.ViewerForward))
+            GoForward();
+    }
 }

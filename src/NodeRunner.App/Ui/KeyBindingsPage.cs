@@ -18,6 +18,7 @@ internal sealed class KeyBindingsPage(AppState state)
         (L("Édition"), [KeyAction.Undo, KeyAction.Redo, KeyAction.Copy, KeyAction.Paste, KeyAction.Delete, KeyAction.PutOnGround, KeyAction.Search, KeyAction.Grid]),
         (L("Projet"), [KeyAction.NewProject, KeyAction.OpenProject, KeyAction.Save, KeyAction.Export]),
         (L("Fenêtres"), [KeyAction.Settings, KeyAction.Shortcuts, KeyAction.Viewer, KeyAction.Archives, KeyAction.Peds, KeyAction.Cutscenes, KeyAction.Play]),
+        (L("Visionneuse"), [KeyAction.ViewerBack, KeyAction.ViewerForward]),
     ];
 
     public static string Name(KeyAction action) => action switch
@@ -55,6 +56,8 @@ internal sealed class KeyBindingsPage(AppState state)
         KeyAction.Peds => L("Visionneuse de personnages"),
         KeyAction.Cutscenes => L("Visionneuse de cinématiques"),
         KeyAction.Play => L("Mode Play (marcher sur la carte)"),
+        KeyAction.ViewerBack => L("Modèle précédent (historique)"),
+        KeyAction.ViewerForward => L("Modèle suivant (historique)"),
         _ => action.ToString(),
     };
 

@@ -370,7 +370,10 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             _openTexture = null;
         }
         if (!_inWorkshop)
+        {
             AddRecent(item);
+            AddToHistory(item);
+        }
         if (state.Other is { } other)
             Viewer.Open(item, other.ModelReader, other.Textures, other.TextureReader);
         else
@@ -424,6 +427,8 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 ImGui.EndChild();
             }
             RememberSettings();
+            if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.GetIO().WantTextInput)
+                HandleCatalogKeys();
         }
         ImGui.End();
     }
@@ -819,6 +824,16 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
     private void DrawViewToolbar()
     {
         bool enabled = Viewer.Item is not null;
+        if (!_inWorkshop)
+        {
+            string back = state.Keys.Text(Input.KeyAction.ViewerBack), forward = state.Keys.Text(Input.KeyAction.ViewerForward);
+            if (Widgets.IconButton(Icons.ChevronLeft, "viewer_back", back.Length > 0 ? L($"Modèle précédent ({back})") : L("Modèle précédent"), enabled: _back.Count > 0))
+                GoBack();
+            ImGui.SameLine(0, 2);
+            if (Widgets.IconButton(Icons.ChevronRight, "viewer_forward", forward.Length > 0 ? L($"Modèle suivant ({forward})") : L("Modèle suivant"), enabled: _forward.Count > 0))
+                GoForward();
+            ImGui.SameLine();
+        }
         int shading = (int)Viewer.Shading;
         string[] shadings = [L($"{Icons.Box}  Textures"), L($"{Icons.Mountain}  Argile"), L($"{Icons.Grid}  Fil de fer")];
         if (ImGui.BeginChild("##viewer_shading", new Vector2(300f, ImGui.GetFrameHeight()), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar))

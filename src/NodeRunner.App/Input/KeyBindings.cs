@@ -39,6 +39,8 @@ public enum KeyAction
     Peds,
     Cutscenes,
     Play,
+    ViewerBack,
+    ViewerForward,
 }
 
 // The base the user's changes apply to.
@@ -91,6 +93,12 @@ public static class KeyBindings
 
     private static bool ViewerOnly(KeyAction action) => action is KeyAction.FrameModel;
 
+    // Acted upon only in the model viewer's catalogue, where the camera keys do nothing.
+    private static bool CatalogOnly(KeyAction action) => action is KeyAction.ViewerBack or KeyAction.ViewerForward;
+
+    private static bool Apart(KeyAction a, KeyAction b) =>
+        MapOnly(a) && ViewerOnly(b) || CatalogOnly(a) && (MapOnly(b) || IsCamera(b));
+
     public static bool CanBind(ImGuiKey key) => key is not (ImGuiKey.None or ImGuiKey.Escape)
         && !(key >= ImGuiKey.LeftCtrl && key <= ImGuiKey.RightSuper) && !(key >= ImGuiKey.MouseLeft && key <= ImGuiKey.MouseWheelY)
         && key < ImGuiKey.NamedKey_END && key >= ImGuiKey.NamedKey_BEGIN && !key.ToString().StartsWith("Mod", StringComparison.Ordinal)
@@ -139,6 +147,8 @@ public static class KeyBindings
             [KeyAction.Peds] = [K(ImGuiKey.F4)],
             [KeyAction.Cutscenes] = [K(ImGuiKey.F5)],
             [KeyAction.Play] = [new KeyChord(ImGuiKey.P, Alt: true)],
+            [KeyAction.ViewerBack] = [new KeyChord(ImGuiKey.LeftArrow, Alt: true)],
+            [KeyAction.ViewerForward] = [new KeyChord(ImGuiKey.RightArrow, Alt: true)],
         };
         if (preset == KeyPreset.CodeWalker)
         {
@@ -195,7 +205,7 @@ public static class KeyBindings
     {
         foreach (var (other, chords) in map)
         {
-            if (other == action || MapOnly(action) && ViewerOnly(other) || ViewerOnly(action) && MapOnly(other))
+            if (other == action || Apart(action, other) || Apart(other, action))
                 continue;
             foreach (var c in chords)
             {

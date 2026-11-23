@@ -60,6 +60,10 @@ internal sealed class ShortcutsWindow(AppState state)
                 A(KeyAction.Settings), A(KeyAction.Grid),
                 (L("Ctrl+Maj+1 à 9"), L("Enregistrer la vue dans un signet de caméra")),
                 (L("Ctrl+1 à 9"), L("Revenir à un signet de caméra")));
+            Group(L("Visionneuse"),
+                (L("Flèche haut / bas"), L("Modèle précédent / suivant de la liste")),
+                A(KeyAction.ViewerBack), A(KeyAction.ViewerForward),
+                (L("Clic droit sur une ligne"), L("Ajouter aux favoris, copier le nom")));
             Group(L("Visionneuse de personnages"),
                 (L("Espace"), L("Lecture / pause de l'animation")),
                 (L("Flèche gauche / droite"), L("Image précédente / suivante")),
