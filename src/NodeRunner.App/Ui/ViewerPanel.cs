@@ -392,6 +392,12 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
         bool visible = ImGui.Begin(L(Title), ref open);
         ImGui.PopStyleVar();
+        _docked = ImGui.IsWindowDocked();
+        if (_closeForMap)
+        {
+            _closeForMap = false;
+            open = false;
+        }
         if (visible)
         {
             ApplySavedSettings();
@@ -1211,8 +1217,13 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         bool canPlace = item.Kind == ViewerKind.Object && state.Features.Editing && state.World.Maps is not null && !_inWorkshop;
         bool canEdit = state.Features.Editing && item.Kind != ViewerKind.Ped && !_inWorkshop;
         float buttons = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + ImGui.CalcTextSize(L("Copier le nom")).X + 70f + (canPlace ? ImGui.CalcTextSize(L("Placer")).X + 50f : 0f)
-            + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f);
+            + (canEdit ? ImGui.CalcTextSize(L("Modifier dans l'Atelier")).X + 50f : 0f) + (_inWorkshop ? 0f : GoToMapButtonWidth(item));
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - buttons));
+        if (!_inWorkshop && item.Kind == ViewerKind.Object && Library is not null)
+        {
+            DrawGoToMapButton(item);
+            ImGui.SameLine();
+        }
         if (canEdit)
         {
             if (Widgets.Button(L($"{Icons.Box}  Modifier dans l'Atelier"),
@@ -2638,6 +2649,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             }
             Widgets.EndProperties();
         }
+        DrawPlacedSection(item);
     }
 
     // ---- File ----

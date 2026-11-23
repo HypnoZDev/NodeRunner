@@ -462,5 +462,14 @@ public static partial class English
         ("{0} favoris, puis derniers ouverts", "{0} favourites, then last opened"),
         ("Retirer des favoris", "Remove from favourites"),
         ("Ajouter aux favoris (bouton étoile au-dessus de la liste pour les retrouver)", "Add to favourites (star button above the list to find them again)"),
+        ("{0}  Sur la carte ({1})", "{0}  On the map ({1})"),
+        ("Aller à l'exemplaire le plus proche de la caméra ({0} sur la carte chargée).\nLa liste complète est dans l'onglet « Type d'objet ».",
+            "Go to the copy nearest to the camera ({0} on the loaded map).\nThe full list is in the \"Object type\" tab."),
+        ("Sur la carte ({0})", "On the map ({0})"),
+        ("Le plus proche de la caméra d'abord. Clic : y aller ; clic droit : copier la position.",
+            "Nearest to the camera first. Click: go there; right-click: copy the position."),
+        ("{0}, dans {1}", "{0}, in {1}"),
+        ("Copier la position", "Copy the position"),
+        ("… et {0} autres plus loin", "… and {0} more further away"),
     ];
 }
