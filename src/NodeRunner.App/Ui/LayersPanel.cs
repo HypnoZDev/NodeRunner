@@ -144,7 +144,7 @@ internal sealed class LayersPanel(AppState state, PathNodeLayer pathNodeLayer, S
         {
             LayerRow(AudioZoneLayer.ZonesLayerName, AudioZoneLayer.ZoneColor, L("Zones d'ambiance"), Widgets.Count(audioZoneLayer.ZoneCount));
             LayerRow(AudioZoneLayer.EmittersLayerName, AudioZoneLayer.EmitterColor, L("Sources sonores"), Widgets.Count(audioZoneLayer.EmitterCount));
-            Widgets.Hint(L($"Zones à moins de {AudioZoneLayer.ZoneRadius:0} m où le jeu joue une ambiance (oiseaux, bruit de la ville, eau...) et sources à moins de {AudioZoneLayer.EmitterRadius:0} m qui jouent un son ou une radio à un point fixe (bars, magasins, alarmes...). Cliquez dessus pour voir leurs détails."), wrap: true);
+            Widgets.Hint(L($"Zones à moins de {AudioZoneLayer.ZoneRadius:0} m où le jeu joue une ambiance (oiseaux, bruit de la ville, eau...) et sources à moins de {AudioZoneLayer.EmitterRadius:0} m qui jouent un son ou une radio à un point fixe (bars, magasins, alarmes...). Le cadre pâle d'une zone montre où il faut être pour l'entendre. Cliquez dessus pour voir leurs détails."), wrap: true);
         }
 
         if (LayerSection(L("Occlusion"), "occlusion", OcclusionLayer.Parts.Select(OcclusionLayer.LayerName), defaultOpen: false))

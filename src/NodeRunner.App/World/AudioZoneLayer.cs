@@ -12,7 +12,8 @@ internal sealed record AudioSelection(AmbientZone? Zone, StaticEmitter? Emitter)
 }
 
 // The ambient zones (where the game plays birds, city noise, water...) and the static emitters (fixed sounds and radios)
-// near the camera, seen through walls. A zone is drawn where its sounds are placed (its positioning shape).
+// near the camera, seen through walls. A zone is drawn where its sounds are placed (its positioning shape) and, fainter,
+// where the player must be for it to play (its activation shape) when that one is elsewhere.
 internal sealed class AudioZoneLayer : IDisposable
 {
     public const string ZonesLayerName = "AudioZones";
@@ -32,6 +33,7 @@ internal sealed class AudioZoneLayer : IDisposable
     private const int Segments = 48;
 
     public static readonly Vector4 ZoneColor = new(0.3f, 0.85f, 0.75f, 0.95f);
+    private static readonly Vector4 ActivationColor = ZoneColor with { W = 0.45f };
     public static readonly Vector4 EmitterColor = new(1f, 0.5f, 0.75f, 1f);
     private static readonly Vector4 SelectedColor = new(1f, 0.95f, 0.35f, 1f);
     private static readonly Vector4 OuterColor = new(1f, 0.95f, 0.35f, 0.4f);
@@ -107,7 +109,7 @@ internal sealed class AudioZoneLayer : IDisposable
         if (selection.Zone is { } zone)
         {
             AddZone(lines.AddLine, zone, SelectedColor);
-            AddBox(lines.AddLine, zone.Activation, OuterColor);
+            AddActivation(lines.AddLine, zone, OuterColor);
         }
         else if (selection.Emitter is { } emitter)
         {
@@ -154,7 +156,7 @@ internal sealed class AudioZoneLayer : IDisposable
         float nearestDistance = MaxPickDistance;
         foreach (var zone in _zones)
         {
-            if (RayZone(origin, direction, zone) is { } d && d < nearestDistance)
+            if (Nearest(RayZone(origin, direction, zone), RayActivation(origin, direction, zone)) is { } d && d < nearestDistance)
             {
                 nearestDistance = d;
                 nearest = zone;
@@ -215,6 +217,41 @@ internal sealed class AudioZoneLayer : IDisposable
         var localOrigin = Vector3.Transform(origin, inverse);
         var localDirection = Vector3.TransformNormal(direction, inverse);
         return RayBox(localOrigin, localDirection, min, max);
+    }
+
+    private static float? Nearest(float? a, float? b) => a is null ? b : b is null ? a : MathF.Min(a.Value, b.Value);
+
+    private static float? RayActivation(Vector3 origin, Vector3 direction, AmbientZone zone)
+    {
+        if (!HasOwnActivation(zone))
+            return null;
+        var v = zone.Activation;
+        if (zone.Shape == AudioZoneShape.Sphere)
+            return RaySphere(origin, direction, v.Centre, v.Size.X);
+        if (!Matrix4x4.Invert(BoxTransform(v), out var inverse))
+            return null;
+        return RayBox(Vector3.Transform(origin, inverse), Vector3.TransformNormal(direction, inverse), -v.Size * 0.5f, v.Size * 0.5f);
+    }
+
+    // An activation shape worth drawing: not empty, and not the positioning shape again.
+    private static bool HasOwnActivation(AmbientZone zone)
+    {
+        var a = zone.Activation;
+        if (a.Size.X < 0.01f || (zone.Shape != AudioZoneShape.Sphere && (a.Size.Y < 0.01f || a.Size.Z < 0.01f)))
+            return false;
+        var p = zone.Positioning;
+        return zone.Shape == AudioZoneShape.Line || Vector3.Distance(a.Centre, p.Centre) > 0.5f
+            || Vector3.Distance(a.Size, p.Size) > 0.5f || a.RotationDegrees != p.RotationDegrees;
+    }
+
+    private static void AddActivation(Action<Vector3, Vector3, Vector4> addLine, AmbientZone zone, Vector4 color)
+    {
+        if (!HasOwnActivation(zone))
+            return;
+        if (zone.Shape == AudioZoneShape.Sphere)
+            AddSphere(addLine, zone.Activation.Centre, zone.Activation.Size.X, color);
+        else
+            AddBox(addLine, zone.Activation, color);
     }
 
     // Distance along the ray to the first face of the box hit (the exit face from inside), or null.
@@ -330,7 +367,7 @@ internal sealed class AudioZoneLayer : IDisposable
         }
     }
 
-    // Distance on the ground from the point to the zone's shape, roughly (its bounding circle).
+    // Distance on the ground from the point to the zone's nearest shape, roughly (their bounding circles).
     private static float GroundDistance(AmbientZone zone, Vector2 point)
     {
         var v = zone.Positioning;
@@ -340,7 +377,12 @@ internal sealed class AudioZoneLayer : IDisposable
             AudioZoneShape.Line => ((v.Centre + v.Size) * 0.5f, Vector3.Distance(v.Centre, v.Size) * 0.5f),
             _ => (v.Centre, new Vector2(v.Size.X, v.Size.Y).Length() * 0.5f),
         };
-        return Vector2.Distance(new Vector2(centre.X, centre.Y), point) - radius;
+        float distance = Vector2.Distance(new Vector2(centre.X, centre.Y), point) - radius;
+        if (!HasOwnActivation(zone))
+            return distance;
+        var a = zone.Activation;
+        float activationRadius = zone.Shape == AudioZoneShape.Sphere ? a.Size.X : new Vector2(a.Size.X, a.Size.Y).Length() * 0.5f;
+        return MathF.Min(distance, Vector2.Distance(new Vector2(a.Centre.X, a.Centre.Y), point) - activationRadius);
     }
 
     private sealed record BuildResult(AudioGameData Data, LineBatch Lines, TriangleBatch Surfaces, List<AmbientZone> Zones,
@@ -362,6 +404,7 @@ internal sealed class AudioZoneLayer : IDisposable
                     continue;
                 zones.Add(zone);
                 AddZone(lines.AddLine, zone, ZoneColor);
+                AddActivation(lines.AddLine, zone, ActivationColor);
                 // Only the small boxes are filled: the big ones (a whole district) would veil the view.
                 var v = zone.Positioning;
                 if (zone.Shape != AudioZoneShape.Box || MathF.Max(v.Size.X, v.Size.Y) > FilledZoneSize)
