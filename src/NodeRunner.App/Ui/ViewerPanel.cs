@@ -791,12 +791,36 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             string dims = L($"L {s.X:0.00} m · l {s.Y:0.00} m · h {s.Z:0.00} m");
             drawList.AddText(new Vector2(max.X - ImGui.CalcTextSize(dims).X - 12, min.Y + 10), Widgets.Col(muted), dims);
         }
-        drawList.AddText(new Vector2(min.X + 12, max.Y - ImGui.GetTextLineHeight() - 8), Widgets.Col(light ? muted : UiTheme.TextFaint),
-            _inWorkshop
-                ? L("Touches de la carte : avancer, monter (Maj : plus vite) · clic droit maintenu : regarder · clic gauche glissé : tourner autour · molette : zoom · F : cadrer")
-                : L("Clic gauche : tourner · clic droit ou molette enfoncée : déplacer · molette : zoom · double-clic : vue par défaut"));
+        DrawViewHelp(drawList, new Vector2(min.X + 20f, max.Y - 20f), light ? muted : UiTheme.TextFaint);
 
         DrawInfo();
+    }
+
+    // A "?" in the corner of the view: the mouse and keys when hovered.
+    private void DrawViewHelp(ImDrawListPtr drawList, Vector2 center, Vector4 color)
+    {
+        const float radius = 9f;
+        bool hovered = Vector2.DistanceSquared(ImGui.GetIO().MousePos, center) <= (radius + 3f) * (radius + 3f)
+            && ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
+        uint col = Widgets.Col(hovered ? UiTheme.Text : color);
+        drawList.AddCircle(center, radius, col, 0, 1.5f);
+        var size = ImGui.CalcTextSize("?");
+        drawList.AddText(center - size * 0.5f, col, "?");
+        if (!hovered)
+            return;
+        string text;
+        if (_inWorkshop)
+        {
+            text = L("Touches de la carte : avancer, monter (Maj : plus vite)\nClic droit maintenu : regarder\nClic gauche glissé : tourner autour\nMolette : zoom\nF : cadrer");
+        }
+        else
+        {
+            var keys = state.Keys;
+            string K(Input.KeyAction action) => keys.Text(action) is { Length: > 0 } key ? key : "-";
+            text = L("Clic gauche glissé : tourner\nClic droit ou molette enfoncée : déplacer\nMolette : zoom\nDouble-clic : vue par défaut")
+                + "\n\n" + L($"{K(Input.KeyAction.FrameModel)} : cadrer · 1 à 8 : vues prédéfinies\n{K(Input.KeyAction.ViewerSpin)} : rotation · {K(Input.KeyAction.ViewerGround)} : sol · {K(Input.KeyAction.ViewerBounds)} : boîte\n{K(Input.KeyAction.ViewerBack)} / {K(Input.KeyAction.ViewerForward)} : modèle précédent / suivant\nFlèches haut / bas dans la liste : modèle précédent / suivant de la liste");
+        }
+        ImGui.SetTooltip(text);
     }
 
     private string? Subtitle(ViewerItem item)
