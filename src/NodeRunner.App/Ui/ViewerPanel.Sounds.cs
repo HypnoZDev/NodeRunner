@@ -39,6 +39,7 @@ internal sealed unsafe partial class ViewerPanel
     // Opens a sound bank of the game's archives (explorer).
     public void OpenSoundFile(string path)
     {
+        ApplySavedSettings();
         _filter = SoundsFilter;
         _search = "";
         var file = new SoundFile(path, SoundName(path));

@@ -151,6 +151,8 @@ public sealed class AppSettings
     // Favourite props of the library (type names).
     public List<string> LibraryFavorites { get; set; } = [];
 
+    public ViewerSettings Viewer { get; set; } = new();
+
     public string? ExportFolder { get; set; }
 
     public string? ExportResourceName { get; set; }
@@ -249,4 +251,23 @@ public sealed class CameraSettings
     public float Yaw { get; set; }
     public float Pitch { get; set; }
     public float Speed { get; set; } = 50f;
+}
+
+// Model viewer: list shown, search, display options, and models opened per game ("v:name" vehicle, "o:name" object).
+public sealed class ViewerSettings
+{
+    public int Filter { get; set; }
+    public string Search { get; set; } = "";
+    public int Shading { get; set; }
+    public bool Edges { get; set; }
+    public bool ShowBounds { get; set; }
+    public bool ShowGround { get; set; } = true;
+    public bool AutoRotate { get; set; }
+    public int Background { get; set; }
+    public bool LightFollowsCamera { get; set; } = true;
+    public float LightAngle { get; set; } = 0.6f;
+    public float LightHeight { get; set; } = 0.8f;
+    public float FieldOfView { get; set; } = 45f;
+    public Dictionary<GameKind, List<string>> Recents { get; set; } = new();
+    public Dictionary<GameKind, List<string>> Favorites { get; set; } = new();
 }

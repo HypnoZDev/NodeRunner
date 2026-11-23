@@ -363,11 +363,14 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
     private void Open(ViewerItem item)
     {
+        ApplySavedSettings();
         if (item != Viewer.Item)
         {
             _selectedMesh = -1;
             _openTexture = null;
         }
+        if (!_inWorkshop)
+            AddRecent(item);
         if (state.Other is { } other)
             Viewer.Open(item, other.ModelReader, other.Textures, other.TextureReader);
         else
@@ -384,7 +387,9 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         ImGui.PopStyleVar();
         if (visible)
         {
+            ApplySavedSettings();
             UpdateCatalog();
+            RestoreLastModel();
             UpdatePaint();
             ShowCaptureResult();
             float spacing = ImGui.GetStyle().ItemSpacing.X;
@@ -418,6 +423,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 }
                 ImGui.EndChild();
             }
+            RememberSettings();
         }
         ImGui.End();
     }
@@ -627,6 +633,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
 
     public void ShowLibrary()
     {
+        ApplySavedSettings();
         _filter = 2;
         _search = "";
     }
