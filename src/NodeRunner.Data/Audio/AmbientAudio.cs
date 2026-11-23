@@ -28,3 +28,8 @@ public sealed record AmbientZone(uint NameHash, uint Flags, AudioZoneShape Shape
 public sealed record StaticEmitter(uint NameHash, uint Flags, uint ChildSound, uint RadioStation, Vector3 Position,
     float MinDistance, float MaxDistance, int Volume, uint Interior, uint Room, int StartMinutes, int EndMinutes,
     string File);
+
+// Ambient rule (game data item 38): a sound an ambient zone plays now and then around the player. Times in minutes
+// after midnight (both 0: always).
+public sealed record AmbientRule(uint NameHash, uint ChildSound, float Weight, float MinDistance, float MaxDistance,
+    int StartMinutes, int EndMinutes, string File);

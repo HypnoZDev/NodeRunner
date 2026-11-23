@@ -17,6 +17,7 @@ public sealed record GameDataContent(IReadOnlyList<InteriorAudioSettings> Interi
 {
     public IReadOnlyList<AmbientZone> AmbientZones { get; init; } = [];
     public IReadOnlyList<StaticEmitter> StaticEmitters { get; init; } = [];
+    public IReadOnlyList<AmbientRule> AmbientRules { get; init; } = [];
 }
 
 public interface IAudioGameDataReader
@@ -32,11 +33,12 @@ public sealed class AudioGameData
     private readonly Dictionary<uint, InteriorAudioSettings> _interiors;
     private readonly Dictionary<uint, RoomAudioSettings> _rooms;
     private readonly Dictionary<uint, string> _names;
+    private readonly Dictionary<uint, AmbientRule> _ambientRules;
     private readonly Dictionary<(uint Interior, uint RoomName), RoomAudioSettings> _byRoomName = new();
 
     private AudioGameData(Dictionary<uint, InteriorAudioSettings> interiors, Dictionary<uint, RoomAudioSettings> rooms,
         Dictionary<uint, string> names, IReadOnlyList<string> errors, IReadOnlyList<AmbientZone> zones,
-        IReadOnlyList<StaticEmitter> emitters)
+        IReadOnlyList<StaticEmitter> emitters, Dictionary<uint, AmbientRule> rules)
     {
         _interiors = interiors;
         _rooms = rooms;
@@ -44,6 +46,7 @@ public sealed class AudioGameData
         Errors = errors;
         AmbientZones = zones;
         StaticEmitters = emitters;
+        _ambientRules = rules;
         foreach (var interior in interiors.Values)
             foreach (uint item in interior.Rooms)
                 if (rooms.TryGetValue(item, out var room))
@@ -54,6 +57,8 @@ public sealed class AudioGameData
 
     public IReadOnlyList<AmbientZone> AmbientZones { get; }
     public IReadOnlyList<StaticEmitter> StaticEmitters { get; }
+
+    public AmbientRule? AmbientRule(uint hash) => _ambientRules.GetValueOrDefault(hash);
 
     public int InteriorCount => _interiors.Count;
 
@@ -75,6 +80,7 @@ public sealed class AudioGameData
         var names = new Dictionary<uint, string>();
         var zones = new Dictionary<uint, AmbientZone>();
         var emitters = new Dictionary<uint, StaticEmitter>();
+        var rules = new Dictionary<uint, AmbientRule>();
         var errors = new List<string>();
         foreach (var path in content.EnumerateAllVersions(".dat151.rel"))
         {
@@ -91,6 +97,8 @@ public sealed class AudioGameData
                     zones[zone.NameHash] = zone;
                 foreach (var emitter in read.StaticEmitters)
                     emitters[emitter.NameHash] = emitter;
+                foreach (var rule in read.AmbientRules)
+                    rules[rule.NameHash] = rule;
                 if (content.ReadFile(path[..^".rel".Length] + ".nametable") is { } table)
                     foreach (var name in System.Text.Encoding.ASCII.GetString(table).Split('\0', StringSplitOptions.RemoveEmptyEntries))
                         names.TryAdd(Joaat.Hash(name), name);
@@ -100,6 +108,6 @@ public sealed class AudioGameData
                 errors.Add($"{Path.GetFileName(path)} : {ex.Message}");
             }
         }
-        return new AudioGameData(interiors, rooms, names, errors, zones.Values.ToList(), emitters.Values.ToList());
+        return new AudioGameData(interiors, rooms, names, errors, zones.Values.ToList(), emitters.Values.ToList(), rules);
     }
 }

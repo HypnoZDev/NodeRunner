@@ -84,6 +84,36 @@ public class AudioOcclusionTests
     }
 
     [Fact]
+    public void SoundTreeReaderFollowsTheHashAndPackTables()
+    {
+        using var file = new MemoryStream();
+        using (var w = new BinaryWriter(file, System.Text.Encoding.ASCII, leaveOpen: true))
+        {
+            w.Write(54); w.Write(32);
+            // Sequential sound playing B and C, then two simple sounds (bank, wave, slot).
+            w.Write((byte)7); w.Write((byte)0); w.Write((short)0); w.Write(0xBBu); w.Write(0xCCu);
+            w.Write((byte)12); w.Write(0x1000u); w.Write(0x2001u); w.Write((byte)0);
+            w.Write((byte)12); w.Write(0x1000u); w.Write(0x2002u); w.Write((byte)0);
+            w.Write(4); w.Write(0);
+            w.Write(3);
+            w.Write(0xAAu); w.Write(0); w.Write(12);
+            w.Write(0xBBu); w.Write(12); w.Write(10);
+            w.Write(0xCCu); w.Write(22); w.Write(10);
+            w.Write(2); w.Write(12); w.Write(16);
+            w.Write(2); w.Write(21); w.Write(31);
+        }
+        var sounds = new SoundTreeReader().Read(file.ToArray()).ToDictionary(s => s.Name, s => s.Sound);
+
+        Assert.Equal([0xBBu, 0xCCu], sounds[0xAA].Children);
+        Assert.Equal((byte)7, sounds[0xAA].Type);
+        Assert.Equal((0x1000u, 0x2001u), (sounds[0xBB].Bank, sounds[0xBB].Wave));
+        Assert.Equal(0x2002u, sounds[0xCC].Wave);
+        Assert.Empty(sounds[0xCC].Children);
+        Assert.Equal(Joaat.Hash("resident/doors"), SoundTree.BankHash(@"x64\audio\sfx\RESIDENT.rpf\doors.awc"));
+        Assert.Equal(0x2001u & 0x1FFFFFFF, new WaveRef(0, 0xE0002001u).TrackId);
+    }
+
+    [Fact]
     public void GameDataReaderReadsInteriorAndRoomItems()
     {
         using var data = new MemoryStream();

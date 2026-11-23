@@ -237,6 +237,33 @@ internal sealed class WorldLoader : IDisposable
     private GameContent? _audioGameDataContent;
     private Task<AudioGameData>? _audioGameData;
 
+    // Every sound of the game (.dat54.rel) and where its banks are: read in the background the first time it is asked for.
+    public SoundTree? SoundTree
+    {
+        get
+        {
+            if (Content is not { } content)
+                return null;
+            if (_soundTreeContent != content)
+            {
+                _soundTreeContent = content;
+                _soundTree = ReadWhenAsked(L("Sons du jeu"), () =>
+                {
+                    var tree = Data.Audio.SoundTree.Load(content, new SoundTreeReader());
+                    foreach (var error in tree.Errors)
+                        Diagnostics.ErrorLog.Add(L("Sons du jeu"), error);
+                    return tree;
+                });
+            }
+            return _soundTree is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        }
+    }
+
+    public string? SoundTreeError => ErrorOf(_soundTree);
+
+    private GameContent? _soundTreeContent;
+    private Task<SoundTree>? _soundTree;
+
     public RpfFileSystem? Files => _files;
 
     // What drawing the models needs, read together: a load publishes these one after the other, and a reader taken

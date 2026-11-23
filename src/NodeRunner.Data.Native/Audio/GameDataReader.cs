@@ -3,8 +3,8 @@ using NodeRunner.Data.Audio;
 
 namespace NodeRunner.Data.Native.Audio;
 
-// Reader for the audio game data files (.dat151.rel): only the interior (44), room (46), ambient zone (37) and static
-// emitter (6) items.
+// Reader for the audio game data files (.dat151.rel): only the interior (44), room (46), ambient zone (37), ambient
+// rule (38) and static emitter (6) items.
 // Layout: type (151), data length, data; name table length + content; item count, then per item its name hash, offset
 // in the data and length. An item starts with its type byte, 3 bytes of name table offset, then 32-bit flags.
 public sealed class GameDataReader : IAudioGameDataReader
@@ -17,6 +17,8 @@ public sealed class GameDataReader : IAudioGameDataReader
     internal const int AmbientZoneLength = 232;
     internal const byte StaticEmitterType = 6;
     internal const int StaticEmitterLength = 84;
+    internal const byte AmbientRuleType = 38;
+    internal const int AmbientRuleLength = 68;
 
     public GameDataContent Read(byte[] data, string file)
     {
@@ -36,6 +38,7 @@ public sealed class GameDataReader : IAudioGameDataReader
         var rooms = new List<RoomAudioSettings>();
         var zones = new List<AmbientZone>();
         var emitters = new List<StaticEmitter>();
+        var rules = new List<AmbientRule>();
         for (int i = 0; i < count; i++, at += 12)
         {
             uint name = U32(span, at);
@@ -64,8 +67,11 @@ public sealed class GameDataReader : IAudioGameDataReader
             else if (item[0] == StaticEmitterType && length >= StaticEmitterLength)
                 emitters.Add(new StaticEmitter(name, U32(item, 4), U32(item, 8), U32(item, 12), V3(item, 16), F32(item, 28),
                     F32(item, 32), I32(item, 36), U32(item, 48), U32(item, 52), U16(item, 80), U16(item, 82), file));
+            else if (item[0] == AmbientRuleType && length >= AmbientRuleLength)
+                rules.Add(new AmbientRule(name, U32(item, 32), F32(item, 52), F32(item, 56), F32(item, 60), U16(item, 64),
+                    U16(item, 66), file));
         }
-        return new GameDataContent(interiors, rooms) { AmbientZones = zones, StaticEmitters = emitters };
+        return new GameDataContent(interiors, rooms) { AmbientZones = zones, StaticEmitters = emitters, AmbientRules = rules };
     }
 
     // Item 37: flags, shape, activation then positioning volume (centre, size, offset, scale, angle; 80 bytes each),

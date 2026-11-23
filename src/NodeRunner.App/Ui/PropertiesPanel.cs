@@ -50,6 +50,7 @@ internal sealed partial class PropertiesPanel(AppState state, Action<uint> showM
 
     public void Draw(ref bool visible)
     {
+        StopZoneSoundIfDeselected();
         if (!ImGui.Begin(L(Title), ref visible))
         {
             ImGui.End();
