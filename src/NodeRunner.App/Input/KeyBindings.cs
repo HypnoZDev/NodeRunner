@@ -41,6 +41,9 @@ public enum KeyAction
     Play,
     ViewerBack,
     ViewerForward,
+    ViewerSpin,
+    ViewerGround,
+    ViewerBounds,
 }
 
 // The base the user's changes apply to.
@@ -94,7 +97,8 @@ public static class KeyBindings
     private static bool ViewerOnly(KeyAction action) => action is KeyAction.FrameModel;
 
     // Acted upon only in the model viewer's catalogue, where the camera keys do nothing.
-    private static bool CatalogOnly(KeyAction action) => action is KeyAction.ViewerBack or KeyAction.ViewerForward;
+    private static bool CatalogOnly(KeyAction action) => action is KeyAction.ViewerBack or KeyAction.ViewerForward
+        or KeyAction.ViewerSpin or KeyAction.ViewerGround or KeyAction.ViewerBounds;
 
     private static bool Apart(KeyAction a, KeyAction b) =>
         MapOnly(a) && ViewerOnly(b) || CatalogOnly(a) && (MapOnly(b) || IsCamera(b));
@@ -149,6 +153,9 @@ public static class KeyBindings
             [KeyAction.Play] = [new KeyChord(ImGuiKey.P, Alt: true)],
             [KeyAction.ViewerBack] = [new KeyChord(ImGuiKey.LeftArrow, Alt: true)],
             [KeyAction.ViewerForward] = [new KeyChord(ImGuiKey.RightArrow, Alt: true)],
+            [KeyAction.ViewerSpin] = [K(ImGuiKey.R)],
+            [KeyAction.ViewerGround] = [K(ImGuiKey.S)],
+            [KeyAction.ViewerBounds] = [K(ImGuiKey.B)],
         };
         if (preset == KeyPreset.CodeWalker)
         {

@@ -212,5 +212,24 @@ internal sealed partial class ViewerPanel
             GoBack();
         else if (keys.Pressed(Input.KeyAction.ViewerForward))
             GoForward();
+        if (_filter == SoundsFilter || Viewer.Item is null)
+            return;
+        if (keys.Pressed(Input.KeyAction.FrameModel))
+            Viewer.Frame();
+        if (keys.Pressed(Input.KeyAction.ViewerSpin))
+            Viewer.AutoRotate = !Viewer.AutoRotate;
+        if (keys.Pressed(Input.KeyAction.ViewerGround))
+            Viewer.ShowGround = !Viewer.ShowGround;
+        if (keys.Pressed(Input.KeyAction.ViewerBounds))
+            Viewer.ShowBounds = !Viewer.ShowBounds;
+        var io = ImGui.GetIO();
+        if (io.KeyCtrl || io.KeyAlt)
+            return;
+        var views = Views;
+        for (int i = 0; i < views.Length; i++)
+        {
+            if (ImGui.IsKeyPressed(ImGuiKey._1 + i, false) || ImGui.IsKeyPressed(ImGuiKey.Keypad1 + i, false))
+                Viewer.SetView(views[i].Yaw, views[i].Pitch);
+        }
     }
 }

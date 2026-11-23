@@ -18,7 +18,7 @@ internal sealed class KeyBindingsPage(AppState state)
         (L("Édition"), [KeyAction.Undo, KeyAction.Redo, KeyAction.Copy, KeyAction.Paste, KeyAction.Delete, KeyAction.PutOnGround, KeyAction.Search, KeyAction.Grid]),
         (L("Projet"), [KeyAction.NewProject, KeyAction.OpenProject, KeyAction.Save, KeyAction.Export]),
         (L("Fenêtres"), [KeyAction.Settings, KeyAction.Shortcuts, KeyAction.Viewer, KeyAction.Archives, KeyAction.Peds, KeyAction.Cutscenes, KeyAction.Play]),
-        (L("Visionneuse"), [KeyAction.ViewerBack, KeyAction.ViewerForward]),
+        (L("Visionneuse"), [KeyAction.ViewerBack, KeyAction.ViewerForward, KeyAction.ViewerSpin, KeyAction.ViewerGround, KeyAction.ViewerBounds]),
     ];
 
     public static string Name(KeyAction action) => action switch
@@ -58,6 +58,9 @@ internal sealed class KeyBindingsPage(AppState state)
         KeyAction.Play => L("Mode Play (marcher sur la carte)"),
         KeyAction.ViewerBack => L("Modèle précédent (historique)"),
         KeyAction.ViewerForward => L("Modèle suivant (historique)"),
+        KeyAction.ViewerSpin => L("Rotation automatique du modèle"),
+        KeyAction.ViewerGround => L("Sol quadrillé sous le modèle"),
+        KeyAction.ViewerBounds => L("Boîte englobante du modèle"),
         _ => action.ToString(),
     };
 

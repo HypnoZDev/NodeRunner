@@ -848,13 +848,13 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         if (Widgets.IconButton(Icons.Waypoints, "viewer_edges", L("Arêtes des triangles sur le modèle"), active: Viewer.Edges))
             Viewer.Edges = !Viewer.Edges;
         ImGui.SameLine(0, 2);
-        if (Widgets.IconButton(Icons.Grid, "viewer_ground", L("Sol quadrillé sous le modèle (carreaux de 1 m, 5 m pour les grands modèles)"), active: Viewer.ShowGround))
+        if (Widgets.IconButton(Icons.Grid, "viewer_ground", WithKey(L("Sol quadrillé sous le modèle (carreaux de 1 m, 5 m pour les grands modèles)"), Input.KeyAction.ViewerGround), active: Viewer.ShowGround))
             Viewer.ShowGround = !Viewer.ShowGround;
         ImGui.SameLine(0, 2);
-        if (Widgets.IconButton(Icons.Ruler, "viewer_bounds", L("Boîte englobante du modèle (ses dimensions)"), active: Viewer.ShowBounds))
+        if (Widgets.IconButton(Icons.Ruler, "viewer_bounds", WithKey(L("Boîte englobante du modèle (ses dimensions)"), Input.KeyAction.ViewerBounds), active: Viewer.ShowBounds))
             Viewer.ShowBounds = !Viewer.ShowBounds;
         ImGui.SameLine(0, 2);
-        if (Widgets.IconButton(Icons.Rotate, "viewer_spin", L("Rotation automatique (vitrine)"), active: Viewer.AutoRotate))
+        if (Widgets.IconButton(Icons.Rotate, "viewer_spin", WithKey(L("Rotation automatique (vitrine)"), Input.KeyAction.ViewerSpin), active: Viewer.AutoRotate))
             Viewer.AutoRotate = !Viewer.AutoRotate;
         ImGui.SameLine(0, 2);
         if (Widgets.IconButton(Icons.Sun, "viewer_light", L("Lumière : réglages"), active: !Viewer.LightFollowsCamera))
@@ -872,7 +872,7 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         }
         Widgets.ToolbarSeparator();
 
-        if (Widgets.ToolbarButton(Icons.Camera, L("Vue"), L("Vues prédéfinies et champ de vision"), enabled))
+        if (Widgets.ToolbarButton(Icons.Camera, L("Vue"), _inWorkshop ? L("Vues prédéfinies et champ de vision") : L("Vues prédéfinies (touches 1 à 8) et champ de vision"), enabled))
             ImGui.OpenPopup("##viewer_views");
         DrawViewsPopup();
         ImGui.SameLine();
@@ -896,6 +896,10 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         DrawCapturePopup();
     }
 
+    // In the catalogue, a button's tooltip gives its key.
+    private string WithKey(string tooltip, Input.KeyAction action) =>
+        !_inWorkshop && state.Keys.Text(action) is { Length: > 0 } key ? $"{tooltip} ({key})" : tooltip;
+
     private void DrawLightPopup()
     {
         if (!ImGui.BeginPopup("##viewer_light_popup"))
@@ -916,21 +920,28 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         ImGui.EndPopup();
     }
 
+    // A vehicle faces +Y: yaw 0 looks along +Y (from behind). Keys 1 to 8 in the viewer.
+    private static (string Name, float Yaw, float Pitch)[] Views =>
+    [
+        (L("Trois quarts avant"), -0.93f, -0.32f), (L("Trois quarts arrière"), 0.93f + MathF.PI, -0.32f),
+        (L("Avant"), MathF.PI, -0.05f), (L("Arrière"), 0f, -0.05f), (L("Gauche"), -MathF.PI / 2f, -0.05f),
+        (L("Droite"), MathF.PI / 2f, -0.05f), (L("Dessus"), MathF.PI, -1.5f), (L("Dessous"), MathF.PI, 1.5f),
+    ];
+
     private void DrawViewsPopup()
     {
         if (!ImGui.BeginPopup("##viewer_views"))
             return;
-        // A vehicle faces +Y: yaw 0 looks along +Y (from behind).
-        (string Name, float Yaw, float Pitch)[] views =
-        [
-            (L("Trois quarts avant"), -0.93f, -0.32f), (L("Trois quarts arrière"), 0.93f + MathF.PI, -0.32f),
-            (L("Avant"), MathF.PI, -0.05f), (L("Arrière"), 0f, -0.05f), (L("Gauche"), -MathF.PI / 2f, -0.05f),
-            (L("Droite"), MathF.PI / 2f, -0.05f), (L("Dessus"), MathF.PI, -1.5f), (L("Dessous"), MathF.PI, 1.5f),
-        ];
-        foreach (var (name, yaw, pitch) in views)
+        var views = Views;
+        for (int i = 0; i < views.Length; i++)
         {
-            if (ImGui.Selectable(name))
+            var (name, yaw, pitch) = views[i];
+            if (ImGui.Selectable(name, false, ImGuiSelectableFlags.None, new Vector2(200f, 0)))
                 Viewer.SetView(yaw, pitch);
+            // Its key, on the right of the row.
+            string key = _inWorkshop ? "" : $"{i + 1}";
+            ImGui.SameLine(200f - ImGui.CalcTextSize(key).X + ImGui.GetStyle().WindowPadding.X);
+            ImGui.TextColored(UiTheme.TextFaint, key);
         }
         ImGui.Separator();
         float fov = Viewer.FieldOfViewDegrees;

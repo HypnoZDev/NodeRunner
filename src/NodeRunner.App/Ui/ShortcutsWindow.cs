@@ -63,6 +63,9 @@ internal sealed class ShortcutsWindow(AppState state)
             Group(L("Visionneuse"),
                 (L("Flèche haut / bas"), L("Modèle précédent / suivant de la liste")),
                 A(KeyAction.ViewerBack), A(KeyAction.ViewerForward),
+                (keys.Text(KeyAction.FrameModel) is { Length: > 0 } frame ? frame : "-", L("Cadrer le modèle")),
+                (L("1 à 8"), L("Vues prédéfinies (avant, arrière, côtés, dessus, dessous)")),
+                A(KeyAction.ViewerSpin), A(KeyAction.ViewerGround), A(KeyAction.ViewerBounds),
                 (L("Clic droit sur une ligne"), L("Ajouter aux favoris, copier le nom")));
             Group(L("Visionneuse de personnages"),
                 (L("Espace"), L("Lecture / pause de l'animation")),
