@@ -471,6 +471,7 @@ internal sealed class MainUi
             ImGui.SetWindowFocus(L(LibraryPanel.Title));
         }
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
+        if (!_showViewer) _viewerPanel.PauseSound();
         if (_showAbout) DrawAboutWindow();
         _exportWindow.Draw();
         ProjectWindow.Draw();

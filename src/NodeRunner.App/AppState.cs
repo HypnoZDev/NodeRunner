@@ -45,6 +45,9 @@ internal sealed partial class AppState
 
     public Camera Camera { get; } = new();
 
+    // Sounds played by the viewer and the audio zones (one at a time).
+    public Audio.SoundOutput Sound { get; } = new();
+
     public WorldLoader World { get; }
 
     // GTA IV: the folder found on this computer (null if none) and the files opened when it is the session's game.

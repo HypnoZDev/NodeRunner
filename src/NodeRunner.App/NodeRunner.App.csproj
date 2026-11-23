@@ -42,4 +42,8 @@
     <ProjectReference Include="..\NodeRunner.Render\NodeRunner.Render.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Vortice.XAudio2" Version="3.8.3" />
+  </ItemGroup>
+
 </Project>

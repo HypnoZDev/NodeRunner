@@ -14,11 +14,11 @@ namespace NodeRunner.App.Ui;
 // Dockable "Visionneuse" panel: list of the vehicles and object types on the left (search), the model in the middle
 // (turn, pan, zoom, display options, captures), and an inspector on the right: paint (vehicles), parts, textures,
 // vehicle sheet or object type, file.
-internal sealed unsafe class ViewerPanel(AppState state)
+internal sealed unsafe partial class ViewerPanel(AppState state)
 {
     public const string Title = $"{Icons.Box}  Visionneuse###Visionneuse";
 
-    private static string[] Filters => [L("Véhicules"), L("Objets"), L("Bibliothèque")];
+    private static string[] Filters => [L("Véhicules"), L("Objets"), L("Bibliothèque"), L("Sons")];
     private const float ListWidth = 230f;
     private const float InspectorWidth = 340f;
 
@@ -345,6 +345,11 @@ internal sealed unsafe class ViewerPanel(AppState state)
 
     public void OpenFile(string path)
     {
+        if (path.EndsWith(".awc", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenSoundFile(path);
+            return;
+        }
         string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
         var kind = ViewerCatalog.IsVehicleFile(path) ? ViewerKind.Vehicle : ViewerKind.Object;
         uint hash = Joaat.Hash(name);
@@ -390,14 +395,27 @@ internal sealed unsafe class ViewerPanel(AppState state)
             ImGui.EndChild();
             ImGui.SameLine();
             float viewWidth = inspector ? available - ListWidth - InspectorWidth - spacing * 2 : 0f;
+            bool sounds = _filter == SoundsFilter;
+            if (!sounds)
+                PauseSound();
             if (ImGui.BeginChild("##viewer_view", new Vector2(viewWidth, 0), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-                DrawView();
+            {
+                if (sounds)
+                    DrawSoundBank();
+                else
+                    DrawView();
+            }
             ImGui.EndChild();
             if (inspector)
             {
                 ImGui.SameLine();
                 if (ImGui.BeginChild("##viewer_inspector", Vector2.Zero, ImGuiChildFlags.None))
-                    DrawInspector();
+                {
+                    if (sounds)
+                        DrawSoundInspector();
+                    else
+                        DrawInspector();
+                }
                 ImGui.EndChild();
             }
         }
@@ -482,7 +500,7 @@ internal sealed unsafe class ViewerPanel(AppState state)
     private void DrawList()
     {
         string[] labels = _catalog is { } c
-            ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})", $"{Filters[2]} ({Widgets.Count(c.Library.Count)})"]
+            ? [$"{Filters[0]} ({Widgets.Count(c.Vehicles.Count)})", $"{Filters[1]} ({Widgets.Count(c.Objects.Count)})", $"{Filters[2]} ({Widgets.Count(c.Library.Count)})", Filters[3]]
             : Filters;
         if (state.IsOtherGame)
         {
@@ -496,17 +514,24 @@ internal sealed unsafe class ViewerPanel(AppState state)
         {
             Widgets.Segmented("viewer_filter", labels, ref _filter,
                 [L("Tous les véhicules du jeu, DLC compris (nom de spawn)"), L("Tous les types d'objets de la carte (archétypes)"),
-                 L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource.")]);
+                 L($"Props addons de ta bibliothèque, utilisables dans tous les projets :\n{state.LibraryFolder}\nÀ l'export FiveM, seuls les fichiers des props placés sont copiés dans la ressource."),
+                 L("Tous les sons du jeu (fichiers .awc), à écouter ici")]);
         }
         ImGui.SetNextItemWidth(-float.Epsilon);
         Widgets.SearchField("##viewer_search", _filter switch
         {
             0 => state.IsOtherGame ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
+            SoundsFilter => L("Fichier de sons (ex. doors, ambience)"),
             1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : state.IsClassic ? L("Type (ex. palm)") : L("Type (ex. prop_bench)"),
             _ => L("Prop ou pack"),
         }, ref _search);
         if (_filter == 2)
             DrawLibraryButtons();
+        if (_filter == SoundsFilter)
+        {
+            DrawSoundList();
+            return;
+        }
 
         if (_catalog is null)
         {

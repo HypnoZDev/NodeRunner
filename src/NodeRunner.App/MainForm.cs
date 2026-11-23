@@ -220,6 +220,7 @@ internal sealed unsafe partial class MainForm : Form
         ReleaseMouse();
         SaveCamera();
         _state.World.Dispose();
+        _state.Sound.Dispose();
         _pathNodeLayer.Dispose();
         _scenarioLayer.Dispose();
         _navMeshLayer.Dispose();

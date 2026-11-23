@@ -232,6 +232,8 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
             string extension = Path.GetExtension(node.Name).ToLowerInvariant();
             if (extension is ".ydr" or ".yft" or ".wdr" or ".wft" && ImGui.MenuItem(L($"{Icons.Box}  Voir dans la visionneuse")))
                 openInViewer(node.Path);
+            if (extension == ".awc" && !state.IsOtherGame && ImGui.MenuItem(L($"{Icons.AudioLines}  Écouter dans la visionneuse")))
+                openInViewer(node.Path);
             if (extension == ".ymap" && ImGui.MenuItem(L($"{Icons.MapPinned}  Aller sur la carte")))
                 GoToMap(node);
             if (extension == ".ytyp" && ImGui.MenuItem(L($"{Icons.Boxes}  Voir les types")))
@@ -257,6 +259,9 @@ internal sealed unsafe class ArchivePanel(AppState state, Action<string> openInV
         switch (Path.GetExtension(node.Name).ToLowerInvariant())
         {
             case ".ydr" or ".yft" or ".wdr" or ".wft":
+                openInViewer(node.Path);
+                break;
+            case ".awc" when !state.IsOtherGame:
                 openInViewer(node.Path);
                 break;
             case ".ymap":

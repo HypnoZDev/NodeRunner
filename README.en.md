@@ -218,7 +218,7 @@ game files with its own code.
 
 Also used:
 - **Dear ImGui** (Omar Cornut, MIT license) via **ImGui.NET** (Eric Mellino, MIT license) for the interface;
-- **Vortice.Windows** (Amer Koleci, MIT license) for DirectX 11;
+- **Vortice.Windows** (Amer Koleci, MIT license) for DirectX 11 and sound (XAudio2);
 - **Lucide** (lucide.dev, ISC license; icons derived from Feather by Cole Bemis, MIT license) for the icons;
 - the **Unbounded** font (The Unbounded Project Authors, SIL Open Font License 1.1) for the logo.
 

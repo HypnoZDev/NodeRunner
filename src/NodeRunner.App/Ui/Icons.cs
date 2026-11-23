@@ -7,6 +7,10 @@ namespace NodeRunner.App.Ui;
 internal static class Icons
 {
     public const string Activity = "\ue038";
+    public const string AudioLines = "\ue55a";
+    public const string Square = "\ue167";
+    public const string Volume = "\ue1ab";
+    public const string VolumeOff = "\ue1ac";
     public const string ArrowDownToLine = "\ue455";
     public const string Box = "\ue061";
     public const string Boxes = "\ue2d0";

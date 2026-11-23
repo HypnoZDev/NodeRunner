@@ -223,7 +223,7 @@ NodeRunner lit les fichiers du jeu avec son propre code.
 
 Également utilisés :
 - **Dear ImGui** (Omar Cornut, licence MIT) via **ImGui.NET** (Eric Mellino, licence MIT) pour l'interface ;
-- **Vortice.Windows** (Amer Koleci, licence MIT) pour DirectX 11 ;
+- **Vortice.Windows** (Amer Koleci, licence MIT) pour DirectX 11 et le son (XAudio2) ;
 - **Lucide** (lucide.dev, licence ISC ; icônes issues de Feather par Cole Bemis, licence MIT) pour les icônes ;
 - la police **Unbounded** (The Unbounded Project Authors, SIL Open Font License 1.1) pour le logo.
 
