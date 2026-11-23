@@ -5,7 +5,7 @@ using System.Xml.Linq;
 namespace NodeRunner.Data.Native.Collisions;
 
 // Collision files in the XML form exported by Sollumz (and CodeWalker): <BoundsFile><Bounds type="Composite">...
-public static class YbnXml
+public static partial class YbnXml
 {
     // A complete .ybn file (RSC7) from the XML text.
     public static byte[] Convert(string xml)
