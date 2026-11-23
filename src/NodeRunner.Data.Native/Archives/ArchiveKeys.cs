@@ -1,10 +1,11 @@
 namespace NodeRunner.Data.Native.Archives;
 
 // Keys needed to read the game's RPF archives: one AES-256 key, and the "NG" cipher's 101 keys with its 17 rounds of
-// 16 lookup tables.
+// 16 lookup tables; and the key of the encrypted sound banks (.awc).
 public sealed class ArchiveKeys
 {
     public const int AesKeyLength = 32;
+    public const int AudioKeyLength = 16;
     public const int NgKeyCount = 101;
     public const int NgRounds = 17;
     public const int NgTablesPerRound = 16;
@@ -16,7 +17,7 @@ public sealed class ArchiveKeys
     private readonly uint[] _ngKeys;   // 101 keys of 68 uints
     private readonly uint[] _ngTables; // [round][table][byte], flattened
 
-    public ArchiveKeys(byte[] aesKey, ReadOnlySpan<byte> ngKeys, ReadOnlySpan<byte> ngTables)
+    public ArchiveKeys(byte[] aesKey, ReadOnlySpan<byte> ngKeys, ReadOnlySpan<byte> ngTables, byte[]? audioKey = null)
     {
         if (aesKey.Length != AesKeyLength)
             throw new ArgumentException("Clé AES invalide.", nameof(aesKey));
@@ -25,12 +26,19 @@ public sealed class ArchiveKeys
         if (ngTables.Length != NgTablesLength)
             throw new ArgumentException("Tables NG invalides.", nameof(ngTables));
 
+        if (audioKey is not null && audioKey.Length != AudioKeyLength)
+            throw new ArgumentException("Clé audio invalide.", nameof(audioKey));
+
         AesKey = aesKey;
+        AudioKey = audioKey;
         _ngKeys = ToUInts(ngKeys);
         _ngTables = ToUInts(ngTables);
     }
 
     public byte[] AesKey { get; }
+
+    // Null with an older key file: encrypted sound banks are then unreadable.
+    public byte[]? AudioKey { get; }
 
     internal ReadOnlySpan<uint> NgKey(int index) => _ngKeys.AsSpan(index * (NgKeyLength / 4), NgKeyLength / 4);
 

@@ -28,6 +28,9 @@ public sealed class RpfFileSystem : IGameFileSystem
     public GameInstallation? Installation { get; private set; }
 
     public IReadOnlyList<string> Errors => _errors;
+
+    // Key of the encrypted sound banks (.awc); null before Open() or if the key file has none.
+    public byte[]? AudioKey => _keys?.AudioKey;
     private readonly List<string> _errors = [];
 
     public void Open(GameInstallation installation, IProgress<string>? progress = null)

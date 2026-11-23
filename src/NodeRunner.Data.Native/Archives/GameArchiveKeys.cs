@@ -125,7 +125,7 @@ public static class AesKeyFinder
 }
 
 // Layout: "NRAK", version, SHA-256 of the content, slot count, slots (source name, IV, content key wrapped with the
-// source's key), IV, content (AES key + NG keys + NG tables, deflated, encrypted with the content key).
+// source's key), IV, content (AES key + NG keys + NG tables [+ audio key], deflated, encrypted with the content key).
 public static class ArchiveKeyFile
 {
     private const uint Magic = 0x4B41524E; // "NRAK"
@@ -157,11 +157,13 @@ public static class ArchiveKeyFile
                 continue;
 
             int ngKeysLength = ArchiveKeys.NgKeyCount * ArchiveKeys.NgKeyLength;
-            if (content.Length != ArchiveKeys.AesKeyLength + ngKeysLength + ArchiveKeys.NgTablesLength)
+            int baseLength = ArchiveKeys.AesKeyLength + ngKeysLength + ArchiveKeys.NgTablesLength;
+            if (content.Length != baseLength && content.Length != baseLength + ArchiveKeys.AudioKeyLength)
                 throw new InvalidDataException("Fichier de clés invalide.");
             return new ArchiveKeys(content[..ArchiveKeys.AesKeyLength],
                 content.AsSpan(ArchiveKeys.AesKeyLength, ngKeysLength),
-                content.AsSpan(ArchiveKeys.AesKeyLength + ngKeysLength));
+                content.AsSpan(ArchiveKeys.AesKeyLength + ngKeysLength, ArchiveKeys.NgTablesLength),
+                content.Length > baseLength ? content[baseLength..] : null);
         }
         return null;
     }
@@ -189,9 +191,11 @@ public static class ArchiveKeyFile
     }
 
     public static byte[] Write(byte[] aesKey, ReadOnlySpan<byte> ngKeys, ReadOnlySpan<byte> ngTables,
-        IReadOnlyList<(string Source, byte[] Key)> sources)
+        IReadOnlyList<(string Source, byte[] Key)> sources, byte[]? audioKey = null)
     {
-        byte[] content = [.. aesKey, .. ngKeys, .. ngTables];
+        if (audioKey is not null && audioKey.Length != ArchiveKeys.AudioKeyLength)
+            throw new ArgumentException("Clé audio invalide.", nameof(audioKey));
+        byte[] content = [.. aesKey, .. ngKeys, .. ngTables, .. audioKey ?? []];
         using var compressed = new MemoryStream();
         using (var deflate = new DeflateStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
             deflate.Write(content);

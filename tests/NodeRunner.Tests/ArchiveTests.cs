@@ -202,6 +202,11 @@ public class ArchiveTests : IDisposable
 
         var fromArchive = ArchiveKeyFile.Read(file, source => source == "x64a.rpf" ? archiveKey : null)!;
         Assert.Equal(AesKey, fromArchive.AesKey);
+        Assert.Null(fromArchive.AudioKey);
+
+        var audioKey = RandomNumberGenerator.GetBytes(ArchiveKeys.AudioKeyLength);
+        var withAudio = ArchiveKeyFile.Write(AesKey, ngKeys, ngTables, [("exe", AesKey)], audioKey);
+        Assert.Equal(audioKey, ArchiveKeyFile.Read(withAudio, _ => AesKey)!.AudioKey);
 
         Assert.Null(ArchiveKeyFile.Read(file, _ => RandomNumberGenerator.GetBytes(32)));
     }
