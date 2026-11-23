@@ -34,6 +34,9 @@ internal sealed class CameraController
     // Play mode moves the camera: the mouse buttons and wheel are left alone.
     public bool Paused { get; set; }
 
+    // The wheel turns the prop being placed instead of changing the speed.
+    public bool WheelTaken { get; set; }
+
     public void Attach(Control control)
     {
         control.KeyDown += (_, e) =>
@@ -68,7 +71,7 @@ internal sealed class CameraController
         };
         control.MouseWheel += (_, e) =>
         {
-            if (ImGuiWantsMouse() || Paused)
+            if (ImGuiWantsMouse() || Paused || WheelTaken)
                 return;
             Speed =Math.Clamp(Speed * MathF.Pow(WheelSpeedFactor, e.Delta / 120f), MinSpeed, MaxSpeed);
         };

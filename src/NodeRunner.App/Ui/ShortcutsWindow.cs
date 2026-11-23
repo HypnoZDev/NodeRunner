@@ -51,7 +51,9 @@ internal sealed class ShortcutsWindow(AppState state)
                 A(KeyAction.ToolSelect), A(KeyAction.ToolMove), A(KeyAction.ToolRotate), A(KeyAction.ToolScale), A(KeyAction.ToolCollision),
                 (L("Ctrl (en glissant une poignée)"), L("Avancer par crans")));
             Group(L("Édition"),
-                A(KeyAction.Undo), A(KeyAction.Redo), A(KeyAction.Copy), A(KeyAction.Paste), A(KeyAction.Delete), A(KeyAction.PutOnGround),
+                A(KeyAction.Undo), A(KeyAction.Redo), A(KeyAction.Copy), A(KeyAction.Paste), A(KeyAction.Delete), A(KeyAction.PutOnGround), A(KeyAction.PlaceRotate),
+                (L("Molette (pendant la pose)"), L("Tourner le prop de 45° (Maj : 15°)")),
+                (L("Échap (pendant la pose)"), L("Terminer la pose")),
                 A(KeyAction.Search));
             Group(L("Projet"),
                 A(KeyAction.NewProject), A(KeyAction.OpenProject), A(KeyAction.Save), A(KeyAction.Export));

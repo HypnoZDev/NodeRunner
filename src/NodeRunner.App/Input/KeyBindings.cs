@@ -44,6 +44,7 @@ public enum KeyAction
     ViewerSpin,
     ViewerGround,
     ViewerBounds,
+    PlaceRotate,
 }
 
 // The base the user's changes apply to.
@@ -92,7 +93,7 @@ public static class KeyBindings
 
     // Actions only acted upon on the map, or only in the workshop / ped viewer: they may share a key.
     private static bool MapOnly(KeyAction action) => action is KeyAction.Copy or KeyAction.Paste or KeyAction.Delete or KeyAction.PutOnGround
-        or KeyAction.Undo or KeyAction.Redo or KeyAction.Grid or KeyAction.SpeedDown or KeyAction.SpeedUp;
+        or KeyAction.Undo or KeyAction.Redo or KeyAction.Grid or KeyAction.SpeedDown or KeyAction.SpeedUp or KeyAction.PlaceRotate;
 
     private static bool ViewerOnly(KeyAction action) => action is KeyAction.FrameModel;
 
@@ -156,6 +157,7 @@ public static class KeyBindings
             [KeyAction.ViewerSpin] = [K(ImGuiKey.R)],
             [KeyAction.ViewerGround] = [K(ImGuiKey.S)],
             [KeyAction.ViewerBounds] = [K(ImGuiKey.B)],
+            [KeyAction.PlaceRotate] = [K(ImGuiKey.R)],
         };
         if (preset == KeyPreset.CodeWalker)
         {
@@ -164,6 +166,7 @@ public static class KeyBindings
             map[KeyAction.MoveForward] = [K(ImGuiKey.W), K(ImGuiKey.UpArrow)];
             map[KeyAction.MoveLeft] = [K(ImGuiKey.A), K(ImGuiKey.LeftArrow)];
             map[KeyAction.MoveUp] = [K(ImGuiKey.R), K(ImGuiKey.PageUp)];
+            map[KeyAction.PlaceRotate] = [K(ImGuiKey.T)];
             map[KeyAction.MoveDown] = [K(ImGuiKey.F), K(ImGuiKey.PageDown)];
             map[KeyAction.SpeedDown] = [K(ImGuiKey.Z)];
             map[KeyAction.SpeedUp] = [K(ImGuiKey.X)];

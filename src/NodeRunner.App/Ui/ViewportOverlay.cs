@@ -65,10 +65,45 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
 
         ImGui.PopStyleVar(2);
 
+        if (state.Placing.IsActive)
+            DrawPlacementHint(position, size);
         if (state.IsGta4)
             DrawGta4Notice(position, size);
         else if (state.IsClassic)
             DrawClassicNotice(position, size);
+    }
+
+    // Placing a prop with the mouse: what it is, the keys, and what is wrong where it would go.
+    private void DrawPlacementHint(Vector2 position, Vector2 size)
+    {
+        var placement = state.Placing;
+        ImGui.SetNextWindowPos(new Vector2(position.X + size.X * 0.5f, position.Y + size.Y - Margin), ImGuiCond.Always, new Vector2(0.5f, 1f));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(12f, 8f));
+        if (ImGui.Begin("##placement_hint", OverlayFlags))
+        {
+            OverlayStyle.WindowBackground(8f, strong: true);
+            ImGui.TextColored(UiTheme.Accent, $"{Icons.MapPinned}  " + L($"Pose : {placement.Name}"));
+            if (placement.Placed.Count > 0)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled(L($"({placement.Placed.Count} posé(s))"));
+            }
+            string rotate = state.Keys.Text(KeyAction.PlaceRotate) is { Length: > 0 } key ? key : "-";
+            ImGui.TextDisabled(L($"Clic : poser · Molette ou {rotate} : tourner (Maj + molette : 15°) · Échap : terminer"));
+            string? problem = placement.Pose is null ? null : placement.Problem switch
+            {
+                Editor.PlacementProblem.Floating => L("Le prop flotte : une partie n'est pas posée sur le sol."),
+                Editor.PlacementProblem.Sinking => L("Le prop s'enfonce dans le sol."),
+                Editor.PlacementProblem.Overlapping => L("Le prop traverse un autre objet."),
+                _ => null,
+            };
+            if (problem is not null)
+                ImGui.TextColored(UiTheme.Error, $"{Icons.TriangleAlert}  {problem}");
+            if (Widgets.Button(L("Terminer##placement_end"), L("Arrête la pose et sélectionne les props posés (aussi : Échap).")))
+                state.StopPlacement();
+        }
+        ImGui.End();
+        ImGui.PopStyleVar();
     }
 
     // Trilogy session: while reading or after an error, a notice in the middle of the view.

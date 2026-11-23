@@ -445,15 +445,83 @@ internal sealed partial class AppState
         // The point found in the picture may be a tree top or a model without collision: rest on the collision below.
         if (GroundPosition(entity, archetype) is { } onCollision)
             entity.SetPlacement(onCollision, entity.Orientation, entity.Scale);
-        string name = World.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
-        if (AddToInterior(library, [entity], L($"Ajouter {name}")) is not { } inside)
-        {
-            History.Add(AddEdit.Apply(library, map, entity, L($"Ajouter {name}")));
-            inside = [entity];
-        }
-        SelectAll(inside);
+        SelectAll(Add(library, map, entity));
         if (Tool == TransformTool.Select)
             Tool = TransformTool.Move;
+    }
+
+    public PropPlacement Placing { get; } = new();
+
+    // Starts placing objects of type archetypeHash with the mouse (each click adds one, Escape ends).
+    public void StartPlacement(uint archetypeHash)
+    {
+        Notice = null;
+        if (Project is null)
+        {
+            Notify(L("Ouvre ou crée d'abord un projet pour placer un prop."), warning: true);
+            return;
+        }
+        if (Online.BlocksType(archetypeHash) is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return;
+        }
+        if (World.Maps?.GetArchetype(archetypeHash) is not { } archetype || ProjectMap(World.Maps) is null)
+            return;
+        StopPlacement();
+        string name = World.Names?.Describe(archetypeHash) ?? $"0x{archetypeHash:X8}";
+        var model = archetype.Kind != ArchetypeKind.Interior && World.Models?.Locate(archetype) is { } location
+            ? new ViewerItem(name, ViewerKind.Object, location) : null;
+        var forward = Camera.Forward;
+        float yaw = MathF.Round(MathF.Atan2(forward.X, -forward.Y) * 180f / MathF.PI / SurfacePlacement.FineStep) * SurfacePlacement.FineStep;
+        Placing.Start(archetypeHash, name, archetype, model, World, yaw);
+        if (Tool != TransformTool.Select)
+            Tool = TransformTool.Select;
+    }
+
+    // Whether an object standing at pose rests on the collision below it (None while the collisions are not loaded).
+    public PlacementProblem GroundProblem(PlacementPose pose, System.Numerics.Vector3 min, System.Numerics.Vector3 max)
+    {
+        if (World.Collisions is null)
+            return PlacementProblem.None;
+        var box = SurfacePlacement.WorldBox(pose.Position, pose.Orientation, min, max);
+        var collisions = CollisionQuery.CollisionIn(World, box.Min with { Z = -1000f }, box.Max, CollisionEdits);
+        return SurfacePlacement.CheckGround(pose.Position, pose.Orientation, min, max,
+            (point, from) => GroundSnap.HighestBelow(collisions, point, from));
+    }
+
+    // Ends the placement; the objects added are selected.
+    public void StopPlacement()
+    {
+        if (!Placing.IsActive)
+            return;
+        Placing.Stop();
+        if (Placing.Placed.Count > 0)
+            SelectAll([.. Placing.Placed.Where(e => !IsGone(e))]);
+        Placing.Placed.Clear();
+    }
+
+    // Adds an object exactly there (placement under the mouse); the objects added (in an interior: its definition's
+    // copies), or null when it cannot be added.
+    public IReadOnlyList<MapEntity>? PlaceAt(uint archetypeHash, System.Numerics.Vector3 position, System.Numerics.Quaternion orientation)
+    {
+        if (Online.BlocksType(archetypeHash) is { } blocked)
+        {
+            Notify(blocked, warning: true);
+            return null;
+        }
+        if (World.Maps is not { } library || ProjectMap(library) is not { } map)
+            return null;
+        return Add(library, map, Adding.NewEntity(archetypeHash, library.GetArchetype(archetypeHash), position, orientation));
+    }
+
+    private IReadOnlyList<MapEntity> Add(MapLibrary library, MapData map, MapEntity entity)
+    {
+        string name = World.Names?.Describe(entity.ArchetypeHash) ?? $"0x{entity.ArchetypeHash:X8}";
+        if (AddToInterior(library, [entity], L($"Ajouter {name}")) is { } inside)
+            return inside;
+        History.Add(AddEdit.Apply(library, map, entity, L($"Ajouter {name}")));
+        return [entity];
     }
 
     // Moves the selected objects of the main selection's interior into its entity set setIndex (-1 = out of any set),

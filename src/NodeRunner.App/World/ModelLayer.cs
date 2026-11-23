@@ -470,6 +470,63 @@ internal sealed class ModelLayer : IDisposable
         return (drawn.Entity, point, drawn.Model.IsOverlay);
     }
 
+    // The surface seen at pixel (x, y), for placing an object: the models are drawn again only around the pixel, into a
+    // small buffer of their own (cheap enough for every frame), giving the object, the 3D point and the surface's
+    // normal (turned towards viewer).
+    public (MapEntity Entity, Vector3 Point, Vector3 Normal)? PickSurface(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection,
+        int width, int height, int x, int y, Vector3 viewer)
+    {
+        const int Size = 16, Half = Size / 2, Step = 3;
+        float sx = width / (float)Size, sy = height / (float)Size;
+        var window = Matrix4x4.Identity;
+        window.M11 = sx;
+        window.M22 = sy;
+        window.M41 = -(x / (float)width * 2f - 1f) * sx;
+        window.M42 = -(1f - y / (float)height * 2f) * sy;
+        var narrow = viewProjection * window;
+
+        buffer.Begin(Size, Size);
+        renderer.BeginPick();
+        for (int i = 0; i < _drawn.Count; i++)
+            renderer.DrawPick(_drawn[i].Model, _drawn[i].Transform, narrow, (uint)(i + 1));
+        uint number = buffer.Read(Half, Half);
+        if (number < 1 || number > _drawn.Count || !Matrix4x4.Invert(viewProjection, out var inverse))
+            return null;
+
+        Vector3? At(int i, int j)
+        {
+            if (buffer.Read(i, j) != number)
+                return null; // Another object: its surface says nothing of this one.
+            float depth = buffer.ReadDepth(i, j);
+            if (depth <= 0f)
+                return null;
+            var clip = new Vector4((x - Half + i + 0.5f) / width * 2f - 1f, 1f - (y - Half + j + 0.5f) / height * 2f, depth, 1f);
+            var world = Vector4.Transform(clip, inverse);
+            return Math.Abs(world.W) < 1e-12f ? null : new Vector3(world.X, world.Y, world.Z) / world.W;
+        }
+
+        if (At(Half, Half) is not { } center)
+            return null;
+        var across = (At(Half + Step, Half) ?? center) - (At(Half - Step, Half) ?? center);
+        var down = (At(Half, Half + Step) ?? center) - (At(Half, Half - Step) ?? center);
+        var normal = Vector3.Cross(across, down);
+        normal = normal.LengthSquared() < 1e-12f ? Vector3.UnitZ : Vector3.Normalize(normal);
+        if (Vector3.Dot(normal, viewer - center) < 0f)
+            normal = -normal;
+        return (_drawn[(int)number - 1].Entity, center, normal);
+    }
+
+    // The objects drawn at the last frame whose position is within distance of point.
+    public IEnumerable<MapEntity> DrawnNear(Vector3 point, float distance)
+    {
+        float squared = distance * distance;
+        foreach (var drawn in _drawn)
+        {
+            if (Vector3.DistanceSquared(drawn.Transform.Translation, point) <= squared)
+                yield return drawn.Entity;
+        }
+    }
+
     // The 3D point of the drawn models at pixel (x, y) of the view, null if none is there (sky).
     public Vector3? PickPoint(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y)
     {

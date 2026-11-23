@@ -233,6 +233,7 @@ internal sealed unsafe partial class MainForm
         if (_state.Play.IsActive)
             return;
         DrawSelectionBox(lines, viewProjection);
+        DrawPlacementGhost(lines, viewProjection);
         if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
         if (_state.SelectedScenario is { } selectedScenario)

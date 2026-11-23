@@ -120,7 +120,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         if (Widgets.Button(L($"{Icons.MapPinned}  Placer##library_place"),
                 _selected is null ? L("Choisis d'abord un prop dans la liste.")
                 : state.Project is null ? L("Ouvre ou crée d'abord un projet.")
-                : L("Pose le prop au centre de la vue 3D (aussi : double-clic, ou glisser la vignette dans la vue 3D)."), enabled: canPlace))
+                : L("Le prop suit la souris dans la vue 3D : un clic le pose, Échap termine (aussi : double-clic, ou glisser la vignette dans la vue 3D)."), enabled: canPlace))
             Place(_selected!, null);
         ImGui.SameLine();
         if (Widgets.Button(L($"{Icons.Box}  Visionneuse##library_view"), L("Ouvre le prop dans la visionneuse (pièces, textures, capture)."), enabled: _selected is not null))
@@ -268,7 +268,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         if (ImGui.BeginPopupContextItem("##tile_menu"))
         {
             _selected = item;
-            if (ImGui.MenuItem(L($"{Icons.MapPinned}  Placer au centre de la vue"), null, false, state.Project is not null))
+            if (ImGui.MenuItem(L($"{Icons.MapPinned}  Placer avec la souris"), null, false, state.Project is not null))
                 Place(item, null);
             if (ImGui.MenuItem(L($"{Icons.Box}  Voir dans la visionneuse")))
                 openInViewer(item.ArchetypeHash);
@@ -319,6 +319,11 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         if (state.Project is null)
         {
             state.Notify(L("Ouvre ou crée d'abord un projet pour placer un prop."), warning: true);
+            return;
+        }
+        if (at is null)
+        {
+            state.StartPlacement(item.ArchetypeHash);
             return;
         }
         state.PlacePoint = at;

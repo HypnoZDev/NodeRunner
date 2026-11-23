@@ -21,7 +21,9 @@ internal sealed unsafe partial class MainForm
             // a click on a 3D handle grabs it.
             if (e.Button == MouseButtons.Left && !ImGui.GetIO().WantCaptureMouse && !_ui.IsSearchOpen && !_ui.IsGizmoHovered)
             {
-                if (_state.Tool == TransformTool.Collision)
+                if (_state.Placing.IsActive)
+                    _placeClick = true;
+                else if (_state.Tool == TransformTool.Collision)
                     _collisionDragStart = _collisionDragCurrent = e.Location;
                 else if (e.Clicks == 2 && (ModifierKeys & Keys.Control) == 0)
                     _doorClick = e.Location;
@@ -57,6 +59,11 @@ internal sealed unsafe partial class MainForm
         };
         _surface.KeyDown += (_, e) =>
         {
+            if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.Placing.IsActive)
+            {
+                _state.StopPlacement();
+                return;
+            }
             // Escape during a drag puts the object back (TransformGizmo) instead of deselecting.
             if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.OpeningTool is not null)
             {
@@ -352,10 +359,13 @@ internal sealed unsafe partial class MainForm
             return;
         uint archetype = _state.PlaceRequest;
         bool paste = _state.PasteRequest;
+        bool dropped = _state.PlacePoint is not null;
         var at = _state.PlacePoint ?? new Vector2(0.5f, 0.5f);
         _state.PlaceRequest = 0;
         _state.PasteRequest = false;
         _state.PlacePoint = null;
+        if (!paste && dropped && PlaceDropped(scene, at, archetype))
+            return;
         var camera = _state.Camera;
         Vector3? ground = null;
         if (_state.IsLayerVisible(ModelLayer.LayerName))

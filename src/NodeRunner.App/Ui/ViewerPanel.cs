@@ -1234,11 +1234,11 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         if (canPlace)
         {
             if (Widgets.PrimaryButton(L($"{Icons.MapPinned}  Placer")))
-                state.PlaceRequest = item.ArchetypeHash;
+                state.StartPlacement(item.ArchetypeHash);
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(state.Project is null
                     ? L("Ajouter cet objet à la carte : ouvre ou crée d'abord un projet.")
-                    : L($"Ajouter cet objet à la carte, posé au sol au centre de la vue 3D,\ndans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nEnsuite : poignées 3D pour l'ajuster, Ctrl+Z pour annuler."));
+                    : L($"Ajouter cet objet à la carte : il suit la souris dans la vue 3D, chaque clic en pose un, Échap termine.\nIl va dans le YMAP du projet ({state.Project.AddedMapName ?? state.Project.ResourceName + "_props"}.ymap).\nCtrl+Z pour annuler."));
             ImGui.SameLine();
         }
         if (KeyOf(item) is not null)

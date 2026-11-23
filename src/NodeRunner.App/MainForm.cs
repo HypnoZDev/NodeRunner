@@ -188,6 +188,7 @@ internal sealed unsafe partial class MainForm : Form
         _skyRenderer = new SkyRenderer(_graphics.Device, _graphics.Context);
         _waterRenderer = new WaterRenderer(_graphics.Device, _graphics.Context);
         _pickBuffer = new PickBuffer(_graphics.Device, _graphics.Context);
+        _placeBuffer = new PickBuffer(_graphics.Device, _graphics.Context);
         var graphics = _graphics;
         // Most of the video memory for the models, the rest for the window, shadows and other layers.
         // A fixed size chosen in the settings never goes above 90 % of what Windows grants (no crash on a small card).
@@ -255,6 +256,8 @@ internal sealed unsafe partial class MainForm : Form
         _shadowMaps?.Dispose();
         _shadowMaps = null;
         _pickBuffer?.Dispose();
+        _placeBuffer?.Dispose();
+        _state.Placing.Dispose();
         _pickBuffer = null;
         _windowAlpha?.Dispose();
         _windowAlpha = null;
@@ -383,6 +386,7 @@ internal sealed unsafe partial class MainForm : Form
         _cameraController.InvertY = _state.Settings.InvertMouseY;
         _cameraController.Keys = _state.Keys;
         _cameraController.Paused = _state.Play.IsActive;
+        _cameraController.WheelTaken = _state.Placing.IsActive;
         if (_state.Play.IsActive)
             UpdatePlay(Math.Min(deltaTime, 0.1f));
         else
@@ -418,6 +422,7 @@ internal sealed unsafe partial class MainForm : Form
         PickContextObject(scene);
         PickCollision(scene);
         PlaceRequestedObject(scene);
+        UpdatePlacement(scene);
         StartRequestedPlay(scene);
         graphics.BeginFrame(BackgroundColor);
         graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
