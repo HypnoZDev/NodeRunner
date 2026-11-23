@@ -11,7 +11,7 @@ namespace NodeRunner.Data.Native.Models;
 
 // Drawables in the XML form exported by Sollumz (and CodeWalker): <Drawable> with its shaders, embedded textures
 // (.dds in the folder named after the file), models of each level of detail, lights and collision.
-public static class YdrXml
+public static partial class YdrXml
 {
     private static readonly string[] Semantics =
     [
