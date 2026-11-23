@@ -603,8 +603,8 @@ public static partial class English
         // Model viewer
         ("Tous les véhicules du jeu, DLC compris (nom de spawn)", "All the game's vehicles, DLCs included (spawn name)"),
         ("Tous les types d'objets de la carte (archétypes)", "All object types of the map (archetypes)"),
-        ("Véhicule (ex. adder)", "Vehicle (e.g. adder)"),
-        ("Type (ex. prop_bench)", "Type (e.g. prop_bench)"),
+        ("Nom, marque ou hash (ex. adder, pegassi)", "Name, make or hash (e.g. adder, pegassi)"),
+        ("Type ou hash (ex. prop_bench)", "Type or hash (e.g. prop_bench)"),
         ("Préparation de la liste...", "Preparing the list..."),
         ("Aucun résultat", "No results"),
         ("{0} modèle(s)", "{0} model(s)"),

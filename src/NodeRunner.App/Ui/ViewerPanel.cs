@@ -527,9 +527,9 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         float starWidth = sounds ? 0f : ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X;
         Widgets.SearchField("##viewer_search", _filter switch
         {
-            0 => state.IsOtherGame ? L("Véhicule (ex. infernus)") : L("Véhicule (ex. adder)"),
+            0 => state.IsOtherGame ? L("Véhicule (ex. infernus)") : L("Nom, marque ou hash (ex. adder, pegassi)"),
             SoundsFilter => L("Fichier de sons (ex. doors, ambience)"),
-            1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : state.IsClassic ? L("Type (ex. palm)") : L("Type (ex. prop_bench)"),
+            1 => IsGta4 ? L("Type (ex. bm_nylamp1)") : state.IsClassic ? L("Type (ex. palm)") : L("Type ou hash (ex. prop_bench)"),
             _ => L("Prop ou pack"),
         }, ref _search, width: ImGui.GetContentRegionAvail().X - starWidth);
         if (!sounds)
@@ -647,11 +647,56 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             return;
         }
         var source = _filter switch { 0 => _catalog!.Vehicles, 1 => _catalog!.Objects, _ => _catalog!.Library };
-        _rows = search.Length == 0
+        var words = SearchWords(search);
+        _rows = words.Length == 0
             ? source.ToList()
-            : source.Where(r => r.Name.Contains(search, StringComparison.Ordinal) || r.Pack?.Contains(search, StringComparison.OrdinalIgnoreCase) == true)
-                .OrderBy(r => r.Name.StartsWith(search, StringComparison.Ordinal) ? 0 : 1)
+            : source.Where(r => Matches(r, words))
+                .OrderBy(r => r.Name.StartsWith(words[0], StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ToList();
+    }
+
+    private static string[] SearchWords(string search) => search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    // Every word must be found: in the name, the pack, a vehicle's make and name in the game, or as the model's hash
+    // (0x1234ABCD, or the number a FiveM script prints).
+    private bool Matches(ViewerItem item, string[] words)
+    {
+        foreach (string word in words)
+        {
+            if (HashOf(word) is { } hash)
+            {
+                if (item.Location.ModelHash != hash && item.ArchetypeHash != hash)
+                    return false;
+                continue;
+            }
+            if (item.Name.Contains(word, StringComparison.OrdinalIgnoreCase) || item.Pack?.Contains(word, StringComparison.OrdinalIgnoreCase) == true)
+                continue;
+            if (item.Kind == ViewerKind.Vehicle && VehicleWords(item).Contains(word, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return false;
+        }
+        return true;
+    }
+
+    private static uint? HashOf(string word)
+    {
+        if (word.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && uint.TryParse(word.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint hex))
+            return hex;
+        // Model names are never all digits: a long number is a hash, signed as GetHashKey gives it.
+        if (word.Length >= 6 && int.TryParse(word, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int signed))
+            return unchecked((uint)signed);
+        if (word.Length >= 6 && uint.TryParse(word, NumberStyles.None, CultureInfo.InvariantCulture, out uint plain))
+            return plain;
+        return null;
+    }
+
+    // Make and name in the game of a vehicle (vehicles.meta), e.g. "PEGASSI ZENTORNO".
+    private string VehicleWords(ViewerItem item)
+    {
+        if (state.IsOtherGame || Vehicles?.Info.VehicleOf(item.Location.ModelHash) is not { Count: > 0 } sheet)
+            return "";
+        return $"{VehicleInfoCatalog.Value(sheet, "vehicleMakeName")} {VehicleInfoCatalog.Value(sheet, "gameName")}";
     }
 
     public void ShowLibrary()

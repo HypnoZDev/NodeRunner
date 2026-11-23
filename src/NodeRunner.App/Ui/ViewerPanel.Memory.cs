@@ -126,12 +126,12 @@ internal sealed partial class ViewerPanel
     {
         var rows = new List<ViewerItem>();
         var seen = new HashSet<ViewerItem>();
+        var words = SearchWords(search);
         foreach (var list in new[] { SavedList(Saved.Favorites), SavedList(Saved.Recents) })
         {
             foreach (string key in list)
             {
-                if (Find(key, _filter) is { } item && seen.Add(item)
-                    && (search.Length == 0 || item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)))
+                if (Find(key, _filter) is { } item && seen.Add(item) && Matches(item, words))
                     rows.Add(item);
             }
         }
