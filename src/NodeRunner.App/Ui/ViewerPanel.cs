@@ -19,8 +19,12 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
     public const string Title = $"{Icons.Box}  Visionneuse###Visionneuse";
 
     private static string[] Filters => [L("Véhicules"), L("Objets"), L("Bibliothèque"), L("Sons")];
-    private const float ListWidth = 230f;
-    private const float InspectorWidth = 340f;
+    // Widths of the list and the inspector, changed by dragging the bar between them and the view.
+    private const float DefaultListWidth = 230f, MinListWidth = 160f, MaxListWidth = 600f;
+    private const float DefaultInspectorWidth = 340f, MinInspectorWidth = 260f, MaxInspectorWidth = 700f;
+    private const float MinViewWidth = 300f, Grip = 8f;
+    private float _listWidth = DefaultListWidth, _inspectorWidth = DefaultInspectorWidth;
+    private bool _inspectorOpen = true, _inspectorFits = true;
 
     private static VehiclePaintSlot[] PaintSlots => VehiclePaintColors.Slots;
     private static int[] DefaultPaint => VehiclePaintColors.Default;
@@ -395,15 +399,22 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             RestoreLastModel();
             UpdatePaint();
             ShowCaptureResult();
-            float spacing = ImGui.GetStyle().ItemSpacing.X;
             float available = ImGui.GetContentRegionAvail().X;
-            bool inspector = available > ListWidth + InspectorWidth + 300f;
-            if (ImGui.BeginChild("##viewer_list", new Vector2(ListWidth, 0), ImGuiChildFlags.None))
+            bool sounds = _filter == SoundsFilter;
+            // A narrow window narrows the list shown, not the width kept.
+            float listWidth = Math.Min(_listWidth, Math.Max(MinListWidth, available - MinViewWidth - Grip));
+            _inspectorFits = available > listWidth + _inspectorWidth + MinViewWidth + Grip * 2;
+            bool inspector = (_inspectorOpen || sounds) && _inspectorFits;
+            if (ImGui.BeginChild("##viewer_list", new Vector2(listWidth, 0), ImGuiChildFlags.None))
                 DrawList();
             ImGui.EndChild();
-            ImGui.SameLine();
-            float viewWidth = inspector ? available - ListWidth - InspectorWidth - spacing * 2 : 0f;
-            bool sounds = _filter == SoundsFilter;
+            ImGui.SameLine(0, 0);
+            float dragged = listWidth;
+            Splitter("##viewer_split_list", ref dragged, 1f, MinListWidth, MaxListWidth, DefaultListWidth);
+            if (dragged != listWidth)
+                _listWidth = dragged;
+            ImGui.SameLine(0, 0);
+            float viewWidth = inspector ? available - listWidth - _inspectorWidth - Grip * 2 : 0f;
             if (!sounds)
                 PauseSound();
             if (ImGui.BeginChild("##viewer_view", new Vector2(viewWidth, 0), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
@@ -416,7 +427,9 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             ImGui.EndChild();
             if (inspector)
             {
-                ImGui.SameLine();
+                ImGui.SameLine(0, 0);
+                Splitter("##viewer_split_inspector", ref _inspectorWidth, -1f, MinInspectorWidth, MaxInspectorWidth, DefaultInspectorWidth);
+                ImGui.SameLine(0, 0);
                 if (ImGui.BeginChild("##viewer_inspector", Vector2.Zero, ImGuiChildFlags.None))
                 {
                     if (sounds)
@@ -431,6 +444,26 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
                 HandleCatalogKeys();
         }
         ImGui.End();
+    }
+
+    // Thin bar between two columns: dragged, it changes width (direction -1: the column on its right); double-click
+    // gives the width back.
+    private static void Splitter(string id, ref float width, float direction, float min, float max, float initial)
+    {
+        float height = Math.Max(1f, ImGui.GetContentRegionAvail().Y);
+        ImGui.InvisibleButton(id, new Vector2(Grip, height));
+        bool active = ImGui.IsItemActive();
+        if (ImGui.IsItemHovered() || active)
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
+            var a = ImGui.GetItemRectMin();
+            float x = MathF.Floor(a.X + Grip * 0.5f);
+            ImGui.GetWindowDrawList().AddLine(new Vector2(x, a.Y), new Vector2(x, a.Y + height), Widgets.Col(UiTheme.Accent), 2f);
+            if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                width = initial;
+        }
+        if (active)
+            width = Math.Clamp(width + ImGui.GetIO().MouseDelta.X * direction, min, max);
     }
 
     private void UpdateCatalog()
@@ -918,6 +951,21 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         if (Widgets.ToolbarButton(Icons.Save, L("Capture"), L("Enregistrer l'image de la vue en PNG"), enabled && Viewer.TriangleCount > 0))
             ImGui.OpenPopup("##viewer_capture");
         DrawCapturePopup();
+        if (!_inWorkshop)
+        {
+            ImGui.SameLine();
+            string tip = !_inspectorOpen ? L("Afficher le panneau d'infos (peinture, pièces, textures, fiche, fichier)")
+                : _inspectorFits ? L("Cacher le panneau d'infos (plus de place pour le modèle)")
+                : L("Panneau d'infos : la fenêtre est trop étroite pour l'afficher, agrandissez-la ou rétrécissez la liste");
+            if (Widgets.IconButton(Icons.Info, "viewer_inspector_toggle", tip, active: _inspectorOpen && _inspectorFits))
+            {
+                // Shown but no room for it: the list gives its room first.
+                if (_inspectorOpen && !_inspectorFits && _listWidth > MinListWidth)
+                    _listWidth = MinListWidth;
+                else
+                    _inspectorOpen = !_inspectorOpen;
+            }
+        }
     }
 
     // In the catalogue, a button's tooltip gives its key.

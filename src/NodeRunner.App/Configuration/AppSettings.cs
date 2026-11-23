@@ -268,6 +268,9 @@ public sealed class ViewerSettings
     public float LightAngle { get; set; } = 0.6f;
     public float LightHeight { get; set; } = 0.8f;
     public float FieldOfView { get; set; } = 45f;
+    public float ListWidth { get; set; } = 230f;
+    public float InspectorWidth { get; set; } = 340f;
+    public bool InspectorOpen { get; set; } = true;
     public Dictionary<GameKind, List<string>> Recents { get; set; } = new();
     public Dictionary<GameKind, List<string>> Favorites { get; set; } = new();
 }

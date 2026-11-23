@@ -39,6 +39,9 @@ internal sealed partial class ViewerPanel
         viewer.LightAngle = saved.LightAngle;
         viewer.LightHeight = Math.Clamp(saved.LightHeight, 0.05f, 3f);
         viewer.FieldOfViewDegrees = Math.Clamp(saved.FieldOfView, 10f, 90f);
+        _listWidth = Math.Clamp(saved.ListWidth, MinListWidth, MaxListWidth);
+        _inspectorWidth = Math.Clamp(saved.InspectorWidth, MinInspectorWidth, MaxInspectorWidth);
+        _inspectorOpen = saved.InspectorOpen;
     }
 
     // Copied each frame; written to settings.json when NodeRunner closes.
@@ -58,6 +61,9 @@ internal sealed partial class ViewerPanel
         saved.LightAngle = viewer.LightAngle;
         saved.LightHeight = viewer.LightHeight;
         saved.FieldOfView = viewer.FieldOfViewDegrees;
+        saved.ListWidth = _listWidth;
+        saved.InspectorWidth = _inspectorWidth;
+        saved.InspectorOpen = _inspectorOpen;
     }
 
     private static string? KeyOf(ViewerItem item) => item.Kind switch
