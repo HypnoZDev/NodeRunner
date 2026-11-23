@@ -217,7 +217,7 @@ internal sealed unsafe partial class MainForm
         bool audioEmittersEnabled = _state.IsLayerVisible(AudioZoneLayer.EmittersLayerName);
         _audioZoneLayer.Update(_state.World, lines, camera.Position, audioZonesEnabled, audioEmittersEnabled);
         if (audioZonesEnabled || audioEmittersEnabled)
-            _audioZoneLayer.Draw(lines, viewProjection, camera.Position);
+            _audioZoneLayer.Draw(lines, viewProjection, camera.Position, new Vector2(scene.Width, scene.Height));
 
         _scenarioLayer.Update(_state.World, lines);
         _scenarioLayer.Draw(lines, viewProjection, camera.Position, c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)));

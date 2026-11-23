@@ -23,9 +23,13 @@ internal sealed class AudioZoneLayer : IDisposable
 
     private const float RebuildDistance = 60f;
     private const float FilledZoneSize = 250f;
-    private const float SurfaceAlpha = 0.1f;
-    private const float HiddenOpacity = 0.35f;
-    private const float HiddenLineOpacity = 0.4f;
+    private const float SurfaceAlpha = 0.16f;
+    private const float HiddenOpacity = 0.5f;
+    private const float HiddenLineOpacity = 0.75f;
+    private const float FadeDistance = ZoneRadius * 3f;
+    // Lines drawn again shifted by a pixel around: 2 pixels wide, whatever the distance.
+    private static readonly Vector2[] LineOffsets = [new(0, 0), new(1, 0), new(0, 1), new(1, 1)];
+    private const float PickCentrePixels = 14f;
     private const float MarkSize = 0.6f;
     private const float LineWidth = 1f;
     private const float MaxPickDistance = 2000f;
@@ -33,7 +37,7 @@ internal sealed class AudioZoneLayer : IDisposable
     private const int Segments = 48;
 
     public static readonly Vector4 ZoneColor = new(0.3f, 0.85f, 0.75f, 0.95f);
-    private static readonly Vector4 ActivationColor = ZoneColor with { W = 0.45f };
+    private static readonly Vector4 ActivationColor = ZoneColor with { W = 0.7f };
     public static readonly Vector4 EmitterColor = new(1f, 0.5f, 0.75f, 1f);
     private static readonly Vector4 SelectedColor = new(1f, 0.95f, 0.35f, 1f);
     private static readonly Vector4 OuterColor = new(1f, 0.95f, 0.35f, 0.4f);
@@ -94,12 +98,24 @@ internal sealed class AudioZoneLayer : IDisposable
         }
     }
 
-    public void Draw(ColorRenderer renderer, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    public void Draw(ColorRenderer renderer, Matrix4x4 viewProjection, Vector3 cameraPosition, Vector2 viewport)
     {
         if (_surfaces is { } surfaces)
-            renderer.DrawXRay(surfaces, viewProjection, cameraPosition, ZoneRadius * 2f, HiddenOpacity);
+            renderer.DrawXRay(surfaces, viewProjection, cameraPosition, FadeDistance, HiddenOpacity);
         if (_lines is { } lines)
-            renderer.DrawXRay(lines, viewProjection, cameraPosition, ZoneRadius * 2f, HiddenLineOpacity);
+            foreach (var offset in LineOffsets)
+                renderer.DrawXRay(lines, Shifted(viewProjection, offset, viewport), cameraPosition, FadeDistance, HiddenLineOpacity);
+    }
+
+    // The projection moved by a few pixels on the screen.
+    private static Matrix4x4 Shifted(Matrix4x4 viewProjection, Vector2 pixels, Vector2 viewport)
+    {
+        if (pixels == Vector2.Zero || viewport.X < 1 || viewport.Y < 1)
+            return viewProjection;
+        var shift = Matrix4x4.Identity;
+        shift.M41 = pixels.X * 2f / viewport.X;
+        shift.M42 = -pixels.Y * 2f / viewport.Y;
+        return viewProjection * shift;
     }
 
     // The selection outlined over everything. Zone: where its sounds are placed, and the wider box where it starts
@@ -152,7 +168,25 @@ internal sealed class AudioZoneLayer : IDisposable
         // Reversed Z: depth 1 = near plane.
         var origin = Unproject(ndc, 1f, inverse);
         var direction = Vector3.Normalize(Unproject(ndc, 0.1f, inverse) - origin);
+        // A zone whose centre is a few pixels away first: small zones seen from afar, hard to hit otherwise.
         AmbientZone? nearest = null;
+        float centreScore = PickCentrePixels * PickCentrePixels;
+        foreach (var zone in _zones)
+        {
+            var centre = Extent(new AudioSelection(zone, null)).Centre;
+            var clip = Vector4.Transform(new Vector4(centre, 1f), viewProjection);
+            if (clip.W <= 0.1f || clip.W > MaxPickDistance)
+                continue;
+            var screen = new Vector2((clip.X / clip.W * 0.5f + 0.5f) * viewport.X, (0.5f - clip.Y / clip.W * 0.5f) * viewport.Y);
+            float d = Vector2.DistanceSquared(screen, point);
+            if (d < centreScore)
+            {
+                centreScore = d;
+                nearest = zone;
+            }
+        }
+        if (nearest is not null)
+            return new AudioSelection(nearest, null);
         float nearestDistance = MaxPickDistance;
         foreach (var zone in _zones)
         {
