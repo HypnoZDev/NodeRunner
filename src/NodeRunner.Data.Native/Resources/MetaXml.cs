@@ -9,7 +9,7 @@ namespace NodeRunner.Data.Native.Resources;
 // Builds a Meta resource (.ytyp, .ymap...) from the XML written by CodeWalker and Sollumz: one element per field, named
 // like it (or "hash_XXXXXXXX"), values in a "value" attribute, x / y / z / w attributes or text, arrays as <Item>
 // lists or as text. Places and types of the fields come from the game's own descriptions (MetaSchema).
-public static class MetaXml
+public static partial class MetaXml
 {
     // Field types of the descriptions.
     private const byte Boolean = 0x01;
@@ -361,14 +361,6 @@ public static class MetaXml
                 At(block, at + i, 1)[0] = byte.Parse(hex.AsSpan(i * 2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
         }
 
-        private static int ValueSize(byte type) => type switch
-        {
-            SignedByte or UnsignedByte or Boolean => 1,
-            SignedShort or UnsignedShort => 2,
-            SignedInt or UnsignedInt or Float or Hash => 4,
-            FloatXyz => 16,
-            _ => throw new InvalidDataException($"type de tableau 0x{type:X2} non pris en charge"),
-        };
 
         // The values of an array of a basic type: <Item> elements (vectors: 4 values each, a missing w being NaN as in
         // the game's portal corners), or text.
@@ -468,6 +460,15 @@ public static class MetaXml
             return document;
         }
     }
+
+    private static int ValueSize(byte type) => type switch
+    {
+        SignedByte or UnsignedByte or Boolean => 1,
+        SignedShort or UnsignedShort => 2,
+        SignedInt or UnsignedInt or Float or Hash => 4,
+        FloatXyz => 16,
+        _ => throw new InvalidDataException($"type de tableau 0x{type:X2} non pris en charge"),
+    };
 
     internal static string Value(XElement element) => element.Attribute("value")?.Value ?? element.Value;
 

@@ -88,7 +88,8 @@ public sealed class MetaSchema(params IEnumerable<byte[]>[] sources)
     {
         try
         {
-            Add(MetaDocument.Read(content));
+            // Descriptions only: grass files keep their data in graphics pages, which the content alone cannot place.
+            Add(MetaDocument.Read(content, descriptionsOnly: true));
         }
         catch (InvalidDataException)
         {

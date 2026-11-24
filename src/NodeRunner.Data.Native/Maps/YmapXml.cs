@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using NodeRunner.Data.FileSystem;
+using NodeRunner.Data.Native.Archives;
 using NodeRunner.Data.Native.Resources;
 
 namespace NodeRunner.Data.Native.Maps;
@@ -40,4 +41,8 @@ public static class YmapXml
         uint graphicsFlags = ((uint)Version & 0xF) << 28;
         return ResourceFile.Write(new ResourceHeader(Version, systemFlags, graphicsFlags), content);
     }
+
+    // A game file (decompressed content) written out as XML. values: names of the models and other hashes it holds.
+    public static XmlConversion Export(string fileName, byte[] data, ResourceHeader header, Func<uint, string?> values) =>
+        new(fileName + ".xml", MetaXml.Write(MetaDocument.Read(data, ResourcePages.Size(header.SystemFlags)), MapMetaNames.Find, values), []);
 }

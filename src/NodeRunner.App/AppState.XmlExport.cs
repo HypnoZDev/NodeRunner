@@ -1,5 +1,6 @@
 using NodeRunner.Data.FileSystem;
 using NodeRunner.Data.Native.Collisions;
+using NodeRunner.Data.Native.Maps;
 using NodeRunner.Data.Native.Models;
 using NodeRunner.Data.Native.Textures;
 
@@ -8,7 +9,7 @@ namespace NodeRunner.App;
 // Export of a game file as the XML read by Sollumz (Blender) and CodeWalker, from the archive explorer or the viewer.
 internal sealed partial class AppState
 {
-    private static readonly string[] XmlExtensions = [".ydr", ".ydd", ".yft", ".ytd", ".ybn"];
+    private static readonly string[] XmlExtensions = [".ydr", ".ydd", ".yft", ".ytd", ".ybn", ".ymap", ".ytyp"];
 
     private Task<string>? _xmlExport;
     private string? _xmlExportFolder;
@@ -68,6 +69,8 @@ internal sealed partial class AppState
             ".ydr" => YdrXml.Export(name, data, header, ShaderNames(game)),
             ".ydd" => YddXml.Export(name, data, header, ShaderNames(game), models is null ? null : models.TryGet),
             ".yft" => YftXml.Export(name, data, header, ShaderNames(game)),
+            ".ymap" => YmapXml.Export(name, data, header, hash => models?.TryGet(hash)),
+            ".ytyp" => YtypXml.Export(name, data, header, hash => models?.TryGet(hash)),
             _ => throw new InvalidDataException(L("Type de fichier non pris en charge.")),
         };
         File.WriteAllText(Path.Combine(folder, conversion.FileName), conversion.Text);

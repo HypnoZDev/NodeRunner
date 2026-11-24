@@ -68,9 +68,11 @@ public sealed class MetaDocument
         set => BinaryPrimitives.WriteInt32LittleEndian(_header.AsSpan(RootBlockOffset), value + 1);
     }
 
-    public static MetaDocument Read(ReadOnlySpan<byte> data)
+    // graphicsStart: where the graphics pages begin (grass instances are stored there), -1 when unknown.
+    // descriptionsOnly: structure and enum descriptions alone, without the data blocks.
+    public static MetaDocument Read(ReadOnlySpan<byte> data, int graphicsStart = -1, bool descriptionsOnly = false)
     {
-        var d = new ResourceData(data);
+        var d = new ResourceData(data, graphicsStart);
         if (d.Length < HeaderSize)
             throw new InvalidDataException("Fichier Meta trop court.");
 
@@ -100,6 +102,8 @@ public sealed class MetaDocument
                 entryCount == 0 ? [] : data.Slice(entries, entryCount * EnumEntrySize).ToArray()));
         }
 
+        if (descriptionsOnly)
+            return document;
         int blockCount = d.UInt16(DataBlocksCountOffset);
         int blocks = d.ResolveArray(d.UInt64(DataBlocksPointerOffset), blockCount, DataBlockInfoSize, "les blocs");
         for (int i = 0; i < blockCount; i++)
