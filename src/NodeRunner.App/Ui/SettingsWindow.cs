@@ -710,6 +710,23 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
             if (ImGui.SliderFloat("##exposure", ref exposure, 0.4f, 2.5f, L("Luminosité x %.2f"), ImGuiSliderFlags.Logarithmic))
                 settings.Exposure = exposure;
             SaveWhenReleased();
+
+            Widgets.Property(L("Halo lumineux"), L("Les zones très lumineuses (soleil, ciel éblouissant, lampes et fenêtres allumées la nuit) débordent en une lueur douce, comme sur une vraie caméra."));
+            bool bloom = settings.Bloom;
+            if (ImGui.Checkbox("##bloom", ref bloom))
+            {
+                settings.Bloom = bloom;
+                state.SaveSettings();
+            }
+            if (settings.Bloom)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(-1f);
+                float glow = settings.BloomStrength * 100f;
+                if (ImGui.SliderFloat("##bloom_strength", ref glow, 0f, 100f, L("Force %.0f %%")))
+                    settings.BloomStrength = glow / 100f;
+                SaveWhenReleased();
+            }
         }
 
         Widgets.Property(L("Anticrénelage (TAA)"), L("Lisse les bords en escalier et le scintillement des grillages, câbles et feuillages, en mêlant chaque image aux précédentes. Coûte peu ; léger flou pendant les mouvements rapides."));

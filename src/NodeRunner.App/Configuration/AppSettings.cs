@@ -142,6 +142,10 @@ public sealed class AppSettings
     public int AmbientOcclusion { get; set; }
     public float OcclusionStrength { get; set; } = 1f;
 
+    // Glow around very bright pixels (HDR only), and its strength (0 to 1).
+    public bool Bloom { get; set; }
+    public float BloomStrength { get; set; } = 0.5f;
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -243,6 +247,7 @@ public sealed class AppSettings
         WaterReflections = d.WaterReflections;
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
+        (Bloom, BloomStrength) = (d.Bloom, d.BloomStrength);
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);

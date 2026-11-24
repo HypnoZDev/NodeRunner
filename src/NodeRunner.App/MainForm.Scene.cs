@@ -327,6 +327,7 @@ internal sealed unsafe partial class MainForm
             Antialiasing = allowed && settings.Antialiasing,
             AmbientOcclusion = allowed ? Math.Clamp(settings.AmbientOcclusion, 0, 2) : 0,
             OcclusionStrength = Math.Clamp(settings.OcclusionStrength, 0f, 2f),
+            Bloom = settings.Bloom ? Math.Clamp(settings.BloomStrength, 0f, 1f) : 0f,
         };
     }
 

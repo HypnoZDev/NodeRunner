@@ -36,6 +36,9 @@ public readonly record struct SceneImageOptions
 
     public float OcclusionStrength { get; init; }
 
+    // Glow around very bright pixels, HDR only (0 none to 1 strong).
+    public float Bloom { get; init; }
+
     // True when the scene needs its own images; otherwise it is drawn straight into the window, as on small PCs.
     public bool IsUsed => Hdr || Antialiasing || AmbientOcclusion > 0 || Scale < 0.999f;
 }
@@ -50,9 +53,11 @@ cbuffer Constants : register(b0)
 {
     float4 Source;    // xy: size of the scene image (pixels), zw: 1 / size.
     float4 Settings;  // x: exposure, y: 1 = HDR (tone mapping), z: sharpening, w: saturation.
+    float4 Effects;   // x: share of the glow.
 };
 Texture2D SceneColor : register(t0);
 Texture2D<float> SceneDepth : register(t1);
+Texture2D Glow : register(t2);
 SamplerState LinearClamp : register(s0);
 
 struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -88,6 +93,8 @@ float3 Shown(float2 uv)
     float3 c = max(SceneColor.SampleLevel(LinearClamp, uv, 0).rgb, 0.0f);
     if (Settings.y < 0.5f)
         return c;
+    if (Effects.x > 0.0f)
+        c = lerp(c, Glow.SampleLevel(LinearClamp, uv, 0).rgb, Effects.x);
     c = ToneMap(c * Settings.x);
     c = max(lerp(dot(c, float3(0.2126f, 0.7152f, 0.0722f)), c, Settings.w), 0.0f);
     return ToDisplay(c);
@@ -115,6 +122,70 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
     output.depth = SceneDepth.Load(int3(min(uv * Source.xy, Source.xy - 1.0f), 0));
     return output;
 }";
+
+    // Glow (bloom): the HDR image shrunk step by step to 1/64 of its size, then enlarged back with each step added, so
+    // very bright pixels (sun, lamps, lit windows) spill a soft light around them.
+    private const string BloomSource = @"
+cbuffer Constants : register(b0)
+{
+    float4 Texel; // xy: 1 / size of the image read, z = 1: first step (very bright pixels weigh less, no flicker).
+};
+Texture2D Source : register(t0);
+SamplerState LinearClamp : register(s0);
+
+struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float3 Read(float2 uv, float2 offset)
+{
+    return max(Source.SampleLevel(LinearClamp, uv + offset * Texel.xy, 0).rgb, 0.0f);
+}
+
+float Weight(float3 c)
+{
+    return Texel.z > 0.5f ? 1.0f / (1.0f + max(max(c.r, c.g), c.b)) : 1.0f;
+}
+
+// Half the size: 13 reads around the pixel, blended.
+float4 PSDown(VS_OUTPUT input) : SV_Target
+{
+    static const float2 offsets[13] =
+    {
+        float2(-2.0f, -2.0f), float2(0.0f, -2.0f), float2(2.0f, -2.0f), float2(-2.0f, 0.0f), float2(0.0f, 0.0f), float2(2.0f, 0.0f),
+        float2(-2.0f, 2.0f), float2(0.0f, 2.0f), float2(2.0f, 2.0f), float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(-1.0f, 1.0f),
+        float2(1.0f, 1.0f),
+    };
+    static const float shares[13] =
+    {
+        0.03125f, 0.0625f, 0.03125f, 0.0625f, 0.125f, 0.0625f, 0.03125f, 0.0625f, 0.03125f, 0.125f, 0.125f, 0.125f, 0.125f,
+    };
+    float3 sum = 0.0f;
+    float weights = 0.0f;
+    [unroll] for (int i = 0; i < 13; i++)
+    {
+        float3 c = Read(input.uv, offsets[i]);
+        float w = shares[i] * Weight(c);
+        sum += c * w;
+        weights += w;
+    }
+    return float4(sum / max(weights, 0.0001f), 1.0f);
+}
+
+// Twice the size, softly (3 x 3 tent), added to the step below.
+float4 PSUp(VS_OUTPUT input) : SV_Target
+{
+    float3 c = Read(input.uv, float2(0.0f, 0.0f)) * 4.0f
+        + (Read(input.uv, float2(-1.0f, 0.0f)) + Read(input.uv, float2(1.0f, 0.0f)) + Read(input.uv, float2(0.0f, -1.0f)) + Read(input.uv, float2(0.0f, 1.0f))) * 2.0f
+        + Read(input.uv, float2(-1.0f, -1.0f)) + Read(input.uv, float2(1.0f, -1.0f)) + Read(input.uv, float2(-1.0f, 1.0f)) + Read(input.uv, float2(1.0f, 1.0f));
+    return float4(c / 16.0f, 1.0f);
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BloomConstants
+    {
+        public Vector4 Texel;
+    }
+
+    private const int BloomSteps = 6;
 
     // Smoothing of the edges (TAA): this frame's image blended with the previous result, found again where the camera
     // saw it then (only the camera's movement is followed: what moves by itself is held back by the colours around).
@@ -342,6 +413,7 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
     {
         public Vector4 Source;
         public Vector4 Settings;
+        public Vector4 Effects;
     }
 
     private const Format ColorFormat = Format.R16G16B16A16_Float;
@@ -360,6 +432,12 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11BlendState _opaque;
     private readonly ID3D11BlendState _multiply;
+    private readonly ID3D11BlendState _add;
+    private readonly ID3D11PixelShader _bloomDownPixelShader;
+    private readonly ID3D11PixelShader _bloomUpPixelShader;
+    private readonly ID3D11Buffer _bloomBuffer;
+    private readonly Texture?[] _bloom = new Texture?[BloomSteps];
+    private bool _bloomShown;
     private readonly ID3D11PixelShader _occlusionPixelShader;
     private readonly ID3D11PixelShader _blurPixelShader;
     private readonly ID3D11PixelShader _applyPixelShader;
@@ -438,6 +516,23 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
             RenderTargetWriteMask = ColorWriteEnable.All,
         };
         _multiply = device.CreateBlendState(multiply);
+        var add = new BlendDescription();
+        add.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            BlendEnable = true,
+            SourceBlend = Blend.One,
+            DestinationBlend = Blend.One,
+            BlendOperation = BlendOperation.Add,
+            SourceBlendAlpha = Blend.Zero,
+            DestinationBlendAlpha = Blend.One,
+            BlendOperationAlpha = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteEnable.All,
+        };
+        _add = device.CreateBlendState(add);
+        _bloomDownPixelShader = device.CreatePixelShader(Compiler.Compile(BloomSource, "PSDown", "bloom", "ps_5_0").Span);
+        _bloomUpPixelShader = device.CreatePixelShader(Compiler.Compile(BloomSource, "PSUp", "bloom", "ps_5_0").Span);
+        _bloomBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(BloomConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
         _occlusionPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSOcclusion", "occlusion", "ps_5_0").Span);
         _blurPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSBlur", "occlusion", "ps_5_0").Span);
         _applyPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSApply", "occlusion", "ps_5_0").Span);
@@ -655,6 +750,73 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
     public void Process()
     {
         _shown = Options.Antialiasing ? Resolve() : _color;
+        _bloomShown = Options.Hdr && Options.Bloom > 0f && Width >= 64 && Height >= 64;
+        if (_bloomShown)
+            Glow(_shown!);
+    }
+
+    // Glow: the image shrunk step by step, then enlarged back with each step added (the result is in _bloom[0]).
+    private void Glow(Texture source)
+    {
+        int width = Width, height = Height;
+        for (int i = 0; i < BloomSteps; i++)
+        {
+            width = Math.Max(1, width / 2);
+            height = Math.Max(1, height / 2);
+            if (_bloom[i] is null || _bloomSizes[i] != (width, height))
+            {
+                _bloom[i]?.Dispose();
+                _bloom[i] = CreateTexture(width, height, Format.R11G11B10_Float, target: true);
+                _bloomSizes[i] = (width, height);
+            }
+        }
+        _context.IASetInputLayout(null);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_fullVertexShader);
+        _context.GSSetShader(null);
+        _context.PSSetSampler(0, _linearClamp);
+        _context.OMSetDepthStencilState(_noDepth, 0);
+        _context.RSSetState(_rasterizerState);
+        _context.PSSetConstantBuffer(0, _bloomBuffer);
+
+        _context.PSSetShader(_bloomDownPixelShader);
+        _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        var from = source;
+        int fromWidth = Width, fromHeight = Height;
+        for (int i = 0; i < BloomSteps; i++)
+        {
+            var to = _bloom[i]!;
+            WriteBloom(new Vector4(1f / fromWidth, 1f / fromHeight, i == 0 ? 1f : 0f, 0f));
+            _context.OMSetRenderTargets(to.Write!);
+            _context.RSSetViewport(new Viewport(0, 0, _bloomSizes[i].Width, _bloomSizes[i].Height));
+            _context.PSSetShaderResource(0, from.Read);
+            _context.Draw(3, 0);
+            _context.PSUnsetShaderResource(0);
+            from = to;
+            (fromWidth, fromHeight) = _bloomSizes[i];
+        }
+
+        _context.PSSetShader(_bloomUpPixelShader);
+        _context.OMSetBlendState(_add, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        for (int i = BloomSteps - 2; i >= 0; i--)
+        {
+            var (smallWidth, smallHeight) = _bloomSizes[i + 1];
+            WriteBloom(new Vector4(1f / smallWidth, 1f / smallHeight, 0f, 0f));
+            _context.OMSetRenderTargets(_bloom[i]!.Write!);
+            _context.RSSetViewport(new Viewport(0, 0, _bloomSizes[i].Width, _bloomSizes[i].Height));
+            _context.PSSetShaderResource(0, _bloom[i + 1]!.Read);
+            _context.Draw(3, 0);
+            _context.PSUnsetShaderResource(0);
+        }
+    }
+
+    private readonly (int Width, int Height)[] _bloomSizes = new (int, int)[BloomSteps];
+
+    private void WriteBloom(Vector4 texel)
+    {
+        var map = _context.Map(_bloomBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, new BloomConstants { Texel = texel });
+        _context.Unmap(_bloomBuffer, 0);
     }
 
     private Texture? _shown;
@@ -670,6 +832,8 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
             Source = new Vector4(Width, Height, 1f / Width, 1f / Height),
             Settings = new Vector4(MathF.Max(options.Exposure, 0.01f) * MathF.Max(options.Adaptation, 1f) * Exposure, options.Hdr ? 1f : 0f,
                 Math.Clamp(options.Sharpness, 0f, 1f), Saturation),
+            // The steps added together hold about BloomSteps times the light.
+            Effects = new Vector4(_bloomShown ? Math.Clamp(options.Bloom, 0f, 1f) * MaxGlow / BloomSteps : 0f, 0f, 0f, 0f),
         });
         _context.IASetInputLayout(null);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
@@ -680,13 +844,19 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _context.PSSetSampler(0, _linearClamp);
         _context.PSSetShaderResource(0, source.Read);
         _context.PSSetShaderResource(1, _depthRead!);
+        if (_bloomShown)
+            _context.PSSetShaderResource(2, _bloom[0]!.Read);
         _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.OMSetDepthStencilState(_writeDepth, 0);
         _context.RSSetState(_rasterizerState);
         _context.Draw(3, 0);
         _context.PSUnsetShaderResource(0);
         _context.PSUnsetShaderResource(1);
+        _context.PSUnsetShaderResource(2);
     }
+
+    // Share of the glow in the image at full strength.
+    private const float MaxGlow = 0.2f;
 
     // TAA: blends this frame into the previous result; returns the new result (kept for the next frame).
     private Texture Resolve()
@@ -785,6 +955,11 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _occlusion = null;
         _occlusionBlur?.Dispose();
         _occlusionBlur = null;
+        for (int i = 0; i < _bloom.Length; i++)
+        {
+            _bloom[i]?.Dispose();
+            _bloom[i] = null;
+        }
         _historyValid = false;
         _depthRead?.Dispose();
         _depthRead = null;
@@ -806,6 +981,10 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _constantBuffer.Dispose();
         _resolveBuffer.Dispose();
         _multiply.Dispose();
+        _add.Dispose();
+        _bloomDownPixelShader.Dispose();
+        _bloomUpPixelShader.Dispose();
+        _bloomBuffer.Dispose();
         _occlusionPixelShader.Dispose();
         _blurPixelShader.Dispose();
         _applyPixelShader.Dispose();
