@@ -52,6 +52,7 @@ public class RenderTests(SoftwareDevice gpu)
         new ColorRenderer(gpu.Device, gpu.Context).Dispose();
         new SkyRenderer(gpu.Device, gpu.Context).Dispose();
         new WaterRenderer(gpu.Device, gpu.Context).Dispose();
+        new SceneImage(gpu.Device, gpu.Context).Dispose();
         new ShadowMaps(gpu.Device, gpu.Context).Dispose();
 
         var imgui = ImGui.CreateContext();

@@ -127,6 +127,9 @@ public sealed class AppSettings
     // Water mirroring the scene (not only the sky), bottom bent by the waves.
     public bool WaterReflections { get; set; } = true;
 
+    // The sea's surface moves with the waves of the game's water file (otherwise flat, only its look follows them).
+    public bool WaterWaves { get; set; }
+
     // Advanced rendering of the 3D view (NodeRunner.Render.SceneImage): light beyond white brought back by a filmic
     // curve (HDR), brightness, share of the view's width and height drawn (0.5 to 1), sharpening. Chosen once for the
     // PC's graphics card (GraphicsTierChosen, see QualityPreset.ForCard), then by the user.
@@ -244,7 +247,7 @@ public sealed class AppSettings
         (SnapMove, SnapRotate, SnapScale, BackupMinutes, CopyFormat) = (d.SnapMove, d.SnapRotate, d.SnapScale, d.BackupMinutes, d.CopyFormat);
         (ShowSky, TimeOfDay, Fog, FogDistance) = (d.ShowSky, d.TimeOfDay, d.Fog, d.FogDistance);
         (Shadows, ShadowDistance, Anisotropy, ViewDistanceMultiplier) = (d.Shadows, d.ShadowDistance, d.Anisotropy, d.ViewDistanceMultiplier);
-        WaterReflections = d.WaterReflections;
+        (WaterReflections, WaterWaves) = (d.WaterReflections, d.WaterWaves);
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
         (Bloom, BloomStrength) = (d.Bloom, d.BloomStrength);

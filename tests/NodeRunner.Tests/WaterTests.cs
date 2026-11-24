@@ -48,6 +48,17 @@ public class WaterTests
               <fDampening value="0.05" />
             </Item>
           </CalmingQuads>
+          <WaveQuads>
+            <Item>
+              <minX value="1664" />
+              <maxX value="1988" />
+              <minY value="-120" />
+              <maxY value="132" />
+              <Amplitude value="1.5" />
+              <XDirection value="-0.603208" />
+              <YDirection value="-0.797584" />
+            </Item>
+          </WaveQuads>
         </WaterData>
         """;
 
@@ -59,6 +70,18 @@ public class WaterTests
         Assert.Equal(2, quads.Count);
         Assert.Equal(new WaterQuad(-1592, -1304, -1744, -1624, 0, WaterQuadShape.Rectangle), quads[0]);
         Assert.Equal(new WaterQuad(10, 20, 30, 40, 30.5f, WaterQuadShape.WithoutSouthEast), quads[1]);
+    }
+
+    [Fact]
+    public void Reads_the_calm_zones_and_the_zones_of_waves_rolling_in()
+    {
+        var (_, calming, waves) = WaterMap.Read(new MemoryStream(Encoding.UTF8.GetBytes(Xml)));
+
+        Assert.Equal([new WaterCalming(1752, 2076, 216, 800, 0.05f)], calming);
+        var wave = Assert.Single(waves);
+        Assert.Equal((1664f, 1988f, -120f, 132f, 1.5f), (wave.MinX, wave.MaxX, wave.MinY, wave.MaxY, wave.Amplitude));
+        Assert.Equal(1f, wave.Direction.Length(), 3);
+        Assert.True(wave.Direction.X < 0 && wave.Direction.Y < 0);
     }
 
     [Fact]

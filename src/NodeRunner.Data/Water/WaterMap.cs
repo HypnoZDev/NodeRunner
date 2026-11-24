@@ -58,7 +58,15 @@ public readonly record struct WaterQuad(float MinX, float MaxX, float MinY, floa
     }
 }
 
-// Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles.
+// A zone of water.xml where the waves are smaller (harbours, marinas, behind breakwaters): their height is multiplied
+// by Dampening (0 = flat).
+public readonly record struct WaterCalming(float MinX, float MaxX, float MinY, float MaxY, float Dampening);
+
+// A zone of water.xml where waves roll in towards the shore: their size (Amplitude, about metres) and the way they go.
+public readonly record struct WaterWave(float MinX, float MaxX, float MinY, float MaxY, float Amplitude, Vector2 Direction);
+
+// Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles,
+// and the zones where the waves are calmer or roll in towards the shore.
 public sealed class WaterMap
 {
     public static readonly string[] WaterFiles =
@@ -68,6 +76,10 @@ public sealed class WaterMap
     ];
 
     public List<WaterQuad> Quads { get; } = [];
+
+    public List<WaterCalming> Calming { get; } = [];
+
+    public List<WaterWave> Waves { get; } = [];
 
     // Rectangle covered by the main map's water file (min X, min Y, max X, max Y); the open ocean is outside.
     public Vector4 OceanBounds { get; set; }
@@ -108,10 +120,12 @@ public sealed class WaterMap
             }
             try
             {
-                var quads = Parse(new MemoryStream(data));
+                var (quads, calming, waves) = Read(new MemoryStream(data));
                 if (i == 0)
                     map.OceanBounds = BoundsOf(quads);
                 map.Quads.AddRange(quads);
+                map.Calming.AddRange(calming);
+                map.Waves.AddRange(waves);
             }
             catch (XmlException ex)
             {
@@ -121,33 +135,60 @@ public sealed class WaterMap
         return map;
     }
 
-    public static List<WaterQuad> Parse(Stream xml)
+    public static List<WaterQuad> Parse(Stream xml) => Read(xml).Quads;
+
+    // The three lists of a water file: surfaces, calm zones, zones of waves rolling in.
+    public static (List<WaterQuad> Quads, List<WaterCalming> Calming, List<WaterWave> Waves) Read(Stream xml)
     {
         var quads = new List<WaterQuad>();
+        var calming = new List<WaterCalming>();
+        var waves = new List<WaterWave>();
         using var reader = XmlReader.Create(xml, new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, IgnoreWhitespace = true });
-        if (!reader.ReadToFollowing("WaterQuads") || reader.IsEmptyElement)
-            return quads;
-        using var list = reader.ReadSubtree();
-        while (list.ReadToFollowing("Item"))
+        string? section = null;
+        while (reader.Read())
         {
-            var values = new Dictionary<string, string>();
-            using var item = list.ReadSubtree();
-            item.Read();
-            while (item.Read())
+            if (reader.NodeType != XmlNodeType.Element)
+                continue;
+            if (reader.Name is "WaterQuads" or "CalmingQuads" or "WaveQuads")
             {
-                if (item.NodeType == XmlNodeType.Element && item.GetAttribute("value") is { } value)
-                    values[item.Name] = value;
+                section = reader.Name;
+                continue;
+            }
+            if (reader.Name != "Item" || section is null)
+                continue;
+            var values = new Dictionary<string, string>();
+            using (var item = reader.ReadSubtree())
+            {
+                item.Read();
+                while (item.Read())
+                {
+                    if (item.NodeType == XmlNodeType.Element && item.GetAttribute("value") is { } value)
+                        values[item.Name] = value;
+                }
             }
 
             float Get(string name) => values.TryGetValue(name, out var text)
                 && float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : 0f;
-            if (values.TryGetValue("IsInvisible", out var invisible) && invisible.Equals("true", StringComparison.OrdinalIgnoreCase))
-                continue;
-            int type = (int)Get("Type");
-            quads.Add(new WaterQuad(Get("minX"), Get("maxX"), Get("minY"), Get("maxY"), Get("z"),
-                Enum.IsDefined((WaterQuadShape)type) ? (WaterQuadShape)type : WaterQuadShape.Rectangle));
+            switch (section)
+            {
+                case "WaterQuads":
+                    if (values.TryGetValue("IsInvisible", out var invisible) && invisible.Equals("true", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    int type = (int)Get("Type");
+                    quads.Add(new WaterQuad(Get("minX"), Get("maxX"), Get("minY"), Get("maxY"), Get("z"),
+                        Enum.IsDefined((WaterQuadShape)type) ? (WaterQuadShape)type : WaterQuadShape.Rectangle));
+                    break;
+                case "CalmingQuads":
+                    calming.Add(new WaterCalming(Get("minX"), Get("maxX"), Get("minY"), Get("maxY"), Math.Clamp(Get("fDampening"), 0f, 1f)));
+                    break;
+                default:
+                    var direction = new Vector2(Get("XDirection"), Get("YDirection"));
+                    direction = direction.LengthSquared() > 1e-6f ? Vector2.Normalize(direction) : Vector2.UnitX;
+                    waves.Add(new WaterWave(Get("minX"), Get("maxX"), Get("minY"), Get("maxY"), MathF.Max(Get("Amplitude"), 0f), direction));
+                    break;
+            }
         }
-        return quads;
+        return (quads, calming, waves);
     }
 
     private static Vector4 BoundsOf(List<WaterQuad> quads) => quads.Count == 0

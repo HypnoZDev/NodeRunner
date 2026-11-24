@@ -382,18 +382,19 @@ internal sealed unsafe partial class MainForm
         if (!ReferenceEquals(water, _waterShown))
         {
             _waterShown = water;
-            _waterRenderer!.SetSurfaces(water?.Quads.SelectMany(q => q.Triangles()) ?? [], water?.OceanBounds ?? Vector4.Zero, water?.OceanHeight ?? 0f);
+            _waterRenderer!.SetSurfaces(water);
         }
         if (!_state.IsLayerVisible(WaterLayer.LayerName))
             return;
         // Wrapped every hour, so the time stays precise enough for the waves.
         float time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
+        bool waves3D = _state.Settings.WaterWaves;
         if (image is not null)
             _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, image.CopyDepth(),
-                _state.Settings.WaterReflections ? image.CopyColor() : null, new Vector4(0f, 0f, image.Width, image.Height));
+                _state.Settings.WaterReflections ? image.CopyColor() : null, new Vector4(0f, 0f, image.Width, image.Height), waves3D);
         else
             _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth(),
-                _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height));
+                _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height), waves3D);
         _waterRenderer.DrawSurfaces();
         if (_state.IsLayerVisible(ModelLayer.LayerName))
             _modelLayer.DrawWater(_waterRenderer);

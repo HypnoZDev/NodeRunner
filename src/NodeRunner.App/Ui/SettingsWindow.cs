@@ -168,6 +168,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     state.SaveSettings();
                 }
 
+                Widgets.Property(L("Vagues en 3D"), L("La surface de la mer bouge avec les vagues, comme dans le jeu : houle du large, mer calme dans les ports et marinas, vagues qui roulent vers les plages et écume (zones du fichier water.xml du jeu). Sans : surface plate, seul son aspect suit les vagues."));
+                bool waves = settings.WaterWaves;
+                if (ImGui.Checkbox("##water_waves", ref waves))
+                {
+                    settings.WaterWaves = waves;
+                    state.SaveSettings();
+                }
+
                 DrawImageSettings(settings);
 
                 Widgets.Property(L("Carte graphique"), L("Carte utilisée pour la vue 3D. Automatique = la plus puissante (la carte dédiée d'un portable à deux cartes). Prend effet au prochain démarrage ; si la carte choisie ne marche pas, NodeRunner prend une autre carte."));
