@@ -300,8 +300,23 @@ float4 PSTranslucent(PS_INPUT input) : SV_Target
     return color;
 }
 
-// Shadow images: depth only, with the holes of foliage and fences.
-void PSShadowCutout(PS_INPUT input)
+// Shadow images: depth only, with the holes of foliage and fences. Only the position and the texture coordinates of
+// the vertices are read.
+struct PS_SHADOW { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+PS_SHADOW VSShadow(float3 pos : POSITION, float2 uv : TEXCOORD0)
+{
+    PS_SHADOW output;
+    output.pos = mul(ViewProjection, mul(World, float4(pos, 1.0f)));
+    output.uv = uv;
+    return output;
+}
+
+void PSShadowCutout(PS_SHADOW input)
+{
+    clip(ColorTexture.Sample(ColorSampler, input.uv).a - 0.33f);
+}
+
+void PSShadowSkinnedCutout(PS_INPUT input)
 {
     clip(ColorTexture.Sample(ColorSampler, input.uv).a - 0.33f);
 }
@@ -424,6 +439,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11PixelShader _cutoutPixelShader;
     private readonly ID3D11PixelShader _translucentPixelShader;
     private readonly ID3D11PixelShader _shadowCutoutPixelShader;
+    private readonly ID3D11PixelShader _shadowSkinnedCutoutPixelShader;
+    private readonly ID3D11VertexShader _shadowVertexShader;
+    private readonly ID3D11InputLayout _shadowInputLayout;
     private readonly ID3D11PixelShader _pickOpaquePixelShader;
     private readonly ID3D11PixelShader _pickCutoutPixelShader;
     private readonly ID3D11PixelShader _pickTranslucentPixelShader;
@@ -432,7 +450,12 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11InputLayout _skinnedInputLayout;
     private readonly ID3D11Buffer _boneBuffer;
     private readonly float[] _boneRows = new float[MaxBones * 12];
-    private bool _skinnedBound;
+    private VertexMode _vertexMode;
+    private bool _shadowPass;
+    private ID3D11PixelShader? _boundPixelShader;
+    private bool _pixelShaderBound;
+    private ID3D11RasterizerState? _boundRasterizer;
+    private ID3D11ShaderResourceView? _boundColorTexture;
     private readonly ID3D11Buffer _frameBuffer;
     private readonly ID3D11Buffer _objectBuffer;
     private readonly ID3D11Buffer _shadowConstantBuffer;
@@ -464,6 +487,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _cutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSCutout", "models", "ps_5_0").Span);
         _translucentPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTranslucent", "models", "ps_5_0").Span);
         _shadowCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSShadowCutout", "models", "ps_5_0").Span);
+        _shadowSkinnedCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSShadowSkinnedCutout", "models", "ps_5_0").Span);
         _pickOpaquePixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickOpaque", "models", "ps_5_0").Span);
         _pickCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickCutout", "models", "ps_5_0").Span);
         _pickTranslucentPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSPickTranslucent", "models", "ps_5_0").Span);
@@ -478,6 +502,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             new("TEXCOORD", 1, Format.R32G32_Float, 40, 0),
         ];
         _inputLayout = device.CreateInputLayout(layout, vsBytecode.Span);
+
+        ReadOnlyMemory<byte> shadowBytecode = Compiler.Compile(ShaderSource, "VSShadow", "models", "vs_5_0");
+        _shadowVertexShader = device.CreateVertexShader(shadowBytecode.Span);
+        _shadowInputLayout = device.CreateInputLayout([layout[0], layout[2]], shadowBytecode.Span);
 
         ReadOnlyMemory<byte> skinnedBytecode = Compiler.Compile(ShaderSource, "VSSkinned", "models", "vs_5_0");
         _skinnedVertexShader = device.CreateVertexShader(skinnedBytecode.Span);
@@ -774,17 +802,17 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     public void Begin(ModelPass pass)
     {
         _pass = pass;
+        _shadowPass = false;
         bool translucent = pass == ModelPass.Translucent;
-        _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        _context.VSSetShader(_vertexShader);
-        _skinnedBound = false;
+        BindVertexMode(VertexMode.Plain);
         BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
         _context.OMSetBlendState(translucent ? _translucentBlendState : _blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.OMSetDepthStencilState(translucent ? _translucentDepthStencilState : _depthStencilState, 0);
-        _context.RSSetState(_rasterizerState);
+        ForgetBoundStates();
+        SetRasterizer(_rasterizerState);
         SetShadows(Shadows);
     }
 
@@ -798,6 +826,56 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _context.PSSetConstantBuffer(2, _objectBuffer);
     }
 
+    // Other renderers change the states between two passes: the next ones are set again.
+    private void ForgetBoundStates()
+    {
+        _boundPixelShader = null;
+        _pixelShaderBound = false;
+        _boundRasterizer = null;
+        _boundColorTexture = null;
+    }
+
+    private void SetPixelShader(ID3D11PixelShader? shader)
+    {
+        if (_pixelShaderBound && ReferenceEquals(shader, _boundPixelShader))
+            return;
+        _context.PSSetShader(shader);
+        _boundPixelShader = shader;
+        _pixelShaderBound = true;
+    }
+
+    private void SetRasterizer(ID3D11RasterizerState state)
+    {
+        if (ReferenceEquals(state, _boundRasterizer))
+            return;
+        _context.RSSetState(state);
+        _boundRasterizer = state;
+    }
+
+    private void SetColorTexture(GpuTexture texture)
+    {
+        if (ReferenceEquals(texture.View, _boundColorTexture))
+            return;
+        _context.PSSetShaderResource(0, texture.View);
+        _boundColorTexture = texture.View;
+    }
+
+    // Vertex shader and vertex layout: plain models, models following a skeleton, or shadow images (position and
+    // texture coordinates only).
+    private enum VertexMode
+    {
+        Plain,
+        Skinned,
+        Shadow,
+    }
+
+    private void BindVertexMode(VertexMode mode)
+    {
+        _vertexMode = mode;
+        _context.IASetInputLayout(mode switch { VertexMode.Skinned => _skinnedInputLayout, VertexMode.Shadow => _shadowInputLayout, _ => _inputLayout });
+        _context.VSSetShader(mode switch { VertexMode.Skinned => _skinnedVertexShader, VertexMode.Shadow => _shadowVertexShader, _ => _vertexShader });
+    }
+
     private void SetShadows(ShadowMaps? shadows)
     {
         var constants = new ShadowConstants();
@@ -807,7 +885,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             constants.Cascade1 = shadows.Cascades[1];
             constants.Cascade2 = shadows.Cascades[2];
             constants.Splits = new Vector4(shadows.Splits[0], shadows.Splits[1], shadows.Splits[2], 1f);
-            constants.Texels = new Vector4(shadows.TexelSizes[0], shadows.TexelSizes[1], shadows.TexelSizes[2], 1f / ShadowMaps.Size);
+            constants.Texels = new Vector4(shadows.TexelSizes[0], shadows.TexelSizes[1], shadows.TexelSizes[2], 1f / shadows.Size);
             constants.Forward = new Vector4(shadows.CameraForward, 0f);
         }
         var map = _context.Map(_shadowConstantBuffer, 0, MapMode.WriteDiscard);
@@ -829,35 +907,36 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     // DrawShadow.
     public void BeginShadow()
     {
+        _shadowPass = true;
         _context.PSUnsetShaderResource(5); // The shadow images are being drawn.
-        _context.IASetInputLayout(_inputLayout);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        _context.VSSetShader(_vertexShader);
-        _skinnedBound = false;
+        BindVertexMode(VertexMode.Shadow);
         BindConstants();
         _context.PSSetSampler(0, _samplerState);
         _context.GSSetShader(null);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.OMSetDepthStencilState(_shadowDepthStencilState, 0);
-        _context.RSSetState(_shadowRasterizerState);
+        ForgetBoundStates();
+        SetRasterizer(_shadowRasterizerState);
     }
 
     // Draws the solid and cut-out meshes of a placed model into the shadow image seen through lightViewProjection.
     public void DrawShadow(GpuModel model, Matrix4x4 world, Matrix4x4 lightViewProjection)
     {
         SetModel(model, world, lightViewProjection, Vector3.One, pickId: 0);
+        FlushConstants();
         foreach (var part in model.Parts)
         {
             if (part.BlendMode is MeshBlendMode.Translucent or MeshBlendMode.Water)
                 continue; // Glass, decals and water let the light through.
             if (part.BlendMode == MeshBlendMode.Cutout)
             {
-                _context.PSSetShader(_shadowCutoutPixelShader);
-                _context.PSSetShaderResource(0, (part.Texture ?? _untextured).View);
+                SetPixelShader(_vertexMode == VertexMode.Skinned ? _shadowSkinnedCutoutPixelShader : _shadowCutoutPixelShader);
+                SetColorTexture(part.Texture ?? _untextured);
             }
             else
             {
-                _context.PSSetShader(null);
+                SetPixelShader(null);
             }
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
@@ -873,15 +952,17 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             bool translucent = part.BlendMode == MeshBlendMode.Translucent;
             if (translucent != (_pass == ModelPass.Translucent) || part.BlendMode == MeshBlendMode.Water)
                 continue; // Water: drawn by WaterRenderer.
+            if (HiddenMeshes is { } hidden && hidden.Contains(part.Mesh))
+                continue;
             bool terrain = part.Layers is not null && part.BlendMode == MeshBlendMode.Opaque;
-            _context.PSSetShader(part.BlendMode switch
+            SetPixelShader(part.BlendMode switch
             {
                 _ when terrain => _terrainPixelShader,
                 MeshBlendMode.Cutout => _cutoutPixelShader,
                 MeshBlendMode.Translucent => _translucentPixelShader,
                 _ => _opaquePixelShader,
             });
-            _context.RSSetState(Wireframe ? _wireframeRasterizerState
+            SetRasterizer(Wireframe ? _wireframeRasterizerState
                 : part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
             float emission = part.Emission switch
             {
@@ -893,8 +974,6 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var paint = VehiclePaint is { } colors && part.PaintSlot != VehiclePaintSlot.None && (int)part.PaintSlot < colors.Length
                 ? colors[(int)part.PaintSlot] : Vector3.One;
             bool painted = VehiclePaint is not null && part.PaintSlot != VehiclePaintSlot.None;
-            if (HiddenMeshes is { } hidden && hidden.Contains(part.Mesh))
-                continue;
             var highlight = HighlightedMesh == part.Mesh ? HighlightColor : Vector3.One;
             SetTint(tint * paint * highlight);
             var baseTexture = Untextured && part.BlendMode == MeshBlendMode.Opaque ? _white
@@ -917,7 +996,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
             SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine);
-            _context.PSSetShaderResource(0, baseTexture.View);
+            SetColorTexture(baseTexture);
+            FlushConstants();
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
     }
@@ -933,7 +1013,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         if (_constants.Surface == value)
             return;
         _constants.Surface = value;
-        WriteConstants();
+        _constantsDirty = true;
     }
 
     // Sets the shaders and states for drawing object numbers into a PickBuffer (already bound), before a series of
@@ -947,18 +1027,19 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     public void DrawPick(GpuModel model, Matrix4x4 world, Matrix4x4 viewProjection, uint pickId)
     {
         SetModel(model, world, viewProjection, Vector3.One, pickId);
+        FlushConstants();
         foreach (var part in model.Parts)
         {
             if (part.DarkeningDecal)
                 continue; // A shadow on the floor: the click goes to the floor.
-            _context.PSSetShader(part.BlendMode switch
+            SetPixelShader(part.BlendMode switch
             {
                 MeshBlendMode.Cutout => _pickCutoutPixelShader,
                 MeshBlendMode.Translucent => _pickTranslucentPixelShader,
                 _ => _pickOpaquePixelShader,
             });
-            _context.RSSetState(part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
-            _context.PSSetShaderResource(0, (part.Texture ?? _untextured).View);
+            SetRasterizer(part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
+            SetColorTexture(part.Texture ?? _untextured);
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
     }
@@ -990,16 +1071,16 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             _frameWritten = true;
         }
 
-        _constants = new ObjectConstants { World = world, Tint = new Vector4(tint, 1f), PickId = pickId };
-        WriteConstants();
+        // Written once, just before the first draw of the model (the mesh settings below may change it again).
+        _constants.World = world;
+        _constants.Tint = new Vector4(tint, 1f);
+        _constants.PickId = pickId;
+        _constantsDirty = true;
 
         bool skinned = model.SkinBuffer is not null && BonePose is not null;
-        if (skinned != _skinnedBound)
-        {
-            _context.IASetInputLayout(skinned ? _skinnedInputLayout : _inputLayout);
-            _context.VSSetShader(skinned ? _skinnedVertexShader : _vertexShader);
-            _skinnedBound = skinned;
-        }
+        var mode = skinned ? VertexMode.Skinned : _shadowPass ? VertexMode.Shadow : VertexMode.Plain;
+        if (mode != _vertexMode)
+            BindVertexMode(mode);
         if (skinned)
         {
             WriteBones(BonePose!, model.BonePalette);
@@ -1033,8 +1114,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private Matrix4x4 _frameViewProjection;
 
     // Constants of the model being drawn: only the emission and the terrain settings change from one mesh to the
-    // next.
+    // next. Sent to the GPU only before a draw, when they changed.
     private ObjectConstants _constants;
+    private bool _constantsDirty;
 
     private void SetTint(Vector3 tint)
     {
@@ -1042,7 +1124,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         if (_constants.Tint == value)
             return;
         _constants.Tint = value;
-        WriteConstants();
+        _constantsDirty = true;
     }
 
     // bakedLighting: 0 none, 1 GTA IV (darkens nooks), 2 first trilogy pre-lit.
@@ -1053,11 +1135,14 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             return;
         _constants.Emission = value;
         _constants.Terrain = terrain;
-        WriteConstants();
+        _constantsDirty = true;
     }
 
-    private void WriteConstants()
+    private void FlushConstants()
     {
+        if (!_constantsDirty)
+            return;
+        _constantsDirty = false;
         var map = _context.Map(_objectBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, _constants);
         _context.Unmap(_objectBuffer, 0);
@@ -1082,6 +1167,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _shadowRasterizerState.Dispose();
         _shadowDepthStencilState.Dispose();
         _shadowCutoutPixelShader.Dispose();
+        _shadowSkinnedCutoutPixelShader.Dispose();
+        _shadowVertexShader.Dispose();
+        _shadowInputLayout.Dispose();
         _inputLayout.Dispose();
         _skinnedInputLayout.Dispose();
         _skinnedVertexShader.Dispose();

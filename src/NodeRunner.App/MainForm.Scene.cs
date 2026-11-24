@@ -105,7 +105,9 @@ internal sealed unsafe partial class MainForm
         if (shadows)
         {
             _shadowMaps ??= new ShadowMaps(_graphics!.Device, _graphics.Context);
-            _shadowMaps.Update(camera, (float)scene.Width / scene.Height, lighting.SunDirection, settings.ShadowDistance);
+            // Kept from the last frames while nothing casting a shadow changed and the view stays within them.
+            _shadowMaps.Update(camera, (float)scene.Width / scene.Height, lighting.SunDirection, settings.ShadowDistance,
+                _modelLayer.CastersChanged(), _state.Play.IsActive);
             _modelLayer.DrawShadows(_modelRenderer, _shadowMaps, _state.Play.IsActive ? light => _state.Play.DrawShadow(_modelRenderer, light) : null);
             _graphics!.BindBackBuffer();
             _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);

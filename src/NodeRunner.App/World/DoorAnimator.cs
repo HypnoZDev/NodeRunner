@@ -37,6 +37,9 @@ internal sealed class DoorAnimator
 
     public int Count => _doors.Count;
 
+    // Changes whenever a door moves (the sun's shadow images are drawn again).
+    public int Version { get; private set; }
+
     public bool IsOpen(MapEntity door) => _doors.TryGetValue(door, out var motion) && motion.Target > 0f;
 
     // The leaf's movement to apply before the object's own placement, while the door is not closed.
@@ -60,6 +63,8 @@ internal sealed class DoorAnimator
         if (library != _library)
         {
             _library = library;
+            if (_doors.Count > 0)
+                Version++;
             _doors.Clear();
             _clearances.Clear();
         }
@@ -69,9 +74,12 @@ internal sealed class DoorAnimator
         foreach (var (entity, motion) in _doors)
         {
             float step = Speed * seconds;
+            float amount = motion.Amount;
             motion.Amount = motion.Target > motion.Amount
                 ? MathF.Min(motion.Target, motion.Amount + step)
                 : MathF.Max(motion.Target, motion.Amount - step);
+            if (motion.Amount != amount)
+                Version++;
             if ((motion.Amount <= 0f && motion.Target <= 0f) || entity.IsDeleted)
                 (closed ??= []).Add(entity);
         }

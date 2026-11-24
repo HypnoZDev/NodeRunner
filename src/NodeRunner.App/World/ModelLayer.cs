@@ -215,6 +215,7 @@ internal sealed class ModelLayer : IDisposable
             if (finished.IsCompletedSuccessfully)
             {
                 _visible = finished.Result;
+                _castersVersion++;
             }
             else
             {
@@ -285,6 +286,29 @@ internal sealed class ModelLayer : IDisposable
 
     // Objects not drawn (those a cutscene playing replaces with its own).
     public IReadOnlySet<MapEntity>? Hidden { get; set; }
+
+    // Bumped when what casts a shadow changes: list of objects, models loaded or released (see CastersChanged).
+    private int _castersVersion;
+    private (int Casters, int Structure, int Doors, IReadOnlySet<MapEntity>? Hidden, int HiddenCount) _castersSeen = (-1, -1, -1, null, 0);
+
+    // True when an object casting a shadow was moved, added, removed, loaded, hidden or opened (door) since the last
+    // call: the sun's shadow images must be drawn again.
+    public bool CastersChanged()
+    {
+        for (int i = 0; i < _visible.Count; i++)
+        {
+            if (!_visible[i].IsCurrent)
+            {
+                _visible[i] = Refresh(_visible[i]);
+                _castersVersion++;
+            }
+        }
+        var now = (_castersVersion, _library?.StructureVersion ?? 0, Doors?.Version ?? 0, Hidden, Hidden?.Count ?? 0);
+        if (now == _castersSeen)
+            return false;
+        _castersSeen = now;
+        return true;
+    }
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
         Action? beforeTranslucent = null, OcclusionCuller? occlusion = null)
@@ -384,6 +408,8 @@ internal sealed class ModelLayer : IDisposable
         fallbacksDrawn.Clear();
         for (int cascade = 0; cascade < ShadowMaps.CascadeCount; cascade++)
         {
+            if (!shadows.MustDraw(cascade))
+                continue; // Still valid.
             shadows.BeginCascade(cascade);
             var lightViewProjection = shadows.Cascades[cascade];
             var frustum = new Frustum(lightViewProjection);
@@ -686,6 +712,7 @@ internal sealed class ModelLayer : IDisposable
             slot.Model = model;
             slot.Loaded = true;
             slot.LastUsed = _clock.Elapsed.TotalSeconds;
+            _castersVersion++;
         }
     }
 
@@ -731,6 +758,7 @@ internal sealed class ModelLayer : IDisposable
         if (!slot.Loaded)
             return false;
         slot.Loaded = false;
+        _castersVersion++;
         if (slot.Model is { } model)
         {
             _gpuBytes -= model.ByteSize;
@@ -822,6 +850,7 @@ internal sealed class ModelLayer : IDisposable
     private void Clear()
     {
         _generation++;
+        _castersVersion++;
         _recentFiles = new(RecentFileCacheSize);
         _drawn.Clear();
         foreach (var slot in _slots.Values)
