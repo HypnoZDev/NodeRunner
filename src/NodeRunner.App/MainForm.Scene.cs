@@ -148,9 +148,21 @@ internal sealed unsafe partial class MainForm
         if (occlusionPreview)
             _occlusionCuller.Prepare(viewProjection, camera.Position, (float)scene.Width / scene.Height);
         // The character of the play mode before the water: what is under the surface is seen through it.
+        // The solid models also give their normals for the ambient occlusion, applied before the water and glass.
+        bool occlusion = image is not null && imageOptions.AmbientOcclusion > 0;
+        if (occlusion)
+        {
+            image!.Bind(normals: true);
+            _modelRenderer.NormalsOutput = true;
+        }
         void PlayerAndWater()
         {
             _state.Play.Draw(_modelRenderer, sceneViewProjection);
+            if (occlusion)
+            {
+                _modelRenderer.NormalsOutput = false;
+                image!.ApplyOcclusion(camera, (float)scene.Width / scene.Height);
+            }
             DrawWater(sceneViewProjection, lighting, scene, image);
         }
         if (modelsEnabled)
@@ -313,6 +325,8 @@ internal sealed unsafe partial class MainForm
             Exposure = Math.Clamp(settings.Exposure, 0.2f, 4f),
             Sharpness = Math.Clamp(settings.Sharpness, 0f, 1f),
             Antialiasing = allowed && settings.Antialiasing,
+            AmbientOcclusion = allowed ? Math.Clamp(settings.AmbientOcclusion, 0, 2) : 0,
+            OcclusionStrength = Math.Clamp(settings.OcclusionStrength, 0f, 2f),
         };
     }
 

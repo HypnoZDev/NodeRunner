@@ -720,6 +720,25 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
             state.SaveSettings();
         }
 
+        Widgets.Property(L("Occlusion ambiante"), L("Assombrit les recoins, le pied des murs et le sol sous les objets, là où la lumière du ciel arrive moins. Normale = rapide, Haute = plus précise."));
+        string[] occlusionNames = [L("Aucune"), L("Normale"), L("Haute")];
+        int occlusion = Math.Clamp(settings.AmbientOcclusion, 0, 2);
+        ImGui.SetNextItemWidth(settings.AmbientOcclusion > 0 ? ImGui.GetContentRegionAvail().X * 0.45f : -1f);
+        if (ImGui.Combo("##ambient_occlusion", ref occlusion, occlusionNames, occlusionNames.Length))
+        {
+            settings.AmbientOcclusion = occlusion;
+            state.SaveSettings();
+        }
+        if (settings.AmbientOcclusion > 0)
+        {
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(-1f);
+            float strength = settings.OcclusionStrength * 100f;
+            if (ImGui.SliderFloat("##occlusion_strength", ref strength, 0f, 200f, L("Force %.0f %%")))
+                settings.OcclusionStrength = strength / 100f;
+            SaveWhenReleased();
+        }
+
         Widgets.Property(L("Résolution de rendu"), L("Part des pixels de la vue 3D vraiment calculés ; l'image est ensuite agrandie. Moins de 100 % = bien plus rapide sur un petit PC ou un écran 4K, mais moins net."));
         ImGui.SetNextItemWidth(-1f);
         float scale = settings.RenderScale * 100f;

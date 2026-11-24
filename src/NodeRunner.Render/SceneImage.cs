@@ -31,8 +31,13 @@ public readonly record struct SceneImageOptions
     // ones, moved back to where the camera saw them.
     public bool Antialiasing { get; init; }
 
+    // Ambient occlusion (nooks and the ground under objects darker): 0 none, 1 normal (half the pixels), 2 high.
+    public int AmbientOcclusion { get; init; }
+
+    public float OcclusionStrength { get; init; }
+
     // True when the scene needs its own images; otherwise it is drawn straight into the window, as on small PCs.
-    public bool IsUsed => Hdr || Antialiasing || Scale < 0.999f;
+    public bool IsUsed => Hdr || Antialiasing || AmbientOcclusion > 0 || Scale < 0.999f;
 }
 
 // The 3D scene drawn into images of its own instead of straight into the window: light beyond white (HDR) brought back
@@ -214,6 +219,116 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
     return float4(Expand(FromYCoCg(result)), 1.0f);
 }";
 
+    // Ambient occlusion: how much of the sky's light the surroundings hide from each pixel (nooks, the ground under
+    // objects, the foot of walls), from the depth and the normals of the solid pass; blurred while keeping the edges,
+    // then multiplied into the light coming from the surroundings only (the sun's own light is not darkened).
+    private const string OcclusionSource = @"
+cbuffer Constants : register(b0)
+{
+    float4x4 ViewRotation; // World directions -> camera's (rotation only).
+    float4 Projection;     // x, y: scale of the projection, z: near plane (m), w: radius of the search (m).
+    float4 Size;           // xy: size of the occlusion image, zw: size of the scene images.
+    float4 Settings;       // x: strength, y: frame number (turns the samples), z: samples, w: distance where it fades out.
+    float4 Direction;      // xy: blur direction (pixels).
+};
+Texture2D<float> Depth : register(t0);
+Texture2D Normals : register(t1);
+Texture2D<float> Occlusion : register(t2);
+SamplerState LinearClamp : register(s0);
+
+struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+// Point seen at uv, in the camera's space (looking along -z), from the reversed depth.
+float3 ViewPoint(float2 uv, float depth)
+{
+    float distance = Projection.z / max(depth, 1e-7f);
+    float2 ndc = (uv * 2.0f - 1.0f) * float2(1.0f, -1.0f);
+    return float3(ndc.x * distance / Projection.x, ndc.y * distance / Projection.y, -distance);
+}
+
+float DepthAt(float2 uv)
+{
+    return Depth.Load(int3(clamp(uv * Size.zw, 0.0f, Size.zw - 1.0f), 0));
+}
+
+float PSOcclusion(VS_OUTPUT input) : SV_Target
+{
+    float depth = DepthAt(input.uv);
+    float4 normal = Normals.Load(int3(clamp(input.uv * Size.zw, 0.0f, Size.zw - 1.0f), 0));
+    if (depth <= 0.0f || normal.a <= 0.0f)
+        return 1.0f; // Sky, or no surface lit by its surroundings.
+    float3 p = ViewPoint(input.uv, depth);
+    float3 n = normalize(mul(ViewRotation, float4(normal.xyz * 2.0f - 1.0f, 0.0f)).xyz);
+    float3 tangent = normalize(abs(n.z) < 0.9f ? cross(n, float3(0.0f, 0.0f, 1.0f)) : cross(n, float3(1.0f, 0.0f, 0.0f)));
+    float3 bitangent = cross(n, tangent);
+
+    // Different turn of the samples for each pixel (and each frame with the smoothing, which blends them).
+    float noise = frac(52.9829189f * frac(dot(input.pos.xy + Settings.y * 5.588238f, float2(0.06711056f, 0.00583715f))));
+    float angle = noise * 6.2831853f;
+    int count = (int)Settings.z;
+    float radius = Projection.w;
+    float hidden = 0.0f;
+    [loop] for (int i = 0; i < count; i++)
+    {
+        float f = (i + 0.5f) / count;
+        float r = sqrt(f);
+        float theta = i * 2.3999632f + angle;
+        float3 direction = tangent * (cos(theta) * r) + bitangent * (sin(theta) * r) + n * sqrt(1.0f - f);
+        float reach = lerp(0.15f, 1.0f, frac(f + noise * 0.61803f));
+        float3 s = p + direction * (radius * reach * reach);
+        if (s.z >= -Projection.z)
+            continue;
+        float2 ndc = float2(s.x * Projection.x, s.y * Projection.y) / -s.z;
+        float2 uv = ndc * float2(0.5f, -0.5f) + 0.5f;
+        if (any(uv < 0.0f) || any(uv > 1.0f))
+            continue;
+        float sceneDistance = Projection.z / max(DepthAt(uv), 1e-7f);
+        float sampleDistance = -s.z;
+        // Hidden when the surface seen there is in front of the sample; not by something far in front of it.
+        float inFront = sampleDistance - sceneDistance;
+        if (inFront > 0.02f * radius)
+            hidden += saturate(radius / max(inFront, 0.001f) - 0.5f);
+    }
+    float occlusion = 1.0f - hidden / max(count, 1);
+    float fade = saturate(-p.z / Settings.w);
+    return lerp(occlusion, 1.0f, fade * fade);
+}
+
+// Blur along Direction, only between pixels at about the same distance (the edges of objects stay sharp).
+float PSBlur(VS_OUTPUT input) : SV_Target
+{
+    float center = Projection.z / max(DepthAt(input.uv), 1e-7f);
+    float sum = 0.0f, weights = 0.0f;
+    [unroll] for (int i = -4; i <= 4; i++)
+    {
+        float2 uv = input.uv + Direction.xy * i / Size.xy;
+        float distance = Projection.z / max(DepthAt(uv), 1e-7f);
+        float w = exp(-i * i / 8.0f) * saturate(1.0f - abs(distance - center) / (0.03f * center + 0.05f));
+        sum += Occlusion.SampleLevel(LinearClamp, uv, 0) * w;
+        weights += w;
+    }
+    return sum / max(weights, 0.0001f);
+}
+
+// Multiplies the scene's colours: only the share of the light that came from the surroundings is darkened.
+float4 PSApply(VS_OUTPUT input) : SV_Target
+{
+    float occlusion = Occlusion.SampleLevel(LinearClamp, input.uv, 0);
+    float share = Normals.Load(int3(input.pos.xy, 0)).a;
+    float k = saturate(1.0f - (1.0f - occlusion) * share * Settings.x);
+    return float4(k, k, k, 1.0f);
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct OcclusionConstants
+    {
+        public Matrix4x4 ViewRotation;
+        public Vector4 Projection;
+        public Vector4 Size;
+        public Vector4 Settings;
+        public Vector4 Direction;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct ResolveConstants
     {
@@ -244,6 +359,13 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
     private readonly ID3D11DepthStencilState _noDepth;
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11BlendState _opaque;
+    private readonly ID3D11BlendState _multiply;
+    private readonly ID3D11PixelShader _occlusionPixelShader;
+    private readonly ID3D11PixelShader _blurPixelShader;
+    private readonly ID3D11PixelShader _applyPixelShader;
+    private readonly ID3D11Buffer _occlusionBuffer;
+    private Texture? _occlusion;
+    private Texture? _occlusionBlur;
 
     private Texture? _color;
     private Texture? _normals;
@@ -303,6 +425,24 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
             DepthClipEnable = false,
         });
         _opaque = device.CreateBlendState(BlendDescription.Opaque);
+        var multiply = new BlendDescription();
+        multiply.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            BlendEnable = true,
+            SourceBlend = Blend.Zero,
+            DestinationBlend = Blend.SourceColor,
+            BlendOperation = BlendOperation.Add,
+            SourceBlendAlpha = Blend.Zero,
+            DestinationBlendAlpha = Blend.One,
+            BlendOperationAlpha = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteEnable.All,
+        };
+        _multiply = device.CreateBlendState(multiply);
+        _occlusionPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSOcclusion", "occlusion", "ps_5_0").Span);
+        _blurPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSBlur", "occlusion", "ps_5_0").Span);
+        _applyPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSApply", "occlusion", "ps_5_0").Span);
+        _occlusionBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(OcclusionConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
     }
 
     // Size of the images, in pixels.
@@ -399,6 +539,90 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
         for (; index > 0; index /= radix, fraction /= radix)
             result += fraction * (index % radix);
         return result;
+    }
+
+    // Darkens the nooks of the solid models drawn so far (with the normals' image bound, see Bind), then binds the
+    // colour image alone again. camera: the camera of ViewProjection.
+    public void ApplyOcclusion(Camera camera, float aspectRatio)
+    {
+        var options = Options;
+        if (options.AmbientOcclusion <= 0)
+        {
+            Bind(normals: false);
+            return;
+        }
+        bool high = options.AmbientOcclusion >= 2;
+        int width = high ? Width : Math.Max(1, Width / 2), height = high ? Height : Math.Max(1, Height / 2);
+        if (_occlusion is null || _occlusionWidth != width || _occlusionHeight != height)
+        {
+            _occlusion?.Dispose();
+            _occlusionBlur?.Dispose();
+            _occlusion = CreateTexture(width, height, Format.R8_UNorm, target: true);
+            _occlusionBlur = CreateTexture(width, height, Format.R8_UNorm, target: true);
+            (_occlusionWidth, _occlusionHeight) = (width, height);
+        }
+
+        var projection = camera.Projection(aspectRatio);
+        var constants = new OcclusionConstants
+        {
+            ViewRotation = Matrix4x4.CreateLookAt(Vector3.Zero, camera.Forward, Vector3.UnitZ),
+            Projection = new Vector4(projection.M11, projection.M22, camera.NearPlane, OcclusionRadius),
+            Size = new Vector4(width, height, Width, Height),
+            Settings = new Vector4(Math.Clamp(options.OcclusionStrength, 0f, 2f), options.Antialiasing ? _frame : 0f, high ? 16f : 10f, OcclusionDistance),
+        };
+        _context.OMSetRenderTargets((ID3D11RenderTargetView?)null!);
+        _context.IASetInputLayout(null);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_fullVertexShader);
+        _context.GSSetShader(null);
+        _context.PSSetSampler(0, _linearClamp);
+        _context.OMSetDepthStencilState(_noDepth, 0);
+        _context.RSSetState(_rasterizerState);
+        _context.PSSetShaderResource(0, _depthRead!);
+        _context.PSSetShaderResource(1, _normals!.Read);
+
+        // Occlusion, then blurred across and down.
+        WriteOcclusion(constants);
+        _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.OMSetRenderTargets(_occlusion.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, width, height));
+        _context.PSSetShader(_occlusionPixelShader);
+        _context.Draw(3, 0);
+
+        _context.PSSetShader(_blurPixelShader);
+        foreach (var (from, to, direction) in new[] { (_occlusion, _occlusionBlur!, Vector2.UnitX), (_occlusionBlur!, _occlusion, Vector2.UnitY) })
+        {
+            WriteOcclusion(constants with { Direction = new Vector4(direction, 0f, 0f) });
+            _context.OMSetRenderTargets(to.Write!);
+            _context.PSSetShaderResource(2, from.Read);
+            _context.Draw(3, 0);
+            _context.PSUnsetShaderResource(2);
+        }
+
+        // Into the colours.
+        _context.OMSetRenderTargets(_color!.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+        _context.PSSetShaderResource(2, _occlusion.Read);
+        _context.PSSetShader(_applyPixelShader);
+        _context.OMSetBlendState(_multiply, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.Draw(3, 0);
+        for (uint slot = 0; slot < 3; slot++)
+            _context.PSUnsetShaderResource(slot);
+        Bind(normals: false);
+    }
+
+    private int _occlusionWidth, _occlusionHeight;
+
+    // Metres around a point where something can hide the sky from it; distance beyond which the occlusion fades out.
+    private const float OcclusionRadius = 1.6f;
+    private const float OcclusionDistance = 300f;
+
+    private void WriteOcclusion(OcclusionConstants constants)
+    {
+        var map = _context.Map(_occlusionBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, constants);
+        _context.Unmap(_occlusionBuffer, 0);
+        _context.PSSetConstantBuffer(0, _occlusionBuffer);
     }
 
     // Binds the colour image (and the normals' image for the solid passes) with the depth, over the whole image.
@@ -557,6 +781,10 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
             _history[i]?.Dispose();
             _history[i] = null;
         }
+        _occlusion?.Dispose();
+        _occlusion = null;
+        _occlusionBlur?.Dispose();
+        _occlusionBlur = null;
         _historyValid = false;
         _depthRead?.Dispose();
         _depthRead = null;
@@ -577,6 +805,11 @@ float4 PSResolve(VS_OUTPUT input) : SV_Target
         _linearClamp.Dispose();
         _constantBuffer.Dispose();
         _resolveBuffer.Dispose();
+        _multiply.Dispose();
+        _occlusionPixelShader.Dispose();
+        _blurPixelShader.Dispose();
+        _applyPixelShader.Dispose();
+        _occlusionBuffer.Dispose();
         _resolvePixelShader.Dispose();
         _compositePixelShader.Dispose();
         _fullVertexShader.Dispose();
