@@ -171,5 +171,27 @@ public static partial class English
         ("Tourner la caméra", "Turn the camera"),
         ("Rapprocher ou éloigner la caméra", "Move the camera closer or farther"),
         ("Quitter le mode Play", "Leave play mode"),
+
+        // Vehicle recording viewer.
+        ("{0}  Enregistrements de véhicules", "{0}  Vehicle recordings"),
+        ("Ouvrir les enregistrements de véhicules", "Open the vehicle recordings"),
+        ("La visionneuse d'enregistrements de véhicules est réservée à GTA V.", "The vehicle recording viewer is for GTA V only."),
+        ("Ferme la visionneuse d'enregistrements : le panneau Scène revient à la carte", "Closes the recording viewer: the Scene panel goes back to the map"),
+        ("{0}  Liste des enregistrements...", "{0}  Listing the recordings..."),
+        ("Rechercher une mission (ex. fam1, fbi4, trv)", "Search a mission (e.g. fam1, fbi4, trv)"),
+        ("{0} missions · {1} enregistrements", "{0} missions · {1} recordings"),
+        ("Joue (ou retire) tous les enregistrements de cette mission", "Plays (or removes) every recording of this mission"),
+        (" · {0} joués", " · {0} playing"),
+        ("Coche un ou plusieurs enregistrements : ils se jouent ensemble sur la carte, chaque voiture sur son trajet.", "Tick one or more recordings: they play together on the map, each car on its path."),
+        ("{0} joués · {1} s", "{0} playing · {1} s"),
+        ("La caméra suit cette voiture (clic : caméra libre)", "The camera follows this car (click: free camera)"),
+        ("Suivre cette voiture avec la caméra", "Follow this car with the camera"),
+        ("Aller à cette voiture", "Go to this car"),
+        ("Retirer cet enregistrement", "Remove this recording"),
+        ("{0}  ·  {1} s  ·  {2} km/h", "{0}  ·  {1} s  ·  {2} km/h"),
+        ("{0}  Tout retirer", "{0}  Remove all"),
+        ("Retire tous les enregistrements joués", "Removes every recording playing"),
+        ("La caméra suit une voiture (clic : caméra libre)", "The camera follows a car (click: free camera)"),
+        ("Caméra libre (clic : suivre la première voiture)", "Free camera (click: follow the first car)"),
     ];
 }

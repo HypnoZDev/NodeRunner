@@ -60,6 +60,7 @@ internal sealed unsafe class ScenePanel(AppState state)
     public Action? WorkshopContent { get; set; }
     public Action? PedContent { get; set; }
     public Action? CutsceneContent { get; set; }
+    public Action? RecordingContent { get; set; }
 
     public void Draw(ref bool visible)
     {
@@ -71,6 +72,8 @@ internal sealed unsafe class ScenePanel(AppState state)
                 ped();
             else if (state.CutsceneOpen && CutsceneContent is { } cutscenes)
                 cutscenes();
+            else if (state.RecordingOpen && RecordingContent is { } recordings)
+                recordings();
             else
                 DrawContent();
         }

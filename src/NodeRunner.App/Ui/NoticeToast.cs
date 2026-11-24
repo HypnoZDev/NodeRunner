@@ -29,7 +29,7 @@ internal sealed class NoticeToast(AppState state)
         if (size.X < 200f || size.Y < 120f)
             return;
         // Above the timeline of a cutscene or of the character viewer.
-        float bottom = Margin + (state.CutsceneOpen || state.PedShown ? PlaybackBar.Height + 28f : 0f);
+        float bottom = Margin + (state.CutsceneOpen || state.RecordingOpen || state.PedShown ? PlaybackBar.Height + 28f : 0f);
         float width = MathF.Min(ImGui.GetFontSize() * 30f, size.X - Margin * 2f);
 
         ImGui.SetNextWindowPos(new Vector2(position.X + size.X - Margin, position.Y + size.Y - bottom), ImGuiCond.Always, new Vector2(1f, 1f));

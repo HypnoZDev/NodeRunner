@@ -707,6 +707,9 @@ internal sealed partial class AppState
     // Cutscene viewer open: Scene lists the cutscenes, the one chosen plays on the map.
     public bool CutsceneOpen { get; set; }
 
+    // Vehicle recording viewer open: Scene lists the recordings, those ticked play together on the map.
+    public bool RecordingOpen { get; set; }
+
     // A tab (workshop or ped viewer) is drawn over the 3D view: the map is not drawn nor edited.
     public bool MapCovered => WorkshopCoversMap || PedShown;
 

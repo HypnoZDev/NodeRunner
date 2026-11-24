@@ -65,6 +65,7 @@ internal sealed partial class AppState
 
     // The game cutscene played on the map (cutscene viewer).
     public CutscenePlayer Cutscenes { get; } = new();
+    public RecordingPlayer Recordings { get; } = new();
 
     // The car drawn on the selected parking spot.
     public CarGeneratorPreview SpotPreview { get; } = new();

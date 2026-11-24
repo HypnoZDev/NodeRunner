@@ -44,6 +44,8 @@ internal sealed class MainUi
         _propertiesPanel.PedContent = _pedStudio.DrawProperties;
         _scenePanel.PedContent = _pedStudio.DrawList;
         _scenePanel.CutsceneContent = _cutscenePanel.DrawList;
+        _recordingPanel = new RecordingPanel(state);
+        _scenePanel.RecordingContent = _recordingPanel.DrawList;
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer, audioZoneLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);
@@ -132,6 +134,10 @@ internal sealed class MainUi
             {
                 if (!_state.CutsceneOpen) ToggleCutscenes();
             }, features.CutsceneViewer),
+            new(Icons.Car, L("Ouvrir les enregistrements de véhicules"), "yvr carrec enregistrement trajet poursuite véhicule voiture mission recording", "", () =>
+            {
+                if (!_state.RecordingOpen) ToggleRecordings();
+            }, features.CutsceneViewer),
             new(Icons.PersonStanding, L("Ouvrir la visionneuse de personnages"), "ped pnj piéton personnage animal animation", KeyText(KeyAction.Peds), _pedStudio.Open, features.PedViewer),
             new(Icons.Play, L("Mode Play : marcher sur la carte"), "play jouer jeu marcher personnage tester", KeyText(KeyAction.Play),
                 () => _state.PlayRequest = true, features.Play && !_state.MapCovered),
@@ -204,7 +210,22 @@ internal sealed class MainUi
             _cutscenePanel.Close();
         else
         {
+            if (_state.RecordingOpen)
+                _recordingPanel.Close();
             _cutscenePanel.Open();
+            _showScene = true;
+        }
+    }
+
+    private void ToggleRecordings()
+    {
+        if (_state.RecordingOpen)
+            _recordingPanel.Close();
+        else
+        {
+            if (_state.CutsceneOpen)
+                _cutscenePanel.Close();
+            _recordingPanel.Open();
             _showScene = true;
         }
     }
@@ -219,6 +240,8 @@ internal sealed class MainUi
             _pedStudio.Open();
         if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), KeyText(KeyAction.Cutscenes), _state.CutsceneOpen, features.CutsceneViewer))
             ToggleCutscenes();
+        if (ImGui.MenuItem(L($"{Icons.Car}  Enregistrements de véhicules"), "", _state.RecordingOpen, features.CutsceneViewer))
+            ToggleRecordings();
         ImGui.Separator();
         if (ImGui.MenuItem(L($"{Icons.Box}  Modifier le modèle (Atelier)"), L("Double-clic"), false, features.Editing && _state.Selection is not null))
             _state.WorkshopRequest = _state.Selection;
@@ -264,6 +287,7 @@ internal sealed class MainUi
     private readonly WorkspaceTabs _workspaceTabs;
     private readonly PedStudio _pedStudio;
     private readonly CutscenePanel _cutscenePanel;
+    private readonly RecordingPanel _recordingPanel;
     private readonly LibraryPanel _libraryPanel;
     private readonly TransformGizmo _gizmo;
     private readonly RoomHover _roomHover;
@@ -421,6 +445,7 @@ internal sealed class MainUi
         _viewerPanel.BeginFrame();
         _pedStudio.BeginFrame();
         _cutscenePanel.BeginFrame();
+        _recordingPanel.BeginFrame();
         if (_state.WorkshopRequest is { } workshopModel)
         {
             _state.WorkshopRequest = null;
@@ -445,6 +470,7 @@ internal sealed class MainUi
         _workspaceTabs.Draw();
         HideLibraryForPeds();
         _cutscenePanel.DrawTimeline();
+        _recordingPanel.DrawTimeline();
         // The map's handles and overlays only while the map is shown.
         if (!_state.MapCovered)
         {
@@ -813,6 +839,8 @@ internal sealed class MainUi
                 _pedStudio.Open();
             if (ImGui.MenuItem(L($"{Icons.Film}  Visionneuse de cinématiques"), KeyText(KeyAction.Cutscenes), _state.CutsceneOpen, _state.Features.CutsceneViewer))
                 ToggleCutscenes();
+            if (ImGui.MenuItem(L($"{Icons.Car}  Enregistrements de véhicules"), "", _state.RecordingOpen, _state.Features.CutsceneViewer))
+                ToggleRecordings();
             if (ImGui.MenuItem(L($"{Icons.Play}  Mode Play (marcher sur la carte)"), KeyText(KeyAction.Play), false, _state.Features.Play && !_state.MapCovered))
                 _state.PlayRequest = true;
             if (ImGui.BeginMenu(L($"{Icons.LibraryBig}  Bibliothèque de props")))

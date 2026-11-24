@@ -153,6 +153,10 @@ internal sealed unsafe partial class MainForm
         _state.Cutscenes.Update(_state.World, _modelRenderer);
         _state.Cutscenes.Draw(_modelRenderer, viewProjection);
 
+        // The vehicle recordings ticked in the recording viewer.
+        _state.Recordings.Update(_state.World, _modelRenderer, lines);
+        _state.Recordings.Draw(_modelRenderer, lines, viewProjection, camera.Position);
+
         bool navMeshEnabled = NavMeshLayer.Surfaces.Any(s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)));
         _navMeshLayer.Update(_state.World, lines, camera.Position, _state.Settings.NavMeshRadius, navMeshEnabled);
         _navMeshLayer.Draw(lines, viewProjection, camera.Position,
