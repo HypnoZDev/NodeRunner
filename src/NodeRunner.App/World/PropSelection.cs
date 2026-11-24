@@ -21,7 +21,7 @@ internal static class PropSelection
     [
         new("Chaises & tabourets", "Chairs & stools",
         [
-            new("prop_chair_01a", "Chaise en bois", "Wooden chair"),
+            new("prop_chair_01a", "Chaise de terrasse", "Patio chair"),
             new("apa_mp_h_din_chair_04", "Chaise de salle à manger", "Dining chair"),
             new("prop_old_wood_chair", "Vieille chaise en bois", "Old wooden chair"),
             new("prop_cs_folding_chair_01", "Chaise pliante", "Folding chair"),
