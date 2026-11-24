@@ -12,6 +12,9 @@ internal sealed record ViewerItem(string Name, ViewerKind Kind, ModelLocation Lo
     // Pack of the prop library the object type comes from, null for the game's.
     public string? Pack { get; init; }
 
+    // Name shown instead of the model name (props of the library's selection).
+    public string? Label { get; init; }
+
     // A ped: the files of its parts and how it is dressed.
     public PedFiles? Ped { get; init; }
 

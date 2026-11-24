@@ -6,7 +6,7 @@ using NodeRunner.Data.Maps;
 namespace NodeRunner.App.Ui;
 
 // Prop library (docked under the 3D view): pictures of the addon props shared by every project, filtered by pack or
-// favourites; double-click or drag into the 3D view to place one.
+// favourites, and a short choice of the game's props by kind; double-click or drag into the 3D view to place one.
 internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInViewer)
 {
     public const string Title = $"{Icons.LibraryBig}  Bibliothèque###Bibliothèque";
@@ -14,6 +14,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
     private const float MinTile = 72f;
     private const float MaxTile = 160f;
     private const string FavoritesFilter = "\u0001favorites";
+    private const string SelectionFilter = "\u0002";
 
     private MapLibrary? _builtFor;
     private Task<List<ViewerItem>>? _building;
@@ -21,6 +22,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
     private List<ViewerItem> _rows = [];
     private (string Search, string? Pack, int Favorites, List<ViewerItem> All) _rowsBuiltFor;
     private List<(string Pack, int Count)> _packs = [];
+    private List<ViewerItem>[] _selection = [];
     private string _search = "";
     private string? _pack;
     private ViewerItem? _selected;
@@ -28,6 +30,14 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
     private float _tile = 96f;
 
     public int Count => _all.Count;
+
+    private static string SelectionKey(int category) => SelectionFilter + category;
+
+    private int? SelectedCategory =>
+        _pack is { } pack && pack.StartsWith(SelectionFilter, StringComparison.Ordinal) && int.TryParse(pack.AsSpan(1), out int index)
+        && index < _selection.Length ? index : null;
+
+    private IEnumerable<ViewerItem> SelectionItems => _selection.SelectMany(c => c);
 
     public void Draw(ref bool open)
     {
@@ -41,7 +51,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         {
             Update();
             DrawToolbar();
-            if (_all.Count == 0)
+            if (_all.Count == 0 && SelectedCategory is null && _pack != FavoritesFilter)
                 DrawEmpty();
             else
                 DrawGrid();
@@ -56,6 +66,8 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         {
             _builtFor = world.Maps;
             _building = world.Maps is null ? null : Task.Run(() => ViewerCatalog.LibraryItems(world));
+            _selection = world.Maps is null ? [] : PropSelection.Categories.Select(c => PropSelection.Items(c, world)).ToArray();
+            _rowsBuiltFor = default;
         }
         if (_building is { IsCompleted: true } done)
         {
@@ -63,10 +75,14 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
             _all = done.Result;
             _packs = _all.GroupBy(i => i.Pack ?? "", StringComparer.OrdinalIgnoreCase)
                 .Select(g => (g.Key, g.Count())).OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).ToList();
-            if (_pack is not null && _pack != FavoritesFilter && !_packs.Any(p => string.Equals(p.Pack, _pack, StringComparison.OrdinalIgnoreCase)))
+            if (_pack is not null && _pack != FavoritesFilter && SelectedCategory is null
+                && !_packs.Any(p => string.Equals(p.Pack, _pack, StringComparison.OrdinalIgnoreCase)))
                 _pack = null;
+            // Without addon packs, the game's props are shown first.
+            if (_pack is null && _all.Count == 0 && _selection.Length > 0)
+                _pack = SelectionKey(0);
             if (_selected is not null)
-                _selected = _all.FirstOrDefault(i => i.Name == _selected.Name);
+                _selected = _all.Concat(SelectionItems).FirstOrDefault(i => i.Name == _selected.Name);
         }
     }
 
@@ -96,21 +112,30 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         string current = _pack switch
         {
             null => L($"Tous les packs ({_all.Count})"),
-            FavoritesFilter => L($"{Icons.Star}  Favoris ({_all.Count(IsFavorite)})"),
+            FavoritesFilter => L($"{Icons.Star}  Favoris ({_all.Concat(SelectionItems).Count(IsFavorite)})"),
             "" => L("(racine de la bibliothèque)"),
+            _ when SelectedCategory is { } category => PropSelection.Categories[category].Label,
             _ => _pack,
         };
         if (ImGui.BeginCombo("##library_pack", current))
         {
             if (ImGui.Selectable(L($"Tous les packs ({_all.Count})"), _pack is null))
                 _pack = null;
-            if (ImGui.Selectable(L($"{Icons.Star}  Favoris ({_all.Count(IsFavorite)})"), _pack == FavoritesFilter))
+            if (ImGui.Selectable(L($"{Icons.Star}  Favoris ({_all.Concat(SelectionItems).Count(IsFavorite)})"), _pack == FavoritesFilter))
                 _pack = FavoritesFilter;
-            ImGui.Separator();
+            if (_packs.Count > 0)
+                ImGui.Separator();
             foreach (var (pack, count) in _packs)
             {
                 if (ImGui.Selectable($"{(pack.Length == 0 ? L("(racine de la bibliothèque)") : pack)} ({count})##pack_{pack}", _pack == pack))
                     _pack = pack;
+            }
+            ImGui.SeparatorText(L("Props du jeu"));
+            for (int i = 0; i < _selection.Length; i++)
+            {
+                if (_selection[i].Count > 0
+                    && ImGui.Selectable($"{PropSelection.Categories[i].Label} ({_selection[i].Count})##selection_{i}", _pack == SelectionKey(i)))
+                    _pack = SelectionKey(i);
             }
             ImGui.EndCombo();
         }
@@ -178,11 +203,13 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
         IEnumerable<ViewerItem> rows = _pack switch
         {
             null => _all,
-            FavoritesFilter => _all.Where(IsFavorite),
+            FavoritesFilter => _all.Concat(SelectionItems).Where(IsFavorite).DistinctBy(i => i.Name),
+            _ when SelectedCategory is { } category => _selection[category],
             _ => _all.Where(i => string.Equals(i.Pack, _pack, StringComparison.OrdinalIgnoreCase)),
         };
         if (search.Length > 0)
             rows = rows.Where(i => i.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                                   || i.Label?.Contains(search, StringComparison.OrdinalIgnoreCase) == true
                                    || i.Pack?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
         // Favourites first.
         _rows = rows.OrderBy(i => IsFavorite(i) ? 0 : 1).ToList();
@@ -260,7 +287,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
             ImGui.SetDragDropPayload("NR_LIBRARY_PROP", IntPtr.Zero, 0);
             _dragging = item;
             _selected = item;
-            ImGui.TextUnformatted(item.Name);
+            ImGui.TextUnformatted(item.Label ?? item.Name);
             ImGui.TextDisabled(state.Project is null ? L("Ouvre d'abord un projet pour placer ce prop.") : L("Relâche dans la vue 3D pour le poser à cet endroit."));
             ImGui.EndDragDropSource();
         }
@@ -276,15 +303,20 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
                 ImGui.SetClipboardText(item.Name);
             if (ImGui.MenuItem(favorite ? L($"{Icons.Star}  Retirer des favoris") : L($"{Icons.Star}  Ajouter aux favoris")))
                 ToggleFavorite(item);
-            if (ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir le dossier du pack")))
+            if (item.Pack is not null && ImGui.MenuItem(L($"{Icons.FolderOpen}  Ouvrir le dossier du pack")))
                 OpenPackFolder(item);
             ImGui.EndPopup();
         }
 
         if (hovered && !overStar && ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
         {
-            string pack = string.IsNullOrEmpty(item.Pack) ? L("(racine de la bibliothèque)") : item.Pack;
-            ImGui.SetTooltip(L($"{item.Name}\nPack : {pack}\nDouble-clic : placer · glisser dans la vue 3D : placer à cet endroit · clic droit : plus"));
+            if (item.Pack is null)
+                ImGui.SetTooltip(L($"{item.Label ?? item.Name}\n{item.Name} (prop du jeu)\nDouble-clic : placer · glisser dans la vue 3D : placer à cet endroit · clic droit : plus"));
+            else
+            {
+                string pack = item.Pack.Length == 0 ? L("(racine de la bibliothèque)") : item.Pack;
+                ImGui.SetTooltip(L($"{item.Name}\nPack : {pack}\nDouble-clic : placer · glisser dans la vue 3D : placer à cet endroit · clic droit : plus"));
+            }
         }
 
         // Background, picture, name.
@@ -302,7 +334,7 @@ internal sealed unsafe class LibraryPanel(AppState state, Action<uint> openInVie
             var size = ImGui.CalcTextSize(Icons.Box);
             drawList.AddText((pictureMin + pictureMax - size) * 0.5f, ImGui.GetColorU32(UiTheme.TextMuted), Icons.Box);
         }
-        string name = Widgets.Fit(item.Name, _tile - 8f);
+        string name = Widgets.Fit(item.Label ?? item.Name, _tile - 8f);
         var nameSize = ImGui.CalcTextSize(name);
         drawList.AddText(new Vector2(min.X + (_tile - nameSize.X) * 0.5f, min.Y + _tile), ImGui.GetColorU32(selected ? UiTheme.Text : UiTheme.TextMuted), name);
         if (favorite || hovered)
