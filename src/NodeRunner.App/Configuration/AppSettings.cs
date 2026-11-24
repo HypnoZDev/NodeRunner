@@ -76,6 +76,9 @@ public sealed class AppSettings
     public NodeRunner.App.Input.KeyPreset KeyPreset { get; set; }
     public Dictionary<string, List<string>> KeyBindings { get; set; } = new();
 
+    // Vehicle recording viewer: the vehicle chosen for a recording (recording name -> vehicle model name).
+    public Dictionary<string, string> RecordingVehicles { get; set; } = new();
+
     // Steps of the 3D handles while Ctrl is held: metres, degrees, scale.
     public float SnapMove { get; set; } = 0.5f;
     public float SnapRotate { get; set; } = 15f;

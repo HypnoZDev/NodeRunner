@@ -187,6 +187,17 @@ internal sealed unsafe partial class MainForm
                 _state.Gta4Selection = _modelLayer.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height, click.X - scene.X, click.Y - scene.Y);
             return;
         }
+        // A car of the vehicle recording viewer (a click elsewhere lets it go).
+        if (_state.RecordingOpen && !control)
+        {
+            _state.Recordings.Selected = _state.Recordings.Pick(_modelRenderer, _pickBuffer, viewProjection, scene.Width, scene.Height,
+                click.X - scene.X, click.Y - scene.Y);
+            if (_state.Recordings.Selected is not null)
+            {
+                _state.Select(null);
+                return;
+            }
+        }
         // Road nodes first: a dot on the road is clicked on purpose, the road model is under it.
         var linkSource = _state.PathLinkSource;
         _state.PathLinkSource = null;

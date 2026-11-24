@@ -46,6 +46,7 @@ internal sealed class MainUi
         _scenePanel.CutsceneContent = _cutscenePanel.DrawList;
         _recordingPanel = new RecordingPanel(state);
         _scenePanel.RecordingContent = _recordingPanel.DrawList;
+        _propertiesPanel.RecordingContent = _recordingPanel.DrawProperties;
         _viewerPanel.BuildingOpeningContent = _propertiesPanel.DrawBuildingOpeningFor;
         _layersPanel = new LayersPanel(state, pathNodeLayer, scenarioLayer, entityBoxLayer, roomLayer, occlusionLayer, occlusionCuller, carGeneratorLayer, timecycleLayer, lodLightLayer, audioZoneLayer);
         _statusPanel = new StatusPanel(state, this, cameraController, navMeshLayer, collisionLayer, entityBoxLayer, modelLayer);

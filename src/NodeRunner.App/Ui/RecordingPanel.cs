@@ -32,6 +32,7 @@ internal sealed class RecordingPanel(AppState state)
             state.Notify(L("La visionneuse d'enregistrements de véhicules est réservée à GTA V."), warning: true);
             return;
         }
+        Player.Vehicles = state.Settings.RecordingVehicles;
         state.RecordingOpen = true;
     }
 
@@ -162,7 +163,7 @@ internal sealed class RecordingPanel(AppState state)
                 ImGui.SetTooltip(L("Joue (ou retire) tous les enregistrements de cette mission"));
             ImGui.SameLine();
             string played = shown > 0 ? L($" · {shown} joués") : "";
-            if (ImGui.Selectable($"{(open ? Icons.ChevronDown : Icons.ChevronRight)}  {row.Group}  ({row.Count}{played})##recording_g_{index}", false))
+            if (ImGui.Selectable($"{(open ? Icons.ChevronDown : Icons.ChevronRight)}  {row.Group}  ({row.Count}{played})###recording_g_{index}", false))
             {
                 if (!_openGroups.Remove(row.Group))
                     _openGroups.Add(row.Group);
@@ -229,7 +230,12 @@ internal sealed class RecordingPanel(AppState state)
             if (track.Error is { } error)
                 ImGui.TextColored(UiTheme.Error, $"{track.Entry.Name} : {error}");
             else if (track.Recording is { } recording)
-                ImGui.TextUnformatted(L($"{track.Entry.Name}  ·  {recording.Duration:0.0} s  ·  {track.Pose.Speed * 3.6f:0} km/h"));
+            {
+                if (ImGui.Selectable(L($"{track.Entry.Name}  ·  {track.Vehicle}  ·  {track.Pose.Speed * 3.6f:0} km/h") + "###recording_pick", Player.Selected == track))
+                    Player.Selected = Player.Selected == track ? null : track;
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayNormal))
+                    ImGui.SetTooltip(L($"{recording.Duration:0.0} s · clic : détails et choix du véhicule dans Propriétés"));
+            }
             else
                 ImGui.TextUnformatted(L($"{track.Entry.Name}  ·  {Icons.LoaderCircle} lecture..."));
             ImGui.PopID();
@@ -242,6 +248,111 @@ internal sealed class RecordingPanel(AppState state)
             _followed = null;
             _bar.Start();
         }
+    }
+
+    // ---- Properties panel: the car chosen ----
+
+    private string _vehicleSearch = "";
+
+    public void DrawProperties()
+    {
+        if (Player.Selected is not { Recording: { } recording } track)
+            return;
+        ImGui.PushFont(UiTheme.SemiboldFont);
+        ColorDot(track.Color);
+        ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted(L($"{Icons.Car}  Enregistrement {track.Entry.Name}"));
+        ImGui.PopFont();
+        Widgets.Hint($"{Icons.File}  {track.Entry.Path}", wrap: true);
+        Widgets.Hint(L($"Mission « {recording.Group} », numéro {recording.Number} · {recording.Duration:0.0} s · {recording.Frames.Count} points"));
+
+        var pose = track.Pose;
+        float heading = RecordingPlayer.Heading(pose.Rotation);
+        if (Widgets.Button(L($"{Icons.Crosshair}  Aller à la voiture")))
+        {
+            _followed = null;
+            GoTo(track);
+        }
+        ImGui.SameLine();
+        string position = state.FormatPosition(pose.Position, heading);
+        if (Widgets.Button(L($"{Icons.Copy}  Copier la position"), position))
+            ImGui.SetClipboardText(position);
+        ImGui.SameLine();
+        string script = Script(recording);
+        if (Widgets.Button(L($"{Icons.Copy}  Copier pour FiveM"), script))
+            ImGui.SetClipboardText(script);
+
+        ImGui.SeparatorText(L($"À {Player.Time:0.00} s"));
+        if (ImGui.BeginTable("##recording_values", 2, ImGuiTableFlags.SizingStretchProp))
+        {
+            Value(L("Vitesse"), L($"{pose.Speed * 3.6f:0} km/h"));
+            Value(L("Cap"), $"{heading:0.0}°");
+            Value(L("Volant"), $"{pose.Steering * 180f / MathF.PI:0}°");
+            Value(L("Accélérateur"), pose.Gas < 0f ? L($"{-pose.Gas * 100f:0} % (marche arrière)") : $"{pose.Gas * 100f:0} %");
+            Value(L("Frein"), $"{pose.Brake * 100f:0} %");
+            Value(L("Frein à main"), pose.Handbrake ? L("serré") : L("desserré"));
+            Value(L("Position"), $"{pose.Position.X:0.00}, {pose.Position.Y:0.00}, {pose.Position.Z:0.00}");
+            ImGui.EndTable();
+        }
+
+        ImGui.SeparatorText(L("Véhicule"));
+        Widgets.Hint(L("Le fichier ne dit pas quel véhicule roule : c'est le script de la mission qui le choisit. Choisis-en un pour l'aperçu ; il est retenu pour cet enregistrement."), wrap: true);
+        if (track.Model is null && track.Opened == track.Vehicle)
+            ImGui.TextColored(UiTheme.Error, L($"{Icons.TriangleAlert}  Véhicule inconnu : {track.Vehicle}"));
+        DrawVehicleChoice(track);
+    }
+
+    private static void Value(string name, string value)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextDisabled(name);
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(value);
+    }
+
+    // The lines a FiveM script uses to play this recording on a vehicle of its own.
+    private static string Script(Data.Recordings.VehicleRecording recording) =>
+        $"""
+        RequestVehicleRecording({recording.Number}, "{recording.Group}")
+        while not HasVehicleRecordingBeenLoaded({recording.Number}, "{recording.Group}") do Wait(0) end
+        StartPlaybackRecordedVehicle(vehicle, {recording.Number}, "{recording.Group}", true)
+        """;
+
+    private void DrawVehicleChoice(RecordingPlayer.Track track)
+    {
+        Widgets.SearchField("##recording_vehicle", L($"Modèle (actuel : {track.Vehicle})"), ref _vehicleSearch);
+        var names = Player.VehicleNames(state.World);
+        string search = _vehicleSearch.Trim();
+        var found = names.Where(n => search.Length == 0 || n.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+        float rows = Math.Min(found.Count, 8);
+        if (ImGui.BeginChild("##recording_vehicles", new Vector2(0f, (rows + 0.5f) * ImGui.GetTextLineHeightWithSpacing()), ImGuiChildFlags.Borders))
+        {
+            foreach (string name in found)
+            {
+                if (ImGui.Selectable(name, name == track.Vehicle))
+                    SetVehicle([track], name);
+            }
+        }
+        ImGui.EndChild();
+        var group = Player.Tracks.Where(t => t.Recording?.Group == track.Recording?.Group && t.Vehicle != track.Vehicle).ToList();
+        if (group.Count > 0 && Widgets.Button(L($"Mettre {track.Vehicle} sur les {group.Count} autres de la mission"),
+                L("Même véhicule pour les autres enregistrements joués de cette mission")))
+            SetVehicle(group, track.Vehicle);
+    }
+
+    private void SetVehicle(IEnumerable<RecordingPlayer.Track> tracks, string vehicle)
+    {
+        foreach (var track in tracks)
+        {
+            track.Vehicle = vehicle;
+            if (vehicle == RecordingPlayer.DefaultVehicle)
+                state.Settings.RecordingVehicles.Remove(track.Entry.Name);
+            else
+                state.Settings.RecordingVehicles[track.Entry.Name] = vehicle;
+        }
+        state.SaveSettings();
     }
 
     // ---- Timeline over the bottom of the 3D view ----

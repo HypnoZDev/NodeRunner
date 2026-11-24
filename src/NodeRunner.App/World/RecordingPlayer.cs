@@ -51,6 +51,12 @@ internal sealed class RecordingPlayer : IDisposable
 
     public IReadOnlyList<Track> Tracks => _tracks;
 
+    // The car chosen (Scene or a click on the map), shown in Properties.
+    public Track? Selected { get; set; }
+
+    // The vehicle chosen for each recording (the settings' list, kept by name).
+    public Dictionary<string, string> Vehicles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     // The time shown (seconds from the start), set by the timeline.
     public float Time { get; set; }
 
@@ -97,10 +103,12 @@ internal sealed class RecordingPlayer : IDisposable
         {
             track!.Trail?.Dispose();
             _tracks.Remove(track);
+            if (Selected == track)
+                Selected = null;
             ReleaseUnusedModels();
             return;
         }
-        var added = new Track(entry, Colors[_colorIndex++ % Colors.Length]);
+        var added = new Track(entry, Colors[_colorIndex++ % Colors.Length]) { Vehicle = Vehicles.GetValueOrDefault(entry.Name) ?? DefaultVehicle };
         added.Loading = Task.Run(() => VehicleRecordingReader.Read(content.ReadFile(entry.Path) ?? throw new InvalidDataException(L("Fichier illisible.")), entry.Name));
         _tracks.Add(added);
     }
@@ -117,6 +125,7 @@ internal sealed class RecordingPlayer : IDisposable
         foreach (var track in _tracks)
             track.Trail?.Dispose();
         _tracks.Clear();
+        Selected = null;
         ReleaseUnusedModels();
         _colorIndex = 0;
     }
@@ -200,6 +209,52 @@ internal sealed class RecordingPlayer : IDisposable
         }
     }
 
+    // The vehicle game models (spawn names), for the vehicle chosen in Properties.
+    public List<string> VehicleNames(WorldLoader world)
+    {
+        if (world.Models is not { } models)
+            return [];
+        if (!ReferenceEquals(models, _namesFor))
+        {
+            _namesFor = models;
+            _names = models.FragmentFiles
+                .Where(ViewerCatalog.IsVehicleFile)
+                .Select(p => System.IO.Path.GetFileNameWithoutExtension(p).ToLowerInvariant())
+                .Where(n => !n.EndsWith("_hi", StringComparison.Ordinal))
+                .Distinct().Order(StringComparer.Ordinal).ToList();
+        }
+        return _names;
+    }
+
+    private object? _namesFor;
+    private List<string> _names = [];
+
+    // The car under a point of the 3D view (its model, or its box while it has none).
+    public Track? Pick(ModelRenderer renderer, PickBuffer buffer, Matrix4x4 viewProjection, int width, int height, int x, int y)
+    {
+        if (_tracks.Count == 0)
+            return null;
+        buffer.Begin(width, height);
+        renderer.BeginPick();
+        for (int i = 0; i < _tracks.Count; i++)
+        {
+            if (_tracks[i] is { Recording: not null, Model.Model: { } model } track)
+                renderer.DrawPick(model, track.World, viewProjection, (uint)(i + 1));
+        }
+        uint number = buffer.Read(x, y);
+        if (number >= 1 && number <= _tracks.Count)
+            return _tracks[(int)number - 1];
+        return null;
+    }
+
+    // Heading of the car as in a FiveM vector4: degrees from north, counter-clockwise.
+    public static float Heading(Quaternion rotation)
+    {
+        var forward = Vector3.Transform(Vector3.UnitY, rotation);
+        float degrees = MathF.Atan2(-forward.X, forward.Y) * 180f / MathF.PI;
+        return (degrees % 360f + 360f) % 360f;
+    }
+
     public void Draw(ModelRenderer renderer, ColorRenderer lines, Matrix4x4 viewProjection, Vector3 cameraPosition)
     {
         if (_tracks.Count == 0)
@@ -227,6 +282,8 @@ internal sealed class RecordingPlayer : IDisposable
             if (track.Recording is not null && track.Model?.Model is null)
                 lines.AddBox(new Vector3(-0.9f, -2.3f, -0.7f), new Vector3(0.9f, 2.3f, 0.7f), track.World, track.Color);
         }
+        if (Selected is { Recording: not null, Model: { Model: not null } chosen } selected)
+            lines.AddBox(chosen.BoundsMin, chosen.BoundsMax, selected.World, selected.Color);
         if (lines.PendingLineCount > 0)
             lines.Flush(viewProjection, cameraPosition);
     }
