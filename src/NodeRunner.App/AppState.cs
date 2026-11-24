@@ -479,17 +479,6 @@ internal sealed partial class AppState
             Tool = TransformTool.Select;
     }
 
-    // Whether an object standing at pose rests on the collision below it (None while the collisions are not loaded).
-    public PlacementProblem GroundProblem(PlacementPose pose, System.Numerics.Vector3 min, System.Numerics.Vector3 max)
-    {
-        if (World.Collisions is null)
-            return PlacementProblem.None;
-        var box = SurfacePlacement.WorldBox(pose.Position, pose.Orientation, min, max);
-        var collisions = CollisionQuery.CollisionIn(World, box.Min with { Z = -1000f }, box.Max, CollisionEdits);
-        return SurfacePlacement.CheckGround(pose.Position, pose.Orientation, min, max,
-            (point, from) => GroundSnap.HighestBelow(collisions, point, from));
-    }
-
     // Ends the placement; the objects added are selected.
     public void StopPlacement()
     {

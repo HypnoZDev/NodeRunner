@@ -21,9 +21,8 @@ internal sealed class PropPlacement : IDisposable
     public float FloorYaw { get; set; }
     public float Turn { get; set; }
 
-    // Where it would go now (null: the mouse is not over a surface of the 3D view) and what is wrong there.
+    // Where it would go now (null: the mouse is not over a surface of the 3D view).
     public PlacementPose? Pose { get; set; }
-    public PlacementProblem Problem { get; set; }
 
     // Objects added since the start, selected at the end.
     public List<MapEntity> Placed { get; } = [];
@@ -39,7 +38,6 @@ internal sealed class PropPlacement : IDisposable
         FloorYaw = floorYaw;
         Turn = 0f;
         Pose = null;
-        Problem = PlacementProblem.None;
         Placed.Clear();
         if (model is not null)
             _ghost.Open(model, world);

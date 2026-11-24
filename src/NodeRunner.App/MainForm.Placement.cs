@@ -11,16 +11,14 @@ namespace NodeRunner.App;
 internal sealed partial class MainForm
 {
     private static readonly Vector3 GhostTint = new(0.75f, 0.95f, 1.45f);
-    private static readonly Vector3 GhostBadTint = new(1.9f, 0.35f, 0.3f);
     private static readonly Vector4 GhostBoxColor = new(0.3f, 0.55f, 1f, 1f);
-    private static readonly Vector4 GhostBadBoxColor = new(1f, 0.25f, 0.2f, 1f);
     private const float MaxPlaceDistance = 500f;
 
     private PickBuffer? _placeBuffer;
     private bool _placeClick;
     private Point? _placedAt;
     private (Point, Size, Vector3, float, float, float, int) _placeKey;
-    private (PlacementPose?, PlacementProblem) _placeFound;
+    private PlacementPose? _placeFound;
     private int _placeFrames;
     private const int PlaceRefreshFrames = 15;
     private const int PlacedMouseMove = 24; // pixels
@@ -70,21 +68,18 @@ internal sealed partial class MainForm
         var key = (mouse, scene.Size, camera.Position, camera.Yaw, camera.Pitch, placement.Turn, placement.Placed.Count);
         if (!click && key == _placeKey && ++_placeFrames < PlaceRefreshFrames)
         {
-            (placement.Pose, placement.Problem) = _placeFound;
+            placement.Pose = _placeFound;
             return;
         }
         _placeKey = key;
         _placeFrames = 0;
-        _placeFound = (null, PlacementProblem.None);
+        _placeFound = null;
 
         var (min, max) = (placement.BoundsMin, placement.BoundsMax);
-        if (SurfacePose(scene, mouse.X - scene.X, mouse.Y - scene.Y, min, max, placement.FloorYaw, placement.Turn) is not var (pose, under))
+        if (SurfacePose(scene, mouse.X - scene.X, mouse.Y - scene.Y, min, max, placement.FloorYaw, placement.Turn) is not var (pose, _))
             return;
         placement.Pose = pose;
-        placement.Problem = Overlaps(library, pose, min, max, under) ? PlacementProblem.Overlapping
-            : pose.OnWall ? PlacementProblem.None
-            : _state.GroundProblem(pose, min, max);
-        _placeFound = (placement.Pose, placement.Problem);
+        _placeFound = pose;
 
         if (click && _state.PlaceAt(placement.ArchetypeHash, pose.Position, pose.Orientation) is { } added)
         {
@@ -130,42 +125,19 @@ internal sealed partial class MainForm
         return true;
     }
 
-    // Whether the object would go through another one nearby. Large objects (buildings, ground) are left out: the
-    // object stands on them or against them, and their box is far bigger than what they fill.
-    private bool Overlaps(Data.Maps.MapLibrary library, PlacementPose pose, Vector3 min, Vector3 max, Data.Maps.MapEntity under)
-    {
-        const float LargeObject = 20f;
-        var box = SurfacePlacement.WorldBox(pose.Position, pose.Orientation, min, max);
-        var size = box.Max - box.Min;
-        float margin = MathF.Max(0.05f, 0.15f * MathF.Min(size.X, MathF.Min(size.Y, size.Z)));
-        foreach (var other in _modelLayer.DrawnNear((box.Min + box.Max) * 0.5f, size.Length() * 0.5f + LargeObject))
-        {
-            if (other == under || library.GetArchetype(other.ArchetypeHash) is not { } type
-                || GroundSnap.WorldBox(other, type) is not { } otherBox)
-                continue;
-            var otherSize = otherBox.Max - otherBox.Min;
-            if (otherSize.X > LargeObject || otherSize.Y > LargeObject || otherSize.Z > LargeObject)
-                continue;
-            if (SurfacePlacement.Overlap(box, otherBox, margin))
-                return true;
-        }
-        return false;
-    }
-
-    // The prop being placed, where a click would put it: its model tinted (red when something is wrong) and its box.
+    // The prop being placed, where a click would put it: its model tinted and its box.
     private void DrawPlacementGhost(ColorRenderer lines, Matrix4x4 viewProjection)
     {
         if (_state.Placing is not { IsActive: true, Pose: { } pose } placement || _modelRenderer is null)
             return;
-        bool bad = placement.Problem != PlacementProblem.None;
         var transform = Matrix4x4.CreateFromQuaternion(pose.Orientation) * Matrix4x4.CreateTranslation(pose.Position);
         if (placement.Model is { } model)
         {
             _modelRenderer.Begin(ModelPass.Solid);
-            _modelRenderer.Draw(model, transform, viewProjection, bad ? GhostBadTint : GhostTint);
+            _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
             _modelRenderer.Begin(ModelPass.Translucent);
-            _modelRenderer.Draw(model, transform, viewProjection, bad ? GhostBadTint : GhostTint);
+            _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
         }
-        lines.AddBox(placement.BoundsMin, placement.BoundsMax, transform, bad ? GhostBadBoxColor : GhostBoxColor);
+        lines.AddBox(placement.BoundsMin, placement.BoundsMax, transform, GhostBoxColor);
     }
 }

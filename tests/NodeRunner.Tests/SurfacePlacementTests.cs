@@ -52,25 +52,4 @@ public class SurfacePlacementTests
         Assert.True(pose.NeedsGround);
         Assert.True(pose.Position.Y < -0.3f);
     }
-
-    [Fact]
-    public void Ground_check_finds_floating_and_sinking_objects()
-    {
-        var at = new Vector3(0, 0, 1f);
-        Assert.Equal(PlacementProblem.None, SurfacePlacement.CheckGround(at, Quaternion.Identity, ChairMin, ChairMax, (_, _) => 1f));
-        // Half of it over a ledge.
-        Assert.Equal(PlacementProblem.Floating, SurfacePlacement.CheckGround(at, Quaternion.Identity, ChairMin, ChairMax, (p, _) => p.X < 0 ? 1f : 0f));
-        // A slope rising through one side.
-        Assert.Equal(PlacementProblem.Sinking, SurfacePlacement.CheckGround(at, Quaternion.Identity, ChairMin, ChairMax, (p, _) => p.X < 0 ? 1f : 1.4f));
-        // Nothing known: no warning.
-        Assert.Equal(PlacementProblem.None, SurfacePlacement.CheckGround(at, Quaternion.Identity, ChairMin, ChairMax, (_, _) => null));
-    }
-
-    [Fact]
-    public void Boxes_touching_do_not_overlap()
-    {
-        var a = (new Vector3(0, 0, 0), new Vector3(1, 1, 1));
-        Assert.False(SurfacePlacement.Overlap(a, (new Vector3(1, 0, 0), new Vector3(2, 1, 1)), 0.05f));
-        Assert.True(SurfacePlacement.Overlap(a, (new Vector3(0.5f, 0.5f, 0), new Vector3(2, 2, 1)), 0.05f));
-    }
 }

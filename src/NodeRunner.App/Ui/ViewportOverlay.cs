@@ -73,7 +73,7 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
             DrawClassicNotice(position, size);
     }
 
-    // Placing a prop with the mouse: what it is, the keys, and what is wrong where it would go.
+    // Placing a prop with the mouse: what it is and the keys.
     private void DrawPlacementHint(Vector2 position, Vector2 size)
     {
         var placement = state.Placing;
@@ -90,15 +90,6 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
             }
             string rotate = state.Keys.Text(KeyAction.PlaceRotate) is { Length: > 0 } key ? key : "-";
             ImGui.TextDisabled(L($"Clic : poser · Molette ou {rotate} : tourner (Maj + molette : 15°) · Échap : terminer"));
-            string? problem = placement.Pose is null ? null : placement.Problem switch
-            {
-                Editor.PlacementProblem.Floating => L("Le prop flotte : une partie n'est pas posée sur le sol."),
-                Editor.PlacementProblem.Sinking => L("Le prop s'enfonce dans le sol."),
-                Editor.PlacementProblem.Overlapping => L("Le prop traverse un autre objet."),
-                _ => null,
-            };
-            if (problem is not null)
-                ImGui.TextColored(UiTheme.Error, $"{Icons.TriangleAlert}  {problem}");
             if (Widgets.Button(L("Terminer##placement_end"), L("Arrête la pose et sélectionne les props posés (aussi : Échap).")))
                 state.StopPlacement();
         }
