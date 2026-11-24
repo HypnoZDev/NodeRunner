@@ -675,6 +675,22 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _untexturedTranslucent = GpuTexture.CreateSolid(device, 190, 200, 210, 64);
     }
 
+    // Sharper textures (negative: finer mipmaps), for an image smoothed over several frames (TAA).
+    public float MipBias
+    {
+        get => _mipBias;
+        set
+        {
+            if (value == _mipBias)
+                return;
+            _mipBias = value;
+            _samplerState.Dispose();
+            _samplerState = CreateSampler(_device, _anisotropy, value);
+        }
+    }
+
+    private float _mipBias;
+
     // Texture filtering at grazing angles: 1 = plain (fastest), up to 16 (ground textures stay sharp in the
     // distance).
     public int Anisotropy
@@ -687,11 +703,11 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 return;
             _anisotropy = value;
             _samplerState.Dispose();
-            _samplerState = CreateSampler(_device, value);
+            _samplerState = CreateSampler(_device, value, _mipBias);
         }
     }
 
-    private static ID3D11SamplerState CreateSampler(ID3D11Device device, int anisotropy) =>
+    private static ID3D11SamplerState CreateSampler(ID3D11Device device, int anisotropy, float mipBias = 0f) =>
         device.CreateSamplerState(new SamplerDescription
         {
             Filter = anisotropy > 1 ? Filter.Anisotropic : Filter.MinMagMipLinear,
@@ -701,6 +717,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             AddressW = TextureAddressMode.Wrap,
             ComparisonFunc = ComparisonFunction.Never,
             MaxLOD = float.MaxValue,
+            MipLODBias = mipBias,
         });
 
     public GpuTexture? UploadTexture(TextureData texture) => GpuTexture.Create(_device, texture);

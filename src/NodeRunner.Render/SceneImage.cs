@@ -27,8 +27,12 @@ public readonly record struct SceneImageOptions
     // Sharpening of the stretched or smoothed image (0 to 1).
     public float Sharpness { get; init; }
 
+    // Smoothing of the edges (TAA): each frame is drawn shifted by a fraction of a pixel and blended with the previous
+    // ones, moved back to where the camera saw them.
+    public bool Antialiasing { get; init; }
+
     // True when the scene needs its own images; otherwise it is drawn straight into the window, as on small PCs.
-    public bool IsUsed => Hdr || Scale < 0.999f;
+    public bool IsUsed => Hdr || Antialiasing || Scale < 0.999f;
 }
 
 // The 3D scene drawn into images of its own instead of straight into the window: light beyond white (HDR) brought back
@@ -107,6 +111,117 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
     return output;
 }";
 
+    // Smoothing of the edges (TAA): this frame's image blended with the previous result, found again where the camera
+    // saw it then (only the camera's movement is followed: what moves by itself is held back by the colours around).
+    private const string ResolveSource = @"
+cbuffer Constants : register(b0)
+{
+    float4x4 Reprojection; // Position on this frame's image (without the shift) -> position on the previous one.
+    float4 Size;           // xy: size of the images (pixels), zw: 1 / size.
+    float4 Jitter;         // xy: shift of this frame (-1 to 1 coordinates), z = 1: previous result usable,
+                           // w: share of this frame in the blend.
+};
+Texture2D Current : register(t0);
+Texture2D History : register(t1);
+Texture2D<float> Depth : register(t2);
+SamplerState LinearClamp : register(s0);
+
+struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+// Bright colours squeezed below 1 (reversibly), so one very bright pixel does not flicker.
+float3 Compress(float3 c) { return c / (1.0f + max(max(c.r, c.g), c.b)); }
+float3 Expand(float3 c) { return c / max(1.0f - max(max(c.r, c.g), c.b), 0.0001f); }
+
+float3 ToYCoCg(float3 c)
+{
+    return float3(0.25f * c.r + 0.5f * c.g + 0.25f * c.b, 0.5f * c.r - 0.5f * c.b, -0.25f * c.r + 0.5f * c.g - 0.25f * c.b);
+}
+
+float3 FromYCoCg(float3 c)
+{
+    return float3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
+}
+
+// The previous result at uv, read with a sharp (Catmull-Rom) filter in 5 reads.
+float3 SampleHistory(float2 uv)
+{
+    float2 position = uv * Size.xy;
+    float2 center = floor(position - 0.5f) + 0.5f;
+    float2 f = position - center;
+    float2 w0 = f * (-0.5f + f * (1.0f - 0.5f * f));
+    float2 w1 = 1.0f + f * f * (-2.5f + 1.5f * f);
+    float2 w2 = f * (0.5f + f * (2.0f - 1.5f * f));
+    float2 w3 = f * f * (-0.5f + 0.5f * f);
+    float2 w12 = w1 + w2;
+    float2 tc12 = (center + w2 / w12) * Size.zw;
+    float2 tc0 = (center - 1.0f) * Size.zw;
+    float2 tc3 = (center + 2.0f) * Size.zw;
+    float3 sum = History.SampleLevel(LinearClamp, float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y)
+        + History.SampleLevel(LinearClamp, float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y)
+        + History.SampleLevel(LinearClamp, tc12, 0).rgb * (w12.x * w12.y)
+        + History.SampleLevel(LinearClamp, float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y)
+        + History.SampleLevel(LinearClamp, float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+    float weight = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+    return max(sum / weight, 0.0f);
+}
+
+float4 PSResolve(VS_OUTPUT input) : SV_Target
+{
+    int2 p = int2(input.pos.xy);
+    int2 last = int2(Size.xy) - 1;
+    // Colours around the pixel (mean and spread), and the nearest depth (edges follow the object in front).
+    float3 m1 = 0.0f, m2 = 0.0f, center = 0.0f;
+    float nearest = 0.0f;
+    [unroll] for (int y = -1; y <= 1; y++)
+    {
+        [unroll] for (int x = -1; x <= 1; x++)
+        {
+            int2 q = clamp(p + int2(x, y), 0, last);
+            float3 c = ToYCoCg(Compress(max(Current.Load(int3(q, 0)).rgb, 0.0f)));
+            m1 += c;
+            m2 += c * c;
+            if (x == 0 && y == 0)
+                center = c;
+            nearest = max(nearest, Depth.Load(int3(q, 0)));
+        }
+    }
+    m1 /= 9.0f;
+    float3 spread = sqrt(max(m2 / 9.0f - m1 * m1, 0.0f));
+    float3 low = m1 - 1.25f * spread, high = m1 + 1.25f * spread;
+
+    float3 result = center;
+    float2 ndc = (input.uv * 2.0f - 1.0f) * float2(1.0f, -1.0f) - Jitter.xy;
+    float4 previous = mul(Reprojection, float4(ndc, nearest, 1.0f));
+    if (Jitter.z > 0.5f && previous.w > 0.0f)
+    {
+        float2 uv = previous.xy / previous.w * float2(0.5f, -0.5f) + 0.5f;
+        if (all(uv > 0.0f) && all(uv < 1.0f))
+        {
+            float3 history = ToYCoCg(Compress(SampleHistory(uv)));
+            // Brought back towards the colours around the pixel when it does not match them (something moved).
+            float3 offset = history - m1;
+            float3 extent = max(high - m1, 0.0001f);
+            float3 ratio = abs(offset / extent);
+            float largest = max(ratio.x, max(ratio.y, ratio.z));
+            if (largest > 1.0f)
+                history = m1 + offset / largest;
+            // A little more of this frame when the image moves fast: less blur behind moving edges.
+            float moved = length((uv - input.uv) * Size.xy);
+            float share = lerp(Jitter.w, 0.4f, saturate(moved / 12.0f));
+            result = lerp(history, center, share);
+        }
+    }
+    return float4(Expand(FromYCoCg(result)), 1.0f);
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ResolveConstants
+    {
+        public Matrix4x4 Reprojection;
+        public Vector4 Size;
+        public Vector4 Jitter;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct Constants
     {
@@ -121,9 +236,12 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
     private readonly ID3D11DeviceContext _context;
     private readonly ID3D11VertexShader _fullVertexShader;
     private readonly ID3D11PixelShader _compositePixelShader;
+    private readonly ID3D11PixelShader _resolvePixelShader;
     private readonly ID3D11Buffer _constantBuffer;
+    private readonly ID3D11Buffer _resolveBuffer;
     private readonly ID3D11SamplerState _linearClamp;
     private readonly ID3D11DepthStencilState _writeDepth;
+    private readonly ID3D11DepthStencilState _noDepth;
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11BlendState _opaque;
 
@@ -135,14 +253,28 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
     private Texture? _depthCopy;
     private Texture? _colorCopy;
 
+    // TAA: the last two results (one read, the other written), the shift of this frame, the camera of this frame and
+    // the previous one (rotation and projection only, and position).
+    private readonly Texture?[] _history = new Texture?[2];
+    private int _historyIndex;
+    private bool _historyValid;
+    private int _frame;
+    private Vector2 _jitter;
+    private Matrix4x4 _rotationProjection, _previousRotationProjection;
+    private Vector3 _cameraPosition, _previousCameraPosition;
+    private bool _cameraSet;
+
     public SceneImage(ID3D11Device device, ID3D11DeviceContext context)
     {
         _device = device;
         _context = context;
         _fullVertexShader = device.CreateVertexShader(Compiler.Compile(ShaderSource, "VSFull", "scene", "vs_5_0").Span);
         _compositePixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSComposite", "scene", "ps_5_0").Span);
+        _resolvePixelShader = device.CreatePixelShader(Compiler.Compile(ResolveSource, "PSResolve", "resolve", "ps_5_0").Span);
         _constantBuffer = device.CreateBuffer(new BufferDescription(
             (uint)sizeof(Constants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        _resolveBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(ResolveConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
         _linearClamp = device.CreateSamplerState(new SamplerDescription
         {
             Filter = Filter.MinMagMipLinear,
@@ -156,6 +288,12 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         {
             DepthEnable = true,
             DepthWriteMask = DepthWriteMask.All,
+            DepthFunc = ComparisonFunction.Always,
+        });
+        _noDepth = device.CreateDepthStencilState(new DepthStencilDescription
+        {
+            DepthEnable = false,
+            DepthWriteMask = DepthWriteMask.Zero,
             DepthFunc = ComparisonFunction.Always,
         });
         _rasterizerState = device.CreateRasterizerState(new RasterizerDescription
@@ -208,7 +346,10 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
     // cleared and bound.
     public void Begin(SceneImageOptions options, int viewWidth, int viewHeight, Vector4 clearColor)
     {
+        if (options.Antialiasing != Options.Antialiasing || options.Hdr != Options.Hdr)
+            _historyValid = false;
         Options = options;
+        _shown = null;
         float scale = Math.Clamp(options.Scale, 0.25f, 1f);
         int width = Math.Max(1, (int)MathF.Round(viewWidth * scale));
         int height = Math.Max(1, (int)MathF.Round(viewHeight * scale));
@@ -219,6 +360,45 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         _context.ClearRenderTargetView(_normals!.Write!, new Color4(0f, 0f, 0f, 0f));
         _context.ClearDepthStencilView(_depthView!, DepthStencilClearFlags.Depth, 0f, 0); // Reversed Z: 0 = far.
         Bind(normals: false);
+    }
+
+    // The view-projection to draw this frame's scene with (after Begin): with TAA, shifted by a fraction of a pixel,
+    // a different one each frame, so the frames together see more detail than one.
+    public Matrix4x4 ViewProjection(Camera camera, float aspectRatio)
+    {
+        var projection = camera.Projection(aspectRatio);
+        var rotation = Matrix4x4.CreateLookAt(Vector3.Zero, camera.Forward, Vector3.UnitZ);
+        _previousRotationProjection = _rotationProjection;
+        _previousCameraPosition = _cameraPosition;
+        _rotationProjection = rotation * projection;
+        _cameraPosition = camera.Position;
+        // A jump (teleport, bookmark, other map): the previous frames show something else.
+        if (!_cameraSet || Vector3.Distance(_cameraPosition, _previousCameraPosition) > 50f)
+            _historyValid = false;
+        _cameraSet = true;
+
+        var viewProjection = camera.ViewProjection(aspectRatio);
+        if (!Options.Antialiasing)
+        {
+            _jitter = Vector2.Zero;
+            return viewProjection;
+        }
+        _frame = (_frame + 1) % JitterCount;
+        _jitter = new Vector2((Halton(_frame + 1, 2) - 0.5f) * 2f / Width, -(Halton(_frame + 1, 3) - 0.5f) * 2f / Height);
+        var shift = Matrix4x4.Identity;
+        shift.M41 = _jitter.X;
+        shift.M42 = _jitter.Y;
+        return viewProjection * shift;
+    }
+
+    private const int JitterCount = 8;
+
+    private static float Halton(int index, int radix)
+    {
+        float result = 0f, fraction = 1f / radix;
+        for (; index > 0; index /= radix, fraction /= radix)
+            result += fraction * (index % radix);
+        return result;
     }
 
     // Binds the colour image (and the normals' image for the solid passes) with the depth, over the whole image.
@@ -247,11 +427,20 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         return _colorCopy.Read;
     }
 
+    // Finishes the image once the scene is drawn (smoothing), before Show.
+    public void Process()
+    {
+        _shown = Options.Antialiasing ? Resolve() : _color;
+    }
+
+    private Texture? _shown;
+
     // Draws the finished image into the render target and viewport bound by the caller (the window's 3D view), with
     // its depth.
-    public void Finish()
+    public void Show()
     {
         var options = Options;
+        var source = _shown ?? _color!;
         WriteConstants(new Constants
         {
             Source = new Vector4(Width, Height, 1f / Width, 1f / Height),
@@ -265,7 +454,7 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         _context.PSSetShader(_compositePixelShader);
         _context.PSSetConstantBuffer(0, _constantBuffer);
         _context.PSSetSampler(0, _linearClamp);
-        _context.PSSetShaderResource(0, _color!.Read);
+        _context.PSSetShaderResource(0, source.Read);
         _context.PSSetShaderResource(1, _depthRead!);
         _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.OMSetDepthStencilState(_writeDepth, 0);
@@ -273,6 +462,51 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         _context.Draw(3, 0);
         _context.PSUnsetShaderResource(0);
         _context.PSUnsetShaderResource(1);
+    }
+
+    // TAA: blends this frame into the previous result; returns the new result (kept for the next frame).
+    private Texture Resolve()
+    {
+        _history[0] ??= CreateTexture(Width, Height, ColorFormat, target: true);
+        _history[1] ??= CreateTexture(Width, Height, ColorFormat, target: true);
+        var previous = _history[_historyIndex]!;
+        _historyIndex ^= 1;
+        var next = _history[_historyIndex]!;
+
+        // This frame's position without the shift -> camera-relative point -> the previous camera's image.
+        Matrix4x4.Invert(_rotationProjection, out var unproject);
+        var reprojection = unproject * Matrix4x4.CreateTranslation(_cameraPosition - _previousCameraPosition) * _previousRotationProjection;
+        var constants = new ResolveConstants
+        {
+            Reprojection = reprojection,
+            Size = new Vector4(Width, Height, 1f / Width, 1f / Height),
+            Jitter = new Vector4(_jitter, _historyValid ? 1f : 0f, 0.1f),
+        };
+        var map = _context.Map(_resolveBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, constants);
+        _context.Unmap(_resolveBuffer, 0);
+
+        _context.OMSetRenderTargets(next.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+        _context.IASetInputLayout(null);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_fullVertexShader);
+        _context.GSSetShader(null);
+        _context.PSSetShader(_resolvePixelShader);
+        _context.PSSetConstantBuffer(0, _resolveBuffer);
+        _context.PSSetSampler(0, _linearClamp);
+        _context.PSSetShaderResource(0, _color!.Read);
+        _context.PSSetShaderResource(1, previous.Read);
+        _context.PSSetShaderResource(2, _depthRead!);
+        _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.OMSetDepthStencilState(_noDepth, 0);
+        _context.RSSetState(_rasterizerState);
+        _context.Draw(3, 0);
+        _context.PSUnsetShaderResource(0);
+        _context.PSUnsetShaderResource(1);
+        _context.PSUnsetShaderResource(2);
+        _historyValid = true;
+        return next;
     }
 
     // Brightness of the HDR image for an exposure of 1.
@@ -318,6 +552,12 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         _depthCopy = null;
         _colorCopy?.Dispose();
         _colorCopy = null;
+        for (int i = 0; i < _history.Length; i++)
+        {
+            _history[i]?.Dispose();
+            _history[i] = null;
+        }
+        _historyValid = false;
         _depthRead?.Dispose();
         _depthRead = null;
         _depthView?.Dispose();
@@ -333,8 +573,11 @@ PS_COMPOSITE PSComposite(VS_OUTPUT input)
         _opaque.Dispose();
         _rasterizerState.Dispose();
         _writeDepth.Dispose();
+        _noDepth.Dispose();
         _linearClamp.Dispose();
         _constantBuffer.Dispose();
+        _resolveBuffer.Dispose();
+        _resolvePixelShader.Dispose();
         _compositePixelShader.Dispose();
         _fullVertexShader.Dispose();
     }

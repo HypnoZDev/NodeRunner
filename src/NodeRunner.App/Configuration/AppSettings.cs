@@ -135,6 +135,9 @@ public sealed class AppSettings
     public float RenderScale { get; set; } = 1f;
     public float Sharpness { get; set; } = 0.3f;
 
+    // Smoothing of the edges over several frames (TAA).
+    public bool Antialiasing { get; set; }
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -235,6 +238,7 @@ public sealed class AppSettings
         (Shadows, ShadowDistance, Anisotropy, ViewDistanceMultiplier) = (d.Shadows, d.ShadowDistance, d.Anisotropy, d.ViewDistanceMultiplier);
         WaterReflections = d.WaterReflections;
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
+        Antialiasing = d.Antialiasing;
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);

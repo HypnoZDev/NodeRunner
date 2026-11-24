@@ -135,9 +135,13 @@ internal sealed unsafe partial class MainForm
                 : BackgroundColor;
             image.Begin(imageOptions, scene.Width, scene.Height, clear);
         }
+        // The scene's models are drawn shifted by a fraction of a pixel each frame for the smoothing (TAA); the editor's
+        // lines are not.
+        var sceneViewProjection = image?.ViewProjection(camera, (float)scene.Width / scene.Height) ?? viewProjection;
+        _modelRenderer.MipBias = imageOptions.Antialiasing && image is not null ? -0.5f : 0f;
 
         if (settings.ShowSky)
-            _skyRenderer!.Draw(viewProjection, lighting);
+            _skyRenderer!.Draw(sceneViewProjection, lighting);
         // Play mode shows the map as the game does: always without what the occluders hide.
         bool occlusionPreview = modelsEnabled && (settings.OcclusionPreview || _state.Play.IsActive);
         _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
@@ -146,11 +150,11 @@ internal sealed unsafe partial class MainForm
         // The character of the play mode before the water: what is under the surface is seen through it.
         void PlayerAndWater()
         {
-            _state.Play.Draw(_modelRenderer, viewProjection);
-            DrawWater(viewProjection, lighting, scene, image);
+            _state.Play.Draw(_modelRenderer, sceneViewProjection);
+            DrawWater(sceneViewProjection, lighting, scene, image);
         }
         if (modelsEnabled)
-            _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
+            _modelLayer.Draw(_modelRenderer, sceneViewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
                 PlayerAndWater, occlusionPreview ? _occlusionCuller : null);
         else
             PlayerAndWater();
@@ -159,39 +163,40 @@ internal sealed unsafe partial class MainForm
         var previewSpot = _state.IsLayerVisible(CarGeneratorLayer.LayerName) ? _state.SelectedCarGenerator : null;
         _state.SpotPreview.Update(_state.World, _modelRenderer, previewSpot);
         if (previewSpot?.Spot is { } shownSpot)
-            _state.SpotPreview.Draw(_modelRenderer, shownSpot, _carGeneratorLayer.GroundOf(_state.World, shownSpot), viewProjection);
+            _state.SpotPreview.Draw(_modelRenderer, shownSpot, _carGeneratorLayer.GroundOf(_state.World, shownSpot), sceneViewProjection);
 
         // The ped, animal or vehicle of the selected scenario point.
         var previewPoint = _state.SelectedScenario is { } point && _state.IsLayerVisible(ScenarioLayer.LayerName(point.Category)) ? point : null;
         _state.ScenarioClips.Update(_modelRenderer);
         _state.ScenarioPreview.Update(_state.World, _modelRenderer, _state.ScenarioClips, previewPoint);
         if (previewPoint is not null)
-            _state.ScenarioPreview.Draw(_modelRenderer, previewPoint, viewProjection);
+            _state.ScenarioPreview.Draw(_modelRenderer, previewPoint, sceneViewProjection);
 
         // Peds, animals and vehicles on the points the game would use at this hour.
         _state.ScenarioLife.Update(_state.World, _modelRenderer, _state.ScenarioClips, camera.Position, hour, settings.MapVersion == NodeRunner.Data.FileSystem.MapVersion.Multiplayer,
             c => _state.IsLayerVisible(ScenarioLayer.LayerName(c)), settings.ScenarioLife && !_state.IsOtherGame && _state.Cutscenes.Cutscene is null);
-        _state.ScenarioLife.Draw(_modelRenderer, viewProjection, previewPoint);
+        _state.ScenarioLife.Draw(_modelRenderer, sceneViewProjection, previewPoint);
 
         // The cutscene chosen in the cutscene viewer, at its place.
         _state.Cutscenes.Update(_state.World, _modelRenderer);
-        _state.Cutscenes.Draw(_modelRenderer, viewProjection);
+        _state.Cutscenes.Draw(_modelRenderer, sceneViewProjection);
 
         // The vehicle recordings ticked in the recording viewer.
         _state.Recordings.Update(_state.World, _modelRenderer, lines);
-        _state.Recordings.DrawModels(_modelRenderer, viewProjection);
+        _state.Recordings.DrawModels(_modelRenderer, sceneViewProjection);
 
         // The object about to be placed, under the mouse.
         if (!_state.Play.IsActive)
-            DrawPlacementGhost(viewProjection);
+            DrawPlacementGhost(sceneViewProjection);
 
         // The finished image into the window's 3D view, with its depth: the editor's lines below are hidden behind
         // the models as before.
         if (image is not null)
         {
+            image.Process();
             _graphics!.BindBackBuffer();
             _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
-            image.Finish();
+            image.Show();
         }
 
         _state.Recordings.DrawLines(lines, viewProjection, camera.Position);
@@ -307,6 +312,7 @@ internal sealed unsafe partial class MainForm
             Scale = allowed ? Math.Clamp(settings.RenderScale, 0.5f, 1f) : 1f,
             Exposure = Math.Clamp(settings.Exposure, 0.2f, 4f),
             Sharpness = Math.Clamp(settings.Sharpness, 0f, 1f),
+            Antialiasing = allowed && settings.Antialiasing,
         };
     }
 

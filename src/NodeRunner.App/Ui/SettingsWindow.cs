@@ -712,6 +712,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
             SaveWhenReleased();
         }
 
+        Widgets.Property(L("Anticrénelage (TAA)"), L("Lisse les bords en escalier et le scintillement des grillages, câbles et feuillages, en mêlant chaque image aux précédentes. Coûte peu ; léger flou pendant les mouvements rapides."));
+        bool antialiasing = settings.Antialiasing;
+        if (ImGui.Checkbox("##antialiasing", ref antialiasing))
+        {
+            settings.Antialiasing = antialiasing;
+            state.SaveSettings();
+        }
+
         Widgets.Property(L("Résolution de rendu"), L("Part des pixels de la vue 3D vraiment calculés ; l'image est ensuite agrandie. Moins de 100 % = bien plus rapide sur un petit PC ou un écran 4K, mais moins net."));
         ImGui.SetNextItemWidth(-1f);
         float scale = settings.RenderScale * 100f;
@@ -719,7 +727,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
             settings.RenderScale = MathF.Round(scale / 5f) * 0.05f;
         SaveWhenReleased();
 
-        if (settings.HdrRendering || settings.RenderScale < 0.999f)
+        if (settings.HdrRendering || settings.Antialiasing || settings.RenderScale < 0.999f)
         {
             Widgets.Property(L("Netteté"), L("Renforce les détails de l'image agrandie ou lissée. 0 = image telle quelle."));
             ImGui.SetNextItemWidth(-1f);
