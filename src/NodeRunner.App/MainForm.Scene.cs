@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.App.Configuration;
 using NodeRunner.App.Ui;
 using NodeRunner.App.World;
 using NodeRunner.Editor;
@@ -68,6 +69,7 @@ internal sealed unsafe partial class MainForm
         var viewProjection = camera.ViewProjection((float)scene.Width / scene.Height);
 
         LoadWorld();
+        ChooseGraphicsTier();
 
         // Sky behind everything, then opaque models, then the translucent navmesh, then lines.
         var settings = _state.Settings;
@@ -75,6 +77,15 @@ internal sealed unsafe partial class MainForm
         var lighting = SceneLighting.ForHour(settings.TimeOfDay, fogDistance);
         if (_state.IsClassic)
             lighting = _classicLighting.Apply(lighting, _state.Classic.TimeCycle, settings.TimeOfDay, camera.Position);
+        // The scene in an image of its own (HDR light, fewer pixels) when the settings ask for it, else straight into
+        // the window.
+        var imageOptions = SceneOptions();
+        var image = imageOptions.IsUsed ? _sceneImage ??= new SceneImage(_graphics!.Device, _graphics.Context) : null;
+        if (image is not null && imageOptions.Hdr)
+        {
+            lighting = lighting.ForHdr();
+            imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
+        }
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
         _modelRenderer.Anisotropy = settings.Anisotropy;
@@ -104,7 +115,12 @@ internal sealed unsafe partial class MainForm
         bool shadows = modelsEnabled && settings.Shadows;
         if (shadows)
         {
-            _shadowMaps ??= new ShadowMaps(_graphics!.Device, _graphics.Context);
+            if (_shadowMaps is not null && _shadowMaps.Size != settings.ShadowResolution)
+            {
+                _shadowMaps.Dispose();
+                _shadowMaps = null;
+            }
+            _shadowMaps ??= new ShadowMaps(_graphics!.Device, _graphics.Context, settings.ShadowResolution);
             // Kept from the last frames while nothing casting a shadow changed and the view stays within them.
             _shadowMaps.Update(camera, (float)scene.Width / scene.Height, lighting.SunDirection, settings.ShadowDistance,
                 _modelLayer.CastersChanged(), _state.Play.IsActive);
@@ -113,6 +129,12 @@ internal sealed unsafe partial class MainForm
             _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
         }
         _modelRenderer.Shadows = shadows ? _shadowMaps : null;
+        if (image is not null)
+        {
+            var clear = imageOptions.Hdr ? new Vector4(MathF.Pow(BackgroundColor.X, 2.2f), MathF.Pow(BackgroundColor.Y, 2.2f), MathF.Pow(BackgroundColor.Z, 2.2f), 1f)
+                : BackgroundColor;
+            image.Begin(imageOptions, scene.Width, scene.Height, clear);
+        }
 
         if (settings.ShowSky)
             _skyRenderer!.Draw(viewProjection, lighting);
@@ -125,7 +147,7 @@ internal sealed unsafe partial class MainForm
         void PlayerAndWater()
         {
             _state.Play.Draw(_modelRenderer, viewProjection);
-            DrawWater(viewProjection, lighting, scene);
+            DrawWater(viewProjection, lighting, scene, image);
         }
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, viewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
@@ -157,7 +179,22 @@ internal sealed unsafe partial class MainForm
 
         // The vehicle recordings ticked in the recording viewer.
         _state.Recordings.Update(_state.World, _modelRenderer, lines);
-        _state.Recordings.Draw(_modelRenderer, lines, viewProjection, camera.Position);
+        _state.Recordings.DrawModels(_modelRenderer, viewProjection);
+
+        // The object about to be placed, under the mouse.
+        if (!_state.Play.IsActive)
+            DrawPlacementGhost(viewProjection);
+
+        // The finished image into the window's 3D view, with its depth: the editor's lines below are hidden behind
+        // the models as before.
+        if (image is not null)
+        {
+            _graphics!.BindBackBuffer();
+            _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
+            image.Finish();
+        }
+
+        _state.Recordings.DrawLines(lines, viewProjection, camera.Position);
 
         bool navMeshEnabled = NavMeshLayer.Surfaces.Any(s => _state.IsLayerVisible(NavMeshLayer.LayerName(s)));
         _navMeshLayer.Update(_state.World, lines, camera.Position, _state.Settings.NavMeshRadius, navMeshEnabled);
@@ -239,7 +276,7 @@ internal sealed unsafe partial class MainForm
         if (_state.Play.IsActive)
             return;
         DrawSelectionBox(lines, viewProjection);
-        DrawPlacementGhost(lines, viewProjection);
+        DrawPlacementBox(lines);
         if (_state.SelectedPathNode is { } selectedNode && _state.World.PathNetwork is { } pathNetwork)
             PathNodeLayer.DrawSelected(lines, pathNetwork, selectedNode, viewProjection, camera.Position);
         if (_state.SelectedScenario is { } selectedScenario)
@@ -257,6 +294,36 @@ internal sealed unsafe partial class MainForm
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
+    }
+
+    // What the scene's own image does, from the display settings (software rendering: the simple rendering only).
+    private SceneImageOptions SceneOptions()
+    {
+        var settings = _state.Settings;
+        bool allowed = !_graphics!.IsSoftware;
+        return new SceneImageOptions
+        {
+            Hdr = allowed && settings.HdrRendering,
+            Scale = allowed ? Math.Clamp(settings.RenderScale, 0.5f, 1f) : 1f,
+            Exposure = Math.Clamp(settings.Exposure, 0.2f, 4f),
+            Sharpness = Math.Clamp(settings.Sharpness, 0f, 1f),
+        };
+    }
+
+    // The first time (and after the display settings are reset), the effects are chosen for this PC's graphics card;
+    // a new installation also gets the distances of that preset.
+    private void ChooseGraphicsTier()
+    {
+        var settings = _state.Settings;
+        if (settings.GraphicsTierChosen || _graphics is null)
+            return;
+        var preset = QualityPreset.ForCard(_graphics.IsSoftware, _graphics.DedicatedVideoMemory());
+        if (settings.Camera is null)
+            preset.ApplyTo(settings);
+        else
+            preset.ApplyEffectsTo(settings);
+        settings.GraphicsTierChosen = true;
+        _state.SaveSettings();
     }
 
     private bool _gta4CameraPending;
@@ -288,7 +355,7 @@ internal sealed unsafe partial class MainForm
 
     // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose
     // depth tells how much water is crossed).
-    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene)
+    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene, SceneImage? image)
     {
         var water = _state.Other is { } other ? other.Water : _state.World.Water;
         if (!ReferenceEquals(water, _waterShown))
@@ -300,8 +367,12 @@ internal sealed unsafe partial class MainForm
             return;
         // Wrapped every hour, so the time stays precise enough for the waves.
         float time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
-        _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth(),
-            _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height));
+        if (image is not null)
+            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, image.CopyDepth(),
+                _state.Settings.WaterReflections ? image.CopyColor() : null, new Vector4(0f, 0f, image.Width, image.Height));
+        else
+            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth(),
+                _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height));
         _waterRenderer.DrawSurfaces();
         if (_state.IsLayerVisible(ModelLayer.LayerName))
             _modelLayer.DrawWater(_waterRenderer);

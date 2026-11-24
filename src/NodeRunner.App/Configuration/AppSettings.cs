@@ -127,6 +127,19 @@ public sealed class AppSettings
     // Water mirroring the scene (not only the sky), bottom bent by the waves.
     public bool WaterReflections { get; set; } = true;
 
+    // Advanced rendering of the 3D view (NodeRunner.Render.SceneImage): light beyond white brought back by a filmic
+    // curve (HDR), brightness, share of the view's width and height drawn (0.5 to 1), sharpening. Chosen once for the
+    // PC's graphics card (GraphicsTierChosen, see QualityPreset.ForCard), then by the user.
+    public bool HdrRendering { get; set; }
+    public float Exposure { get; set; } = 1f;
+    public float RenderScale { get; set; } = 1f;
+    public float Sharpness { get; set; } = 0.3f;
+
+    // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
+    public int ShadowResolution { get; set; } = 2048;
+
+    public bool GraphicsTierChosen { get; set; }
+
     // Objects hidden behind the occluders are not drawn, as in the game.
     public bool OcclusionPreview { get; set; }
 
@@ -221,6 +234,8 @@ public sealed class AppSettings
         (ShowSky, TimeOfDay, Fog, FogDistance) = (d.ShowSky, d.TimeOfDay, d.Fog, d.FogDistance);
         (Shadows, ShadowDistance, Anisotropy, ViewDistanceMultiplier) = (d.Shadows, d.ShadowDistance, d.Anisotropy, d.ViewDistanceMultiplier);
         WaterReflections = d.WaterReflections;
+        (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
+        GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);
     }

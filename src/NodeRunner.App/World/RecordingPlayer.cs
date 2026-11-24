@@ -255,15 +255,11 @@ internal sealed class RecordingPlayer : IDisposable
         return (degrees % 360f + 360f) % 360f;
     }
 
-    public void Draw(ModelRenderer renderer, ColorRenderer lines, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    // The vehicles, with the scene's models.
+    public void DrawModels(ModelRenderer renderer, Matrix4x4 viewProjection)
     {
         if (_tracks.Count == 0)
             return;
-        foreach (var track in _tracks)
-        {
-            if (track.Trail is { } trail)
-                lines.DrawXRay(trail, viewProjection, cameraPosition, 0f, 0.3f);
-        }
         foreach (var pass in (ReadOnlySpan<ModelPass>)[ModelPass.Solid, ModelPass.Translucent])
         {
             renderer.Begin(pass);
@@ -276,6 +272,18 @@ internal sealed class RecordingPlayer : IDisposable
             }
         }
         renderer.VehiclePaint = null;
+    }
+
+    // The paths, and the boxes of the cars without a model and of the chosen one, with the editor's lines.
+    public void DrawLines(ColorRenderer lines, Matrix4x4 viewProjection, Vector3 cameraPosition)
+    {
+        if (_tracks.Count == 0)
+            return;
+        foreach (var track in _tracks)
+        {
+            if (track.Trail is { } trail)
+                lines.DrawXRay(trail, viewProjection, cameraPosition, 0f, 0.3f);
+        }
         // A car without a model: a box of a car's size.
         foreach (var track in _tracks)
         {

@@ -324,6 +324,21 @@ public sealed class GraphicsDevice : IDisposable
         }
     }
 
+    // The graphics card's own memory (bytes; a small amount for a chip sharing the PC's memory), 0 if unknown.
+    public long DedicatedVideoMemory()
+    {
+        try
+        {
+            using var dxgiDevice = Device.QueryInterface<IDXGIDevice>();
+            using var adapter = dxgiDevice.GetAdapter();
+            return (long)(nuint)adapter.Description.DedicatedVideoMemory;
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            return 0;
+        }
+    }
+
     // True once Windows has taken the GPU away (driver crash, update or restart, card removed): nothing can be drawn
     // with this device anymore, and every resource would have to be created again.
     public bool IsLost => Device.DeviceRemovedReason.Failure;

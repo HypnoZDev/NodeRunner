@@ -24,6 +24,7 @@ cbuffer Constants : register(b0)
     float4 Horizon;      // Also the fog colour.
     float4 Settings;     // x: 1 = fog on, y: fog distance, z: 1 = scene depth available, w: 1 = scene colour available.
     float4 Viewport;     // xy: top-left pixel of the 3D view, zw: its size.
+    float4 Options;      // x = 1: linear colours of an HDR image.
 };
 // Water meshes of the models (pools, fountains, streams): placement and wave strength of the model drawn.
 cbuffer MeshConstants : register(b1)
@@ -170,8 +171,14 @@ float4 PS(PS_INPUT input) : SV_Target
 
     // Light received by the water body: sky all around, plus the sun from above.
     float3 light = SkyAmbient.rgb * 1.3f + SunColor.rgb * saturate(SunDirection.z) * 0.9f;
-    float3 deep = float3(0.012f, 0.060f, 0.080f) * light;
-    float3 shallow = float3(0.050f, 0.190f, 0.180f) * light;
+    float3 deepColor = float3(0.012f, 0.060f, 0.080f), shallowColor = float3(0.050f, 0.190f, 0.180f);
+    if (Options.x > 0.5f)
+    {
+        deepColor = pow(deepColor, 2.2f) * 2.0f;
+        shallowColor = pow(shallowColor, 2.2f) * 2.0f;
+    }
+    float3 deep = deepColor * light;
+    float3 shallow = shallowColor * light;
 
     if (below)
         return float4(deep * 1.5f, 0.85f);
@@ -230,6 +237,8 @@ float4 PS(PS_INPUT input) : SV_Target
     // Same fog as the models.
     float fog = Settings.x * saturate((distance - 0.25f * Settings.y) / (0.75f * Settings.y));
     fog = fog * fog * (3.0f - 2.0f * fog);
+    if (Options.x > 0.5f)
+        fog = pow(fog, 1.5f);
     return float4(lerp(color, Horizon.rgb * alpha, fog), alpha);
 }";
 
@@ -245,6 +254,7 @@ float4 PS(PS_INPUT input) : SV_Target
         public Vector4 Horizon;
         public Vector4 Settings;
         public Vector4 Viewport;
+        public Vector4 Options;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -397,6 +407,7 @@ float4 PS(PS_INPUT input) : SV_Target
             Settings = new Vector4(lighting.FogDistance > 0f ? 1f : 0f, MathF.Max(lighting.FogDistance, 1f), sceneDepth is null ? 0f : 1f,
                 sceneColor is null ? 0f : 1f),
             Viewport = viewport,
+            Options = new Vector4(lighting.IsHdr ? 1f : 0f, 0f, 0f, 0f),
         };
         var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, constants);

@@ -28,6 +28,7 @@ internal sealed unsafe partial class MainForm : Form
     private SkyRenderer? _skyRenderer;
     private WaterRenderer? _waterRenderer;
     private ShadowMaps? _shadowMaps;
+    private SceneImage? _sceneImage;
     private object? _waterShown; // The WaterMap uploaded to _waterRenderer.
     private PickBuffer? _pickBuffer;
     private BackdropBlur? _backdropBlur;
@@ -256,6 +257,8 @@ internal sealed unsafe partial class MainForm : Form
         _waterRenderer = null;
         _shadowMaps?.Dispose();
         _shadowMaps = null;
+        _sceneImage?.Dispose();
+        _sceneImage = null;
         _pickBuffer?.Dispose();
         _placeBuffer?.Dispose();
         _state.Placing.Dispose();

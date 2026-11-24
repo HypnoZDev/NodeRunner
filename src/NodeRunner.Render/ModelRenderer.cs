@@ -32,6 +32,8 @@ cbuffer Frame : register(b0)
     float4 RimColor;
     float4 ClassicLight;  // First trilogy pre-lit surfaces: xyz = ambient light added, w = night colours blend (0 day).
     float4 ClassicShade;  // x: how much the sun shadows darken them.
+    float4 Output;        // x = 1: linear colours of an HDR image (textures and vertex colours made linear), y: brightness
+                          // of the light given off by lit windows and lamps there.
 };
 cbuffer Object : register(b2)
 {
@@ -154,6 +156,16 @@ float SunShadow(float3 world, float3 n)
     return lerp(1.0f, lit, fade);
 }
 
+float3 ToLinear(float3 c)
+{
+    return pow(abs(c), 2.2f);
+}
+
+// Set by Shade for the second image of the solid pass (ambient occlusion): the normal of the surface, and the share of
+// its light coming from the surroundings (the part the occlusion darkens).
+static float3 ShadedNormal = float3(0.0f, 0.0f, 1.0f);
+static float AmbientShare = 1.0f;
+
 // The normal bent by a normal map (x and y in red and green, z rebuilt), along directions worked out from how the
 // position and the texture coordinates change from pixel to pixel: no tangents needed in the vertices.
 float3 Relief(float3 n, float3 world, float2 uv)
@@ -187,11 +199,19 @@ float4 Shade(PS_INPUT input, float4 color)
         float3 prelit = lerp(input.color.rgb, input.weights.rgb, ClassicLight.w) + ClassicLight.rgb;
         float shade = 1.0f - ClassicShade.x * (1.0f - saturate(sun * 4.0f));
         float3 classic = color.rgb * Tint.rgb * min(prelit, 1.0f) * shade;
+        if (Output.x > 0.5f)
+            classic = ToLinear(classic) * 2.0f;
+        ShadedNormal = n;
+        AmbientShare = 1.0f;
         float far = length(input.world - CameraFog.xyz);
         float haze = FogColor.a * saturate((far - 0.25f * CameraFog.w) / (0.75f * CameraFog.w));
         haze = haze * haze * (3.0f - 2.0f * haze);
+        if (Output.x > 0.5f)
+            haze = pow(haze, 1.5f); // Blended in linear colours, the haze would look thicker.
         return float4(lerp(classic, FogColor.rgb, haze), color.a);
     }
+    if (Output.x > 0.5f)
+        color.rgb = ToLinear(color.rgb);
     float sky = 0.5f + 0.5f * n.z;
     float3 ambient = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky);
     if (Emission.y > 0.5f)
@@ -211,8 +231,10 @@ float4 Shade(PS_INPUT input, float4 color)
     float3 toCamera = normalize(CameraFog.xyz - input.world);
     float edge = 1.0f - saturate(abs(dot(n, toCamera)));
     light += RimColor.rgb * saturate(dot(n, RimDirection.xyz)) * edge * edge;
+    ShadedNormal = n;
+    AmbientShare = dot(ambient, 1.0f) / max(dot(light, 1.0f), 0.0001f);
     // Own light: at least the texture colour, brighter than the surroundings at night.
-    float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * 1.4f);
+    float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * (Output.x > 0.5f ? Output.y : 1.4f));
     // Characters' shine: highlights of the key light, as bright as the red of the specular map (squared) says, as
     // tight as its alpha says.
     if (Surface.y > 0.5f && sun > 0.0f)
@@ -228,6 +250,8 @@ float4 Shade(PS_INPUT input, float4 color)
     float distance = length(input.world - CameraFog.xyz);
     float fog = FogColor.a * saturate((distance - 0.25f * CameraFog.w) / (0.75f * CameraFog.w));
     fog = fog * fog * (3.0f - 2.0f * fog);
+    if (Output.x > 0.5f)
+        fog = pow(fog, 1.5f); // Blended in linear colours, the haze would look thicker.
     return float4(lerp(lit, FogColor.rgb, fog), color.a);
 }
 
@@ -300,6 +324,32 @@ float4 PSTranslucent(PS_INPUT input) : SV_Target
     return color;
 }
 
+// Solid passes also giving the second image of the ambient occlusion: the normal (0 to 1) and the share of the light
+// coming from the surroundings.
+struct PS_TWO { float4 color : SV_Target0; float4 normal : SV_Target1; };
+PS_TWO WithNormal(float4 color)
+{
+    PS_TWO output;
+    output.color = color;
+    output.normal = float4(ShadedNormal * 0.5f + 0.5f, saturate(AmbientShare));
+    return output;
+}
+
+PS_TWO PSOpaqueNormal(PS_INPUT input)
+{
+    return WithNormal(PSOpaque(input));
+}
+
+PS_TWO PSTerrainNormal(PS_INPUT input)
+{
+    return WithNormal(PSTerrain(input));
+}
+
+PS_TWO PSCutoutNormal(PS_INPUT input)
+{
+    return WithNormal(PSCutout(input));
+}
+
 // Shadow images: depth only, with the holes of foliage and fences. Only the position and the texture coordinates of
 // the vertices are read.
 struct PS_SHADOW { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -355,6 +405,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 RimColor;
         public Vector4 ClassicLight;
         public Vector4 ClassicShade;
+        public Vector4 Output;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -414,6 +465,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
 
     public SceneLighting Lighting { get; set; } = SceneLighting.Neutral;
 
+    // The solid passes also write the surface's normal into a second image (SceneImage, for the ambient occlusion).
+    public bool NormalsOutput { get; set; }
+
     public Vector3 CameraPosition { get; set; }
 
     public ShadowMaps? Shadows { get; set; }
@@ -436,6 +490,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     private readonly ID3D11VertexShader _vertexShader;
     private readonly ID3D11PixelShader _opaquePixelShader;
     private readonly ID3D11PixelShader _terrainPixelShader;
+    private readonly ID3D11PixelShader _opaqueNormalPixelShader;
+    private readonly ID3D11PixelShader _terrainNormalPixelShader;
+    private readonly ID3D11PixelShader _cutoutNormalPixelShader;
     private readonly ID3D11PixelShader _cutoutPixelShader;
     private readonly ID3D11PixelShader _translucentPixelShader;
     private readonly ID3D11PixelShader _shadowCutoutPixelShader;
@@ -484,6 +541,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _vertexShader = device.CreateVertexShader(vsBytecode.Span);
         _opaquePixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSOpaque", "models", "ps_5_0").Span);
         _terrainPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTerrain", "models", "ps_5_0").Span);
+        _opaqueNormalPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSOpaqueNormal", "models", "ps_5_0").Span);
+        _terrainNormalPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTerrainNormal", "models", "ps_5_0").Span);
+        _cutoutNormalPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSCutoutNormal", "models", "ps_5_0").Span);
         _cutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSCutout", "models", "ps_5_0").Span);
         _translucentPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSTranslucent", "models", "ps_5_0").Span);
         _shadowCutoutPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSShadowCutout", "models", "ps_5_0").Span);
@@ -957,10 +1017,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             bool terrain = part.Layers is not null && part.BlendMode == MeshBlendMode.Opaque;
             SetPixelShader(part.BlendMode switch
             {
-                _ when terrain => _terrainPixelShader,
-                MeshBlendMode.Cutout => _cutoutPixelShader,
+                _ when terrain => NormalsOutput ? _terrainNormalPixelShader : _terrainPixelShader,
+                MeshBlendMode.Cutout => NormalsOutput ? _cutoutNormalPixelShader : _cutoutPixelShader,
                 MeshBlendMode.Translucent => _translucentPixelShader,
-                _ => _opaquePixelShader,
+                _ => NormalsOutput ? _opaqueNormalPixelShader : _opaquePixelShader,
             });
             SetRasterizer(Wireframe ? _wireframeRasterizerState
                 : part.BlendMode == MeshBlendMode.Opaque ? _rasterizerState : _doubleSidedRasterizerState);
@@ -973,6 +1033,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             // Vehicle paint: the part's colour slot, over a white base if its texture is missing.
             var paint = VehiclePaint is { } colors && part.PaintSlot != VehiclePaintSlot.None && (int)part.PaintSlot < colors.Length
                 ? colors[(int)part.PaintSlot] : Vector3.One;
+            if (Lighting.IsHdr && paint != Vector3.One)
+                paint = new Vector3(MathF.Pow(paint.X, 2.2f), MathF.Pow(paint.Y, 2.2f), MathF.Pow(paint.Z, 2.2f));
             bool painted = VehiclePaint is not null && part.PaintSlot != VehiclePaintSlot.None;
             var highlight = HighlightedMesh == part.Mesh ? HighlightColor : Vector3.One;
             SetTint(tint * paint * highlight);
@@ -1063,6 +1125,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 RimColor = new Vector4(Lighting.RimColor, 0f),
                 ClassicLight = new Vector4(Lighting.ClassicAmbient, Lighting.ClassicNight),
                 ClassicShade = new Vector4(Lighting.ClassicShadow, 0f, 0f, 0f),
+                Output = new Vector4(Lighting.IsHdr ? 1f : 0f, SceneLighting.HdrEmission, 0f, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);
@@ -1181,6 +1244,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         _cutoutPixelShader.Dispose();
         _opaquePixelShader.Dispose();
         _terrainPixelShader.Dispose();
+        _opaqueNormalPixelShader.Dispose();
+        _terrainNormalPixelShader.Dispose();
+        _cutoutNormalPixelShader.Dispose();
         _vertexShader.Dispose();
     }
 }

@@ -19,6 +19,8 @@ cbuffer Constants : register(b0)
     float4 Zenith;
     float4 Horizon;
     float4 Sun; // xyz: direction towards the sun, w: visibility of the disc.
+    float4 Disc; // x: brightness of the sun disc (much brighter in an HDR image, where it glows), y = 1: HDR image
+                 // (linear colours).
 };
 struct PS_INPUT { float4 pos : SV_POSITION; float2 ndc : TEXCOORD0; };
 
@@ -39,12 +41,21 @@ float4 PS(PS_INPUT input) : SV_Target
     float3 ray = normalize(b.xyz / b.w - a.xyz / a.w);
 
     float up = ray.z;
+    // Linear colours are blended as display colours, for the same gradient.
+    float3 horizon = Horizon.rgb, zenith = Zenith.rgb;
+    if (Disc.y > 0.5f)
+    {
+        horizon = pow(abs(horizon), 1.0f / 2.2f);
+        zenith = pow(abs(zenith), 1.0f / 2.2f);
+    }
     float3 color = up >= 0.0f
-        ? lerp(Horizon.rgb, Zenith.rgb, pow(saturate(up), 0.45f))
-        : Horizon.rgb * lerp(0.85f, 0.55f, saturate(-up * 4.0f));
+        ? lerp(horizon, zenith, pow(saturate(up), 0.45f))
+        : horizon * lerp(0.85f, 0.55f, saturate(-up * 4.0f));
+    if (Disc.y > 0.5f)
+        color = pow(color, 2.2f);
 
     float facing = saturate(dot(ray, Sun.xyz));
-    color += Sun.w * (pow(facing, 2000.0f) * 6.0f * float3(1.0f, 0.95f, 0.85f)
+    color += Sun.w * (pow(facing, 2000.0f) * Disc.x * float3(1.0f, 0.95f, 0.85f)
         + pow(facing, 24.0f) * 0.25f * Horizon.rgb);
     return float4(color, 1.0f);
 }";
@@ -56,6 +67,7 @@ float4 PS(PS_INPUT input) : SV_Target
         public Vector4 Zenith;
         public Vector4 Horizon;
         public Vector4 Sun;
+        public Vector4 Disc;
     }
 
     private readonly ID3D11DeviceContext _context;
@@ -99,6 +111,7 @@ float4 PS(PS_INPUT input) : SV_Target
             Zenith = new Vector4(lighting.Zenith, 1f),
             Horizon = new Vector4(lighting.Horizon, 1f),
             Sun = new Vector4(lighting.SunDirection, lighting.SunDisc),
+            Disc = new Vector4(lighting.IsHdr ? 60f : 6f, lighting.IsHdr ? 1f : 0f, 0f, 0f),
         };
         var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, constants);

@@ -106,6 +106,50 @@ public readonly record struct SceneLighting
         return lighting with { SunDirection = direction, FogDistance = fogDistance };
     }
 
+    // The same light for the HDR scene image (SceneImage): linear colours (the values above are display colours), a
+    // sun several times stronger than the sky's light around, as outdoors. The eye gets used to the dark: with less
+    // light (dusk, night), the image is made brighter (Adaptation), as in the game.
+    public SceneLighting ForHdr()
+    {
+        var hdr = HdrColours();
+        return hdr with { Adaptation = Math.Clamp(MathF.Pow(DayKey / MathF.Max(Key(hdr), 1e-3f), 0.45f), 1f, 3.5f) };
+    }
+
+    private SceneLighting HdrColours() => this with
+    {
+        SunColor = Linear(SunColor) * HdrSun,
+        SkyAmbient = Linear(SkyAmbient) * HdrAmbient,
+        GroundAmbient = Linear(GroundAmbient) * HdrAmbient,
+        Zenith = Linear(Zenith) * HdrSky,
+        Horizon = Linear(Horizon) * HdrSky,
+        FillColor = Linear(FillColor) * HdrAmbient,
+        RimColor = Linear(RimColor) * HdrAmbient,
+        IsHdr = true,
+    };
+
+    private const float HdrSun = 3f;
+    private const float HdrAmbient = 2f;
+    private const float HdrSky = 1.25f;
+
+    // How much light there is around (HDR colours), and the same at noon.
+    private static float Key(SceneLighting l) =>
+        Luminance(l.SkyAmbient) + Luminance(l.SunColor) * MathF.Max(l.SunDirection.Z, 0.1f);
+
+    private static readonly float DayKey = Key(ForHour(13f, 0f).HdrColours());
+
+    private static float Luminance(Vector3 c) => 0.2126f * c.X + 0.7152f * c.Y + 0.0722f * c.Z;
+
+    // Brightening of the HDR image for the light of the hour (1 by day, 0 when not worked out).
+    public float Adaptation { get; init; }
+
+    // Light given off by lit windows and lamps in the HDR image, compared with a white surface in the sun.
+    public const float HdrEmission = 3f;
+
+    private static Vector3 Linear(Vector3 c) => new(MathF.Pow(c.X, 2.2f), MathF.Pow(c.Y, 2.2f), MathF.Pow(c.Z, 2.2f));
+
+    // Linear colours for the HDR scene image (ForHdr).
+    public bool IsHdr { get; init; }
+
     private static SceneLighting Blend(SceneLighting a, SceneLighting b, float t) => a with
     {
         SunColor = Vector3.Lerp(a.SunColor, b.SunColor, t),

@@ -126,18 +126,23 @@ internal sealed partial class MainForm
     }
 
     // The prop being placed, where a click would put it: its model tinted and its box.
-    private void DrawPlacementGhost(ColorRenderer lines, Matrix4x4 viewProjection)
+    private void DrawPlacementGhost(Matrix4x4 viewProjection)
     {
-        if (_state.Placing is not { IsActive: true, Pose: { } pose } placement || _modelRenderer is null)
+        if (_state.Placing is not { IsActive: true, Pose: { } pose } placement || _modelRenderer is null || placement.Model is not { } model)
             return;
         var transform = Matrix4x4.CreateFromQuaternion(pose.Orientation) * Matrix4x4.CreateTranslation(pose.Position);
-        if (placement.Model is { } model)
-        {
-            _modelRenderer.Begin(ModelPass.Solid);
-            _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
-            _modelRenderer.Begin(ModelPass.Translucent);
-            _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
-        }
+        _modelRenderer.Begin(ModelPass.Solid);
+        _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
+        _modelRenderer.Begin(ModelPass.Translucent);
+        _modelRenderer.Draw(model, transform, viewProjection, GhostTint);
+    }
+
+    // Its box, with the editor's lines.
+    private void DrawPlacementBox(ColorRenderer lines)
+    {
+        if (_state.Placing is not { IsActive: true, Pose: { } pose } placement)
+            return;
+        var transform = Matrix4x4.CreateFromQuaternion(pose.Orientation) * Matrix4x4.CreateTranslation(pose.Position);
         lines.AddBox(placement.BoundsMin, placement.BoundsMax, transform, GhostBoxColor);
     }
 }

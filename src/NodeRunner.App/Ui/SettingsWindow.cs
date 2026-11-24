@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using NodeRunner.App.Configuration;
 using NodeRunner.App.World;
 using NodeRunner.Editor.Localization;
 
@@ -11,18 +12,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
 {
     public const string Title = $"{Icons.Settings}  Paramètres d'affichage###Settings";
 
-    // A quality preset: the values it sets.
-    private sealed record Preset(string Name, string Tooltip, float ViewDistance, float FogDistance, int Anisotropy, bool Shadows, float ShadowDistance,
-        bool WaterReflections);
-
-    private static readonly Preset[] Presets =
-    [
-        new("Basse", "Pour un PC modeste : moins d'objets détaillés au loin, brouillard plus proche (rien n'est dessiné derrière), textures filtrées simplement, sans ombres ni reflets sur l'eau.",
-            0.6f, 2000f, 1, false, 400f, false),
-        new("Moyenne", "Réglages par défaut.", 1f, 4000f, 8, true, 400f, true),
-        new("Haute", "Pour une carte graphique récente : détails plus loin, brouillard lointain, textures du sol nettes au loin, ombres plus loin.",
-            1.5f, 8000f, 16, true, 800f, true),
-    ];
+    private static QualityPreset[] Presets => QualityPreset.All;
 
     private bool _open;
 
@@ -109,19 +99,12 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
 
         if (Page(0))
         {
-            int current = Array.FindIndex(Presets, p => Matches(p));
+            int current = Array.FindIndex(Presets, p => p.Matches(settings));
             int selected = current;
             if (Widgets.Segmented("##quality", Presets.Select(p => L(p.Name)).ToArray(), ref selected, Presets.Select(p => L(p.Tooltip)).ToArray())
                 && selected >= 0)
             {
-                var preset = Presets[selected];
-                settings.ViewDistanceMultiplier = preset.ViewDistance;
-                settings.FogDistance = preset.FogDistance;
-                settings.Anisotropy = preset.Anisotropy;
-                settings.Shadows = preset.Shadows;
-                settings.ShadowDistance = preset.ShadowDistance;
-                settings.WaterReflections = preset.WaterReflections;
-                settings.Fog = true;
+                Presets[selected].ApplyTo(settings);
                 state.SaveSettings();
             }
             if (current < 0)
@@ -184,6 +167,8 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     settings.WaterReflections = reflections;
                     state.SaveSettings();
                 }
+
+                DrawImageSettings(settings);
 
                 Widgets.Property(L("Carte graphique"), L("Carte utilisée pour la vue 3D. Automatique = la plus puissante (la carte dédiée d'un portable à deux cartes). Prend effet au prochain démarrage ; si la carte choisie ne marche pas, NodeRunner prend une autre carte."));
                 ImGui.SetNextItemWidth(-1f);
@@ -695,13 +680,54 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         state.SaveSettings();
     }
 
-    private bool Matches(Preset preset)
+    private static readonly int[] ShadowResolutions = [1024, 2048, 4096];
+
+    // The scene's own image: HDR light, its effects, resolution.
+    private void DrawImageSettings(AppSettings settings)
     {
-        var settings = state.Settings;
-        return settings.Fog && MathF.Abs(settings.ViewDistanceMultiplier - preset.ViewDistance) < 0.01f
-            && MathF.Abs(settings.FogDistance - preset.FogDistance) < 1f && settings.Anisotropy == preset.Anisotropy
-            && settings.Shadows == preset.Shadows && (!preset.Shadows || MathF.Abs(settings.ShadowDistance - preset.ShadowDistance) < 1f)
-            && settings.WaterReflections == preset.WaterReflections;
+        Widgets.Property(L("Qualité des ombres"), L("Finesse des ombres du soleil. Plus fine = bords plus nets, mais plus de mémoire vidéo et un peu plus lent."));
+        ImGui.SetNextItemWidth(-1f);
+        string[] shadowNames = [L("Basse (1024)"), L("Moyenne (2048)"), L("Haute (4096)")];
+        int shadowLevel = Math.Max(0, Array.IndexOf(ShadowResolutions, settings.ShadowResolution));
+        if (ImGui.Combo("##shadow_resolution", ref shadowLevel, shadowNames, shadowNames.Length))
+        {
+            settings.ShadowResolution = ShadowResolutions[shadowLevel];
+            state.SaveSettings();
+        }
+
+        Widgets.Property(L("Lumière réaliste (HDR)"), L("La lumière est calculée comme dans la réalité (soleil bien plus fort que l'ombre, lumières qui brillent la nuit), puis ramenée à l'écran par une courbe de cinéma. Sans : le rendu simple des versions précédentes, le plus rapide."));
+        bool hdr = settings.HdrRendering;
+        if (ImGui.Checkbox("##hdr", ref hdr))
+        {
+            settings.HdrRendering = hdr;
+            state.SaveSettings();
+        }
+        if (settings.HdrRendering)
+        {
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(-1f);
+            float exposure = settings.Exposure;
+            if (ImGui.SliderFloat("##exposure", ref exposure, 0.4f, 2.5f, L("Luminosité x %.2f"), ImGuiSliderFlags.Logarithmic))
+                settings.Exposure = exposure;
+            SaveWhenReleased();
+        }
+
+        Widgets.Property(L("Résolution de rendu"), L("Part des pixels de la vue 3D vraiment calculés ; l'image est ensuite agrandie. Moins de 100 % = bien plus rapide sur un petit PC ou un écran 4K, mais moins net."));
+        ImGui.SetNextItemWidth(-1f);
+        float scale = settings.RenderScale * 100f;
+        if (ImGui.SliderFloat("##render_scale", ref scale, 50f, 100f, "%.0f %%"))
+            settings.RenderScale = MathF.Round(scale / 5f) * 0.05f;
+        SaveWhenReleased();
+
+        if (settings.HdrRendering || settings.RenderScale < 0.999f)
+        {
+            Widgets.Property(L("Netteté"), L("Renforce les détails de l'image agrandie ou lissée. 0 = image telle quelle."));
+            ImGui.SetNextItemWidth(-1f);
+            float sharpness = settings.Sharpness * 100f;
+            if (ImGui.SliderFloat("##sharpness", ref sharpness, 0f, 100f, "%.0f %%"))
+                settings.Sharpness = sharpness / 100f;
+            SaveWhenReleased();
+        }
     }
 
     private void SaveWhenReleased()
