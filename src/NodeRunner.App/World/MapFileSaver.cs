@@ -16,7 +16,9 @@ internal static class MapFileSaver
         public List<string> Kept { get; } = [];
     }
 
-    public static Report Save(WorldLoader world, IEnumerable<MapData> maps, string folder, bool markSaved = true)
+    // lodLinks: maps whose objects get lower-detail parents in another map (automatic LODs, LodFileSaver).
+    public static Report Save(WorldLoader world, IEnumerable<MapData> maps, string folder, bool markSaved = true,
+        IReadOnlyDictionary<MapData, (uint ParentMap, Dictionary<int, int> Parents)>? lodLinks = null)
     {
         var report = new Report([], []);
         if (world.Content is not { } content || world.Maps is not { } library)
@@ -82,6 +84,8 @@ internal static class MapFileSaver
                     header = content.GetResourceHeader(map.FilePath) ?? throw new InvalidDataException(L("en-tête de ressource introuvable"));
                     written = writer.Write(source, map, extents);
                 }
+                if (lodLinks is not null && lodLinks.TryGetValue(map, out var links))
+                    written = YmapWriter.LinkToParent(written, links.ParentMap, links.Parents);
                 var file = ResourceFile.Write(header with { SystemFlags = (header.SystemFlags & 0xF0000000) | written.SystemPageFlags }, written.Content);
                 Verify(file, map);
 
@@ -106,7 +110,7 @@ internal static class MapFileSaver
 
     // A game map file with ordinary objects (no interior, no grass), whose descriptions of the structures are used
     // for the user's own maps; the same one for a whole map loading.
-    private static (byte[] Content, ResourceHeader Header) Template(GameContent content, MapLibrary library)
+    internal static (byte[] Content, ResourceHeader Header) Template(GameContent content, MapLibrary library)
     {
         if (_template is { } cached && cached.Library == library)
             return (cached.Content, cached.Header);

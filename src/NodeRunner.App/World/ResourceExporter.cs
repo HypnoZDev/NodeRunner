@@ -221,7 +221,18 @@ internal static class ResourceExporter
     {
         fromLibrary = [];
         string stream = Path.Combine(resourceFolder, FiveMResource.StreamFolderName);
-        var report = maps.Count > 0 ? MapFileSaver.Save(world, maps, stream, markSaved: false) : new MapFileSaver.Report([], []);
+        var report = new MapFileSaver.Report([], []);
+        LodFileSaver.Plan? lods = null;
+        if (maps.Count > 0)
+        {
+            Directory.CreateDirectory(stream);
+            lods = LodFileSaver.Prepare(world, maps, Path.GetFileName(Path.TrimEndingDirectorySeparator(resourceFolder)), stream, report);
+            var saved = MapFileSaver.Save(world, maps, stream, markSaved: false, lods?.Links);
+            report.Saved.AddRange(saved.Saved);
+            report.Errors.AddRange(saved.Errors);
+            if (lods is not null)
+                LodFileSaver.Save(world, lods, stream, report);
+        }
         PathFileSaver.Save(world, pathAreas, stream, report, markSaved: false);
         if (world.Scenarios is { } scenarios)
             ScenarioFileSaver.Save(world, scenarios.RegionsToSave.ToList(), stream, report, markSaved: false);

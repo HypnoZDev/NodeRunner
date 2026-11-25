@@ -76,8 +76,16 @@ public static class ModelSimplifier
     // and normal until it is merged into a vertex it shares a triangle with.
     public static ModelMesh SimplifyMesh(ModelMesh mesh, int targetTriangles, double maxError)
     {
-        int n = mesh.Positions.Length;
-        var vertexPositions = (Vector3[])mesh.Positions.Clone();
+        var (kept, indices, positions) = Simplify(mesh.Positions, Array.ConvertAll(mesh.Indices, i => (int)i), targetTriangles, maxError);
+        return mesh.Subset(kept, Array.ConvertAll(indices, i => (ushort)i), positions);
+    }
+
+    // Triangles over positions simplified: Kept = the vertices still used (in their order), Indices = the triangles
+    // over them (numbered in Kept), Positions = where every vertex of positions now is (some moved onto a neighbour).
+    public static (int[] Kept, int[] Indices, Vector3[] Positions) Simplify(Vector3[] positions, int[] triangles, int targetTriangles, double maxError)
+    {
+        int n = positions.Length;
+        var vertexPositions = (Vector3[])positions.Clone();
         var pointOf = new int[n];
         var points = new List<Vector3>();
         var pointIndex = new Dictionary<Vector3, int>();
@@ -93,7 +101,7 @@ public static class ModelSimplifier
         }
         int pointCount = points.Count;
 
-        int[] tris = Array.ConvertAll(mesh.Indices, i => (int)i);
+        int[] tris = (int[])triangles.Clone();
         int triCount = tris.Length / 3;
         var alive = new bool[triCount];
         var around = new List<int>[pointCount];
@@ -244,7 +252,7 @@ public static class ModelSimplifier
         var newIndex = new int[n];
         Array.Fill(newIndex, -1);
         var kept = new List<int>();
-        var indices = new List<ushort>();
+        var indices = new List<int>();
         for (int t = 0; t < triCount; t++)
         {
             if (!alive[t])
@@ -257,10 +265,10 @@ public static class ModelSimplifier
                     newIndex[i] = kept.Count;
                     kept.Add(i);
                 }
-                indices.Add((ushort)newIndex[i]);
+                indices.Add(newIndex[i]);
             }
         }
-        return mesh.Subset(kept.ToArray(), indices.ToArray(), vertexPositions);
+        return (kept.ToArray(), indices.ToArray(), vertexPositions);
     }
 
     private const float BorderWeight = 10f;

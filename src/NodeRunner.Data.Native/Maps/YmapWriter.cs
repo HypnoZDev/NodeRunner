@@ -209,6 +209,46 @@ public sealed class YmapWriter : IMapDataWriter
         return new MapFileContent(bytes, pageFlags);
     }
 
+    // Objects of a written map given lower-detail parents in another map (automatic LODs): the map names its parent
+    // map, each object listed (by its number in the file) becomes HD with its parent's number there and the flag
+    // "lower detail in the parent map".
+    public static MapFileContent LinkToParent(MapFileContent written, uint parentMap, IReadOnlyDictionary<int, int> parents)
+    {
+        var document = MetaDocument.Read(written.Content);
+        var mapData = document.Blocks[document.RootBlock].Data;
+        BinaryPrimitives.WriteUInt32LittleEndian(mapData.AsSpan(12), parentMap);
+        var items = EntityItems(document, mapData);
+        foreach (var (index, parent) in parents)
+        {
+            var (block, offset) = items[index];
+            var item = document.Blocks[block].Data.AsSpan(offset, YmapReader.EntitySize);
+            BinaryPrimitives.WriteUInt32LittleEndian(item[12..], BinaryPrimitives.ReadUInt32LittleEndian(item[12..]) | LodInParentMapFlag);
+            BinaryPrimitives.WriteInt32LittleEndian(item[YmapReader.EntityParentIndex..], parent);
+            BinaryPrimitives.WriteInt32LittleEndian(item[84..], (int)LodLevel.Hd);
+        }
+        var (content, pageFlags) = document.Write();
+        return new MapFileContent(content, pageFlags);
+    }
+
+    private const uint LodInParentMapFlag = 8;
+
+    // Lower-detail objects of a written map: how many children each one has (by its number in the file), and up to
+    // where those are drawn.
+    public static MapFileContent SetChildren(MapFileContent written, IReadOnlyDictionary<int, (int Count, float Distance)> children)
+    {
+        var document = MetaDocument.Read(written.Content);
+        var items = EntityItems(document, document.Blocks[document.RootBlock].Data);
+        foreach (var (index, (count, distance)) in children)
+        {
+            var (block, offset) = items[index];
+            var item = document.Blocks[block].Data.AsSpan(offset, YmapReader.EntitySize);
+            BinaryPrimitives.WriteInt32LittleEndian(item[YmapReader.EntityChildCount..], count);
+            BinaryPrimitives.WriteSingleLittleEndian(item[80..], distance);
+        }
+        var (content, pageFlags) = document.Write();
+        return new MapFileContent(content, pageFlags);
+    }
+
     // The descriptions of parking spots (CCarGen) and timecycle zones (CTimeCycleModifier) in a map file.
     public static MetaDocument.StructureInfo? CarGeneratorDescription(ReadOnlySpan<byte> source) =>
         MetaDocument.Read(source).FindStructure(YmapReader.CarGeneratorStructure);
