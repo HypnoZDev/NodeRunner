@@ -10,7 +10,7 @@ public static class GameLinkResource
 {
     public const string ResourceName = "noderunner-link";
     public const string CategoryFolder = "[noderunner]";
-    public const int Version = 1;
+    public const int Version = 2;
 
     public const string ConfigFileName = "server.cfg";
     public const string ResourcesFolderName = "resources";
@@ -224,6 +224,7 @@ public static class GameLinkResource
     [
         (FiveMResource.ManifestFileName, Manifest()),
         ("client.lua", Client),
+        ("server.lua", Server.Replace("{PORT}", GameLinkHost.DefaultPort.ToString(System.Globalization.CultureInfo.InvariantCulture))),
     ];
 
     private static string Manifest()
@@ -237,11 +238,12 @@ public static class GameLinkResource
         text.Append("description 'NodeRunner Studio live link'\n");
         text.Append("version '").Append(Version).Append("'\n\n");
         text.Append("client_script 'client.lua'\n");
+        text.Append("server_script 'server.lua'\n");
         return text.ToString();
     }
 
     private const string Client = """
-        -- NodeRunner Studio live link (client side).
+        -- NodeRunner Studio live link (client side): sends where the player and the camera are, runs the editor's commands.
 
         local function notify(text)
             BeginTextCommandThefeedPost('STRING')
@@ -255,6 +257,112 @@ public static class GameLinkResource
             end
             Wait(2000)
             notify('~b~NodeRunner Studio~s~ : lien avec l\'éditeur prêt / editor link ready')
+            while true do
+                local ped = PlayerPedId()
+                local pos = GetEntityCoords(ped)
+                local cam = GetFinalRenderedCamCoord()
+                local rot = GetFinalRenderedCamRot(2)
+                TriggerServerEvent('noderunner-link:state', {
+                    x = pos.x, y = pos.y, z = pos.z, h = GetEntityHeading(ped),
+                    cx = cam.x, cy = cam.y, cz = cam.z, rx = rot.x, ry = rot.y, rz = rot.z,
+                })
+                Wait(200)
+            end
+        end)
+
+        RegisterNetEvent('noderunner-link:status', function(connected)
+            if connected then
+                notify('~b~NodeRunner Studio~s~ : connecté / connected')
+            else
+                notify('~b~NodeRunner Studio~s~ : déconnecté / disconnected')
+            end
+        end)
+
+        RegisterNetEvent('noderunner-link:teleport', function(c)
+            local ped = PlayerPedId()
+            local target = ped
+            if IsPedInAnyVehicle(ped, false) then
+                target = GetVehiclePedIsIn(ped, false)
+            end
+            local x, y, z = c.x + 0.0, c.y + 0.0, c.z + 0.0
+            FreezeEntityPosition(target, true)
+            SetEntityCoordsNoOffset(target, x, y, z, false, false, false)
+            local ground = z
+            for _ = 1, 60 do
+                RequestCollisionAtCoord(x, y, z)
+                local found, groundZ = GetGroundZFor_3dCoord(x, y, z + 1.0, false)
+                if found then
+                    ground = groundZ
+                    break
+                end
+                Wait(50)
+            end
+            SetEntityCoordsNoOffset(target, x, y, ground, false, false, false)
+            SetEntityHeading(target, c.h + 0.0)
+            FreezeEntityPosition(target, false)
+            SetGameplayCamRelativeHeading(0.0)
+        end)
+
+        """;
+
+    private const string Server = """
+        -- NodeRunner Studio live link (server side): polls the editor running on this PC.
+
+        local url = ('http://127.0.0.1:%d/link'):format(GetConvarInt('noderunner_port', {PORT}))
+        local states = {}
+        local connected = false
+        local allowed = { teleport = true }
+
+        RegisterNetEvent('noderunner-link:state', function(state)
+            local source = source
+            if type(state) ~= 'table' then
+                return
+            end
+            state.id = source
+            state.name = GetPlayerName(source)
+            states[source] = state
+        end)
+
+        AddEventHandler('playerDropped', function()
+            states[source] = nil
+        end)
+
+        CreateThread(function()
+            while true do
+                local players = {}
+                for _, state in pairs(states) do
+                    players[#players + 1] = state
+                end
+                local done = false
+                PerformHttpRequest(url, function(status, body)
+                    local ok = status == 200
+                    if ok ~= connected then
+                        connected = ok
+                        TriggerClientEvent('noderunner-link:status', -1, ok)
+                    end
+                    if ok and body then
+                        local reply = json.decode(body)
+                        if type(reply) == 'table' and type(reply.commands) == 'table' then
+                            for _, command in ipairs(reply.commands) do
+                                if allowed[command.type] then
+                                    TriggerClientEvent('noderunner-link:' .. command.type, tonumber(command.player) or -1, command)
+                                end
+                            end
+                        end
+                    end
+                    done = true
+                end, 'POST', json.encode({ v = 2, players = players }), { ['Content-Type'] = 'application/json' })
+                local waited = 0
+                while not done and waited < 3000 do
+                    Wait(20)
+                    waited = waited + 20
+                end
+                if connected then
+                    Wait(100)
+                else
+                    Wait(2000)
+                end
+            end
         end)
 
         """;

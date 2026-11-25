@@ -99,6 +99,12 @@ internal sealed class StatusBar(AppState state, ModelLayer modelLayer, Action op
                 : L($"Session Online de {host} : c'est {host} qui enregistre"), UiTheme.Accent);
         }
 
+        if (state.Link.IsConnected)
+        {
+            Next();
+            Item(Icons.Monitor, L("Jeu connecté"), UiTheme.Success);
+        }
+
         if (state.History.HasUnsavedChanges && !state.Online.IsGuest)
         {
             Next();

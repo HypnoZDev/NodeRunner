@@ -45,6 +45,9 @@ internal sealed partial class AppState
 
     public Camera Camera { get; } = new();
 
+    // Live link with the game (noderunner-link resource of the local FiveM server).
+    public Editor.GameLinkHost Link { get; } = new();
+
     // Sounds played by the viewer and the audio zones (one at a time).
     public Audio.SoundOutput Sound { get; } = new();
 

@@ -1422,5 +1422,17 @@ public static partial class English
             "Deletes the resource and its line in server.cfg. Your other files are not touched."),
         ("Retiré du serveur.", "Removed from the server."),
         ("Impossible d'écrire dans le dossier du serveur : {0}", "Cannot write to the server folder: {0}"),
+        ("Jeu connecté", "Game connected"),
+        ("Joueur", "Player"),
+        ("{0}  Jeu connecté.", "{0}  Game connected."),
+        ("{0}  En attente du jeu : lance ton serveur et rejoins-le.", "{0}  Waiting for the game: start your server and join it."),
+        ("{0}  Serveur connecté, personne en jeu pour l'instant.", "{0}  Server connected, nobody in game yet."),
+        ("{0}  Le lien ne peut pas démarrer (port {1} déjà pris ?) : {2}", "{0}  The link cannot start (port {1} already taken?): {2}"),
+        ("{0}  Caméra à ma position en jeu", "{0}  Camera to my in-game position"),
+        ("{0}  Envoyer mon perso à la caméra", "{0}  Send my character to the camera"),
+        ("Pose ton personnage (ou ton véhicule) au sol sous la caméra de NodeRunner, tourné dans le même sens.",
+            "Puts your character (or your vehicle) on the ground under NodeRunner's camera, facing the same way."),
+        ("Suivre la caméra du jeu", "Follow the game camera"),
+        ("La vue 3D de NodeRunner reprend en continu la caméra du jeu.", "NodeRunner's 3D view keeps copying the game camera."),
     ];
 }

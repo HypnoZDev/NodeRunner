@@ -15,6 +15,8 @@ internal sealed class GameLinkWindow(AppState state)
     private List<string> _found = [];
     private string? _message;
     private bool _messageIsError;
+    private bool _follow;
+    private int _player;
 
     public bool FolderRequested { get; set; }
 
@@ -86,6 +88,7 @@ internal sealed class GameLinkWindow(AppState state)
 
     public void Draw()
     {
+        Follow();
         if (!_open)
             return;
         if (_search is { IsCompleted: true })
@@ -162,6 +165,13 @@ internal sealed class GameLinkWindow(AppState state)
             ImGui.Separator();
             ImGui.Spacing();
             DrawInstall(chosen);
+            if (GameLinkResource.StateOf(chosen) == GameLinkResource.State.Installed)
+            {
+                ImGui.Spacing();
+                ImGui.Separator();
+                ImGui.Spacing();
+                DrawConnection();
+            }
         }
         else if (Server is not null)
         {
@@ -220,6 +230,84 @@ internal sealed class GameLinkWindow(AppState state)
             if (Widgets.Button(L($"{Icons.Trash}  Retirer du serveur"), L("Supprime la ressource et sa ligne dans server.cfg. Tes autres fichiers ne sont pas touchés.")))
                 Run(() => GameLinkResource.Uninstall(server), L("Retiré du serveur."));
         }
+    }
+
+    private GameLinkPlayer? Player
+    {
+        get
+        {
+            var players = state.Link.Players;
+            return players.Count == 0 ? null : players[Math.Clamp(_player, 0, players.Count - 1)];
+        }
+    }
+
+    // The editor camera glued to the game camera while "follow" is on.
+    private void Follow()
+    {
+        if (!_follow)
+            return;
+        if (Player is not { } player)
+        {
+            if (!state.Link.IsConnected)
+                _follow = false;
+            return;
+        }
+        CameraToGame(player);
+    }
+
+    private void CameraToGame(GameLinkPlayer player)
+    {
+        state.Camera.Position = player.CameraPosition;
+        state.Camera.Yaw = player.CameraYaw;
+        state.Camera.Pitch = player.CameraPitch;
+    }
+
+    private void DrawConnection()
+    {
+        var link = state.Link;
+        if (!link.IsRunning)
+        {
+            ImGui.TextColored(UiTheme.Error, L($"{Icons.TriangleAlert}  Le lien ne peut pas démarrer (port {GameLinkHost.DefaultPort} déjà pris ?) : {link.Error}"));
+            return;
+        }
+        var players = link.Players;
+        if (!link.IsConnected)
+        {
+            ImGui.TextColored(UiTheme.TextMuted, L($"{Icons.LoaderCircle}  En attente du jeu : lance ton serveur et rejoins-le."));
+            return;
+        }
+        if (players.Count == 0)
+        {
+            ImGui.TextColored(UiTheme.Success, L($"{Icons.Check}  Serveur connecté, personne en jeu pour l'instant."));
+            return;
+        }
+
+        ImGui.TextColored(UiTheme.Success, L($"{Icons.Check}  Jeu connecté."));
+        if (players.Count > 1)
+        {
+            _player = Math.Clamp(_player, 0, players.Count - 1);
+            ImGui.SetNextItemWidth(260f);
+            if (ImGui.BeginCombo(L("Joueur"), players[_player].Name))
+            {
+                for (int i = 0; i < players.Count; i++)
+                    if (ImGui.Selectable($"{players[i].Name}##{players[i].Id}", i == _player))
+                        _player = i;
+                ImGui.EndCombo();
+            }
+        }
+        var player = Player!;
+        Widgets.Hint(L($"{player.Name} : {player.Position.X:0.00}, {player.Position.Y:0.00}, {player.Position.Z:0.00}"));
+        ImGui.Spacing();
+
+        if (Widgets.PrimaryButton(L($"{Icons.Camera}  Caméra à ma position en jeu")))
+            CameraToGame(player);
+        ImGui.SameLine();
+        if (Widgets.Button(L($"{Icons.PersonStanding}  Envoyer mon perso à la caméra"),
+                L("Pose ton personnage (ou ton véhicule) au sol sous la caméra de NodeRunner, tourné dans le même sens.")))
+            link.Teleport(player.Id, state.Camera.Position, GameLinkHost.HeadingFromYaw(state.Camera.Yaw));
+        ImGui.Checkbox(L("Suivre la caméra du jeu"), ref _follow);
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("La vue 3D de NodeRunner reprend en continu la caméra du jeu."));
     }
 
     private void Run(Action action, string done)
