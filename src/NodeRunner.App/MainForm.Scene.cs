@@ -111,6 +111,18 @@ internal sealed unsafe partial class MainForm
             if (image is not null && imageOptions.Hdr)
                 imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
         }
+        else
+        {
+            // The first trilogy keeps the light of its weather files; only the rain on the ground and the hurricane's
+            // lightning are added.
+            lighting = lighting with { Wetness = Math.Clamp(weather.Wet, 0f, 1f) };
+            if (shownWeather == Weather.Thunder)
+            {
+                float flash = Lightning.Flash(_clock.Elapsed.TotalSeconds);
+                lighting = lighting.WithFlash(flash);
+                cloudLighting = cloudLighting.WithFlash(flash);
+            }
+        }
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
         _modelRenderer.Time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
@@ -245,8 +257,8 @@ internal sealed unsafe partial class MainForm
             image!.Bind(normals: false);
             _nightLights!.DrawCoronas(image, camera, sceneViewProjection, nightLights, fogDistance);
         }
-        // Rain or snow falling around the camera (the first trilogy keeps its own weathers).
-        if (!_state.IsClassic && shownWeather is Weather.Rain or Weather.Thunder or Weather.Snow)
+        // Rain or snow falling around the camera.
+        if (shownWeather is Weather.Rain or Weather.Thunder or Weather.Snow)
         {
             image?.Bind(normals: false);
             _precipitation ??= new PrecipitationRenderer(_graphics!.Device, _graphics.Context);

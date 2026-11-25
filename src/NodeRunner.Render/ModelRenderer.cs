@@ -275,6 +275,33 @@ float4 Shade(PS_INPUT input, float4 color)
         if (Output.x > 0.5f)
             classic = ToLinear(classic) * 2.0f;
         ShadedNormal = n;
+        if (Weather.x > 0.0f)
+        {
+            // Rain: the same water film as on the other maps (darker, mirroring the sky, puddles on flat ground).
+            float wet = Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
+            float puddle = 0.0f;
+            if (geometric.z > 0.96f)
+            {
+                float hollow = ValueNoise(input.world.xy * 0.22f) * 0.7f + ValueNoise(input.world.xy * 0.9f) * 0.3f;
+                puddle = smoothstep(0.56f, 0.61f, hollow) * saturate((geometric.z - 0.96f) * 50.0f) * Weather.x * WetMirror;
+            }
+            classic *= (1.0f - (Output.x > 0.5f ? 0.6f : 0.35f) * wet) * (1.0f - 0.45f * puddle);
+            float3 toCamera = normalize(CameraFog.xyz - input.world);
+            float3 w = normalize(lerp(n, geometric, wet));
+            if (puddle > 0.0f)
+            {
+                float near = saturate(1.0f - length(input.world - CameraFog.xyz) / 25.0f);
+                float2 slope = Ripples(input.world.xy / 0.4f, Weather.z) * (0.35f * near * Weather.x);
+                w = normalize(lerp(w, normalize(float3(-slope, 1.0f)), puddle));
+            }
+            float front = dot(w, toCamera);
+            wet *= saturate(front * 8.0f) * WetMirror;
+            float facing = 1.0f - saturate(front);
+            float fresnel = lerp(0.03f, 0.06f, puddle) + 0.9f * facing * facing * facing * facing * facing;
+            WetReflect = fresnel * lerp(wet * 0.8f, 1.0f, puddle);
+            classic = lerp(classic, MirroredSky(reflect(-toCamera, w)), WetReflect);
+            ShadedNormal = w;
+        }
         AmbientShare = 1.0f;
         SurfaceColor = Output.x > 0.5f ? ToLinear(color.rgb * Tint.rgb) : color.rgb * Tint.rgb;
         float far = length(input.world - CameraFog.xyz);
