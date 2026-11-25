@@ -143,12 +143,15 @@ public readonly record struct SceneLighting
     // Rain on the surfaces (0 dry to 1 soaked): darker, mirroring the sky.
     public float Wetness { get; init; }
 
+    // Snow lying on what faces the sky (0 none to 1 covered).
+    public float Snow { get; init; }
+
     // The weather's light (after ForHdr and WithPhysicalSky): less sun through the clouds, more light from the bright
     // grey sky, greyer colours, fog nearer.
     public SceneLighting WithWeather(CloudWeather weather)
     {
         float grey = Math.Clamp(weather.Grey, 0f, 1f), sun = Math.Clamp(weather.Sun, 0f, 1f);
-        if (grey <= 0f && sun >= 1f && weather.Fog >= 1f && weather.Wet <= 0f)
+        if (grey <= 0f && sun >= 1f && weather.Fog >= 1f && weather.Wet <= 0f && weather.Snow <= 0f)
             return this;
         float skyGrey = float.Lerp(Luminance(Zenith), Luminance(Horizon), 0.7f);
         Vector3 Dull(Vector3 c, float luminance) => Vector3.Lerp(c, new Vector3(luminance), grey);
@@ -163,6 +166,7 @@ public readonly record struct SceneLighting
             FogDistance = FogDistance * Math.Clamp(weather.Fog, 0.05f, 1f),
             Grey = grey,
             Wetness = Math.Clamp(weather.Wet, 0f, 1f),
+            Snow = Math.Clamp(weather.Snow, 0f, 1f),
         };
         if (IsHdr)
             result = result with { Adaptation = Math.Clamp(MathF.Pow(DayKey / MathF.Max(Key(result), 1e-3f), 0.45f), 1f, 3.5f) };

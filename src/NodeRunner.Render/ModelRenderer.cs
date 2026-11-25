@@ -37,7 +37,7 @@ cbuffer Frame : register(b0)
     float4 SkyTop;        // Colour of the sky overhead (mirrored by shiny surfaces).
     float4 FogSun;        // Fog colour added towards the sun (sky worked out from the air), along SkySun.
     float4 SkySun;        // xyz: direction of the sun (even below the horizon).
-    float4 Weather;       // x: how wet the surfaces are (rain, 0 to 1).
+    float4 Weather;       // x: how wet the surfaces are (rain, 0 to 1), y: how much snow lies on them.
 };
 cbuffer Object : register(b2)
 {
@@ -207,14 +207,41 @@ float3 MirroredSky(float3 mirrored)
         : lerp(FogColor.rgb, GroundAmbient.rgb * 0.5f, saturate(-mirrored.z * 4.0f));
 }
 
+float Hash(float2 p)
+{
+    float3 p3 = frac(p.xyx * 0.1031f);
+    p3 += dot(p3, p3.yzx + 33.33f);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float ValueNoise(float2 p)
+{
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0f - 2.0f * f);
+    return lerp(lerp(Hash(i), Hash(i + float2(1, 0)), f.x), lerp(Hash(i + float2(0, 1)), Hash(i + 1.0f), f.x), f.y);
+}
+
+// Snow (0 to 1) lying on what faces the sky: flat ground and tops covered, slopes partly with a ragged edge, none on
+// walls; characters hardly. Snow fills the small relief (the geometric normal decides more than the normal map).
+float SnowCover(float3 world, float3 geometric, float3 n)
+{
+    float up = lerp(geometric.z, n.z, 0.3f);
+    float ragged = ValueNoise(world.xy * 0.12f) * 0.6f + ValueNoise(world.xy * 0.9f) * 0.4f;
+    float snow = saturate((up - 0.5f + 0.4f * (ragged - 0.5f)) * 5.0f) * Weather.y;
+    return Emission.w > 0.5f ? snow * 0.25f : snow;
+}
+
 // Lit colour; alpha straight from the colour.
 float4 Shade(PS_INPUT input, float4 color)
 {
     float3 n = input.normal;
     float len = length(n);
     n = len > 0.0001f ? n / len : float3(0, 0, 1);
+    float3 geometric = n;
     if (Surface.x > 0.5f)
         n = Relief(n, input.world, input.uv);
+    float snow = Weather.y > 0.0f ? SnowCover(input.world, geometric, n) : 0.0f;
+    n = normalize(lerp(n, geometric, snow));
     float sun = saturate(dot(n, LightDirection.xyz));
     if (sun > 0.0f)
         sun *= SunShadow(input.world, n);
@@ -239,6 +266,7 @@ float4 Shade(PS_INPUT input, float4 color)
     }
     if (Output.x > 0.5f)
         color.rgb = ToLinear(color.rgb);
+    color.rgb = lerp(color.rgb, Output.x > 0.5f ? float3(0.72f, 0.75f, 0.8f) : float3(0.88f, 0.9f, 0.93f), snow);
     float sky = 0.5f + 0.5f * n.z;
     float3 ambient = lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky);
     if (Emission.y > 0.5f)
@@ -262,8 +290,7 @@ float4 Shade(PS_INPUT input, float4 color)
     AmbientShare = dot(ambient, 1.0f) / max(dot(light, 1.0f), 0.0001f);
     // Rain: water soaks into what faces the sky (darker) and lies on it (mirrors the sky), most on flat ground, a
     // little on walls it runs down.
-    float3 geometric = len > 0.0001f ? input.normal / len : float3(0, 0, 1);
-    float wet = Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
+    float wet =Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
     if (Emission.w > 0.5f)
         wet *= 0.4f;
     color.rgb *= 1.0f - (Output.x > 0.5f ? 0.6f : 0.35f) * wet;
@@ -1213,7 +1240,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 SkyTop = new Vector4(Lighting.Zenith, 0f),
                 FogSun = new Vector4(Lighting.FogSun, 0f),
                 SkySun = new Vector4(Lighting.Sun, 0f),
-                Weather = new Vector4(Lighting.Wetness, 0f, 0f, 0f),
+                Weather = new Vector4(Lighting.Wetness, Lighting.Snow, 0f, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);
