@@ -35,6 +35,8 @@ cbuffer Frame : register(b0)
     float4 Output;        // x = 1: linear colours of an HDR image (textures and vertex colours made linear), y: brightness
                           // of the light given off by lit windows and lamps there.
     float4 SkyTop;        // Colour of the sky overhead (mirrored by shiny surfaces).
+    float4 FogSun;        // Fog colour added towards the sun (sky worked out from the air), along SkySun.
+    float4 SkySun;        // xyz: direction of the sun (even below the horizon).
 };
 cbuffer Object : register(b2)
 {
@@ -163,6 +165,18 @@ float3 ToLinear(float3 c)
     return pow(abs(c), 2.2f);
 }
 
+// Colour of the fog in front of world: brighter in the direction of the sun when the sky is worked out from the air.
+float3 FogTowards(float3 world)
+{
+    float2 view = world.xy - CameraFog.xy;
+    float2 sun = SkySun.xy;
+    if (dot(FogSun.rgb, 1.0f) <= 0.0f || dot(view, view) < 1e-4f || dot(sun, sun) < 1e-6f)
+        return FogColor.rgb;
+    float toward = saturate(dot(normalize(view), normalize(sun)));
+    toward *= toward;
+    return FogColor.rgb + FogSun.rgb * (toward * toward * toward * toward);
+}
+
 // Set by Shade for the second image of the solid pass (ambient occlusion): the normal of the surface, and the share of
 // its light coming from the surroundings (the part the occlusion darkens).
 static float3 ShadedNormal = float3(0.0f, 0.0f, 1.0f);
@@ -212,7 +226,7 @@ float4 Shade(PS_INPUT input, float4 color)
         haze = haze * haze * (3.0f - 2.0f * haze);
         if (Output.x > 0.5f)
             haze = pow(haze, 1.5f); // Blended in linear colours, the haze would look thicker.
-        return float4(lerp(classic, FogColor.rgb, haze), color.a);
+        return float4(lerp(classic, FogTowards(input.world), haze), color.a);
     }
     if (Output.x > 0.5f)
         color.rgb = ToLinear(color.rgb);
@@ -272,7 +286,7 @@ float4 Shade(PS_INPUT input, float4 color)
     fog = fog * fog * (3.0f - 2.0f * fog);
     if (Output.x > 0.5f)
         fog = pow(fog, 1.5f); // Blended in linear colours, the haze would look thicker.
-    return float4(lerp(lit, FogColor.rgb, fog), color.a);
+    return float4(lerp(lit, FogTowards(input.world), fog), color.a);
 }
 
 float4 Shade(PS_INPUT input)
@@ -428,6 +442,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 ClassicShade;
         public Vector4 Output;
         public Vector4 SkyTop;
+        public Vector4 FogSun;
+        public Vector4 SkySun;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1168,6 +1184,8 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 ClassicShade = new Vector4(Lighting.ClassicShadow, 0f, 0f, 0f),
                 Output = new Vector4(Lighting.IsHdr ? 1f : 0f, SceneLighting.HdrEmission, 0f, 0f),
                 SkyTop = new Vector4(Lighting.Zenith, 0f),
+                FogSun = new Vector4(Lighting.FogSun, 0f),
+                SkySun = new Vector4(Lighting.Sun, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);

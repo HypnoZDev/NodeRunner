@@ -390,6 +390,65 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
     return float4(k, k, k, 1.0f);
 }";
 
+    // Sun rays: the bright sky around the sun (objects in front cut it), smeared away from the sun at half size, added
+    // to the scene; the gaps between buildings and leaves make the rays.
+    private const string RaysSource = @"
+cbuffer Constants : register(b0)
+{
+    float4 SunPosition; // xy: sun on the image (0 to 1), z: strength, w: width / height.
+    float4 RayColor;
+    float4 Size;        // xy: size of the small images, zw: size of the scene images.
+};
+Texture2D Scene : register(t0);
+Texture2D<float> Depth : register(t1);
+Texture2D Mask : register(t2);
+SamplerState LinearClamp : register(s0);
+
+struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float4 PSMask(VS_OUTPUT input) : SV_Target
+{
+    float depth = Depth.Load(int3(min(input.uv * Size.zw, Size.zw - 1.0f), 0));
+    if (depth > 0.0f)
+        return 0.0f;
+    float3 color = min(Scene.SampleLevel(LinearClamp, input.uv, 0).rgb, 4.0f);
+    float2 offset = (input.uv - SunPosition.xy) * float2(SunPosition.w, 1.0f);
+    float near = saturate(1.0f - length(offset) / 0.7f);
+    return float4(color * near * near, 1.0f);
+}
+
+float4 PSRays(VS_OUTPUT input) : SV_Target
+{
+    const int Samples = 48;
+    float2 step = (input.uv - SunPosition.xy) * (0.85f / Samples);
+    // Each pixel starts a little further along (different from its neighbours): no visible steps, smoothed by the TAA.
+    float noise = frac(52.9829189f * frac(dot(input.pos.xy, float2(0.06711056f, 0.00583715f))));
+    float2 uv = input.uv - step * noise;
+    float3 sum = 0.0f;
+    float decay = 1.0f, weights = 0.0f;
+    [loop] for (int i = 0; i < Samples; i++)
+    {
+        sum += Mask.SampleLevel(LinearClamp, uv, 0).rgb * decay;
+        weights += decay;
+        decay *= 0.965f;
+        uv -= step;
+    }
+    return float4(sum / weights, 1.0f);
+}
+
+float4 PSAddRays(VS_OUTPUT input) : SV_Target
+{
+    return float4(Mask.SampleLevel(LinearClamp, input.uv, 0).rgb * RayColor.rgb * SunPosition.z, 0.0f);
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RaysConstants
+    {
+        public Vector4 SunPosition;
+        public Vector4 RayColor;
+        public Vector4 Size;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct OcclusionConstants
     {
@@ -444,6 +503,12 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
     private readonly ID3D11Buffer _occlusionBuffer;
     private Texture? _occlusion;
     private Texture? _occlusionBlur;
+    private readonly ID3D11PixelShader _raysMaskPixelShader;
+    private readonly ID3D11PixelShader _raysPixelShader;
+    private readonly ID3D11PixelShader _addRaysPixelShader;
+    private readonly ID3D11Buffer _raysBuffer;
+    private Texture? _raysMask;
+    private Texture? _rays;
 
     private Texture? _color;
     private Texture? _normals;
@@ -539,6 +604,11 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _applyPixelShader = device.CreatePixelShader(Compiler.Compile(OcclusionSource, "PSApply", "occlusion", "ps_5_0").Span);
         _occlusionBuffer = device.CreateBuffer(new BufferDescription(
             (uint)sizeof(OcclusionConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        _raysMaskPixelShader = device.CreatePixelShader(Compiler.Compile(RaysSource, "PSMask", "rays", "ps_5_0").Span);
+        _raysPixelShader = device.CreatePixelShader(Compiler.Compile(RaysSource, "PSRays", "rays", "ps_5_0").Span);
+        _addRaysPixelShader = device.CreatePixelShader(Compiler.Compile(RaysSource, "PSAddRays", "rays", "ps_5_0").Span);
+        _raysBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(RaysConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
     }
 
     // Size of the images, in pixels.
@@ -755,6 +825,77 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         return _colorCopy.Read;
     }
 
+    // Adds the sun's rays to the scene drawn so far (before Process), then binds the colour image again. viewProjection:
+    // the one the scene is drawn with; sun: direction towards the sun; strength: 0 to 1 and more.
+    public void AddSunRays(Camera camera, Matrix4x4 viewProjection, Vector3 sun, Vector3 color, float strength)
+    {
+        var clip = Vector4.Transform(new Vector4(camera.Position + sun * 10000f, 1f), viewProjection);
+        float facing = Vector3.Dot(Vector3.Normalize(camera.Forward), sun);
+        if (strength <= 0f || clip.W <= 0f || facing <= 0f || Width < 16 || Height < 16)
+            return;
+        var position = new Vector2(clip.X / clip.W * 0.5f + 0.5f, 0.5f - clip.Y / clip.W * 0.5f);
+        // Fading out as the sun leaves the image.
+        float outside = MathF.Max(MathF.Max(-position.X, position.X - 1f), MathF.Max(-position.Y, position.Y - 1f));
+        strength *= Math.Clamp(1f - outside * 2f, 0f, 1f) * Math.Clamp(facing * 2f, 0f, 1f);
+        if (strength <= 0f)
+            return;
+
+        int width = Math.Max(1, Width / 2), height = Math.Max(1, Height / 2);
+        if (_raysMask is null || _raysWidth != width || _raysHeight != height)
+        {
+            _raysMask?.Dispose();
+            _rays?.Dispose();
+            _raysMask = CreateTexture(width, height, Format.R11G11B10_Float, target: true);
+            _rays = CreateTexture(width, height, Format.R11G11B10_Float, target: true);
+            (_raysWidth, _raysHeight) = (width, height);
+        }
+        var map = _context.Map(_raysBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, new RaysConstants
+        {
+            SunPosition = new Vector4(position, strength, (float)Width / Height),
+            RayColor = new Vector4(color, 0f),
+            Size = new Vector4(width, height, Width, Height),
+        });
+        _context.Unmap(_raysBuffer, 0);
+
+        _context.OMSetRenderTargets((ID3D11RenderTargetView?)null!);
+        _context.IASetInputLayout(null);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_fullVertexShader);
+        _context.GSSetShader(null);
+        _context.PSSetConstantBuffer(0, _raysBuffer);
+        _context.PSSetSampler(0, _linearClamp);
+        _context.OMSetDepthStencilState(_noDepth, 0);
+        _context.RSSetState(_rasterizerState);
+        _context.OMSetBlendState(_opaque, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.RSSetViewport(new Viewport(0, 0, width, height));
+
+        _context.OMSetRenderTargets(_raysMask.Write!);
+        _context.PSSetShaderResource(0, _color!.Read);
+        _context.PSSetShaderResource(1, _depthRead!);
+        _context.PSSetShader(_raysMaskPixelShader);
+        _context.Draw(3, 0);
+        _context.PSUnsetShaderResource(0);
+        _context.PSUnsetShaderResource(1);
+
+        _context.OMSetRenderTargets(_rays!.Write!);
+        _context.PSSetShaderResource(2, _raysMask.Read);
+        _context.PSSetShader(_raysPixelShader);
+        _context.Draw(3, 0);
+        _context.PSUnsetShaderResource(2);
+
+        _context.OMSetRenderTargets(_color.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+        _context.OMSetBlendState(_add, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.PSSetShaderResource(2, _rays.Read);
+        _context.PSSetShader(_addRaysPixelShader);
+        _context.Draw(3, 0);
+        _context.PSUnsetShaderResource(2);
+        Bind(normals: false);
+    }
+
+    private int _raysWidth, _raysHeight;
+
     // Finishes the image once the scene is drawn (smoothing), before Show.
     public void Process()
     {
@@ -967,6 +1108,10 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _occlusion = null;
         _occlusionBlur?.Dispose();
         _occlusionBlur = null;
+        _raysMask?.Dispose();
+        _raysMask = null;
+        _rays?.Dispose();
+        _rays = null;
         for (int i = 0; i < _bloom.Length; i++)
         {
             _bloom[i]?.Dispose();
@@ -1001,6 +1146,10 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _blurPixelShader.Dispose();
         _applyPixelShader.Dispose();
         _occlusionBuffer.Dispose();
+        _raysMaskPixelShader.Dispose();
+        _raysPixelShader.Dispose();
+        _addRaysPixelShader.Dispose();
+        _raysBuffer.Dispose();
         _resolvePixelShader.Dispose();
         _compositePixelShader.Dispose();
         _fullVertexShader.Dispose();

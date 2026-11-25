@@ -84,6 +84,8 @@ internal sealed unsafe partial class MainForm
         if (image is not null && imageOptions.Hdr)
         {
             lighting = lighting.ForHdr();
+            if (settings.PhysicalSky && !_state.IsOtherGame)
+                lighting = lighting.WithPhysicalSky();
             imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
         }
         _modelRenderer!.Lighting = lighting;
@@ -132,6 +134,7 @@ internal sealed unsafe partial class MainForm
         _modelRenderer.Shadows = shadows ? _shadowMaps : null;
         if (image is not null)
         {
+            _skyRenderer!.Prepare(lighting);
             var clear = imageOptions.Hdr ? new Vector4(MathF.Pow(BackgroundColor.X, 2.2f), MathF.Pow(BackgroundColor.Y, 2.2f), MathF.Pow(BackgroundColor.Z, 2.2f), 1f)
                 : BackgroundColor;
             image.Begin(imageOptions, scene.Width, scene.Height, clear);
@@ -211,6 +214,12 @@ internal sealed unsafe partial class MainForm
         {
             image!.Bind(normals: false);
             _nightLights!.DrawCoronas(image, camera, sceneViewProjection, nightLights, fogDistance);
+        }
+        if (image is not null && imageOptions.Hdr && settings.SunRays && settings.ShowSky && lighting.Sun.Z > -0.02f)
+        {
+            // Sunlight through the air: warmer when low.
+            var rays = (lighting.PhysicalSky ? lighting.SunTint : Vector3.One) * lighting.SunColor * (1f - lighting.NightLights);
+            image.AddSunRays(camera, sceneViewProjection, Vector3.Normalize(lighting.Sun), rays, Math.Clamp(settings.SunRayStrength, 0f, 1f));
         }
 
         // The finished image into the window's 3D view, with its depth: the editor's lines below are hidden behind

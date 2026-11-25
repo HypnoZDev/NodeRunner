@@ -752,6 +752,31 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     settings.NightLightStrength = lamps / 100f;
                 SaveWhenReleased();
             }
+
+            Widgets.Property(L("Ciel réaliste"), L("Le ciel est calculé comme la lumière du soleil traversant l'air : bleu profond en haut, plus pâle à l'horizon, halo autour du soleil, rouge et orange au lever et au coucher. Le brouillard au loin prend les mêmes couleurs."));
+            bool physicalSky = settings.PhysicalSky;
+            if (ImGui.Checkbox("##physical_sky", ref physicalSky))
+            {
+                settings.PhysicalSky = physicalSky;
+                state.SaveSettings();
+            }
+
+            Widgets.Property(L("Rayons du soleil"), L("Face au soleil, ses rayons passent entre les bâtiments, les arbres et les feuillages."));
+            bool sunRays = settings.SunRays;
+            if (ImGui.Checkbox("##sun_rays", ref sunRays))
+            {
+                settings.SunRays = sunRays;
+                state.SaveSettings();
+            }
+            if (settings.SunRays)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(-1f);
+                float rays = settings.SunRayStrength * 100f;
+                if (ImGui.SliderFloat("##sun_ray_strength", ref rays, 0f, 100f, L("Force %.0f %%")))
+                    settings.SunRayStrength = rays / 100f;
+                SaveWhenReleased();
+            }
         }
 
         Widgets.Property(L("Relief et reflets"), L("Bâtiments, véhicules et objets avec leurs textures de relief (briques, joints, tôles) et de brillance : reflets du soleil et du ciel sur les vitres, la carrosserie, le métal. Plus de mémoire vidéo ; recharge les modèles."));

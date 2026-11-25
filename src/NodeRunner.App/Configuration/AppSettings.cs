@@ -156,6 +156,11 @@ public sealed class AppSettings
     public bool NightLights { get; set; }
     public float NightLightStrength { get; set; } = 1f;
 
+    // Sky worked out from the air (HDR only), and the sun's rays through the gaps (with their strength, 0 to 1).
+    public bool PhysicalSky { get; set; }
+    public bool SunRays { get; set; }
+    public float SunRayStrength { get; set; } = 0.5f;
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -259,6 +264,7 @@ public sealed class AppSettings
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
         (Bloom, BloomStrength, SurfaceDetail) = (d.Bloom, d.BloomStrength, d.SurfaceDetail);
         (NightLights, NightLightStrength) = (d.NightLights, d.NightLightStrength);
+        (PhysicalSky, SunRays, SunRayStrength) = (d.PhysicalSky, d.SunRays, d.SunRayStrength);
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);

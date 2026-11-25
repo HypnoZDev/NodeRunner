@@ -103,7 +103,69 @@ public readonly record struct SceneLighting
         // At night the moon, opposite the sun, gives the light its direction; a low sun lights from just above the horizon.
         var direction = height < -0.05f ? Vector3.Normalize(-sun with { Z = MathF.Max(-sun.Z, 0.3f) })
             : Vector3.Normalize(sun with { Z = MathF.Max(sun.Z, 0.08f) });
-        return lighting with { SunDirection = direction, FogDistance = fogDistance };
+        return lighting with { SunDirection = direction, FogDistance = fogDistance, Sun = sun };
+    }
+
+    // Where the sun really is (below the horizon at night), for the sky; zero when not worked out.
+    public Vector3 Sun { get; init; }
+
+    // Sky worked out from the air (Atmosphere, HDR image only): the sky drawn from it, its colours given to the fog
+    // (brighter towards the sun: FogSun) and to the sky mirrored by the surfaces; SunTint: the sun's colour once through
+    // the air. Night keeps the colours above.
+    public bool PhysicalSky { get; init; }
+    public Vector3 FogSun { get; init; }
+    public Vector3 SunTint { get; init; }
+
+    public SceneLighting WithPhysicalSky()
+    {
+        if (!IsHdr || Sun == Vector3.Zero)
+            return this;
+        var scale = SkyBalance;
+        var zenith = Atmosphere.Radiance(Vector3.UnitZ, Sun) * scale;
+        var horizon = HorizonAround(Sun) * scale;
+        var flat = new Vector2(Sun.X, Sun.Y);
+        flat = flat.LengthSquared() < 1e-6f ? Vector2.UnitX : Vector2.Normalize(flat);
+        var towardSun = Atmosphere.Radiance(new Vector3(flat * MathF.Cos(HorizonHeight), MathF.Sin(HorizonHeight)), Sun) * scale;
+        float night = NightLights;
+        return this with
+        {
+            PhysicalSky = true,
+            Zenith = Vector3.Lerp(zenith, Zenith, night),
+            Horizon = Vector3.Lerp(horizon, Horizon, night),
+            FogSun = Vector3.Max(towardSun - horizon, Vector3.Zero) * (1f - night),
+            SunTint = Atmosphere.Transmittance(Sun),
+        };
+    }
+
+    // Height of the sky's horizon colour (radians), just above the lowest height of the sky drawn (SkyRenderer).
+    private const float HorizonHeight = 0.09f;
+
+    private static Vector3 HorizonAround(Vector3 sun)
+    {
+        const int Around = 8;
+        var sum = Vector3.Zero;
+        for (int i = 0; i < Around; i++)
+        {
+            float a = MathF.Tau * i / Around;
+            sum += Atmosphere.Radiance(new Vector3(MathF.Cos(a) * MathF.Cos(HorizonHeight), MathF.Sin(a) * MathF.Cos(HorizonHeight), MathF.Sin(HorizonHeight)), sun);
+        }
+        return sum / Around;
+    }
+
+    // Worked-out sky -> HDR image, per colour: at noon, the horizon of the same hue as the colours above (the game's
+    // whitish blue) and the sky overhead as bright.
+    internal static Vector3 SkyBalance => _skyBalance ??= MakeSkyBalance();
+
+    private static Vector3? _skyBalance;
+
+    private static Vector3 MakeSkyBalance()
+    {
+        var noon = ForHour(13f, 0f);
+        var target = noon.HdrColours();
+        var horizon = HorizonAround(noon.Sun);
+        var hue = target.Horizon / MathF.Max(Luminance(target.Horizon), 1e-9f) / (horizon / MathF.Max(Luminance(horizon), 1e-9f));
+        var zenith = Atmosphere.Radiance(Vector3.UnitZ, noon.Sun) * hue;
+        return hue * (Luminance(target.Zenith) / MathF.Max(Luminance(zenith), 1e-9f));
     }
 
     // The same light for the HDR scene image (SceneImage): linear colours (the values above are display colours), a
