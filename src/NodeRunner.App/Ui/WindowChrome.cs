@@ -42,6 +42,9 @@ internal static class WindowChrome
         _interactive.Add(new RectangleF(min.X, min.Y, max.X - min.X, max.Y - min.Y));
     }
 
+    public static void TrackRect(Vector2 min, Vector2 max) =>
+        _interactive.Add(new RectangleF(min.X, min.Y, max.X - min.X, max.Y - min.Y));
+
     public static Part HitTest(PointF point)
     {
         if (_maximize.Contains(point))

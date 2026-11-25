@@ -15,6 +15,7 @@ internal sealed class MainUi
     private readonly AppState _state;
     private bool _showLayers = true;
     private bool _showAbout;
+    private readonly SocialWindow _socialWindow = new();
 
     private const string CodeWalkerUrl = "https://github.com/dexyfex/CodeWalker";
     private bool _showStatus = true;
@@ -500,6 +501,7 @@ internal sealed class MainUi
         if (_showViewer) _viewerPanel.Draw(ref _showViewer);
         if (!_showViewer) _viewerPanel.PauseSound();
         if (_showAbout) DrawAboutWindow();
+        _socialWindow.Draw();
         _exportWindow.Draw();
         ProjectWindow.Draw();
         _deleteWindow.Draw();
@@ -710,6 +712,14 @@ internal sealed class MainUi
         var max = ImGui.GetItemRectMax();
         bool hovered = ImGui.IsMouseHoveringRect(min, max);
         ImGui.PopFont();
+        WindowChrome.TrackRect(min, max);
+        if (hovered)
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip(L("Inside Rockstar sur les réseaux"));
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                _socialWindow.Toggle();
+        }
 
         double since = time - _brandSweep;
         if (since >= BrandSweepEvery || hovered && since > BrandSweepLength + 0.4)

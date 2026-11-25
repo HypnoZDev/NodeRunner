@@ -6,6 +6,11 @@ public static partial class English
     private static (string, string)[] Main =>
     [
         ("Fichier", "File"),
+        ("Inside Rockstar sur les réseaux", "Inside Rockstar on social media"),
+        ("Retrouve-moi sur mes réseaux", "Find me on social media"),
+        ("Merci, ton soutien garde NodeRunner Studio gratuit.", "Thank you, your support keeps NodeRunner Studio free."),
+        ("Me soutenir", "Support me"),
+        ("Le site Inside Rockstar", "The Inside Rockstar website"),
         ("Affichage", "View"),
         ("Aide", "Help"),
         ("Outils", "Tools"),
