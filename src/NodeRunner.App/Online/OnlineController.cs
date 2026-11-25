@@ -72,10 +72,38 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
     // edits made meanwhile.
     private const int MaxProjectZip = 768 << 20;
 
-    private static void DeleteFolder(string folder)
+    // Sync clients (OneDrive, Dropbox...) briefly hold freshly written folders: moves and deletes fail for a moment.
+    private static void Retry(Action action)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                action();
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 10)
+            {
+                Thread.Sleep(150 * attempt);
+            }
+        }
+    }
+
+    private static void DeleteFolder(string folder) => Retry(() =>
     {
         if (Directory.Exists(folder))
             Directory.Delete(folder, recursive: true);
+    });
+
+    private static void MoveFolder(string from, string to) => Retry(() => Directory.Move(from, to));
+
+    private static void CopyFolder(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (string dir in Directory.GetDirectories(from, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, dir)));
+        foreach (string file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
+            Retry(() => File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)), overwrite: true));
     }
 
     public void OpenSnapshot(SessionSnapshot snapshot)
@@ -91,19 +119,29 @@ internal sealed class OnlineController(AppState state) : IOnlineDocument
                 SafeZip.Extract(zip, incoming, MaxProjectBytes, MaxProjectFiles);
             DeleteFolder(previous);
             if (Directory.Exists(folder))
-                Directory.Move(folder, previous);
+                MoveFolder(folder, previous);
             try
             {
-                Directory.Move(incoming, folder);
+                MoveFolder(incoming, folder);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                if (Directory.Exists(previous))
-                    Directory.Move(previous, folder);
-                throw;
+                // Still held by a sync client: a copy works where the move does not.
+                try
+                {
+                    DeleteFolder(folder);
+                    CopyFolder(incoming, folder);
+                }
+                catch (Exception) when (Directory.Exists(previous))
+                {
+                    DeleteFolder(folder);
+                    MoveFolder(previous, folder);
+                    throw;
+                }
             }
             try
             {
+                DeleteFolder(incoming);
                 DeleteFolder(previous);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
