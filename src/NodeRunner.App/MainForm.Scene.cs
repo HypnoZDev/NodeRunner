@@ -210,12 +210,16 @@ internal sealed unsafe partial class MainForm
                     image!.ApplyOcclusion(camera, (float)scene.Width / scene.Height);
                 if (nightLights > 0f)
                     _nightLights!.LightSurfaces(image!, camera, sceneViewProjection, nightLights);
-                if (wetReflections)
-                    image!.AddWetReflections(camera, (float)scene.Width / scene.Height);
-                else
-                    image!.Bind(normals: false);
             }
-            DrawWater(sceneViewProjection, lighting, scene, image);
+            // One ray tracing for the water and the wet ground.
+            bool waterShown = _state.IsLayerVisible(WaterLayer.LayerName);
+            var traced = image is not null && _rayTracing is not null && modelsEnabled && (waterShown || wetReflections)
+                ? TraceReflections(sceneViewProjection, lighting, image, waterShown, wetReflections) : null;
+            if (wetReflections)
+                image!.AddWetReflections(camera, (float)scene.Width / scene.Height, traced);
+            else if (occlusion || nightLights > 0f)
+                image!.Bind(normals: false);
+            DrawWater(sceneViewProjection, lighting, scene, image, traced);
         }
         if (modelsEnabled)
             _modelLayer.Draw(_modelRenderer, sceneViewProjection, SelectedForDrawing, camera.Position, fogDistance > 0f ? fogDistance : float.PositiveInfinity,
@@ -486,7 +490,10 @@ internal sealed unsafe partial class MainForm
 
     // Sea, lakes and rivers, then the water meshes of the models (pools, fountains), over the solid models (whose
     // depth tells how much water is crossed).
-    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene, SceneImage? image)
+    // Wrapped every hour, so the time stays precise enough for the waves.
+    private float WaterTime => (float)(_clock.Elapsed.TotalSeconds % 3600.0);
+
+    private void UpdateWaterSurfaces()
     {
         var water = _state.Other is { } other ? other.Water : _state.World.Water;
         if (!ReferenceEquals(water, _waterShown))
@@ -494,17 +501,22 @@ internal sealed unsafe partial class MainForm
             _waterShown = water;
             _waterRenderer!.SetSurfaces(water);
         }
+    }
+
+    // traced: the ray-traced reflections (TraceReflections), null for those of what is on screen.
+    private void DrawWater(Matrix4x4 viewProjection, SceneLighting lighting, Rectangle scene, SceneImage? image,
+        Vortice.Direct3D11.ID3D11ShaderResourceView? traced)
+    {
+        UpdateWaterSurfaces();
         if (!_state.IsLayerVisible(WaterLayer.LayerName))
             return;
-        // Wrapped every hour, so the time stays precise enough for the waves.
-        float time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
+        float time = WaterTime;
         bool waves3D = _state.Settings.WaterWaves;
         bool modelsShown = _state.IsLayerVisible(ModelLayer.LayerName);
         if (image is not null)
         {
             var depth = image.CopyDepth();
             var viewport = new Vector4(0f, 0f, image.Width, image.Height);
-            var traced = _rayTracing is not null && modelsShown ? TraceReflections(viewProjection, lighting, time, depth, viewport, waves3D, image) : null;
             _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, depth,
                 _state.Settings.WaterReflections ? image.CopyColor() : null, viewport, waves3D, traced);
         }
@@ -556,23 +568,31 @@ internal sealed unsafe partial class MainForm
         _state.RayTracingInfo = null;
     }
 
-    // Where each water pixel's reflected ray starts and goes, then those rays followed through the objects around the
-    // camera: the colour found (null: nothing traced, the water mirrors what is on screen).
-    private Vortice.Direct3D11.ID3D11ShaderResourceView? TraceReflections(Matrix4x4 viewProjection, SceneLighting lighting, float time,
-        Vortice.Direct3D11.ID3D11ShaderResourceView depth, Vector4 viewport, bool waves3D, SceneImage image)
+    // Where the reflected ray of each wet pixel, then of each water pixel in front of it, starts and goes; then those
+    // rays followed through the objects around the camera: the colour found (null: nothing traced, the water and the
+    // ground mirror what is on screen).
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? TraceReflections(Matrix4x4 viewProjection, SceneLighting lighting, SceneImage image,
+        bool water, bool wetGround)
     {
         var rays = _rayTracing!;
         try
         {
             _modelLayer.AddRayInstances(rays, _state.Camera.Position, MirroredRadius);
-            // One ray for four pixels: the reflection is softened by the waves anyway.
+            // One ray for four pixels: the reflection is softened by the waves and the rain anyway.
             int width = (image.Width + 1) / 2, height = (image.Height + 1) / 2;
             var (starts, directions) = rays.Targets(width, height);
-            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, depth, null, viewport, waves3D);
-            _waterRenderer.BeginRayStarts(starts, directions, width, height);
-            _waterRenderer.DrawSurfaces();
-            _modelLayer.DrawWater(_waterRenderer);
-            _waterRenderer.End();
+            if (wetGround)
+                image.WriteWetRayStarts(_state.Camera, (float)image.Width / image.Height, starts, directions, width, height);
+            if (water)
+            {
+                UpdateWaterSurfaces();
+                _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, WaterTime, image.CopyDepth(), null,
+                    new Vector4(0f, 0f, image.Width, image.Height), _state.Settings.WaterWaves);
+                _waterRenderer.BeginRayStarts(starts, directions, width, height);
+                _waterRenderer.DrawSurfaces();
+                _modelLayer.DrawWater(_waterRenderer);
+                _waterRenderer.End();
+            }
             return rays.Trace(lighting, _state.Camera.Position, LongestReflectedRay, _state.Settings.Shadows);
         }
         catch (Exception e)

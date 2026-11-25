@@ -18,11 +18,11 @@ internal sealed class RayGeometry(Vector3[] positions, ushort[] indices)
     public ushort[] Indices { get; } = indices;
 }
 
-// Reflections on the water followed through the 3D scene by the graphics card (DirectX 12 ray tracing, next to the
-// DirectX 11 drawing): what the water mirrors is found even off screen. Each model is sent once (its own acceleration
-// structure, built a few per frame); each frame, the objects around the camera are put together and, for each water
-// pixel, the reflected ray (written by WaterRenderer.BeginRayStarts) is followed. The models show the average colour
-// of their textures, lit by the sun (with shadows) and the sky.
+// Reflections on the water and wet ground followed through the 3D scene by the graphics card (DirectX 12 ray tracing,
+// next to the DirectX 11 drawing): what they mirror is found even off screen. Each model is sent once (its own
+// acceleration structure, built a few per frame); each frame, the objects around the camera are put together and, for
+// each water or wet pixel, the reflected ray (written by WaterRenderer.BeginRayStarts, SceneImage.WriteWetRayStarts)
+// is followed. The models show the average colour of their textures, lit by the sun (with shadows) and the sky.
 public sealed unsafe class RayTracedReflections : IDisposable
 {
     private const int FramesInFlight = 3;
@@ -337,8 +337,8 @@ void main(uint3 id : SV_DispatchThreadID)
         _waiting.Enqueue(model);
     }
 
-    // The DirectX 11 images the water writes its reflected rays into (start from the camera, w = 1; direction), cleared
-    // (no water anywhere), at the image's size.
+    // The DirectX 11 images the water and wet ground write their reflected rays into (start from the camera, w = 1;
+    // direction), cleared (no ray anywhere), at the image's size.
     public (ID3D11RenderTargetView Starts, ID3D11RenderTargetView Directions) Targets(int width, int height)
     {
         if (_starts is null || width != _width || height != _height)

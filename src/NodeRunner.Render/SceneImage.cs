@@ -443,19 +443,22 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
 
     // Reflections in wet ground and puddles: from each wet pixel (how much it mirrors: alpha of the surface colours'
     // image), a ray along the mirrored direction through the depth image; where it goes behind a surface, that
-    // surface's colour, blended over the sky the pixel mirrored so far. Only what is on screen can be mirrored.
+    // surface's colour, blended over the sky the pixel mirrored so far. What the screen does not show comes from the ray
+    // tracing when there is one (PSRays wrote where its rays start).
     private const string ReflectSource = @"
 cbuffer Constants : register(b0)
 {
-    float4x4 ViewRotation; // World directions -> camera's (rotation only).
-    float4 Projection;     // x, y: scale of the projection, z: near plane (m).
-    float4 Size;           // xy: size of the images.
-    float4 Settings;       // x: frame number (turns the starts of the rays).
+    float4x4 ViewRotation;  // World directions -> camera's (rotation only).
+    float4x4 WorldRotation; // Camera's directions -> world's.
+    float4 Projection;      // x, y: scale of the projection, z: near plane (m).
+    float4 Size;            // xy: size of the images; zw: pixels of the images per ray (PSRays).
+    float4 Settings;        // x: frame number (turns the starts of the rays), y = 1: Traced bound.
 };
 Texture2D<float> Depth : register(t0);
 Texture2D Normals : register(t1);
 Texture2D Albedo : register(t2);
 Texture2D Scene : register(t3);
+Texture2D Traced : register(t4); // Ray-traced reflections, colour premultiplied by alpha (found).
 SamplerState LinearClamp : register(s0);
 
 struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -493,56 +496,90 @@ float4 PSReflect(VS_OUTPUT input) : SV_Target
     float3 r = reflect(normalize(p), n);
     // Rays coming back towards the camera would need what is behind it.
     float away = saturate((0.4f - r.z) * 2.5f);
-    if (away <= 0.0f)
-        discard;
-
-    float noise = frac(52.9829189f * frac(dot(input.pos.xy + Settings.x * 5.588238f, float2(0.06711056f, 0.00583715f))));
-    float stride = 0.1f + 0.01f * -p.z;
-    float3 s = p + r * (stride * noise);
-    float3 previous = s;
-    float2 hit = -1.0f;
-    [loop] for (int i = 0; i < 40; i++)
+    float3 found = 0.0f;
+    float fade = 0.0f;
+    if (away > 0.0f)
     {
-        previous = s;
-        s += r * stride;
-        stride *= 1.12f;
-        if (s.z >= -Projection.z)
-            break;
-        float2 uv = ImageAt(s);
-        if (any(uv < 0.0f) || any(uv > 1.0f))
-            break;
-        float behind = -s.z - SceneDistance(uv);
-        if (behind > 0.0f)
+        float noise = frac(52.9829189f * frac(dot(input.pos.xy + Settings.x * 5.588238f, float2(0.06711056f, 0.00583715f))));
+        float stride = 0.1f + 0.01f * -p.z;
+        float3 s = p + r * (stride * noise);
+        float3 previous = s;
+        float2 hit = -1.0f;
+        [loop] for (int i = 0; i < 40; i++)
         {
-            // Behind a surface, not just passing behind a thin thing far in front of the ray: found, then refined.
-            if (behind < max(stride * 2.0f, 0.5f))
+            previous = s;
+            s += r * stride;
+            stride *= 1.12f;
+            if (s.z >= -Projection.z)
+                break;
+            float2 uv = ImageAt(s);
+            if (any(uv < 0.0f) || any(uv > 1.0f))
+                break;
+            float behind = -s.z - SceneDistance(uv);
+            if (behind > 0.0f)
             {
-                float3 a = previous, b = s;
-                [unroll] for (int k = 0; k < 5; k++)
+                // Behind a surface, not just passing behind a thin thing far in front of the ray: found, then refined.
+                if (behind < max(stride * 2.0f, 0.5f))
                 {
-                    float3 m = (a + b) * 0.5f;
-                    if (-m.z - SceneDistance(ImageAt(m)) > 0.0f)
-                        b = m;
-                    else
-                        a = m;
+                    float3 a = previous, b = s;
+                    [unroll] for (int k = 0; k < 5; k++)
+                    {
+                        float3 m = (a + b) * 0.5f;
+                        if (-m.z - SceneDistance(ImageAt(m)) > 0.0f)
+                            b = m;
+                        else
+                            a = m;
+                    }
+                    hit = ImageAt(b);
                 }
-                hit = ImageAt(b);
+                break;
             }
-            break;
+        }
+        if (hit.x >= 0.0f)
+        {
+            // Faded towards the edges of the image (what is past them is unknown).
+            float2 edge = min(hit, 1.0f - hit);
+            fade = saturate(min(edge.x, edge.y) * 12.0f) * away;
+            found = Scene.SampleLevel(LinearClamp, hit, 0).rgb;
         }
     }
-    if (hit.x < 0.0f)
+    // What is on screen first (its real textures and lamps), the ray tracing for the rest.
+    float4 traced = Settings.y > 0.5f ? Traced.SampleLevel(LinearClamp, input.uv, 0) : 0.0f;
+    float cover = fade + traced.a * (1.0f - fade);
+    if (cover < 0.001f)
         discard;
-    // Faded towards the edges of the image (what is past them is unknown).
-    float2 edge = min(hit, 1.0f - hit);
-    float fade = saturate(min(edge.x, edge.y) * 12.0f) * away;
-    return float4(Scene.SampleLevel(LinearClamp, hit, 0).rgb, mirror * fade);
+    return float4((found * fade + traced.rgb * (1.0f - fade)) / cover, mirror * cover);
+}
+
+// For the ray tracing: where the reflected ray of a wet pixel starts (from the camera, w = 1) and where it goes, one
+// ray for Size.zw pixels.
+struct RAY_STARTS { float4 start : SV_Target0; float4 direction : SV_Target1; };
+
+RAY_STARTS PSRays(VS_OUTPUT input)
+{
+    int3 pixel = int3(min(input.pos.xy * Size.zw, Size.xy - 1.0f), 0);
+    float mirror = Albedo.Load(pixel).a;
+    float4 normal = Normals.Load(pixel);
+    float depth = Depth.Load(pixel);
+    if (mirror < 0.02f || depth <= 0.0f || dot(normal.xyz, 1.0f) <= 0.0f)
+        discard;
+    float3 p = mul(WorldRotation, float4(ViewPoint((pixel.xy + 0.5f) / Size.xy, depth), 0.0f)).xyz;
+    float3 n = normalize(normal.xyz * 2.0f - 1.0f);
+    float3 r = reflect(normalize(p), n);
+    if (dot(r, n) <= 0.0f)
+        discard;
+    RAY_STARTS o;
+    // Lifted off the surface: the depth is not precise enough far away.
+    o.start = float4(p + n * (0.05f + 0.002f * length(p)), 1.0f);
+    o.direction = float4(r, 0.0f);
+    return o;
 }";
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ReflectConstants
     {
         public Matrix4x4 ViewRotation;
+        public Matrix4x4 WorldRotation;
         public Vector4 Projection;
         public Vector4 Size;
         public Vector4 Settings;
@@ -601,6 +638,7 @@ float4 PSReflect(VS_OUTPUT input) : SV_Target
     private readonly ID3D11BlendState _add;
     private readonly ID3D11BlendState _mix;
     private readonly ID3D11PixelShader _reflectPixelShader;
+    private readonly ID3D11PixelShader _rayStartsPixelShader;
     private readonly ID3D11Buffer _reflectBuffer;
     private readonly ID3D11PixelShader _bloomDownPixelShader;
     private readonly ID3D11PixelShader _bloomUpPixelShader;
@@ -719,6 +757,7 @@ float4 PSReflect(VS_OUTPUT input) : SV_Target
         };
         _mix = device.CreateBlendState(mix);
         _reflectPixelShader = device.CreatePixelShader(Compiler.Compile(ReflectSource, "PSReflect", "reflect", "ps_5_0").Span);
+        _rayStartsPixelShader = device.CreatePixelShader(Compiler.Compile(ReflectSource, "PSRays", "reflect", "ps_5_0").Span);
         _reflectBuffer = device.CreateBuffer(new BufferDescription(
             (uint)sizeof(ReflectConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
         _bloomDownPixelShader = device.CreatePixelShader(Compiler.Compile(BloomSource, "PSDown", "bloom", "ps_5_0").Span);
@@ -919,41 +958,72 @@ float4 PSReflect(VS_OUTPUT input) : SV_Target
 
     // Mirrors what is on screen in the wet surfaces drawn so far (with the normals' image bound, see Bind; their
     // surface colours' alpha says how much they mirror), then binds the colour image alone again. camera: the camera of
-    // ViewProjection.
-    public void AddWetReflections(Camera camera, float aspectRatio)
+    // ViewProjection; traced: the ray-traced reflections (WriteWetRayStarts), for what the screen does not show.
+    public void AddWetReflections(Camera camera, float aspectRatio, ID3D11ShaderResourceView? traced = null)
     {
         var copy = CopyColor();
+        WriteReflectConstants(camera, aspectRatio, Vector2.One, traced is not null);
+        _context.OMSetRenderTargets(_color!.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+        SetReflectState(_reflectPixelShader);
+        _context.OMSetBlendState(_mix, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.PSSetShaderResource(3, copy);
+        if (traced is not null)
+            _context.PSSetShaderResource(4, traced);
+        _context.Draw(3, 0);
+        for (uint slot = 0; slot < 5; slot++)
+            _context.PSUnsetShaderResource(slot);
+        Bind(normals: false);
+    }
+
+    // For the ray tracing: where the reflected ray of each wet pixel starts (from the camera, w = 1) and where it goes,
+    // into images of width x height (one ray for several pixels); the pixels that do not mirror are left as they are.
+    // Then binds the colour image alone again.
+    public void WriteWetRayStarts(Camera camera, float aspectRatio, ID3D11RenderTargetView starts, ID3D11RenderTargetView directions,
+        int width, int height)
+    {
+        WriteReflectConstants(camera, aspectRatio, new Vector2((float)Width / width, (float)Height / height), traced: false);
+        _context.OMSetRenderTargets([starts, directions], null);
+        _context.RSSetViewport(new Viewport(0, 0, width, height));
+        SetReflectState(_rayStartsPixelShader);
+        _context.OMSetBlendState(null, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.Draw(3, 0);
+        for (uint slot = 0; slot < 3; slot++)
+            _context.PSUnsetShaderResource(slot);
+        Bind(normals: false);
+    }
+
+    private void WriteReflectConstants(Camera camera, float aspectRatio, Vector2 pixelsPerRay, bool traced)
+    {
         var projection = camera.Projection(aspectRatio);
+        var rotation = Matrix4x4.CreateLookAt(Vector3.Zero, camera.Forward, Vector3.UnitZ);
         var map = _context.Map(_reflectBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, new ReflectConstants
         {
-            ViewRotation = Matrix4x4.CreateLookAt(Vector3.Zero, camera.Forward, Vector3.UnitZ),
+            ViewRotation = rotation,
+            WorldRotation = Matrix4x4.Transpose(rotation),
             Projection = new Vector4(projection.M11, projection.M22, camera.NearPlane, 0f),
-            Size = new Vector4(Width, Height, 0f, 0f),
-            Settings = new Vector4(Options.Antialiasing ? _frame : 0f, 0f, 0f, 0f),
+            Size = new Vector4(Width, Height, pixelsPerRay.X, pixelsPerRay.Y),
+            Settings = new Vector4(Options.Antialiasing ? _frame : 0f, traced ? 1f : 0f, 0f, 0f),
         });
         _context.Unmap(_reflectBuffer, 0);
+    }
 
-        _context.OMSetRenderTargets(_color!.Write!);
-        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+    // The full-image pass of the wet reflections, reading the depth, normals and surface colours.
+    private void SetReflectState(ID3D11PixelShader shader)
+    {
         _context.IASetInputLayout(null);
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_fullVertexShader);
         _context.GSSetShader(null);
-        _context.PSSetShader(_reflectPixelShader);
+        _context.PSSetShader(shader);
         _context.PSSetConstantBuffer(0, _reflectBuffer);
         _context.PSSetSampler(0, _linearClamp);
         _context.OMSetDepthStencilState(_noDepth, 0);
         _context.RSSetState(_rasterizerState);
-        _context.OMSetBlendState(_mix, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.PSSetShaderResource(0, _depthRead!);
         _context.PSSetShaderResource(1, _normals!.Read);
         _context.PSSetShaderResource(2, _albedo!.Read);
-        _context.PSSetShaderResource(3, copy);
-        _context.Draw(3, 0);
-        for (uint slot = 0; slot < 4; slot++)
-            _context.PSUnsetShaderResource(slot);
-        Bind(normals: false);
     }
 
     // Images of the solid pass for the effects drawn over it (NightLights): colour image, depth, normals, colours of the
@@ -1306,6 +1376,7 @@ float4 PSReflect(VS_OUTPUT input) : SV_Target
         _add.Dispose();
         _mix.Dispose();
         _reflectPixelShader.Dispose();
+        _rayStartsPixelShader.Dispose();
         _reflectBuffer.Dispose();
         _bloomDownPixelShader.Dispose();
         _bloomUpPixelShader.Dispose();
