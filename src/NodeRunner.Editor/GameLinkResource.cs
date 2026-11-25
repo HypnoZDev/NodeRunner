@@ -10,7 +10,7 @@ public static class GameLinkResource
 {
     public const string ResourceName = "noderunner-link";
     public const string CategoryFolder = "[noderunner]";
-    public const int Version = 2;
+    public const int Version = 3;
 
     public const string ConfigFileName = "server.cfg";
     public const string ResourcesFolderName = "resources";
@@ -251,6 +251,102 @@ public static class GameLinkResource
             EndTextCommandThefeedPostTicker(false, false)
         end
 
+        -- Preview of the editor's changes: game objects hidden, local objects put in their place.
+        local previewRev = 0
+        local shown = {}
+
+        local function hideKey(item)
+            if not item.hm then
+                return nil
+            end
+            return ('%s:%.3f:%.3f:%.3f'):format(tostring(item.hm), item.hx, item.hy, item.hz)
+        end
+
+        local function place(object, item)
+            SetEntityCoordsNoOffset(object, item.x + 0.0, item.y + 0.0, item.z + 0.0, false, false, false)
+            SetEntityQuaternion(object, item.qx + 0.0, item.qy + 0.0, item.qz + 0.0, item.qw + 0.0)
+        end
+
+        local function clear(entry)
+            entry.cleared = true
+            if entry.object and DoesEntityExist(entry.object) then
+                DeleteObject(entry.object)
+            end
+            if entry.hide then
+                RemoveModelHide(entry.hide.hx + 0.0, entry.hide.hy + 0.0, entry.hide.hz + 0.0, 0.1, entry.hide.hm, false)
+            end
+        end
+
+        local function apply(item)
+            local entry = { model = item.m, hideKey = hideKey(item), item = item }
+            if item.hm then
+                entry.hide = { hm = item.hm, hx = item.hx, hy = item.hy, hz = item.hz }
+                CreateModelHide(item.hx + 0.0, item.hy + 0.0, item.hz + 0.0, 0.1, item.hm, true)
+            end
+            if item.m and IsModelInCdimage(item.m) then
+                CreateThread(function()
+                    RequestModel(item.m)
+                    local waited = 0
+                    while not HasModelLoaded(item.m) and waited < 5000 do
+                        Wait(20)
+                        waited = waited + 20
+                    end
+                    if entry.cleared or not HasModelLoaded(item.m) then
+                        return
+                    end
+                    local latest = entry.item
+                    local object = CreateObjectNoOffset(item.m, latest.x + 0.0, latest.y + 0.0, latest.z + 0.0, false, false, false)
+                    FreezeEntityPosition(object, true)
+                    place(object, latest)
+                    SetModelAsNoLongerNeeded(item.m)
+                    entry.object = object
+                end)
+            end
+            return entry
+        end
+
+        local function clearAll()
+            for key, entry in pairs(shown) do
+                clear(entry)
+                shown[key] = nil
+            end
+            previewRev = 0
+        end
+
+        RegisterNetEvent('noderunner-link:preview', function(c)
+            if type(c) ~= 'table' or type(c.items) ~= 'table' then
+                return
+            end
+            previewRev = tonumber(c.rev) or 0
+            local wanted = {}
+            for _, item in ipairs(c.items) do
+                wanted[item.k] = item
+            end
+            for key, entry in pairs(shown) do
+                local item = wanted[key]
+                if not item or item.m ~= entry.model or hideKey(item) ~= entry.hideKey then
+                    clear(entry)
+                    shown[key] = nil
+                else
+                    entry.item = item
+                    if entry.object and DoesEntityExist(entry.object) then
+                        place(entry.object, item)
+                    end
+                end
+            end
+            for key, item in pairs(wanted) do
+                if not shown[key] then
+                    shown[key] = apply(item)
+                end
+            end
+        end)
+
+        AddEventHandler('onResourceStop', function(name)
+            if name == GetCurrentResourceName() then
+                clearAll()
+            end
+        end)
+
         CreateThread(function()
             while not NetworkIsPlayerActive(PlayerId()) do
                 Wait(500)
@@ -264,7 +360,7 @@ public static class GameLinkResource
                 local rot = GetFinalRenderedCamRot(2)
                 TriggerServerEvent('noderunner-link:state', {
                     x = pos.x, y = pos.y, z = pos.z, h = GetEntityHeading(ped),
-                    cx = cam.x, cy = cam.y, cz = cam.z, rx = rot.x, ry = rot.y, rz = rot.z,
+                    cx = cam.x, cy = cam.y, cz = cam.z, rx = rot.x, ry = rot.y, rz = rot.z, pr = previewRev,
                 })
                 Wait(200)
             end
@@ -274,6 +370,7 @@ public static class GameLinkResource
             if connected then
                 notify('~b~NodeRunner Studio~s~ : connecté / connected')
             else
+                clearAll()
                 notify('~b~NodeRunner Studio~s~ : déconnecté / disconnected')
             end
         end)
@@ -311,7 +408,7 @@ public static class GameLinkResource
         local url = ('http://127.0.0.1:%d/link'):format(GetConvarInt('noderunner_port', {PORT}))
         local states = {}
         local connected = false
-        local allowed = { teleport = true }
+        local allowed = { teleport = true, preview = true }
 
         RegisterNetEvent('noderunner-link:state', function(state)
             local source = source

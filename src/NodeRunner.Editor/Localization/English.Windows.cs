@@ -1433,6 +1433,12 @@ public static partial class English
         ("Pose ton personnage (ou ton véhicule) au sol sous la caméra de NodeRunner, tourné dans le même sens.",
             "Puts your character (or your vehicle) on the ground under NodeRunner's camera, facing the same way."),
         ("Suivre la caméra du jeu", "Follow the game camera"),
+        ("Aperçu en direct", "Live preview"),
+        ("Les objets déplacés, ajoutés, supprimés ou changés dans NodeRunner le sont aussitôt en jeu,\nsans rien enregistrer. Seulement pour toi, et effacé quand NodeRunner se ferme.",
+            "Objects moved, added, deleted or changed in NodeRunner are at once in game too,\nwithout saving anything. Only for you, and cleared when NodeRunner closes."),
+        ("Les props qui ne sont pas dans le jeu (ceux de ton projet) et les objets des intérieurs ne sont pas encore montrés.",
+            "Props that are not in the game (your project's own) and objects of interiors are not shown yet."),
+        ("{0} objet(s) changé(s) en jeu", "{0} object(s) changed in game"),
         ("La vue 3D de NodeRunner reprend en continu la caméra du jeu.", "NodeRunner's 3D view keeps copying the game camera."),
     ];
 }

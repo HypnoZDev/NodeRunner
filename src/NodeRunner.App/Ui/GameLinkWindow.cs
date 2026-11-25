@@ -17,6 +17,20 @@ internal sealed class GameLinkWindow(AppState state)
     private bool _messageIsError;
     private bool _follow;
     private int _player;
+    private readonly GameLinkPreview _preview = new();
+    private NodeRunner.Data.Maps.MapLibrary? _previewMaps;
+    private bool _livePreview = true, _previewDirty, _wasConnected;
+    private DateTime _pushedAt;
+    private int _previewCount;
+
+    // Follows the edits from the start, so that the preview knows what the game showed before them.
+    public void Attach()
+    {
+        var history = state.History;
+        history.Added += edit => _preview.Observe(edit, undone: false);
+        history.Redone += edit => _preview.Observe(edit, undone: false);
+        history.Undone += edit => _preview.Observe(edit, undone: true);
+    }
 
     public bool FolderRequested { get; set; }
 
@@ -89,6 +103,7 @@ internal sealed class GameLinkWindow(AppState state)
     public void Draw()
     {
         Follow();
+        UpdatePreview();
         if (!_open)
             return;
         if (_search is { IsCompleted: true })
@@ -255,6 +270,31 @@ internal sealed class GameLinkWindow(AppState state)
         CameraToGame(player);
     }
 
+    private void UpdatePreview()
+    {
+        if (!ReferenceEquals(_previewMaps, state.World.Maps))
+        {
+            _previewMaps = state.World.Maps;
+            _preview.Reset();
+        }
+        foreach (var entity in state.SelectedEntities)
+            _preview.Watch(entity);
+        if (_preview.Refresh())
+            _previewDirty = true;
+
+        bool connected = state.Link.IsConnected;
+        if (connected && !_wasConnected)
+            _previewDirty = true;
+        _wasConnected = connected;
+        var now = DateTime.UtcNow;
+        if (!_previewDirty || !connected || now - _pushedAt < TimeSpan.FromMilliseconds(100))
+            return;
+        var items = _livePreview ? _preview.Items(Player?.Position ?? state.Camera.Position) : [];
+        _previewCount = items.Count;
+        state.Link.SetPreview(_preview.Revision, items);
+        (_previewDirty, _pushedAt) = (false, now);
+    }
+
     private void CameraToGame(GameLinkPlayer player)
     {
         state.Camera.Position = player.CameraPosition;
@@ -308,6 +348,18 @@ internal sealed class GameLinkWindow(AppState state)
         ImGui.Checkbox(L("Suivre la caméra du jeu"), ref _follow);
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(L("La vue 3D de NodeRunner reprend en continu la caméra du jeu."));
+
+        ImGui.Spacing();
+        if (ImGui.Checkbox(L("Aperçu en direct"), ref _livePreview))
+            _previewDirty = true;
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+            ImGui.SetTooltip(L("Les objets déplacés, ajoutés, supprimés ou changés dans NodeRunner le sont aussitôt en jeu,\nsans rien enregistrer. Seulement pour toi, et effacé quand NodeRunner se ferme."));
+        if (_livePreview)
+        {
+            ImGui.SameLine();
+            Widgets.Hint(L($"{_previewCount} objet(s) changé(s) en jeu"));
+            Widgets.Hint(L("Les props qui ne sont pas dans le jeu (ceux de ton projet) et les objets des intérieurs ne sont pas encore montrés."), wrap: true);
+        }
     }
 
     private void Run(Action action, string done)

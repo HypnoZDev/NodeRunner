@@ -11,7 +11,8 @@ namespace NodeRunner.Editor;
 
 // A player seen by the live link: where they stand and where the game camera looks (GTA V world space, degrees for
 // the game's own rotations).
-public sealed record GameLinkPlayer(int Id, string Name, Vector3 Position, float Heading, Vector3 CameraPosition, Vector3 CameraRotation)
+public sealed record GameLinkPlayer(int Id, string Name, Vector3 Position, float Heading, Vector3 CameraPosition, Vector3 CameraRotation,
+    int PreviewRevision = 0)
 {
     // Editor camera angles (radians) from the game camera: the game's yaw 0 looks north and turns left.
     public float CameraYaw => (CameraRotation.Z + 90f) * MathF.PI / 180f;
@@ -34,6 +35,9 @@ public sealed class GameLinkHost : IDisposable
     private CancellationTokenSource? _stop;
     private IReadOnlyList<GameLinkPlayer> _players = [];
     private DateTime _lastPoll = DateTime.MinValue;
+    private string? _preview;
+    private int _previewRevision, _sentRevision;
+    private DateTime _sentAt;
 
     public int Port { get; private set; }
 
@@ -102,6 +106,15 @@ public sealed class GameLinkHost : IDisposable
             ["h"] = heading,
         });
 
+    // What the game must show instead of the server's objects (GameLinkPreview.Items); sent once per revision, and again
+    // to a player who did not get it.
+    public void SetPreview(int revision, JsonArray items)
+    {
+        string command = new JsonObject { ["type"] = "preview", ["player"] = -1, ["rev"] = revision, ["items"] = items }.ToJsonString();
+        lock (_lock)
+            (_preview, _previewRevision) = (command, revision);
+    }
+
     // The game's heading (degrees, 0 = north, turning left) from an editor yaw (radians, 0 = east).
     public static float HeadingFromYaw(float yaw)
     {
@@ -161,12 +174,19 @@ public sealed class GameLinkHost : IDisposable
             return ("404 Not Found", "{}");
 
         var players = ReadPlayers(body);
+        var commands = new JsonArray();
         lock (_lock)
         {
+            var now = DateTime.UtcNow;
             _players = players;
-            _lastPoll = DateTime.UtcNow;
+            _lastPoll = now;
+            bool behind = players.Any(p => p.PreviewRevision != _previewRevision) && now - _sentAt > TimeSpan.FromSeconds(1);
+            if (_preview is not null && (_sentRevision != _previewRevision || behind))
+            {
+                commands.Add(JsonNode.Parse(_preview));
+                (_sentRevision, _sentAt) = (_previewRevision, now);
+            }
         }
-        var commands = new JsonArray();
         while (commands.Count < 64 && _commands.TryDequeue(out var command))
             commands.Add(command);
         return ("200 OK", new JsonObject { ["v"] = GameLinkResource.Version, ["commands"] = commands }.ToJsonString());
@@ -237,7 +257,8 @@ public sealed class GameLinkHost : IDisposable
                     new Vector3(Number(item, "x"), Number(item, "y"), Number(item, "z")),
                     Number(item, "h"),
                     new Vector3(Number(item, "cx"), Number(item, "cy"), Number(item, "cz")),
-                    new Vector3(Number(item, "rx"), Number(item, "ry"), Number(item, "rz"))));
+                    new Vector3(Number(item, "rx"), Number(item, "ry"), Number(item, "rz")),
+                    (int)Number(item, "pr")));
             }
         }
         catch (JsonException)
