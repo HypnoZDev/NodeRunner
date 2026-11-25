@@ -101,6 +101,7 @@ internal sealed unsafe partial class MainForm
         }
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
+        _modelRenderer.Time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
         _modelRenderer.Anisotropy = settings.Anisotropy;
 
         bool modelsEnabled = _state.IsLayerVisible(ModelLayer.LayerName);

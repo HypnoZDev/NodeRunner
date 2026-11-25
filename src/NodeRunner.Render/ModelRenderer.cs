@@ -37,7 +37,7 @@ cbuffer Frame : register(b0)
     float4 SkyTop;        // Colour of the sky overhead (mirrored by shiny surfaces).
     float4 FogSun;        // Fog colour added towards the sun (sky worked out from the air), along SkySun.
     float4 SkySun;        // xyz: direction of the sun (even below the horizon).
-    float4 Weather;       // x: how wet the surfaces are (rain, 0 to 1), y: how much snow lies on them.
+    float4 Weather;       // x: how wet the surfaces are (rain, 0 to 1), y: how much snow lies on them, z: time (s).
 };
 cbuffer Object : register(b2)
 {
@@ -221,6 +221,25 @@ float ValueNoise(float2 p)
     return lerp(lerp(Hash(i), Hash(i + float2(1, 0)), f.x), lerp(Hash(i + float2(0, 1)), Hash(i + 1.0f), f.x), f.y);
 }
 
+// Rings spreading from raindrops on a puddle (one cell = 1 in p, a drop now and then in each cell, two grids shifted
+// so the rings overlap): the slope of the water along x and y.
+float2 Ripples(float2 p, float time)
+{
+    float2 slope = 0.0f;
+    [unroll] for (int layer = 0; layer < 2; layer++)
+    {
+        float2 q = p + layer * float2(0.5f, 0.37f);
+        float2 cell = floor(q);
+        float2 d = q - cell - (0.3f + 0.4f * float2(Hash(cell + layer * 17.0f), Hash(cell.yx + 31.0f + layer * 5.0f)));
+        float age = frac(time * 0.9f + Hash(cell * 1.7f + layer * 3.1f));
+        float r = length(d);
+        float ring = r - age * 0.3f;
+        float strength = saturate(1.0f - abs(ring) / 0.06f) * (1.0f - age);
+        slope += (r > 1e-4f ? d / r : 0.0f) * (sin(ring * 90.0f) * strength);
+    }
+    return slope;
+}
+
 // Snow (0 to 1) lying on what faces the sky: flat ground and tops covered, slopes partly with a ragged edge, none on
 // walls; characters hardly. Snow fills the small relief (the geometric normal decides more than the normal map).
 float SnowCover(float3 world, float3 geometric, float3 n)
@@ -290,10 +309,17 @@ float4 Shade(PS_INPUT input, float4 color)
     AmbientShare = dot(ambient, 1.0f) / max(dot(light, 1.0f), 0.0001f);
     // Rain: water soaks into what faces the sky (darker) and lies on it (mirrors the sky), most on flat ground, a
     // little on walls it runs down.
-    float wet =Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
+    float wet = Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
     if (Emission.w > 0.5f)
         wet *= 0.4f;
-    color.rgb *= 1.0f - (Output.x > 0.5f ? 0.6f : 0.35f) * wet;
+    // Puddles in the hollows of flat ground (patches of a few metres), darker still.
+    float puddle = 0.0f;
+    if (Weather.x > 0.0f && Emission.w < 0.5f && geometric.z > 0.96f)
+    {
+        float hollow = ValueNoise(input.world.xy * 0.22f) * 0.7f + ValueNoise(input.world.xy * 0.9f) * 0.3f;
+        puddle = smoothstep(0.56f, 0.61f, hollow) * saturate((geometric.z - 0.96f) * 50.0f) * Weather.x * WetMirror;
+    }
+    color.rgb *= (1.0f - (Output.x > 0.5f ? 0.6f : 0.35f) * wet) * (1.0f - 0.45f * puddle);
     SurfaceColor = color.rgb * Tint.rgb;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * (Output.x > 0.5f ? Output.y : 1.4f));
@@ -323,13 +349,23 @@ float4 Shade(PS_INPUT input, float4 color)
     {
         // The water film fills the relief: smoother than the surface under it. Less in nooks and indoors.
         float3 w = normalize(lerp(n, geometric, wet));
+        float crests = 0.0f;
+        if (puddle > 0.0f)
+        {
+            // A puddle is flat, stirred by the rings of the drops (seen only up close), their crests catching the light.
+            float near = saturate(1.0f - length(input.world - CameraFog.xyz) / 25.0f);
+            float2 slope = Ripples(input.world.xy / 0.4f, Weather.z) * (0.35f * near * Weather.x);
+            w = normalize(lerp(w, normalize(float3(-slope, 1.0f)), puddle));
+            crests = saturate(length(slope) * 2.0f) * puddle;
+        }
         // Sheets seen from behind (grass, leaves) are not mirrors.
         float front = dot(w, toCamera);
         wet *= saturate(front * 8.0f) * WetMirror;
         float facing = 1.0f - saturate(front);
-        float fresnel = 0.03f + 0.97f * facing * facing * facing * facing * facing;
+        float fresnel = lerp(0.03f, 0.06f, puddle) + 0.9f * facing * facing * facing * facing * facing;
         float open = Emission.y > 0.5f ? saturate(dot(input.color.rgb, 0.667f)) : 1.0f;
-        lit = lerp(lit, MirroredSky(reflect(-toCamera, w)), fresnel * wet * 0.8f * open);
+        lit = lerp(lit, MirroredSky(reflect(-toCamera, w)), fresnel * lerp(wet * 0.8f, 1.0f, puddle) * open);
+        lit += SkyTop.rgb * (crests * 0.25f * open);
     }
 
     // Distance fog, thicker towards the horizon colour; none on the first quarter of the distance.
@@ -561,6 +597,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
     public bool NormalsOutput { get; set; }
 
     public Vector3 CameraPosition { get; set; }
+
+    // Seconds, for what moves by itself (rings of the raindrops on the puddles).
+    public float Time { get; set; }
 
     public ShadowMaps? Shadows { get; set; }
 
@@ -1240,7 +1279,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 SkyTop = new Vector4(Lighting.Zenith, 0f),
                 FogSun = new Vector4(Lighting.FogSun, 0f),
                 SkySun = new Vector4(Lighting.Sun, 0f),
-                Weather = new Vector4(Lighting.Wetness, Lighting.Snow, 0f, 0f),
+                Weather = new Vector4(Lighting.Wetness, Lighting.Snow, Time, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);
