@@ -1,5 +1,6 @@
 using System.Numerics;
 using NodeRunner.Data.Maps;
+using NodeRunner.Data.Native.Gta4;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -12,10 +13,14 @@ internal sealed class NightLightField
     private int _hour = -1;
     private int _revision = -1;
     private Task<(MapLibrary Library, NightLight[] Lights)>? _building;
+    private Gta4Definitions? _gta4;
 
-    // Lights to send to the renderer (null: unchanged since the last call).
-    public NightLight[]? Update(MapLibrary? library, int hour)
+    // Lights to send to the renderer (null: unchanged since the last call). With GTA IV's definitions: the lamps of
+    // its models (lit all night, whatever the hour).
+    public NightLight[]? Update(MapLibrary? library, int hour, Gta4Definitions? gta4 = null)
     {
+        if (gta4 is not null)
+            hour = 0;
         NightLight[]? result = null;
         if (_building is { IsCompleted: true } finished)
         {
@@ -37,10 +42,10 @@ internal sealed class NightLightField
             _library = null;
             return [];
         }
-        if (_building is null && (library != _library || hour != _hour || _revision != MapData.LodLightRevision))
+        if (_building is null && (library != _library || hour != _hour || gta4 != _gta4 || _revision != MapData.LodLightRevision))
         {
-            (_library, _hour, _revision) = (library, hour, MapData.LodLightRevision);
-            _building = Task.Run(() => (library, Build(library, hour)));
+            (_library, _hour, _gta4, _revision) = (library, hour, gta4, MapData.LodLightRevision);
+            _building = Task.Run(() => (library, gta4 is null ? Build(library, hour) : BuildGta4(library, gta4)));
         }
         return result;
     }
@@ -77,6 +82,54 @@ internal sealed class NightLightField
             }
         }
         return lights.ToArray();
+    }
+
+    // GTA IV: the lamps declared for the models, on every detailed object placed (inside the interiors too).
+    private static NightLight[] BuildGta4(MapLibrary library, Gta4Definitions definitions)
+    {
+        var lights = new List<NightLight>();
+        void Add(MapEntity entity)
+        {
+            if (entity.LodLevel is not (LodLevel.Hd or LodLevel.OrphanHd) || !definitions.Lights.TryGetValue(entity.ArchetypeHash, out var lamps))
+                return;
+            var transform = entity.Transform;
+            foreach (var lamp in lamps)
+                lights.Add(Make(lamp, transform, entity.Orientation));
+        }
+        foreach (var map in library.Maps)
+        {
+            foreach (var entity in map.Entities)
+            {
+                if (entity.IsInterior)
+                {
+                    foreach (var inside in entity.InteriorEntities)
+                        Add(inside);
+                }
+                else
+                {
+                    Add(entity);
+                }
+            }
+        }
+        return lights.ToArray();
+    }
+
+    private static NightLight Make(Gta4ModelLight lamp, Matrix4x4 transform, Quaternion orientation)
+    {
+        var color = new Vector3(Linear(lamp.Red), Linear(lamp.Green), Linear(lamp.Blue));
+        float brightness = 2.5f * Math.Clamp(lamp.Intensity, 0.1f, 2f);
+        float reach = Math.Clamp(lamp.Reach, 1f, 60f);
+        var direction = Vector3.Zero;
+        float cosOuter = -2f, cosInner = -2f;
+        if (lamp.IsSpot && lamp.Direction.LengthSquared() > 1e-6f && lamp.ConeOuter >= 1f)
+        {
+            direction = Vector3.Normalize(Vector3.Transform(lamp.Direction, orientation));
+            float outer = MathF.Min(lamp.ConeOuter, 89f);
+            float inner = Math.Clamp(lamp.ConeInner, 0f, outer * 0.9f);
+            cosOuter = MathF.Cos(outer * MathF.PI / 180f);
+            cosInner = MathF.Cos(inner * MathF.PI / 180f);
+        }
+        return new NightLight(Vector3.Transform(lamp.Position, transform), reach, color * brightness, 0.8f, direction, cosOuter, cosInner);
     }
 
     private static NightLight Make(DistantLodLight light, LodLight? detail)

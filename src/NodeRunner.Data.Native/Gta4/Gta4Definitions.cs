@@ -26,12 +26,21 @@ public sealed record Gta4InteriorPortal(int RoomFrom, int RoomTo, Vector3[] Corn
 public sealed record Gta4InteriorDef(string Name, uint Hash, Gta4InteriorObject[] Objects, Gta4InteriorRoom[] Rooms,
     Gta4InteriorPortal[] Portals);
 
+// A lamp of a model (light effect of a "2dfx" section), in model space: colour (0 to 255), reach (m), brightness
+// (about 1), and for a spot light where it points and the half angles of its cone (degrees).
+public readonly record struct Gta4ModelLight(Vector3 Position, byte Red, byte Green, byte Blue, float Reach, float Intensity,
+    bool IsSpot, Vector3 Direction, float ConeInner, float ConeOuter);
+
 // Model definitions of GTA IV (".ide" text files): "objs", "tobj" (objs + hours), "anim" (objs with an animation
-// dictionary after the texture dictionary), "tanm" (anim + hours), the texture dictionary parents ("txdp") and the
-// interiors ("mlo").
+// dictionary after the texture dictionary), "tanm" (anim + hours), the texture dictionary parents ("txdp"), the
+// interiors ("mlo") and the lamps of the models ("2dfx" lights).
 public sealed class Gta4Definitions
 {
     private readonly Dictionary<uint, Gta4ModelDef> _models = [];
+    private readonly Dictionary<uint, List<Gta4ModelLight>> _lights = [];
+
+    // Model hash -> its lamps.
+    public IReadOnlyDictionary<uint, List<Gta4ModelLight>> Lights => _lights;
     private readonly Dictionary<uint, Gta4InteriorDef> _interiors = [];
     private readonly Dictionary<string, string> _textureParents = new(StringComparer.OrdinalIgnoreCase);
 
@@ -50,6 +59,7 @@ public sealed class Gta4Definitions
         int bad = 0;
         string section = "";
         var interior = new InteriorReader();
+        var lit = new HashSet<uint>();
         foreach (var raw in text.AsSpan().EnumerateLines())
         {
             var line = raw.Trim();
@@ -86,9 +96,42 @@ public sealed class Gta4Definitions
                     else
                         bad++;
                     break;
+                case "2dfx":
+                    var fx = Split(line.ToString());
+                    if (fx.Length >= 42 && fx[4] == "0")
+                    {
+                        uint owner = Joaat.Hash(fx[0]);
+                        // A later file declaring lamps for a model replaces its earlier ones.
+                        if (lit.Add(owner))
+                            _lights[owner] = [];
+                        if (ReadLight(fx) is { } light)
+                            _lights[owner].Add(light);
+                        else
+                            bad++;
+                    }
+                    break;
             }
         }
         return bad;
+    }
+
+    // Light line: name, position, type 0, rotation (4), kind (1 point, 2 spot), red, green, blue, flashing, corona and
+    // shadow textures, ..., cone inner and outer angles (25, 26), reach (27), brightness (28), ..., direction (32-34).
+    private static Gta4ModelLight? ReadLight(string[] p)
+    {
+        Span<float> v = stackalloc float[3];
+        for (int i = 0; i < 3; i++)
+            if (!TryFloat(p[1 + i], out v[i]))
+                return null;
+        if (!byte.TryParse(p[10], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte r)
+            || !byte.TryParse(p[11], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte g)
+            || !byte.TryParse(p[12], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte b)
+            || !TryFloat(p[25], out float inner) || !TryFloat(p[26], out float outer)
+            || !TryFloat(p[27], out float reach) || !TryFloat(p[28], out float intensity)
+            || !TryFloat(p[32], out float dx) || !TryFloat(p[33], out float dy) || !TryFloat(p[34], out float dz))
+            return null;
+        return new Gta4ModelLight(new Vector3(v[0], v[1], v[2]), r, g, b, reach, intensity, p[9] == "2", new Vector3(dx, dy, dz),
+            inner, outer);
     }
 
     private static Gta4ModelDef? ReadModel(string line, string section)

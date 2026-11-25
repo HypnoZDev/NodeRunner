@@ -84,7 +84,7 @@ internal sealed unsafe partial class MainForm
         if (image is not null && imageOptions.Hdr)
         {
             lighting = lighting.ForHdr();
-            if (settings.PhysicalSky && !_state.IsOtherGame)
+            if (settings.PhysicalSky && !_state.IsClassic)
                 lighting = lighting.WithPhysicalSky();
             imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
         }
@@ -366,14 +366,15 @@ internal sealed unsafe partial class MainForm
         DrawMarker(lines, viewProjection);
     }
 
-    // Brightness of the map's lamps (0: not drawn): HDR image only, at night, GTA V's map.
+    // Brightness of the map's lamps (0: not drawn): HDR image only, at night, GTA V's or GTA IV's map.
     private float NightLightStrength(SceneImage? image, SceneImageOptions options, SceneLighting lighting, bool modelsEnabled)
     {
         var settings = _state.Settings;
-        if (image is null || !options.Hdr || !settings.NightLights || !modelsEnabled || _state.IsOtherGame || lighting.NightLights < 0.01f)
+        if (image is null || !options.Hdr || !settings.NightLights || !modelsEnabled || _state.IsClassic || lighting.NightLights < 0.01f)
             return 0f;
         _nightLights ??= new NightLights(_graphics!.Device, _graphics.Context);
-        if (_nightLightField.Update(_state.World.Maps, (int)settings.TimeOfDay % 24) is { } lights)
+        var lightsOf = _state.IsGta4 ? _state.Gta4.Scene : null;
+        if (_nightLightField.Update(lightsOf?.Library ?? (_state.IsGta4 ? null : _state.World.Maps), (int)settings.TimeOfDay % 24, lightsOf?.Definitions) is { } lights)
             _nightLights.SetLights(lights);
         return lighting.NightLights * Math.Clamp(settings.NightLightStrength, 0f, 2f);
     }

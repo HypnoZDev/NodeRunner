@@ -281,6 +281,36 @@ public class Gta4MapTests : IDisposable
         end
         """;
 
+    private const string LightIde = """
+        2dfx
+        lamp_post, -10.5, 55.75, 9.5, 0, 0, 0, -0.34202, 0.939693, 2, 244, 243, 203, 0, "corona", "null", 100, 18, 0, 0, 0, 0, 0, 0, 64, 37, 60, 12, 1, 1, 0, 5, 0, 0, -1, -0.642787, 0.766045, 0, 0, -1, -1, 1
+        lamp_post, 1, 2, 3, 0, 0, 0, 0, 1, 1, 255, 18, 0, 0, "corona", "null", 100, 18, 0, 0, 0, 0, 0, 0, 64, 0, 0, 8, 0.5, 1, 0, 10, 0, 0, -1, 0, 1, 0, 0, -1, -1, 1
+        lamp_post, 0, 0, 0, 1, 0, 0, 0, 1, fire, 0, 0, 1, 100, 0, 255, 255, 255
+        end
+        """;
+
+    [Fact]
+    public void Definitions_ReadModelLights()
+    {
+        var defs = new Gta4Definitions();
+
+        Assert.Equal(0, defs.Read(LightIde));
+
+        var lamps = defs.Lights[Joaat.Hash("lamp_post")];
+        Assert.Equal(2, lamps.Count);
+        Assert.Equal(new Vector3(-10.5f, 55.75f, 9.5f), lamps[0].Position);
+        Assert.Equal((244, 243, 203), (lamps[0].Red, lamps[0].Green, lamps[0].Blue));
+        Assert.True(lamps[0].IsSpot);
+        Assert.Equal((37f, 60f, 12f, 1f), (lamps[0].ConeInner, lamps[0].ConeOuter, lamps[0].Reach, lamps[0].Intensity));
+        Assert.Equal(new Vector3(0, 0, -1), lamps[0].Direction);
+        Assert.False(lamps[1].IsSpot);
+        Assert.Equal(0.5f, lamps[1].Intensity);
+
+        // A later file replaces the lamps of the model.
+        defs.Read(LightIde.Replace("lamp_post, 1, 2, 3", "other, 1, 2, 3"));
+        Assert.Single(defs.Lights[Joaat.Hash("lamp_post")]);
+    }
+
     [Fact]
     public void Definitions_ReadInteriors()
     {
