@@ -537,6 +537,11 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                 if (ImGui.SliderFloat("##time_of_day", ref hour, 0f, 24f, L($"{minutes / 60:00} h {minutes % 60:00}")))
                     settings.TimeOfDay = hour;
                 SaveWhenReleased();
+
+                Widgets.Property(L("Météo"), L("Les météos du jeu : quantité et forme des nuages, force du soleil, ciel plus gris et brouillard plus proche par mauvais temps. Les nuages se règlent dans Qualité > Nuages."));
+                ImGui.SetNextItemWidth(-1f);
+                if (WeatherChoice.Combo("##weather", settings))
+                    state.SaveSettings();
                 Widgets.EndProperties();
             }
         }
@@ -700,6 +705,16 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
         if (ImGui.Combo("##shadow_resolution", ref shadowLevel, shadowNames, shadowNames.Length))
         {
             settings.ShadowResolution = ShadowResolutions[shadowLevel];
+            state.SaveSettings();
+        }
+
+        Widgets.Property(L("Nuages"), L("Nuages en volume, selon la météo, éclairés par le soleil (dorés au coucher, gris sombre sous la pluie) et poussés par le vent. Simples = rapides, pour les petits PC ; Haute qualité = plus fins et plus détaillés."));
+        ImGui.SetNextItemWidth(-1f);
+        string[] cloudNames = [L("Aucun"), L("Simples"), L("Normaux"), L("Haute qualité")];
+        int clouds = Math.Clamp(settings.CloudQuality, 0, 3);
+        if (ImGui.Combo("##cloud_quality", ref clouds, cloudNames, cloudNames.Length))
+        {
+            settings.CloudQuality = clouds;
             state.SaveSettings();
         }
 

@@ -26,6 +26,7 @@ internal sealed unsafe partial class MainForm : Form
     private ColorRenderer? _lineRenderer;
     private ModelRenderer? _modelRenderer;
     private SkyRenderer? _skyRenderer;
+    private CloudRenderer? _cloudRenderer;
     private WaterRenderer? _waterRenderer;
     private ShadowMaps? _shadowMaps;
     private SceneImage? _sceneImage;
@@ -256,6 +257,8 @@ internal sealed unsafe partial class MainForm : Form
         _modelRenderer = null;
         _skyRenderer?.Dispose();
         _skyRenderer = null;
+        _cloudRenderer?.Dispose();
+        _cloudRenderer = null;
         _waterRenderer?.Dispose();
         _waterRenderer = null;
         _shadowMaps?.Dispose();

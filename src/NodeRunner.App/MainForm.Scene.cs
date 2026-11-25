@@ -88,6 +88,17 @@ internal sealed unsafe partial class MainForm
                 lighting = lighting.WithPhysicalSky();
             imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
         }
+        // The clouds are lit by the sun above them; the weather then dims the light on the ground (the first trilogy
+        // keeps the light of its own weather files).
+        var weather = CloudWeather.For(settings.Weather);
+        var cloudLighting = lighting;
+        if (!_state.IsClassic)
+        {
+            lighting = lighting.WithWeather(weather);
+            fogDistance = lighting.FogDistance;
+            if (image is not null && imageOptions.Hdr)
+                imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
+        }
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
         _modelRenderer.Anisotropy = settings.Anisotropy;
@@ -145,7 +156,7 @@ internal sealed unsafe partial class MainForm
         _modelRenderer.MipBias = imageOptions.Antialiasing && image is not null ? -0.5f : 0f;
 
         if (settings.ShowSky)
-            _skyRenderer!.Draw(sceneViewProjection, lighting);
+            _skyRenderer!.Draw(sceneViewProjection, lighting, DrawClouds(sceneViewProjection, cloudLighting, weather, image, scene));
         // Play mode shows the map as the game does: always without what the occluders hide.
         bool occlusionPreview = modelsEnabled && (settings.OcclusionPreview || _state.Play.IsActive);
         _occlusionCuller.Update(_state.World, camera.Position, occlusionPreview);
@@ -344,6 +355,31 @@ internal sealed unsafe partial class MainForm
         if (_nightLightField.Update(_state.World.Maps, (int)settings.TimeOfDay % 24) is { } lights)
             _nightLights.SetLights(lights);
         return lighting.NightLights * Math.Clamp(settings.NightLightStrength, 0f, 2f);
+    }
+
+    // The clouds into their own image (null: none or not ready), then the scene's image (or the window) bound again.
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? DrawClouds(Matrix4x4 viewProjection, SceneLighting lighting, CloudWeather weather,
+        SceneImage? image, Rectangle scene)
+    {
+        int quality = Math.Clamp(_state.Settings.CloudQuality, 0, 3);
+        if (quality == 0)
+            return null;
+        if (_graphics!.IsSoftware)
+            quality = 1;
+        _cloudRenderer ??= new CloudRenderer(_graphics.Device, _graphics.Context);
+        int width = image?.Width ?? scene.Width, height = image?.Height ?? scene.Height;
+        var clouds = _cloudRenderer.Render(viewProjection, _state.Camera.Position, lighting, weather, width, height, quality,
+            moving: image is not null && image.Options.Antialiasing);
+        if (image is not null)
+        {
+            image.Bind(normals: false);
+        }
+        else
+        {
+            _graphics.BindBackBuffer();
+            _graphics.SetViewport(scene.X, scene.Y, scene.Width, scene.Height);
+        }
+        return clouds;
     }
 
     // What the scene's own image does, from the display settings (software rendering: the simple rendering only).

@@ -276,6 +276,12 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         }
 
         ImGui.Separator();
+        ImGui.TextDisabled(L("Météo"));
+        ImGui.SetNextItemWidth(220);
+        if (WeatherChoice.Combo("##weather", settings))
+            state.SaveSettings();
+
+        ImGui.Separator();
         bool sky = settings.ShowSky;
         if (ImGui.MenuItem(L("Ciel"), null, sky))
         {

@@ -137,6 +137,34 @@ public readonly record struct SceneLighting
         };
     }
 
+    // Sky turned grey by the weather (0 to 1), also for the sky drawn.
+    public float Grey { get; init; }
+
+    // The weather's light (after ForHdr and WithPhysicalSky): less sun through the clouds, more light from the bright
+    // grey sky, greyer colours, fog nearer.
+    public SceneLighting WithWeather(CloudWeather weather)
+    {
+        float grey = Math.Clamp(weather.Grey, 0f, 1f), sun = Math.Clamp(weather.Sun, 0f, 1f);
+        if (grey <= 0f && sun >= 1f && weather.Fog >= 1f)
+            return this;
+        float skyGrey = float.Lerp(Luminance(Zenith), Luminance(Horizon), 0.7f);
+        Vector3 Dull(Vector3 c, float luminance) => Vector3.Lerp(c, new Vector3(luminance), grey);
+        var result = this with
+        {
+            SunColor = SunColor * sun,
+            SkyAmbient = Dull(SkyAmbient, Luminance(SkyAmbient)) * (1f + (1f - sun) * 0.35f),
+            GroundAmbient = Dull(GroundAmbient, Luminance(GroundAmbient)),
+            Zenith = Dull(Zenith, skyGrey),
+            Horizon = Dull(Horizon, skyGrey),
+            FogSun = FogSun * sun * (1f - grey),
+            FogDistance = FogDistance * Math.Clamp(weather.Fog, 0.05f, 1f),
+            Grey = grey,
+        };
+        if (IsHdr)
+            result = result with { Adaptation = Math.Clamp(MathF.Pow(DayKey / MathF.Max(Key(result), 1e-3f), 0.45f), 1f, 3.5f) };
+        return result;
+    }
+
     // Height of the sky's horizon colour (radians), just above the lowest height of the sky drawn (SkyRenderer).
     private const float HorizonHeight = 0.09f;
 

@@ -161,6 +161,11 @@ public sealed class AppSettings
     public bool SunRays { get; set; }
     public float SunRayStrength { get; set; } = 0.5f;
 
+    // The game's weather shown (clouds, light, fog), and the clouds in volume: 0 none, 1 simple (small PCs), 2 normal,
+    // 3 high; -1 in the settings of older versions: chosen from their other effects (Load).
+    public NodeRunner.Render.Weather Weather { get; set; } = NodeRunner.Render.Weather.Clear;
+    public int CloudQuality { get; set; } = -1;
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -265,6 +270,7 @@ public sealed class AppSettings
         (Bloom, BloomStrength, SurfaceDetail) = (d.Bloom, d.BloomStrength, d.SurfaceDetail);
         (NightLights, NightLightStrength) = (d.NightLights, d.NightLightStrength);
         (PhysicalSky, SunRays, SunRayStrength) = (d.PhysicalSky, d.SunRays, d.SunRayStrength);
+        (Weather, CloudQuality) = (d.Weather, d.CloudQuality);
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);
@@ -274,14 +280,18 @@ public sealed class AppSettings
     {
         try
         {
-            if (File.Exists(path))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOptions) ?? new AppSettings();
+            if (File.Exists(path) && JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOptions) is { } settings)
+            {
+                if (settings.CloudQuality < 0)
+                    settings.CloudQuality = !settings.HdrRendering ? 1 : settings.ShadowResolution >= 4096 ? 3 : 2;
+                return settings;
+            }
         }
         catch (Exception)
         {
             // Corrupted file: start with defaults rather than refusing to start.
         }
-        return new AppSettings();
+        return new AppSettings { CloudQuality = 1 };
     }
 
     public void Save(string path)

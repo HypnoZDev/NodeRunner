@@ -17,18 +17,19 @@ public sealed unsafe class SkyRenderer : IDisposable
 cbuffer Constants : register(b0)
 {
     float4x4 InverseViewProjection;
-    float4 Zenith;
+    float4 Zenith;   // w: sky turned grey by the weather (sky from the table).
     float4 Horizon;
     float4 Sun; // xyz: direction towards the sun, w: visibility of the disc.
     float4 Disc; // x: brightness of the sun disc (much brighter in an HDR image, where it glows), y = 1: HDR image
                  // (linear colours), z = 1: sky from the table, w: share of the night colours over it.
     float4 Tint; // Colour of the sun through the air (sky from the table); making the table: worked-out sky -> image.
-    float4 TrueSun; // Direction of the sun, even below the horizon (sky from the table).
+    float4 TrueSun; // Direction of the sun, even below the horizon (sky from the table); w = 1: clouds over the sky.
 };
 // Lowest height of the worked-out sky (radians): below, the same colour down to the horizon (lower, the light crosses
 // hundreds of kilometres of air and turns brown).
 static const float LowestSky = 0.07f;
 Texture2D Table : register(t0);
+Texture2D Clouds : register(t1); // CloudRenderer: rgb their light, a how much of the sky shows through.
 SamplerState LinearClamp : register(s0);
 struct PS_INPUT { float4 pos : SV_POSITION; float2 ndc : TEXCOORD0; };
 
@@ -39,6 +40,21 @@ PS_INPUT VS(uint id : SV_VertexID)
     output.pos = float4(p, 0.0f, 1.0f);
     output.ndc = p;
     return output;
+}
+
+float3 WithClouds(float3 color, float2 ndc)
+{
+    if (TrueSun.w < 0.5f)
+        return color;
+    // Four taps around the pixel: the cloud image is smaller, its steps are smoothed out.
+    float width, height;
+    Clouds.GetDimensions(width, height);
+    float2 uv = ndc * float2(0.5f, -0.5f) + 0.5f, texel = 0.5f / float2(width, height);
+    float4 clouds = 0.25f * (Clouds.SampleLevel(LinearClamp, uv + float2(-texel.x, -texel.y), 0)
+        + Clouds.SampleLevel(LinearClamp, uv + float2(texel.x, -texel.y), 0)
+        + Clouds.SampleLevel(LinearClamp, uv + float2(-texel.x, texel.y), 0)
+        + Clouds.SampleLevel(LinearClamp, uv + float2(texel.x, texel.y), 0));
+    return color * clouds.a + clouds.rgb;
 }
 
 float4 PS(PS_INPUT input) : SV_Target
@@ -74,13 +90,14 @@ float4 PS(PS_INPUT input) : SV_Target
         float3 sky = Table.SampleLevel(LinearClamp, float2(around, height), 0).rgb;
         if (up < 0.0f)
             sky *= lerp(0.85f, 0.55f, saturate(-up * 4.0f));
+        sky = lerp(sky, dot(sky, float3(0.2126f, 0.7152f, 0.0722f)), Zenith.w);
         color = lerp(sky, color, Disc.w);
         color += Sun.w * pow(facing, 2000.0f) * Disc.x * Tint.rgb;
-        return float4(color, 1.0f);
+        return float4(WithClouds(color, input.ndc), 1.0f);
     }
     color += Sun.w * (pow(facing, 2000.0f) * Disc.x * float3(1.0f, 0.95f, 0.85f)
         + pow(facing, 24.0f) * 0.25f * Horizon.rgb);
-    return float4(color, 1.0f);
+    return float4(WithClouds(color, input.ndc), 1.0f);
 }
 
 // One texel of the table: the sky's light in that direction, the sun at its height straight across (around = 0).
@@ -192,7 +209,8 @@ float4 PSTable(PS_INPUT input) : SV_Target
         _context.OMSetRenderTargets((ID3D11RenderTargetView?)null!);
     }
 
-    public void Draw(Matrix4x4 viewProjection, SceneLighting lighting)
+    // clouds: CloudRenderer.Render's image, drawn over the sky.
+    public void Draw(Matrix4x4 viewProjection, SceneLighting lighting, ID3D11ShaderResourceView? clouds = null)
     {
         if (!Matrix4x4.Invert(viewProjection, out var inverse))
             return;
@@ -200,18 +218,21 @@ float4 PSTable(PS_INPUT input) : SV_Target
         {
             // HLSL reads the matrix as it is stored: the same convention as the model shader's mul(Matrix, vector).
             InverseViewProjection = inverse,
-            Zenith = new Vector4(lighting.Zenith, 1f),
+            Zenith = new Vector4(lighting.Zenith, lighting.Grey),
             Horizon = new Vector4(lighting.Horizon, 1f),
             Sun = new Vector4(lighting.SunDirection, lighting.SunDisc),
             Disc = new Vector4(lighting.IsHdr ? 60f : 6f, lighting.IsHdr ? 1f : 0f, lighting.PhysicalSky ? 1f : 0f, lighting.NightLights),
             Tint = new Vector4(lighting.SunTint, 0f),
-            TrueSun = new Vector4(lighting.Sun, 0f),
+            TrueSun = new Vector4(lighting.Sun, clouds is null ? 0f : 1f),
         });
         SetStates(_pixelShader);
         if (lighting.PhysicalSky)
             _context.PSSetShaderResource(0, _tableRead);
+        if (clouds is not null)
+            _context.PSSetShaderResource(1, clouds);
         _context.Draw(3, 0);
         _context.PSUnsetShaderResource(0);
+        _context.PSUnsetShaderResource(1);
     }
 
     private void Write(Constants constants)

@@ -54,6 +54,7 @@ public class RenderTests(SoftwareDevice gpu)
         new WaterRenderer(gpu.Device, gpu.Context).Dispose();
         new SceneImage(gpu.Device, gpu.Context).Dispose();
         new ShadowMaps(gpu.Device, gpu.Context).Dispose();
+        new CloudRenderer(gpu.Device, gpu.Context).Dispose();
 
         var imgui = ImGui.CreateContext();
         try
@@ -196,6 +197,37 @@ public class RenderTests(SoftwareDevice gpu)
         Assert.True(pick.ReadDepth(Size / 2, Size / 2) > 0f);
         Assert.Equal(0f, pick.ReadDepth(1, 1));
         Assert.Equal(0u, pick.Read(-1, Size)); // Outside the image.
+    }
+
+    [Fact]
+    public void Clouds_CoverTheSkyButNotTheGround()
+    {
+        using var sky = new SkyRenderer(gpu.Device, gpu.Context);
+        using var clouds = new CloudRenderer(gpu.Device, gpu.Context);
+        using var target = new RenderTarget(gpu.Device, gpu.Context);
+        var lighting = SceneLighting.ForHour(13f, 0f);
+        var weather = CloudWeather.For(Weather.Overcast);
+
+        byte[] Draw(float pitch, bool withClouds)
+        {
+            var camera = new Camera { Position = new Vector3(0f, 0f, 50f), Pitch = pitch };
+            var viewProjection = camera.ViewProjection(1f);
+            ID3D11ShaderResourceView? view = null;
+            if (withClouds)
+            {
+                var waited = Stopwatch.StartNew();
+                while ((view = clouds.Render(viewProjection, camera.Position, lighting, weather, Size, Size, 1, moving: false)) is null
+                    && waited.Elapsed < TimeSpan.FromSeconds(30))
+                    Thread.Sleep(10);
+                Assert.NotNull(view);
+            }
+            target.Begin(Size, Size, Vector4.One);
+            sky.Draw(viewProjection, lighting, view);
+            return target.ReadPixels();
+        }
+
+        Assert.NotEqual(Draw(1f, withClouds: false), Draw(1f, withClouds: true));
+        Assert.Equal(Draw(-1f, withClouds: false), Draw(-1f, withClouds: true));
     }
 
     [Fact]
