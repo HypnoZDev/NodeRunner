@@ -540,7 +540,7 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
 
                 Widgets.Property(L("Météo"), L("Les météos du jeu : quantité et forme des nuages, force du soleil, ciel plus gris et brouillard plus proche par mauvais temps. Les nuages se règlent dans Qualité > Nuages."));
                 ImGui.SetNextItemWidth(-1f);
-                if (WeatherChoice.Combo("##weather", settings))
+                if (WeatherChoice.Combo("##weather", settings, state.ActiveGame))
                     state.SaveSettings();
                 Widgets.EndProperties();
             }

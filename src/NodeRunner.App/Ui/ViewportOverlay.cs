@@ -277,11 +277,12 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
 
         ImGui.Separator();
         // A side menu: a drop-down list would open over this menu's own items.
-        if (OverlayStyle.BeginSubmenu($"{L("Météo")} : {WeatherChoice.Name(settings.Weather)}###weather"))
+        var shownWeather = WeatherChoice.Shown(settings, state.ActiveGame);
+        if (OverlayStyle.BeginSubmenu($"{L("Météo")} : {WeatherChoice.Name(shownWeather)}###weather"))
         {
-            foreach (var (weather, label) in WeatherChoice.All)
+            foreach (var (weather, label) in WeatherChoice.For(state.ActiveGame))
             {
-                if (ImGui.MenuItem(label, null, settings.Weather == weather))
+                if (ImGui.MenuItem(label, null, shownWeather == weather))
                 {
                     settings.Weather = weather;
                     state.SaveSettings();

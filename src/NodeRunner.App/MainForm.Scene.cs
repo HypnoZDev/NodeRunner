@@ -73,12 +73,14 @@ internal sealed unsafe partial class MainForm
 
         // Sky behind everything, then opaque models, then the translucent navmesh, then lines.
         var settings = _state.Settings;
+        // A weather the game does not have (snow outside GTA V...) shows as good weather.
+        var shownWeather = Ui.WeatherChoice.Shown(settings, _state.ActiveGame);
         float fogDistance = settings.Fog ? settings.FogDistance : 0f;
         var lighting = SceneLighting.ForHour(settings.TimeOfDay, fogDistance);
         if (_state.IsClassic)
         {
             lighting = _classicLighting.Apply(lighting, _state.Classic.TimeCycle, settings.TimeOfDay, camera.Position,
-                ClassicLighting.SkyOf(settings.Weather));
+                ClassicLighting.SkyOf(shownWeather));
             fogDistance = lighting.FogDistance;
         }
         // The scene in an image of its own (HDR light, fewer pixels) when the settings ask for it, else straight into
@@ -94,12 +96,12 @@ internal sealed unsafe partial class MainForm
         }
         // The clouds are lit by the sun above them; the weather then dims the light on the ground (the first trilogy
         // keeps the light of its own weather files).
-        var weather = CloudWeather.For(settings.Weather);
+        var weather = CloudWeather.For(shownWeather);
         var cloudLighting = lighting;
         if (!_state.IsClassic)
         {
             lighting = lighting.WithWeather(weather);
-            if (settings.Weather == Weather.Thunder)
+            if (shownWeather == Weather.Thunder)
             {
                 float flash = Lightning.Flash(_clock.Elapsed.TotalSeconds);
                 lighting = lighting.WithFlash(flash);
@@ -244,11 +246,11 @@ internal sealed unsafe partial class MainForm
             _nightLights!.DrawCoronas(image, camera, sceneViewProjection, nightLights, fogDistance);
         }
         // Rain or snow falling around the camera (the first trilogy keeps its own weathers).
-        if (!_state.IsClassic && settings.Weather is Weather.Rain or Weather.Thunder or Weather.Snow)
+        if (!_state.IsClassic && shownWeather is Weather.Rain or Weather.Thunder or Weather.Snow)
         {
             image?.Bind(normals: false);
             _precipitation ??= new PrecipitationRenderer(_graphics!.Device, _graphics.Context);
-            _precipitation.Draw(settings.Weather, weather, lighting, camera, sceneViewProjection, image?.Height ?? scene.Height,
+            _precipitation.Draw(shownWeather, weather, lighting, camera, sceneViewProjection, image?.Height ?? scene.Height,
                 settings.CloudQuality <= 1 ? 0.5f : 1f);
         }
         if (image is not null && imageOptions.Hdr && settings.SunRays && settings.ShowSky && lighting.Sun.Z > -0.02f)
