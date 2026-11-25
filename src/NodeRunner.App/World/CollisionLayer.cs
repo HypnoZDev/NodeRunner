@@ -310,6 +310,7 @@ internal sealed class CollisionLayer : IDisposable
             Indices = mesh.Indices,
             Materials = mesh.Materials,
             Polygons = mesh.Polygons,
+            Flags = mesh.Flags,
         };
     }
 
@@ -390,7 +391,44 @@ internal sealed class CollisionLayer : IDisposable
         return _materials = result;
     }
 
-    private static readonly Vector4 SelectionColor = new(1f, 0.62f, 0.1f, 0.55f);
+    private Dictionary<CollisionPolygon, (ushort Shown, ushort Game)>? _flags;
+    private (int Selection, int Shown) _flagsVersion = (-1, -1);
+
+    // Options (CollisionFlags) of the given loaded polygons: as shown (with the hand changes) and the game's own.
+    public Dictionary<CollisionPolygon, (ushort Shown, ushort Game)> FlagsOf(IReadOnlySet<CollisionPolygon> polygons, int selectionVersion)
+    {
+        if (_flags is not null && _flagsVersion == (selectionVersion, _shownVersion))
+            return _flags;
+        var result = new Dictionary<CollisionPolygon, (ushort Shown, ushort Game)>();
+        var byPath = polygons.GroupBy(p => p.Path).ToDictionary(g => g.Key, g => g.Select(p => p.Polygon).ToHashSet());
+        foreach (var (file, meshes) in _loaded)
+        {
+            if (meshes.Shown is not { } shown || !byPath.TryGetValue(file.Path, out var wanted))
+                continue;
+            var game = new Dictionary<int, ushort>();
+            if (meshes.Mesh is { } original)
+            {
+                for (int t = 0; t < original.TriangleCount && t < original.Polygons.Count; t++)
+                {
+                    if (wanted.Contains(original.Polygons[t]))
+                        game.TryAdd(original.Polygons[t], original.FlagsOf(t));
+                }
+            }
+            for (int t = 0; t < shown.TriangleCount; t++)
+            {
+                int polygon = shown.Polygons[t];
+                if (wanted.Contains(polygon))
+                {
+                    ushort flags = shown.FlagsOf(t);
+                    result.TryAdd(new CollisionPolygon(file.Path, polygon), (flags, game.GetValueOrDefault(polygon, flags)));
+                }
+            }
+        }
+        _flagsVersion = (selectionVersion, _shownVersion);
+        return _flags = result;
+    }
+
+    private static readonly Vector4 SelectionColor =new(1f, 0.62f, 0.1f, 0.55f);
     private static readonly Vector4 SelectionEdgeColor = new(1f, 0.85f, 0.3f, 1f);
     private object? _selectionShown;
     private int _selectionVersion = -1;

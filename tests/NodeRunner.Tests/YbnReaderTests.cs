@@ -26,6 +26,22 @@ public class YbnReaderTests
     }
 
     [Fact]
+    public void Flags_AreReadAndChangedPerPolygon()
+    {
+        var source = Build();
+        source[Materials + 3] = 0x02; // the first material entry (polygons 0 and 2): not climbable
+        var mesh = YbnReader.Read(source)!;
+        Assert.Equal([2, 0, 2], mesh.Flags.Take(3).Select(f => (int)f));
+
+        var flags = new Dictionary<int, ushort> { [2] = (ushort)(NodeRunner.Data.Collisions.CollisionFlags.ShootThrough | NodeRunner.Data.Collisions.CollisionFlags.NoDecal) };
+        var (data, _) = YbnReader.Edit(source, 0, new HashSet<int>(), new Dictionary<int, byte>(), flags: flags);
+        var back = YbnReader.Read(data)!;
+
+        Assert.Equal([2, 0, 0x108], back.Flags.Take(3).Select(f => (int)f));
+        Assert.Equal([7, 9, 7], back.Materials.Take(3));
+    }
+
+    [Fact]
     public void RemovePolygons_KeepsTheOthersWithAValidTree()
     {
         var data = YbnReader.RemovePolygons(Build(), new HashSet<int> { 1 });

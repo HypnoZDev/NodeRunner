@@ -90,6 +90,17 @@ internal sealed partial class AppState
             Apply(new CollisionMoveEdit(CollisionEdits, description, moves));
     }
 
+    // Switches one option (CollisionFlags) on or off for the selected polygons. flags: their options as shown and the
+    // game's own (CollisionLayer.FlagsOf).
+    public void SetSelectedCollisionFlag(IReadOnlyDictionary<CollisionPolygon, (ushort Shown, ushort Game)> flags, ushort flag, bool on, string name)
+    {
+        var polygons = _selectedCollision.Where(flags.ContainsKey).Select(p => (p, flags[p].Shown, flags[p].Game)).ToList();
+        if (polygons.Count == 0)
+            return;
+        Apply(CollisionFlagsEdit.Switch(CollisionEdits, polygons, flag, on, name));
+        CollisionSelectionVersion++;
+    }
+
     public void SetSelectedCollisionMaterial(byte material)
     {
         if (_selectedCollision.Count == 0 || World.Collisions is not { } catalog)

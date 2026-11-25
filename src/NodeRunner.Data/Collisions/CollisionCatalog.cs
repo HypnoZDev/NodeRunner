@@ -162,10 +162,10 @@ public sealed class CollisionCatalog
     public byte[]? RemovePolygons(CollisionFile file, IReadOnlySet<int> polygons) =>
         (_reader as ICollisionWriter ?? throw new NotSupportedException()).RemovePolygons(file.Path, polygons);
 
-    // The file with new materials, without removed polygons, with openings cut through it.
+    // The file with new materials and options, without removed polygons, with openings cut through it.
     public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
-        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Models.Opening>? openings = null) =>
-        (_reader as ICollisionWriter ?? throw new NotSupportedException()).Edit(path, removed, materials, moves, openings);
+        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Models.Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null) =>
+        (_reader as ICollisionWriter ?? throw new NotSupportedException()).Edit(path, removed, materials, moves, openings, flags);
 
     public CollisionMesh? ReadMoved(string path, IReadOnlyList<CollisionMove> moves) =>
         (_reader as ICollisionWriter ?? throw new NotSupportedException()).ReadMoved(path, moves);

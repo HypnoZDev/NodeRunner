@@ -93,6 +93,9 @@ internal sealed class CollisionProperties(AppState state, CollisionLayer layer)
             }
         }
 
+        if (Widgets.Section(L("Options de la surface"), "collision_flags"))
+            DrawFlags(layer.FlagsOf(selection, state.CollisionSelectionVersion));
+
         ImGui.Dummy(new Vector2(0, 4));
         if (Widgets.Button(L($"{Icons.Trash}  Supprimer la sélection (Suppr)"), L("Retire ces surfaces de la collision : on passe au travers en jeu.")))
             state.DeleteSelectedCollision();
@@ -100,4 +103,49 @@ internal sealed class CollisionProperties(AppState state, CollisionLayer layer)
         if (Widgets.Button(L("Désélectionner")))
             state.SelectCollision([], CollisionSelectMode.Replace);
     }
+
+    // One box per option (CollisionFlags), in the game's order; ticked when every selected surface has it, shown as
+    // partly ticked when only some have it.
+    private void DrawFlags(Dictionary<Editor.CollisionPolygon, (ushort Shown, ushort Game)> flags)
+    {
+        Widgets.Hint(L("Règles du jeu pour ces surfaces, en plus du matériau. Survole une option pour son effet."), wrap: true);
+        if (flags.Count == 0)
+            return;
+        var options = Options();
+        for (int i = 0; i < CollisionFlags.All.Count; i++)
+        {
+            var (bit, gameName) = CollisionFlags.All[i];
+            var (label, effect) = options[i];
+            int with = flags.Values.Count(f => (f.Shown & bit) != 0);
+            bool all = with == flags.Count;
+            bool some = with > 0 && !all;
+            bool ticked = all;
+            string text = some ? L($"{label} (certaines)") : label;
+            if (ImGui.Checkbox($"{text}##flag{i}", ref ticked))
+                state.SetSelectedCollisionFlag(flags, bit, !all, label);
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
+                ImGui.SetTooltip($"{effect}\n{gameName}");
+        }
+    }
+
+    // Name and effect of each option, in the order of CollisionFlags.All.
+    private static (string Label, string Effect)[] Options() =>
+    [
+        (L("Escalier"), L("Les personnages montent et descendent cette surface comme des marches.")),
+        (L("Pas d'escalade"), L("Le joueur ne peut pas grimper dessus.")),
+        (L("On voit à travers"), L("Les personnages voient à travers (vitres, grillages).")),
+        (L("On tire à travers"), L("Les balles la traversent (feuillage, grillage fin).")),
+        (L("Pas un abri"), L("Ne sert pas de couverture pendant les fusillades.")),
+        (L("Chemin praticable"), L("Marquée comme chemin pour les piétons.")),
+        (L("La caméra traverse"), L("La caméra ne bute pas contre (rambardes, grilles).")),
+        (L("Impacts traversants"), L("Les impacts s'affichent mais la balle continue (bâches, vitres fines).")),
+        (L("Pas de traces"), L("Ni traces d'impact ni sang dessus.")),
+        (L("Hors navmesh"), L("Ignorée quand le jeu calcule où les personnages peuvent marcher.")),
+        (L("Pas de ragdoll"), L("Les corps inertes ne la heurtent pas.")),
+        (L("Roue de véhicule"), L("Réservé aux roues des véhicules.")),
+        (L("Pas de particules"), L("Ni poussière, ni étincelles, ni éclaboussures aux impacts.")),
+        (L("Trop pentu pour le joueur"), L("Le joueur glisse dessus au lieu d'y marcher.")),
+        (L("Pas d'apparition en ligne"), L("Personne n'apparaît dessus en multijoueur.")),
+        (L("La caméra traverse (sans recul)"), L("La caméra passe au travers sans se rapprocher du joueur.")),
+    ];
 }

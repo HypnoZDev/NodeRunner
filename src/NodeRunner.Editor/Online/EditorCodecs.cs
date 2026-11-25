@@ -337,6 +337,33 @@ internal sealed class CollisionCodec : EditCodec<CollisionEdit>
     }
 }
 
+internal sealed class CollisionFlagsCodec : EditCodec<CollisionFlagsEdit>
+{
+    public override string Tag => "collision-flags";
+
+    protected override void Write(CollisionFlagsEdit edit, EditWriter w) =>
+        w.WriteList(edit.After, a =>
+        {
+            w.Write(a.Polygon.Path);
+            w.Write(a.Polygon.Polygon);
+            w.Write(a.Flags.HasValue);
+            w.Write((ushort)(a.Flags ?? 0));
+        });
+
+    public override IEdit Apply(EditReader r, string description)
+    {
+        var after = r.ReadList(() =>
+        {
+            var polygon = new CollisionPolygon(r.ReadString(), r.ReadInt());
+            bool has = r.ReadBool();
+            ushort flags = r.ReadUShort();
+            return (polygon, has ? flags : (ushort?)null);
+        });
+        var edits = r.Context.Collisions ?? throw new InvalidOperationException("No collision edits here.");
+        return CollisionFlagsEdit.ToStates(edits, description, after);
+    }
+}
+
 internal sealed class CollisionMoveCodec : EditCodec<CollisionMoveEdit>
 {
     public override string Tag => "collision-move";

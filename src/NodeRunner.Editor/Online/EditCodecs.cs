@@ -73,6 +73,7 @@ public sealed class EditCodecs
         .Add(new DeleteCodec())
         .Add(new MergeCodec())
         .Add(new CollisionCodec())
+        .Add(new CollisionFlagsCodec())
         .Add(new CollisionMoveCodec())
         .Add(new CollisionOpeningCodec())
         .Add(new PathNodeMoveCodec())

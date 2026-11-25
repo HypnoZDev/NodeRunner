@@ -875,6 +875,8 @@ public static partial class English
         ("supprimer une surface de collision", "delete a collision surface"),
         ("supprimer {0} surfaces de collision", "delete {0} collision surfaces"),
         ("matériau de collision : {0}", "collision material: {0}"),
+        ("collision : {0} activé", "collision: {0} on"),
+        ("collision : {0} désactivé", "collision: {0} off"),
         ("déplacer des surfaces de collision", "move collision surfaces"),
         ("tourner des surfaces de collision", "turn collision surfaces"),
         ("1 surface de collision déplacée avec l'objet", "1 collision surface moved with the object"),

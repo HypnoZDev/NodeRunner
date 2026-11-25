@@ -13,10 +13,14 @@ public sealed class CollisionMeshBuilder
     private readonly List<int> _indices = new();
     private readonly List<byte> _materials = new();
     private readonly List<int> _polygons = new();
+    private readonly List<ushort> _flags = new();
 
     public int TriangleCount => _materials.Count;
 
     public int Polygon { get; set; } = -1;
+
+    // Options of the surfaces added next (CollisionFlags).
+    public ushort Flags { get; set; }
 
     public void AddTriangle(Vector3 a, Vector3 b, Vector3 c, byte material)
     {
@@ -29,6 +33,7 @@ public sealed class CollisionMeshBuilder
         _indices.Add(first + 2);
         _materials.Add(material);
         _polygons.Add(Polygon);
+        _flags.Add(Flags);
     }
 
     // A box stored as the game does: four of its corners, each pair on the diagonal of a face (every other corner).
@@ -142,6 +147,7 @@ public sealed class CollisionMeshBuilder
             Indices = _indices.ToArray(),
             Materials = _materials.ToArray(),
             Polygons = _polygons.ToArray(),
+            Flags = _flags.ToArray(),
         };
     }
 

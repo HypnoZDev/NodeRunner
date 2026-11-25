@@ -51,6 +51,22 @@ public sealed class CollisionEditsTests
     }
 
     [Fact]
+    public void Flags_are_applied_and_saved()
+    {
+        var edits = new CollisionEdits();
+        edits.SetFlags("a.ybn", 1, CollisionFlags.Stairs);
+        edits.SetFlags("b.ybn", 0, CollisionFlags.NoDecal);
+        edits.SetFlags("b.ybn", 0, null);
+
+        var back = CollisionEdits.FromJson(edits.ToJson());
+        var mesh = back.Apply("a.ybn", Mesh());
+
+        Assert.Null(back.For("b.ybn"));
+        Assert.Equal(CollisionFlags.Stairs, back.FlagsOf("a.ybn", 1));
+        Assert.Equal([0, CollisionFlags.Stairs, 0], mesh.Flags);
+    }
+
+    [Fact]
     public void Moves_are_saved_and_move_the_shared_corners()
     {
         var edits = new CollisionEdits();

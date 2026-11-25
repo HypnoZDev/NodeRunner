@@ -107,12 +107,12 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     }
 
     public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
-        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Opening>? openings = null)
+        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null)
     {
         if (_files.ReadFile(path) is not { } data)
             return null;
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
-        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves, openings);
+        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves, openings, flags);
         return ResourceFile.Write(header with { SystemFlags = systemFlags }, content);
     }
 
@@ -120,14 +120,16 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     // (file space); when it grew, its pages become a single page large enough (offsets are unchanged: pages follow each
     // other).
     public static (byte[] Content, uint SystemFlags) Edit(byte[] data, uint systemFlags, IReadOnlySet<int> removed,
-        IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null, IReadOnlyList<Opening>? openings = null)
+        IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null, IReadOnlyList<Opening>? openings = null,
+        IReadOnlyDictionary<int, ushort>? flags = null)
     {
         var copy = (byte[])data.Clone();
-        if (materials.Count > 0)
+        flags ??= new Dictionary<int, ushort>();
+        if (materials.Count > 0 || flags.Count > 0)
         {
             var file = new BoundsFile(copy);
             int polygon = 0;
-            file.SetMaterials(0, materials, ref polygon);
+            file.SetMaterials(0, materials, flags, ref polygon);
             copy = file.WithAppended();
         }
         if (removed.Count > 0 || moves is { Count: > 0 })
@@ -307,11 +309,13 @@ internal sealed partial class BoundsFile(byte[] data)
             (index >= 0 && index < vertexCount ? Vertex(vertices, index) * quantum : Vector3.Zero) + center, transform);
 
         var materials = Materials(o, polygonCount);
+        var flags = MaterialFlags(o, polygonCount);
         for (int i = 0; i < polygonCount; i++)
         {
             builder.Polygon = first + i;
             int p = polygons + i * 16;
             byte material = materials(i);
+            builder.Flags = flags(i);
             switch (U8(p) & 7)
             {
                 case 0: // triangle: area, 3 vertices (high bit = flag), 3 neighbours
@@ -332,12 +336,27 @@ internal sealed partial class BoundsFile(byte[] data)
             }
         }
         builder.Polygon = -1;
+        builder.Flags = 0;
     }
 
     private Vector3 Vertex(int vertices, int index)
     {
         int v = vertices + index * 6;
         return new Vector3(I16(v), I16(v + 2), I16(v + 4));
+    }
+
+    // Options of each polygon's surface: bytes 3 and 4 of its material entry.
+    private Func<int, ushort> MaterialFlags(int o, int polygonCount)
+    {
+        int materialCount = U8(o + MaterialsCount);
+        int materials = Resolve(U64(o + MaterialsPointer), Math.Max(materialCount, 1), 8);
+        int indices = Resolve(U64(o + PolygonMaterialsPointer), polygonCount, 1);
+        return i =>
+        {
+            int slot = indices >= 0 ? _data[indices + i] : 0;
+            return materials >= 0 && slot < materialCount
+                ? (ushort)(_data[materials + slot * 8 + 3] | _data[materials + slot * 8 + 4] << 8) : (ushort)0;
+        };
     }
 
     private Func<int, byte> Materials(int o, int polygonCount)

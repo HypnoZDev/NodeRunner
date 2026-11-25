@@ -15,6 +15,11 @@ public sealed class CollisionMesh
 
     public required IReadOnlyList<byte> Materials { get; init; }
 
+    // Options of each triangle's surface (CollisionFlags); empty when the file gives none.
+    public IReadOnlyList<ushort> Flags { get; init; } = [];
+
+    public ushort FlagsOf(int triangle) => triangle < Flags.Count ? Flags[triangle] : (ushort)0;
+
     // Polygon of the file each triangle comes from, numbered in reading order across the file's geometries (a box
     // polygon gives several triangles), or -1 for a lone primitive.
     public IReadOnlyList<int> Polygons { get; init; } = [];

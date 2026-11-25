@@ -228,6 +228,10 @@ public class OnlineEditTests
 
         Share(Apply(CollisionEdit.Remove(a.Collisions, [new("x.ybn", 3), new("x.ybn", 4)])));
         Share(Apply(CollisionEdit.SetMaterial(a.Collisions, [new("y.ybn", 1)], 7, "herbe")));
+        var flagsEdit = CollisionFlagsEdit.Switch(a.Collisions, [(new("y.ybn", 1), CollisionFlags.NotClimbable, CollisionFlags.NotClimbable),
+            (new("y.ybn", 2), (ushort)0, (ushort)0)], CollisionFlags.ShootThrough, true, "on tire à travers");
+        flagsEdit.Redo();
+        Share(flagsEdit);
         var collisionMove = new CollisionMoveEdit(a.Collisions, "déplacer des surfaces de collision",
             [("y.ybn", CollisionMove.Of([1, 2], Matrix4x4.CreateRotationZ(0.5f) * Matrix4x4.CreateTranslation(1, 2, 3)))]);
         collisionMove.Redo();

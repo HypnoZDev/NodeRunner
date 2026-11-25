@@ -67,6 +67,9 @@ public sealed class CollisionFileEdit
     // Polygon -> material index of materials.dat.
     public Dictionary<int, byte> Materials { get; init; } = [];
 
+    // Polygon -> options of its surface (CollisionFlags).
+    public Dictionary<int, ushort> Flags { get; init; } = [];
+
     // In the order they were made.
     public List<CollisionMove> Moves { get; init; } = [];
 
@@ -74,9 +77,9 @@ public sealed class CollisionFileEdit
     public List<CollisionOpening> Openings { get; init; } = [];
 
     [JsonIgnore]
-    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Moves.Count == 0 && Openings.Count == 0;
+    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Flags.Count == 0 && Moves.Count == 0 && Openings.Count == 0;
 
-    public CollisionFileEdit Copy() => new() { Removed = [.. Removed], Materials = new(Materials), Moves = [.. Moves], Openings = [.. Openings] };
+    public CollisionFileEdit Copy() => new() { Removed = [.. Removed], Materials = new(Materials), Flags = new(Flags), Moves = [.. Moves], Openings = [.. Openings] };
 
     // The mesh as the game will see it: polygons moved, removed ones left out, new materials applied, openings cut (the
     // pieces left around them have no polygon number). withMoves false: the mesh is already moved (read from the moved
@@ -99,6 +102,7 @@ public sealed class CollisionFileEdit
         var indices = new List<int>(mesh.Indices.Count + cut.Indices.Count);
         var materials = new List<byte>(mesh.Materials.Count + cut.Indices.Count / 3);
         var polygons = new List<int>(mesh.Polygons.Count + cut.Indices.Count / 3);
+        var flags = new List<ushort>(mesh.TriangleCount + cut.Indices.Count / 3);
         bool numbered = mesh.Polygons.Count == mesh.TriangleCount;
         for (int t = 0; t < mesh.TriangleCount; t++)
         {
@@ -106,6 +110,7 @@ public sealed class CollisionFileEdit
                 continue;
             indices.AddRange([mesh.Indices[t * 3], mesh.Indices[t * 3 + 1], mesh.Indices[t * 3 + 2]]);
             materials.Add(mesh.Materials[t]);
+            flags.Add(mesh.FlagsOf(t));
             if (numbered)
                 polygons.Add(mesh.Polygons[t]);
         }
@@ -119,6 +124,7 @@ public sealed class CollisionFileEdit
         {
             indices.AddRange([first + cut.Indices[k], first + cut.Indices[k + 1], first + cut.Indices[k + 2]]);
             materials.Add(mesh.Materials[cut.Vertices[cut.Indices[k]].Triangle]);
+            flags.Add(mesh.FlagsOf(cut.Vertices[cut.Indices[k]].Triangle));
             if (numbered)
                 polygons.Add(-1);
         }
@@ -130,18 +136,20 @@ public sealed class CollisionFileEdit
             Indices = indices,
             Materials = materials,
             Polygons = polygons,
+            Flags = flags,
         };
     }
 
     private CollisionMesh ApplyChanges(CollisionMesh mesh, bool withMoves)
     {
         bool move = withMoves && Moves.Count > 0;
-        if ((Removed.Count == 0 && Materials.Count == 0 && !move) || mesh.Polygons.Count != mesh.TriangleCount)
+        if ((Removed.Count == 0 && Materials.Count == 0 && Flags.Count == 0 && !move) || mesh.Polygons.Count != mesh.TriangleCount)
             return mesh;
         var vertices = move ? CollisionMove.MoveVertices(mesh.Vertices, mesh.Indices, mesh.Polygons, Moves) : mesh.Vertices;
         var indices = new List<int>(mesh.Indices.Count);
         var materials = new List<byte>(mesh.TriangleCount);
         var polygons = new List<int>(mesh.TriangleCount);
+        var flags = new List<ushort>(mesh.TriangleCount);
         for (int t = 0; t < mesh.TriangleCount; t++)
         {
             int polygon = mesh.Polygons[t];
@@ -151,6 +159,7 @@ public sealed class CollisionFileEdit
             indices.Add(mesh.Indices[t * 3 + 1]);
             indices.Add(mesh.Indices[t * 3 + 2]);
             materials.Add(polygon >= 0 && Materials.TryGetValue(polygon, out byte m) ? m : mesh.Materials[t]);
+            flags.Add(polygon >= 0 && Flags.TryGetValue(polygon, out ushort f) ? f : mesh.FlagsOf(t));
             polygons.Add(polygon);
         }
         var (min, max) = (mesh.BoundsMin, mesh.BoundsMax);
@@ -170,6 +179,7 @@ public sealed class CollisionFileEdit
             Indices = indices,
             Materials = materials,
             Polygons = polygons,
+            Flags = flags,
         };
     }
 }
@@ -211,6 +221,20 @@ public sealed class CollisionEdits
             edit.Materials.Remove(polygon);
         Changed(path);
     }
+
+    // flags null = back to the game's options.
+    public void SetFlags(string path, int polygon, ushort? flags)
+    {
+        var edit = Get(path);
+        if (flags is { } f)
+            edit.Flags[polygon] = f;
+        else
+            edit.Flags.Remove(polygon);
+        Changed(path);
+    }
+
+    public ushort? FlagsOf(string path, int polygon) =>
+        _files.TryGetValue(path, out var edit) && edit.Flags.TryGetValue(polygon, out ushort f) ? f : null;
 
     public void AddMove(string path, CollisionMove move)
     {
