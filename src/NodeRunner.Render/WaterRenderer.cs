@@ -14,7 +14,8 @@ namespace NodeRunner.Render;
 // Water surfaces. The swell of the open sea follows the game's water file: smaller in its calm zones (harbours,
 // marinas), with waves rolling in towards the shore in its wave zones. With 3D waves, the open water is a grid around
 // the camera whose points move with the waves (kept to where the map has open water); the other surfaces (lakes,
-// rivers, pools) stay flat, their look computed per pixel.
+// rivers, pools) stay flat, their look computed per pixel. With the game's patterns (GTA V), its swell, ripples and
+// foam are used; otherwise sums of simple waves.
 public sealed unsafe class WaterRenderer : IDisposable
 {
     private const string ShaderSource = @"
@@ -37,6 +38,7 @@ cbuffer Constants : register(b0)
     float4 ColorArea;    // xy: north-west corner of the game's water colour image, zw: 1 / its size (m, y negative); z = 0: none.
     float4 IslandArea;   // The same for Cayo Perico's image.
     float4 Caustics;     // x = 1: light pattern on the bottom available.
+    float4 Patterns;     // x = 1: the game's wave patterns (swell, waves along the shore, ripples, foam) available.
 };
 // Water meshes of the models (pools, fountains, streams): placement and wave strength of the model drawn.
 cbuffer MeshConstants : register(b1)
@@ -51,6 +53,10 @@ Texture2D<float> WaterMask : register(t3);
 Texture2D WaterColors : register(t4);
 Texture2D IslandColors : register(t5);
 Texture2D<float> CausticPattern : register(t6);
+Texture2D<float> OceanWaves : register(t7);
+Texture2D<float> ShoreWaves : register(t8);
+Texture2D<float2> RipplePattern : register(t9);
+Texture2D<float> FoamPattern : register(t10);
 SamplerState LinearClamp : register(s0);
 SamplerState LinearWrap : register(s1);
 
@@ -102,11 +108,76 @@ void AddWave(float2 p, float2 d, float length, float height, float steepness, in
     ty += float3(-d.x * d.y * steepness * s, -d.y * d.y * steepness * s, d.y * k * height * c);
 }
 
+// Moves a pattern a whole number of times per hour (cycles), so the hourly wrap of the time does not show.
+float Drift(float cycles)
+{
+    return CameraTime.w * cycles / 3600.0f;
+}
+
+// Mip level of a pattern of 128 texels over tile metres, seen with spacing metres between samples.
+float PatternLevel(float tile, float spacing)
+{
+    return log2(max(spacing * 128.0f / tile, 1.0f));
+}
+
+// Height of the open sea from the game's swell pattern: three sizes drifting different ways, so its shape keeps
+// changing. Direction (degrees), tile (m), cycles per hour, height (m).
+static const float4 SwellLayers[3] =
+{
+    float4(20.0f, 150.0f, 96.0f, 0.85f), float4(62.0f, 61.0f, 150.0f, 0.32f), float4(-28.0f, 23.0f, 250.0f, 0.12f),
+};
+
+float SwellHeight(float2 p, float spacing)
+{
+    float h = 0.0f;
+    [unroll] for (int i = 0; i < 3; i++)
+    {
+        float angle = radians(SwellLayers[i].x);
+        float2 d = float2(cos(angle), sin(angle));
+        float2 uv = float2(dot(p, d), dot(p, float2(-d.y, d.x))) / SwellLayers[i].y - float2(Drift(SwellLayers[i].z), 0.0f);
+        h += (OceanWaves.SampleLevel(LinearWrap, uv, PatternLevel(SwellLayers[i].y, spacing)) - 0.5f) * 2.0f * SwellLayers[i].w;
+    }
+    return h;
+}
+
+// How big the waves rolling in are along their crest, from the game's pattern (0.75 to 1.5): they break unevenly.
+float ShoreStrength(float2 p, float2 direction, float spacing)
+{
+    float2 side = float2(-direction.y, direction.x);
+    float2 uv = float2(dot(p, side) / 70.0f, dot(p, direction) / 350.0f + Drift(12.0f));
+    float s = ShoreWaves.SampleLevel(LinearWrap, uv, PatternLevel(70.0f, spacing));
+    return 0.75f + 0.75f * saturate((s - 0.42f) / 0.58f);
+}
+
 // The open water's swell at p: waves of the open sea (smaller in calm zones) and waves rolling in towards the shore.
 // Waves too small for spacing (m between the points that show them) fade out instead of flickering. shore: crest of
 // the waves rolling in (0 to 1), for their foam.
 void Swell(float2 p, WaveState w, float strength, float spacing, out float3 offset, out float3 tx, out float3 ty, out float shore)
 {
+    if (Patterns.x > 0.5f)
+    {
+        float sea = strength * w.calm;
+        float e = max(spacing, 0.25f);
+        float h = SwellHeight(p, spacing);
+        float2 slope = float2(SwellHeight(p + float2(e, 0.0f), spacing) - h, SwellHeight(p + float2(0.0f, e), spacing) - h) / e;
+        offset = float3(0.0f, 0.0f, h * sea);
+        tx = float3(0.0f, 0.0f, slope.x * sea);
+        ty = float3(0.0f, 0.0f, slope.y * sea);
+        shore = 0.0f;
+        float rolling = strength * w.amplitude;
+        if (rolling > 0.01f)
+        {
+            rolling *= ShoreStrength(p, w.direction, spacing);
+            float2 side = float2(-w.direction.y, w.direction.x);
+            float fade1 = saturate(22.0f / (4.0f * spacing) - 0.5f), fade2 = saturate(12.0f / (4.0f * spacing) - 0.5f);
+            float sharp = saturate(rolling);
+            AddWave(p, w.direction, 22.0f, 0.28f * rolling * fade1, 0.45f * sharp * fade1, offset, tx, ty);
+            AddWave(p, normalize(w.direction + side * 0.25f), 12.0f, 0.1f * rolling * fade2, 0.3f * sharp * fade2, offset, tx, ty);
+            float k = 6.2831853f / 22.0f;
+            shore = saturate(sin(k * dot(w.direction, p) - sqrt(9.81f * k) * CameraTime.w) * 4.0f - 3.0f) * saturate(rolling - 0.3f);
+        }
+        return;
+    }
     // Direction (degrees), length (m), height (m), steepness.
     static const float4 waves[6] =
     {
@@ -364,9 +435,23 @@ float4 PS(PS_INPUT input) : SV_Target
         squeeze = dx.x * dy.y - dx.y * dy.x; // Below 1 on the crests, where the surface is pressed together.
         height = offset.z;
         calm = lerp(0.35f, 1.0f, w.calm);
+        // The game's swell only moves up and down: its highest crests whiten instead.
+        if (Patterns.x > 0.5f)
+            squeeze -= saturate((height - 0.4f) / 0.4f) * 0.6f;
     }
-    // Over the swell, only the short ripples (the long ones are part of it).
-    float2 ripples = WaveSlope(input.rest.xy, CameraTime.w, footprint, input.kind.y > 0.5f ? 3 : 0) * input.waves * calm;
+    // Over the swell, only the short ripples (the long ones are part of it): the game's ripple pattern at two sizes.
+    float2 ripples;
+    if (Patterns.x > 0.5f)
+    {
+        float2 p = input.rest.xy;
+        float2 a = RipplePattern.SampleLevel(LinearWrap, p / 9.0f + float2(Drift(140.0f), Drift(50.0f)), PatternLevel(9.0f, footprint)) * 2.0f - 1.0f;
+        float2 b = RipplePattern.SampleLevel(LinearWrap, float2(p.y, -p.x) / 3.4f - float2(Drift(230.0f), Drift(-120.0f)), PatternLevel(3.4f, footprint)) * 2.0f - 1.0f;
+        ripples = (a * 0.35f + b * 0.25f) * input.waves * calm;
+    }
+    else
+    {
+        ripples = WaveSlope(input.rest.xy, CameraTime.w, footprint, input.kind.y > 0.5f ? 3 : 0) * input.waves * calm;
+    }
     n = normalize(n + float3(-ripples, 0.0f) * max(n.z, 0.2f));
     float2 slope = -n.xy / max(n.z, 0.2f);
 
@@ -434,7 +519,12 @@ float4 PS(PS_INPUT input) : SV_Target
     float3 glint = SunColor.rgb * (pow(facing, 900.0f) * (2.0f + 10.0f * SunColor.a) + pow(facing, 60.0f) * 0.25f);
 
     // Foam: where the water meets the shore, on the crests pressed together, on the waves rolling in; broken up.
-    float pattern = Noise(input.rest.xy * 0.9f + CameraTime.w * 0.15f) * 0.6f + Noise(input.rest.xy * 3.1f - CameraTime.w * 0.2f) * 0.4f;
+    float pattern;
+    if (Patterns.x > 0.5f)
+        pattern = FoamPattern.SampleLevel(LinearWrap, input.rest.xy / 20.0f + Drift(60.0f), PatternLevel(20.0f * 8.0f, footprint)) * 0.6f
+            + FoamPattern.SampleLevel(LinearWrap, input.rest.xy / 7.5f - Drift(90.0f), PatternLevel(7.5f * 8.0f, footprint)) * 0.4f;
+    else
+        pattern = Noise(input.rest.xy * 0.9f + CameraTime.w * 0.15f) * 0.6f + Noise(input.rest.xy * 3.1f - CameraTime.w * 0.2f) * 0.4f;
     float foam = (1.0f - smoothstep(0.05f, 0.7f, vertical)) * edge * saturate(0.5f + 3.0f * (slope.x + slope.y)) * input.waves;
     foam += saturate((0.6f - squeeze) * 3.0f) * saturate(pattern * 1.6f - 0.5f) * 0.7f;
     // The waves rolling in break into foam only where the water gets shallow.
@@ -499,6 +589,7 @@ float4 PS(PS_INPUT input) : SV_Target
         public Vector4 ColorArea;
         public Vector4 IslandArea;
         public Vector4 Caustics;
+        public Vector4 Patterns;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -563,6 +654,8 @@ float4 PS(PS_INPUT input) : SV_Target
     private (ID3D11Buffer? Buffer, int Count) _allSurfaces, _inlandSurfaces;
     private (ID3D11Texture2D Texture, ID3D11ShaderResourceView View)? _waveTexture, _maskTexture;
     private (ID3D11Texture2D Texture, ID3D11ShaderResourceView View)? _colorTexture, _islandTexture, _causticTexture;
+    // The game's swell, waves along the shore, ripples and foam (all four, or none).
+    private (ID3D11Texture2D Texture, ID3D11ShaderResourceView View)[]? _patterns;
     private Vector4 _waveArea, _maskArea, _oceanBounds, _colorArea, _islandArea;
     private readonly ID3D11SamplerState _linearWrap;
     private float _oceanHeight;
@@ -739,7 +832,60 @@ float4 PS(PS_INPUT input) : SV_Target
         if (water.ColorMaps.Count > 1)
             (_islandTexture, _islandArea) = CreateColorMap(water.ColorMaps[1]);
         if (water.Caustics is { } caustics)
-            _causticTexture = CreateTexture(caustics.Width, caustics.Height, Format.R8_UNorm, caustics.Values, 1);
+            _causticTexture = CreatePattern(caustics);
+        if (water is { OceanWaves: { } ocean, ShoreWaves: { } shore, Ripples: { } ripples, Foam: { } foam })
+            _patterns = [CreatePattern(ocean), CreatePattern(shore), CreatePattern(ripples), CreatePattern(foam)];
+    }
+
+    // A tiling pattern with all its smaller levels (averages of 2 x 2 texels, wrapping round), so it fades out
+    // smoothly far away instead of flickering.
+    private (ID3D11Texture2D, ID3D11ShaderResourceView) CreatePattern(WaterPattern pattern)
+    {
+        int channels = pattern.Channels;
+        var levels = new List<(int Width, int Height, byte[] Values)> { (pattern.Width, pattern.Height, pattern.Values) };
+        while (levels[^1].Width > 1 || levels[^1].Height > 1)
+        {
+            var (w, h, values) = levels[^1];
+            int nw = Math.Max(1, w / 2), nh = Math.Max(1, h / 2);
+            var next = new byte[nw * nh * channels];
+            for (int y = 0; y < nh; y++)
+            {
+                for (int x = 0; x < nw; x++)
+                {
+                    for (int c = 0; c < channels; c++)
+                    {
+                        int sum = 0;
+                        for (int dy = 0; dy < 2; dy++)
+                            for (int dx = 0; dx < 2; dx++)
+                                sum += values[(((y * 2 + dy) % h) * w + (x * 2 + dx) % w) * channels + c];
+                        next[(y * nw + x) * channels + c] = (byte)((sum + 2) / 4);
+                    }
+                }
+            }
+            levels.Add((nw, nh, next));
+        }
+        var handles = levels.Select(l => GCHandle.Alloc(l.Values, GCHandleType.Pinned)).ToArray();
+        try
+        {
+            var data = levels.Select((l, i) => new SubresourceData(handles[i].AddrOfPinnedObject(), (uint)(l.Width * channels))).ToArray();
+            var texture = _device.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)pattern.Width,
+                Height = (uint)pattern.Height,
+                MipLevels = (uint)levels.Count,
+                ArraySize = 1,
+                Format = channels == 2 ? Format.R8G8_UNorm : Format.R8_UNorm,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Immutable,
+                BindFlags = BindFlags.ShaderResource,
+            }, data);
+            return (texture, _device.CreateShaderResourceView(texture));
+        }
+        finally
+        {
+            foreach (var handle in handles)
+                handle.Free();
+        }
     }
 
     // The image's first row is the north edge: sampled from the north-west corner, y going south.
@@ -951,6 +1097,7 @@ float4 PS(PS_INPUT input) : SV_Target
             ColorArea = _colorTexture is null ? Vector4.Zero : _colorArea,
             IslandArea = _islandTexture is null ? Vector4.Zero : _islandArea,
             Caustics = new Vector4(_causticTexture is null ? 0f : 1f, 0f, 0f, 0f),
+            Patterns = new Vector4(_patterns is null ? 0f : 1f, 0f, 0f, 0f),
         };
         var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, _constants);
@@ -982,6 +1129,14 @@ float4 PS(PS_INPUT input) : SV_Target
             _context.PSSetShaderResource(5, island.View);
         if (_causticTexture is { } caustic)
             _context.PSSetShaderResource(6, caustic.View);
+        if (_patterns is { } patterns)
+        {
+            for (int i = 0; i < patterns.Length; i++)
+                _context.PSSetShaderResource((uint)(7 + i), patterns[i].View);
+            _context.VSSetShaderResource(7, patterns[0].View);
+            _context.VSSetShaderResource(8, patterns[1].View);
+            _context.VSSetSampler(1, _linearWrap);
+        }
         _context.VSSetSampler(0, _linearClamp);
         _context.PSSetSampler(0, _linearClamp);
         _context.PSSetSampler(1, _linearWrap);
@@ -1034,10 +1189,12 @@ float4 PS(PS_INPUT input) : SV_Target
     // The copies are written again next frame.
     public void End()
     {
-        for (uint slot = 0; slot < 7; slot++)
+        for (uint slot = 0; slot < 11; slot++)
             _context.PSUnsetShaderResource(slot);
         _context.VSUnsetShaderResource(2);
         _context.VSUnsetShaderResource(3);
+        _context.VSUnsetShaderResource(7);
+        _context.VSUnsetShaderResource(8);
     }
 
     private void DisposeSurfaces()
@@ -1067,6 +1224,12 @@ float4 PS(PS_INPUT input) : SV_Target
             }
         }
         _colorTexture = _islandTexture = _causticTexture = null;
+        foreach (var (texture, view) in _patterns ?? [])
+        {
+            view.Dispose();
+            texture.Dispose();
+        }
+        _patterns = null;
         _openWater = false;
     }
 

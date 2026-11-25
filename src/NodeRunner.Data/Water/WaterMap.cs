@@ -69,8 +69,8 @@ public readonly record struct WaterWave(float MinX, float MaxX, float MinY, floa
 // Area (min x, min y, max x, max y).
 public sealed record WaterColorMap(int Width, int Height, byte[] Rgba, Vector4 Area);
 
-// A tiling grey pattern (one byte per texel), such as the light patterns on the bottom under shallow water.
-public sealed record WaterPattern(int Width, int Height, byte[] Values);
+// A tiling pattern of the game's water (Channels bytes per texel): height of the swell, light on the bottom...
+public sealed record WaterPattern(int Width, int Height, int Channels, byte[] Values);
 
 // Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles,
 // and the zones where the waves are calmer or roll in towards the shore.
@@ -98,6 +98,16 @@ public sealed class WaterMap
     public List<WaterColorMap> ColorMaps { get; } = [];
 
     public WaterPattern? Caustics { get; set; }
+
+    // Heights of the open sea's swell (grey), and how the waves rolling in change along their crest (grey).
+    public WaterPattern? OceanWaves { get; set; }
+
+    public WaterPattern? ShoreWaves { get; set; }
+
+    // Small ripples: slope across and along (two channels, 0.5 = flat).
+    public WaterPattern? Ripples { get; set; }
+
+    public WaterPattern? Foam { get; set; }
 
     public List<string> Errors { get; } = [];
 
