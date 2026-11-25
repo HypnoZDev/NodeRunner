@@ -276,10 +276,19 @@ internal sealed class ViewportOverlay(AppState state, CameraController cameraCon
         }
 
         ImGui.Separator();
-        ImGui.TextDisabled(L("Météo"));
-        ImGui.SetNextItemWidth(220);
-        if (WeatherChoice.Combo("##weather", settings))
-            state.SaveSettings();
+        // A side menu: a drop-down list would open over this menu's own items.
+        if (ImGui.BeginMenu($"{L("Météo")} : {WeatherChoice.Name(settings.Weather)}###weather"))
+        {
+            foreach (var (weather, label) in WeatherChoice.All)
+            {
+                if (ImGui.MenuItem(label, null, settings.Weather == weather))
+                {
+                    settings.Weather = weather;
+                    state.SaveSettings();
+                }
+            }
+            ImGui.EndMenu();
+        }
 
         ImGui.Separator();
         bool sky = settings.ShowSky;
