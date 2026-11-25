@@ -149,6 +149,9 @@ public sealed class AppSettings
     public bool Bloom { get; set; }
     public float BloomStrength { get; set; } = 0.5f;
 
+    // Buildings, vehicles and props drawn with their relief and shine textures, shiny surfaces mirroring the sky.
+    public bool SurfaceDetail { get; set; }
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -250,7 +253,7 @@ public sealed class AppSettings
         (WaterReflections, WaterWaves) = (d.WaterReflections, d.WaterWaves);
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
-        (Bloom, BloomStrength) = (d.Bloom, d.BloomStrength);
+        (Bloom, BloomStrength, SurfaceDetail) = (d.Bloom, d.BloomStrength, d.SurfaceDetail);
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);

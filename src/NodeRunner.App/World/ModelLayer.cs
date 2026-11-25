@@ -139,6 +139,21 @@ internal sealed class ModelLayer : IDisposable
 
     public List<string> Errors { get; } = new();
 
+    // Models loaded with their relief and shine textures (more memory); changing it loads them all again.
+    public bool SurfaceDetail
+    {
+        get => _surfaces;
+        set
+        {
+            if (value == _surfaces)
+                return;
+            _surfaces = value;
+            Clear();
+        }
+    }
+
+    private volatile bool _surfaces;
+
     private static readonly Vector4 ProtectedColor = new(1f, 0.55f, 0.12f, 0.45f);
 
     // Stand-in for a locked model: its archetype's box, orange and see-through (the objects inside stay visible).
@@ -810,7 +825,7 @@ internal sealed class ModelLayer : IDisposable
                     TextureKey?[][] keys = [];
                     if (model is not null && (prepared = renderer.Prepare(model)) is not null && resolver is not null)
                     {
-                        var resolved = resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey);
+                        var resolved = resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey, surfaces: _surfaces);
                         keys = new TextureKey?[resolved.Length][];
                         for (int i = 0; i < resolved.Length; i++)
                         {

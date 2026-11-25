@@ -91,6 +91,7 @@ internal sealed unsafe partial class MainForm
         _modelRenderer.Anisotropy = settings.Anisotropy;
 
         bool modelsEnabled = _state.IsLayerVisible(ModelLayer.LayerName);
+        _modelLayer.SurfaceDetail = settings.SurfaceDetail && !_graphics!.IsSoftware;
         int hour = (int)settings.TimeOfDay % 24;
         if (_state.Other is { } other)
         {

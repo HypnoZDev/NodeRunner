@@ -142,6 +142,7 @@ internal sealed unsafe partial class MainForm : Form
             return 1f;
         InitializeGraphics();
         var settings = _state.Settings;
+        _modelLayer.SurfaceDetail = settings.SurfaceDetail && !_graphics!.IsSoftware;
         _modelLayer.Update(_state.World, _modelRenderer!, _state.Camera.Position, settings.ViewDistanceMultiplier,
             (int)settings.TimeOfDay % 24, enabled: true);
         return _modelLayer.PreloadProgress();

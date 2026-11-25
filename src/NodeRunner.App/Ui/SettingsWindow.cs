@@ -737,6 +737,14 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
             }
         }
 
+        Widgets.Property(L("Relief et reflets"), L("Bâtiments, véhicules et objets avec leurs textures de relief (briques, joints, tôles) et de brillance : reflets du soleil et du ciel sur les vitres, la carrosserie, le métal. Plus de mémoire vidéo ; recharge les modèles."));
+        bool surfaces = settings.SurfaceDetail;
+        if (ImGui.Checkbox("##surface_detail", ref surfaces))
+        {
+            settings.SurfaceDetail = surfaces;
+            state.SaveSettings();
+        }
+
         Widgets.Property(L("Anticrénelage (TAA)"), L("Lisse les bords en escalier et le scintillement des grillages, câbles et feuillages, en mêlant chaque image aux précédentes. Coûte peu ; léger flou pendant les mouvements rapides."));
         bool antialiasing = settings.Antialiasing;
         if (ImGui.Checkbox("##antialiasing", ref antialiasing))

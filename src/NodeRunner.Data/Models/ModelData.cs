@@ -112,6 +112,11 @@ public sealed class ModelMesh
         : IsCharacter ? [DiffuseTextureName, NormalTextureName, SpecularTextureName]
         : [DiffuseTextureName];
 
+    // TextureNames, plus the relief and shine textures of every other mesh that has them (buildings, vehicles, props).
+    public IReadOnlyList<string?> TextureNamesWithSurface => Terrain is null && TintTextureName is null && !IsCharacter
+        && (NormalTextureName is not null || SpecularTextureName is not null)
+        ? [DiffuseTextureName, NormalTextureName, SpecularTextureName] : TextureNames;
+
     // Shine set by the shader (specularIntensityMult, specularFalloffMult): how bright and how tight the highlights of
     // the specular map are.
     public float SpecularIntensity { get; init; } = 1f;

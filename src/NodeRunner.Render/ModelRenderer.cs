@@ -34,6 +34,7 @@ cbuffer Frame : register(b0)
     float4 ClassicShade;  // x: how much the sun shadows darken them.
     float4 Output;        // x = 1: linear colours of an HDR image (textures and vertex colours made linear), y: brightness
                           // of the light given off by lit windows and lamps there.
+    float4 SkyTop;        // Colour of the sky overhead (mirrored by shiny surfaces).
 };
 cbuffer Object : register(b2)
 {
@@ -48,8 +49,9 @@ cbuffer Object : register(b2)
                        // w = 1: a character (ped shaders).
     float4 Terrain;    // Ground layers: x = 1 to blend with the mask texture, y = 1 for the mask only.
                        // z = 1: the colour is the vertex colour (no texture).
-    float4 Surface;    // Characters: x = 1 with a normal map (NormalTexture), y = 1 with a specular map (SpecularTexture),
-                       // z: how bright its highlights are, w: how tight.
+    float4 Surface;    // x = 1 with a normal map (NormalTexture), y with a specular map (SpecularTexture): 1 for a
+                       // character, 2 for anything else (also mirrors the sky), z: how bright its highlights are, w: how
+                       // tight.
 };
 Texture2D ColorTexture : register(t0);
 Texture2D Layer1 : register(t1);
@@ -237,13 +239,28 @@ float4 Shade(PS_INPUT input, float4 color)
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * (Output.x > 0.5f ? Output.y : 1.4f));
     // Characters' shine: highlights of the key light, as bright as the red of the specular map (squared) says, as
     // tight as its alpha says.
-    if (Surface.y > 0.5f && sun > 0.0f)
+    if (Surface.y > 0.5f)
     {
         float4 s = SpecularTexture.Sample(ColorSampler, input.uv);
-        float3 halfway = normalize(LightDirection.xyz + normalize(CameraFog.xyz - input.world));
-        float power = clamp(s.a * Surface.w, 8.0f, 512.0f);
-        float highlight = pow(saturate(dot(n, halfway)), power) * 0.3f;
-        lit += SunColor.rgb * (s.r * s.r * Surface.z * highlight * sun);
+        if (sun > 0.0f)
+        {
+            float3 halfway = normalize(LightDirection.xyz + toCamera);
+            float power = clamp(s.a * Surface.w, 8.0f, 512.0f);
+            float highlight = pow(saturate(dot(n, halfway)), power) * 0.3f;
+            lit += SunColor.rgb * (s.r * s.r * Surface.z * highlight * sun);
+        }
+        // Other surfaces mirror the sky, more when seen side-on (Fresnel), as much as their shine; less in nooks and
+        // indoors (where the light around is darker than the sky's).
+        if (Surface.y > 1.5f)
+        {
+            float3 mirrored = reflect(-toCamera, n);
+            float3 skyColor = mirrored.z >= 0.0f ? lerp(FogColor.rgb, SkyTop.rgb, saturate(mirrored.z * 1.6f))
+                : lerp(FogColor.rgb, GroundAmbient.rgb * 0.5f, saturate(-mirrored.z * 4.0f));
+            float facing = 1.0f - saturate(dot(n, toCamera));
+            float fresnel = 0.04f + 0.96f * facing * facing * facing * facing * facing;
+            float open = saturate(dot(ambient, 1.0f) / max(dot(lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky), 1.0f), 0.0001f));
+            lit += skyColor * (fresnel * s.r * saturate(Surface.z) * 0.45f * open);
+        }
     }
 
     // Distance fog, thicker towards the horizon colour; none on the first quarter of the distance.
@@ -406,6 +423,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 ClassicLight;
         public Vector4 ClassicShade;
         public Vector4 Output;
+        public Vector4 SkyTop;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -862,11 +880,13 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             var r = prepared.Ranges[i];
             var textures = r.Mesh < meshTextures.Count ? meshTextures[r.Mesh] : [];
             var texture = textures.Length > 0 ? textures[0] : null;
+            // Relief and shine textures: characters always, other meshes when loaded with them (TextureNamesWithSurface).
+            bool surface = !r.Terrain && !r.Tinted;
             GpuTexture?[]? layers = r.Terrain ? textures.Skip(1).Concat(new GpuTexture?[4]).Take(4).ToArray() : null;
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
-                r.DarkeningDecal, r.Character, r.Character && textures.Length > 1 ? textures[1] : null,
-                r.Character && textures.Length > 2 ? textures[2] : null, r.Shine);
+                r.DarkeningDecal, r.Character, surface && textures.Length > 1 ? textures[1] : null,
+                surface && textures.Length > 2 ? textures[2] : null, r.Shine);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
@@ -1074,17 +1094,17 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 if (part.TintTexture is not null)
                     _context.PSSetShaderResource(1, part.TintTexture.View);
             }
-            SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine);
+            SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine, part.Character);
             SetColorTexture(baseTexture);
             FlushConstants();
             _context.DrawIndexed((uint)part.IndexCount, (uint)part.FirstIndex, part.BaseVertex);
         }
     }
 
-    // Relief and shine textures of a character's part (none for everything else).
-    private void SetSurface(GpuTexture? normal, GpuTexture? specular, Vector2 shine)
+    // Relief and shine textures of a part (characters, and the other meshes when loaded with them).
+    private void SetSurface(GpuTexture? normal, GpuTexture? specular, Vector2 shine, bool character)
     {
-        var value = new Vector4(normal is null ? 0f : 1f, specular is null ? 0f : 1f, shine.X, shine.Y);
+        var value = new Vector4(normal is null ? 0f : 1f, specular is null ? 0f : character ? 1f : 2f, shine.X, shine.Y);
         if (normal is not null)
             _context.PSSetShaderResource(6, normal.View);
         if (specular is not null)
@@ -1143,6 +1163,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 ClassicLight = new Vector4(Lighting.ClassicAmbient, Lighting.ClassicNight),
                 ClassicShade = new Vector4(Lighting.ClassicShadow, 0f, 0f, 0f),
                 Output = new Vector4(Lighting.IsHdr ? 1f : 0f, SceneLighting.HdrEmission, 0f, 0f),
+                SkyTop = new Vector4(Lighting.Zenith, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);

@@ -20,7 +20,7 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
     // none or it was not found. namedDictionaries: dictionaries holding one texture each, named after it (story
     // characters' parts), only opened for that texture.
     public ResolvedTexture?[][] Resolve(ModelLocation location, ModelData model, List<string> errors, IReadOnlyList<string>? fallbackDictionaries = null,
-        Func<TextureKey, bool>? isOnGpu = null, IReadOnlyList<string>? namedDictionaries = null)
+        Func<TextureKey, bool>? isOnGpu = null, IReadOnlyList<string>? namedDictionaries = null, bool surfaces = false)
     {
         var result = new ResolvedTexture?[model.Meshes.Count][];
         List<string>? chain = null;
@@ -30,7 +30,7 @@ internal sealed class TextureResolver(TextureCatalog catalog, ITextureReader rea
         var missing = new HashSet<uint>();
         for (int i = 0; i < result.Length; i++)
         {
-            var names = model.Meshes[i].TextureNames;
+            var names = surfaces ? model.Meshes[i].TextureNamesWithSurface : model.Meshes[i].TextureNames;
             result[i] = new ResolvedTexture?[names.Count];
             for (int t = 0; t < names.Count; t++)
             {
