@@ -180,6 +180,18 @@ internal sealed unsafe partial class MainForm
             BrowseForWatchedFolder();
         }
 
+        if (_ui.GameLink.FolderRequested)
+        {
+            _ui.GameLink.FolderRequested = false;
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = L("Choisis le dossier de ton serveur FiveM (celui qui contient server.cfg et resources)."),
+                UseDescriptionForTitle = true,
+            };
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+                _ui.GameLink.SetServer(dialog.SelectedPath);
+        }
+
         if (_ui.CheckResourceRequested)
         {
             _ui.CheckResourceRequested = false;

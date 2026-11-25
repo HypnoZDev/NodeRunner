@@ -65,6 +65,8 @@ internal sealed class MainUi
         _exportWindow = new ExportWindow(state, () => ChooseExportFolderRequested = true, () => SaveSoloPackRequested = true);
         ProjectWindow = new ProjectWindow(state, () => ChooseProjectsFolderRequested = true);
         _onlineWindow = new OnlineWindow(state);
+        GameLink = new GameLinkWindow(state);
+        GameLinkWindow.UpdateInstalled(state.Settings.GameLinkServer);
         _shortcutsWindow = new ShortcutsWindow(state);
         _welcomeWindow = new WelcomeWindow(state, this, _shortcutsWindow.Toggle);
         _toolbar = new Toolbar(state, DrawToolbarProjectMenu,() => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)
@@ -365,6 +367,8 @@ internal sealed class MainUi
 
     public bool CheckResourceRequested { get; set; }
 
+    public GameLinkWindow GameLink { get; }
+
     public bool UnlinkFolderRequested { get; set; }
 
     public void ShowProjectPanel()
@@ -549,6 +553,7 @@ internal sealed class MainUi
         _interiorWindow.Draw();
         _imagePropWindow.Draw();
         _onlineWindow.Draw();
+        GameLink.Draw();
         _errorWindow.Draw();
         _protectedWindow.Draw();
         _welcomeWindow.Draw();
@@ -952,6 +957,10 @@ internal sealed class MainUi
                 CheckResourceRequested = true;
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(L("Vérifie un dossier de ressource FiveM (le tien ou un mapping téléchargé) sans lancer le jeu : fxmanifest.lua,\nfichiers en double dans stream, objets sans type, types sans modèle ni textures, fichiers trop gros..."));
+            if (ImGui.MenuItem(L(GameLinkWindow.Title), null, false, !_state.IsOtherGame))
+                GameLink.Open();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(L("Installe sur ton serveur FiveM la ressource qui relie NodeRunner au jeu pendant que tu mappes."));
             ImGui.Separator();
             if (ImGui.MenuItem(L($"{Icons.Settings}  Paramètres..."), KeyText(KeyAction.Settings)))
                 _settingsWindow.Open();

@@ -212,6 +212,9 @@ public sealed class AppSettings
     // NodeRunner Online relay (wss://...); null = NodeRunner's own.
     public string? OnlineRelay { get; set; }
 
+    // FiveM server folder (server.cfg + resources) where the live link resource is installed.
+    public string? GameLinkServer { get; set; }
+
     public bool ShowGrid { get; set; } = true;
 
     // Metres between two grid lines; 0 = automatic (10 m near the ground, 100 m high up).
