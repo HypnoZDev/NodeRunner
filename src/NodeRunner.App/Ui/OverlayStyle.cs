@@ -200,6 +200,16 @@ internal static class OverlayStyle
         return open;
     }
 
+    // Side menu inside such a popup, with the same glass behind it (the popup's own background is turned off, and its
+    // side menus inherit that). Close with ImGui.EndMenu.
+    public static bool BeginSubmenu(string label)
+    {
+        bool open = ImGui.BeginMenu(label);
+        if (open)
+            WindowBackground(MenuRounding, strong: true);
+        return open;
+    }
+
     public static void EndPopup()
     {
         ImGui.EndPopup();
