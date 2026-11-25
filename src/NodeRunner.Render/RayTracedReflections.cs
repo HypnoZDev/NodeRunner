@@ -173,7 +173,7 @@ void main(uint3 id : SV_DispatchThreadID)
         public ulong Address;
     }
 
-    private readonly record struct Instance(RayModel Model, Matrix4x4 World);
+    private readonly record struct Instance(RayModel Model, Matrix4x4 World, ulong Address);
 
     private readonly ID3D11Device _device11;
     private readonly ID3D11DeviceContext4 _context;
@@ -196,8 +196,15 @@ void main(uint3 id : SV_DispatchThreadID)
     private readonly List<GpuModel> _models = new();
     private readonly Queue<GpuModel> _waiting = new();
     private readonly List<Instance> _instances = new();
+    // The objects the scene's structure was last built with.
+    private readonly List<Instance> _sceneInstances = new();
     private readonly List<(ulong Fence, Action Release)> _retired = new();
     private readonly (ID3D12Resource? Buffer, int Capacity)[] _instanceBuffers = new (ID3D12Resource?, int)[FramesInFlight];
+    // Size of each structure built, once packed: written by the graphics card, read back when its frame is done, then
+    // the structure copied into that smaller room.
+    private readonly ID3D12Resource _packedSizes, _packedSizesRead;
+    private readonly ulong* _packedSizesData;
+    private readonly List<RayModel>[] _built = new List<RayModel>[FramesInFlight];
     private ID3D12Resource? _scratch, _topScratch, _top;
     private ulong _fenceValue;
     private int _frame;
@@ -243,6 +250,15 @@ void main(uint3 id : SV_DispatchThreadID)
         void* data;
         _table.Map(0, null, &data).CheckError();
         _tableData = (GeometryEntry*)data;
+
+        ulong sizesLength = FramesInFlight * MaxModelsPerFrame * 8;
+        _packedSizes = Buffer((long)sizesLength, HeapType.Default, ResourceStates.UnorderedAccess, ResourceFlags.AllowUnorderedAccess);
+        _packedSizesRead = device.CreateCommittedResource(new HeapProperties(HeapType.Readback), HeapFlags.None,
+            ResourceDescription.Buffer(sizesLength), ResourceStates.CopyDest, null);
+        _packedSizesRead.Map(0, null, &data).CheckError();
+        _packedSizesData = (ulong*)data;
+        for (int i = 0; i < FramesInFlight; i++)
+            _built[i] = new List<RayModel>();
     }
 
     // The graphics card's name of what failed, when the ray tracing cannot be used.
@@ -300,7 +316,10 @@ void main(uint3 id : SV_DispatchThreadID)
     // Most bytes the models may take (beyond: the following ones are not mirrored).
     public long MemoryLimit { get; set; } = 1536L << 20;
 
-    // An object to mirror this frame (models loaded with their ray geometry, see ModelRenderer.Prepare).
+    // Starts the list of objects to mirror (Add); without it, the objects of the previous frame are mirrored again.
+    public void BeginObjects() => _instances.Clear();
+
+    // An object to mirror (models loaded with their ray geometry, see ModelRenderer.Prepare).
     public void Add(GpuModel model, Matrix4x4 world)
     {
         if (model.IsDisposed)
@@ -308,7 +327,7 @@ void main(uint3 id : SV_DispatchThreadID)
         if (model.RayState is RayModel ray)
         {
             if (ray.Built)
-                _instances.Add(new Instance(ray, world));
+                _instances.Add(new Instance(ray, world, ray.Address));
             return;
         }
         if (model.RayGeometry is null)
@@ -346,12 +365,25 @@ void main(uint3 id : SV_DispatchThreadID)
         var allocator = _allocators[frame];
         allocator.Reset();
         _list.Reset(allocator, null);
-        BuildWaitingModels();
+        Pack(frame);
+        BuildWaitingModels(frame);
 
+        // Objects released since, or whose structure was packed.
+        _instances.RemoveAll(i => !i.Model.Built);
+        for (int i = 0; i < _instances.Count; i++)
+        {
+            if (_instances[i].Address != _instances[i].Model.Address)
+                _instances[i] = _instances[i] with { Address = _instances[i].Model.Address };
+        }
         bool traced = false;
         if (_instances.Count > 0)
         {
-            BuildScene(frame);
+            if (_top is null || !CollectionsMarshal.AsSpan(_instances).SequenceEqual(CollectionsMarshal.AsSpan(_sceneInstances)))
+            {
+                BuildScene(frame);
+                _sceneInstances.Clear();
+                _sceneInstances.AddRange(_instances);
+            }
             Constants constants = new()
             {
                 SunDirection = new Vector4(lighting.SunDirection, shadows ? 1f : 0f),
@@ -375,7 +407,6 @@ void main(uint3 id : SV_DispatchThreadID)
             _list.Dispatch((uint)(_width + 7) / 8, (uint)(_height + 7) / 8, 1);
             traced = true;
         }
-        _instances.Clear();
         _list.Close();
 
         _queue.Wait(_fence, drawn);
@@ -387,8 +418,37 @@ void main(uint3 id : SV_DispatchThreadID)
         return traced ? _outputRead : null;
     }
 
+    // The structures built by this frame slot's previous frame (now finished) copied into the room they need once packed
+    // (often half).
+    private void Pack(int frame)
+    {
+        var built = _built[frame];
+        bool packed = false;
+        for (int i = 0; i < built.Count; i++)
+        {
+            var ray = built[i];
+            long size = (long)_packedSizesData[frame * MaxModelsPerFrame + i];
+            if (!ray.Built || size <= 0 || size > ray.StructureLength * 9 / 10)
+                continue;
+            if (Allocate(_structureArenas, size, 256, StructureArenaSize, geometry: false) is not { } place)
+                continue;
+            ulong address = _structureArenas[place.Arena].Buffer.GPUVirtualAddress + (ulong)place.Offset;
+            _list.CopyRaytracingAccelerationStructure(address, ray.Address, RaytracingAccelerationStructureCopyMode.Compact);
+            var (oldArena, oldOffset, oldLength) = (_structureArenas[ray.StructureArena], ray.StructureOffset, ray.StructureLength);
+            Retire(() => oldArena.Space.Free(oldOffset, oldLength));
+            ray.StructureArena = place.Arena;
+            ray.StructureOffset = place.Offset;
+            ray.StructureLength = size;
+            ray.Address = address;
+            packed = true;
+        }
+        built.Clear();
+        if (packed)
+            _list.ResourceBarrierUnorderedAccessView(null!);
+    }
+
     // Sends a few waiting models: their positions and indices, then their acceleration structures.
-    private void BuildWaitingModels()
+    private void BuildWaitingModels(int frame)
     {
         var batch = new List<(GpuModel Model, RayModel Ray, BuildRaytracingAccelerationStructureInputs Inputs, long Scratch, long Upload)>();
         long triangles = 0, scratchSize = 0, uploadSize = 0;
@@ -452,7 +512,7 @@ void main(uint3 id : SV_DispatchThreadID)
             var inputs = new BuildRaytracingAccelerationStructureInputs
             {
                 Type = RaytracingAccelerationStructureType.BottomLevel,
-                Flags = RaytracingAccelerationStructureBuildFlags.PreferFastTrace,
+                Flags = RaytracingAccelerationStructureBuildFlags.PreferFastTrace | RaytracingAccelerationStructureBuildFlags.AllowCompaction,
                 Layout = ElementsLayout.Array,
                 DescriptorsCount = (uint)descriptions.Length,
                 GeometryDescriptions = descriptions,
@@ -516,13 +576,23 @@ void main(uint3 id : SV_DispatchThreadID)
                 Retire(() => old.Dispose());
             _scratch = Buffer(Math.Max(scratchSize, 16L << 20), HeapType.Default, ResourceStates.Common, ResourceFlags.AllowUnorderedAccess);
         }
+        ulong sizesAt = (ulong)(frame * MaxModelsPerFrame * 8);
         foreach (var (_, ray, inputs, scratch, _) in batch)
         {
+            var packedSize = new RaytracingAccelerationStructurePostBuildInfoDescription
+            {
+                DestBuffer = _packedSizes.GPUVirtualAddress + sizesAt + (ulong)(_built[frame].Count * 8),
+                InfoType = RaytracingAccelerationStructurePostBuildInfoType.CompactedSize,
+            };
             _list.BuildRaytracingAccelerationStructure(new BuildRaytracingAccelerationStructureDescription(ray.Address, inputs, 0,
-                _scratch.GPUVirtualAddress + (ulong)scratch));
+                _scratch.GPUVirtualAddress + (ulong)scratch), [packedSize]);
+            _built[frame].Add(ray);
             ray.Built = true;
         }
         _list.ResourceBarrierUnorderedAccessView(null!);
+        _list.ResourceBarrierTransition(_packedSizes, ResourceStates.UnorderedAccess, ResourceStates.CopySource);
+        _list.CopyBufferRegion(_packedSizesRead, sizesAt, _packedSizes, sizesAt, (ulong)(batch.Count * 8));
+        _list.ResourceBarrierTransition(_packedSizes, ResourceStates.CopySource, ResourceStates.UnorderedAccess);
         ReadyModelCount += batch.Count;
     }
 
@@ -544,13 +614,13 @@ void main(uint3 id : SV_DispatchThreadID)
         buffer.Map(0, null, (void**)&instances).CheckError();
         for (int i = 0; i < _instances.Count; i++)
         {
-            var (ray, m) = _instances[i];
+            var (ray, m, address) = _instances[i];
             instances[i] = new RaytracingInstanceDescription
             {
                 Transform = new Vortice.Mathematics.Matrix3x4(m.M11, m.M21, m.M31, m.M41, m.M12, m.M22, m.M32, m.M42, m.M13, m.M23, m.M33, m.M43),
                 InstanceID = new Vortice.UInt24((uint)ray.FirstSlot),
                 InstanceMask = 0xFF,
-                AccelerationStructure = ray.Address,
+                AccelerationStructure = address,
             };
         }
         buffer.Unmap(0);
@@ -765,6 +835,9 @@ void main(uint3 id : SV_DispatchThreadID)
             arena.Buffer.Dispose();
         _table.Unmap(0);
         _table.Dispose();
+        _packedSizesRead.Unmap(0);
+        _packedSizesRead.Dispose();
+        _packedSizes.Dispose();
         _heap.Dispose();
         _pipeline.Dispose();
         _rootSignature.Dispose();

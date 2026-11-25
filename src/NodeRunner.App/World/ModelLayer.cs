@@ -103,6 +103,8 @@ internal sealed class ModelLayer : IDisposable
     private readonly List<DrawnEntity> _drawn = new();
     private readonly HashSet<MapEntity> _fallbacksDrawn = new();
     private readonly HashSet<MapEntity> _rayFallbacks = new();
+    private (RayTracedReflections? Rays, Vector3 Camera, double Time, (int, int, int, IReadOnlySet<MapEntity>?, int) Stamp) _rayList =
+        (null, default, double.NegativeInfinity, default);
     private readonly HashSet<MapEntity> _selectedSet = new();
 
     // A model read and put on the GPU by a background thread (null if the file has none), with the texture of each
@@ -335,6 +337,15 @@ internal sealed class ModelLayer : IDisposable
     // call: the sun's shadow images must be drawn again.
     public bool CastersChanged()
     {
+        var now = ChangeStamp();
+        if (now == _castersSeen)
+            return false;
+        _castersSeen = now;
+        return true;
+    }
+
+    private (int, int, int, IReadOnlySet<MapEntity>?, int) ChangeStamp()
+    {
         for (int i = 0; i < _visible.Count; i++)
         {
             if (!_visible[i].IsCurrent)
@@ -343,11 +354,7 @@ internal sealed class ModelLayer : IDisposable
                 _castersVersion++;
             }
         }
-        var now = (_castersVersion, _library?.StructureVersion ?? 0, Doors?.Version ?? 0, Hidden, Hidden?.Count ?? 0);
-        if (now == _castersSeen)
-            return false;
-        _castersSeen = now;
-        return true;
+        return (_castersVersion, _library?.StructureVersion ?? 0, Doors?.Version ?? 0, Hidden, Hidden?.Count ?? 0);
     }
 
     public void Draw(ModelRenderer renderer, Matrix4x4 viewProjection, IReadOnlyList<MapEntity> selected, Vector3 camera, float maxDistance,
@@ -485,9 +492,17 @@ internal sealed class ModelLayer : IDisposable
     }
 
     // The objects within radius of the camera, also those off screen (the water may mirror them), for the ray tracing.
+    // Listed again only when the camera has moved a little, an object changed, or after a moment (models loaded):
+    // otherwise the ray tracing keeps the last list.
     public void AddRayInstances(RayTracedReflections rays, Vector3 camera, float radius)
     {
         double now = _clock.Elapsed.TotalSeconds;
+        var stamp = ChangeStamp();
+        if (ReferenceEquals(rays, _rayList.Rays) && stamp == _rayList.Stamp && Vector3.Distance(camera, _rayList.Camera) < 10f
+            && now - _rayList.Time < 0.5)
+            return;
+        _rayList = (rays, camera, now, stamp);
+        rays.BeginObjects();
         var fallbacksDrawn = _rayFallbacks;
         fallbacksDrawn.Clear();
         for (int i = 0; i < _visible.Count; i++)

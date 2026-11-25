@@ -38,7 +38,7 @@ cbuffer Constants : register(b0)
     float4 GridCenter;   // xy: centre of the grid of the open water.
     float4 ColorArea;    // xy: north-west corner of the game's water colour image, zw: 1 / its size (m, y negative); z = 0: none.
     float4 IslandArea;   // The same for Cayo Perico's image.
-    float4 Caustics;     // x = 1: light pattern on the bottom available.
+    float4 Caustics;     // x = 1: light pattern on the bottom available, y: pixels of the view per pixel of the ray images.
     float4 Patterns;     // x = 1: the game's wave patterns (swell, waves along the shore, ripples, foam) available.
 };
 // Water meshes of the models (pools, fountains, streams): placement and wave strength of the model drawn.
@@ -464,14 +464,14 @@ RAY_STARTS PSRays(PS_INPUT input)
     if (input.kind.x > 0.5f && !IsOpenWater(input.rest.xy))
         discard;
     // Hidden behind something drawn (reversed Z), or seen from below.
-    if (SceneDepth.Load(int3(input.pos.xy, 0)) >= input.pos.z)
+    if (SceneDepth.Load(int3(input.pos.xy * Caustics.y, 0)) >= input.pos.z)
         discard;
     float3 toCamera = CameraTime.xyz - input.world;
     float3 up = SurfaceUp(input);
     if (dot(toCamera, up) < 0.0f)
         discard;
     float squeeze, height, shore, calm;
-    float3 n = SurfaceNormal(input, up, max(length(fwidth(input.rest.xy)), 0.001f), squeeze, height, shore, calm);
+    float3 n = SurfaceNormal(input, up, max(length(fwidth(input.rest.xy)) / Caustics.y, 0.001f), squeeze, height, shore, calm);
     float3 r = reflect(-normalize(toCamera), n);
     r.z = abs(r.z);
     RAY_STARTS o;
@@ -554,8 +554,10 @@ float4 PS(PS_INPUT input) : SV_Target
     bool detailed = Settings.z > 0.5f && Settings.w > 0.5f;
     if (Options.w > 0.5f)
     {
-        float4 traced = RayReflection.Load(int3(input.pos.xy - Viewport.xy, 0));
-        reflection = lerp(reflection, traced.rgb, traced.a);
+        // Traced at a lower resolution: nothing found = black and transparent, so the filtered colour is already
+        // weighted by what was found.
+        float4 traced = RayReflection.SampleLevel(LinearClamp, (input.pos.xy - Viewport.xy) / Viewport.zw, 0);
+        reflection = reflection * (1.0f - traced.a) + traced.rgb;
     }
     else if (detailed)
     {
@@ -1201,9 +1203,15 @@ float4 PS(PS_INPUT input) : SV_Target
     }
 
     // After Begin (with the scene's depth): the surfaces and meshes drawn next write where each pixel's reflected ray
-    // starts and where it goes, for the ray tracing, instead of the water's colour.
-    public void BeginRayStarts(ID3D11RenderTargetView starts, ID3D11RenderTargetView directions)
+    // starts and where it goes, for the ray tracing, instead of the water's colour. The images may be smaller than the
+    // view (width x height): one ray for several pixels.
+    public void BeginRayStarts(ID3D11RenderTargetView starts, ID3D11RenderTargetView directions, int width, int height)
     {
+        _constants.Caustics.Y = _constants.Viewport.Z / width;
+        var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, _constants);
+        _context.Unmap(_constantBuffer, 0);
+        _context.RSSetViewport(new Viewport(0, 0, width, height));
         _context.OMSetRenderTargets([starts, directions], null);
         _context.PSSetShader(_rayPixelShader);
         _context.OMSetDepthStencilState(_noDepthState, 0);

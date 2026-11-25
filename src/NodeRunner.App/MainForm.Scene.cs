@@ -565,9 +565,11 @@ internal sealed unsafe partial class MainForm
         try
         {
             _modelLayer.AddRayInstances(rays, _state.Camera.Position, MirroredRadius);
-            var (starts, directions) = rays.Targets(image.Width, image.Height);
+            // One ray for four pixels: the reflection is softened by the waves anyway.
+            int width = (image.Width + 1) / 2, height = (image.Height + 1) / 2;
+            var (starts, directions) = rays.Targets(width, height);
             _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, depth, null, viewport, waves3D);
-            _waterRenderer.BeginRayStarts(starts, directions);
+            _waterRenderer.BeginRayStarts(starts, directions, width, height);
             _waterRenderer.DrawSurfaces();
             _modelLayer.DrawWater(_waterRenderer);
             _waterRenderer.End();
