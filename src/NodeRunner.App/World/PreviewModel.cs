@@ -2,6 +2,7 @@ using System.Numerics;
 using NodeRunner.Data.Hashing;
 using NodeRunner.Data.Models;
 using NodeRunner.Data.Textures;
+using NodeRunner.Editor;
 using NodeRunner.Render;
 
 namespace NodeRunner.App.World;
@@ -29,6 +30,37 @@ internal sealed class PreviewModel : IDisposable
     public ModelData? Data { get; private set; }
     public IReadOnlyList<PreviewTexture> Textures { get; private set; } = [];
     public IReadOnlyList<PreviewTexture?> MeshTextures { get; private set; } = [];
+
+    // The lighter version seen from afar (ModelSimplifier), worked out when asked for (RequestLod).
+    public GpuModel? Lod { get; private set; }
+    public int LodTriangleCount => Lod?.TriangleCount ?? 0;
+    private Task<(ModelData Data, ModelData Lod, int[] Sources)>? _lodWork;
+    private GpuTexture?[][] _meshTextures = [];
+
+    public void RequestLod()
+    {
+        if (Data is not { } data || Lod is not null || _lodWork is not null)
+            return;
+        _lodWork = Task.Run(() =>
+        {
+            var (lod, sources) = ModelSimplifier.SimplifyWithSources(data, LodRatio);
+            return (data, lod, sources);
+        });
+    }
+
+    public const float LodRatio = 0.25f;
+
+    private void TakeLod(ModelRenderer renderer)
+    {
+        if (_lodWork is not { IsCompleted: true } work)
+            return;
+        _lodWork = null;
+        if (!work.IsCompletedSuccessfully || !ReferenceEquals(work.Result.Data, Data))
+            return;
+        var (_, lod, sources) = work.Result;
+        var textures = sources.Select(i => i < _meshTextures.Length ? _meshTextures[i] : []).ToArray();
+        Lod = renderer.Upload(lod, textures);
+    }
 
     // Changes when another model is put on the graphics card.
     public int Version { get; private set; }
@@ -125,6 +157,7 @@ internal sealed class PreviewModel : IDisposable
     // Takes the model once read; true when a new model was just put on the graphics card.
     public bool Update(ModelRenderer renderer)
     {
+        TakeLod(renderer);
         if (_loading is not { IsCompleted: true } finished)
             return false;
         _loading = null;
@@ -172,6 +205,7 @@ internal sealed class PreviewModel : IDisposable
             }
         }
         Model = renderer.Upload(data, meshTextures);
+        _meshTextures = meshTextures;
         if (Model is null)
         {
             Error = L("modèle vide");
@@ -198,6 +232,10 @@ internal sealed class PreviewModel : IDisposable
     {
         Model?.Dispose();
         Model = null;
+        Lod?.Dispose();
+        Lod = null;
+        _lodWork = null;
+        _meshTextures = [];
         Data = null;
         Textures = [];
         MeshTextures = [];

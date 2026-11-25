@@ -615,6 +615,8 @@ public static partial class English
         ("{0} x {1} x {2} m · {3} triangles · ", "{0} x {1} x {2} m · {3} triangles · "),
         ("{0} maillage(s) · {1} texture(s)", "{0} mesh(es) · {1} texture(s)"),
         (", {0} introuvable(s)", ", {0} not found"),
+        (" · LOD : {0} % des {1} triangles", " · LOD: {0}% of the {1} triangles"),
+        ("Aperçu LOD : la version allégée que NodeRunner fabrique pour voir le modèle de loin", "LOD preview: the lighter version NodeRunner makes to see the model from afar"),
         ("\nTextures introuvables : {0}", "\nTextures not found: {0}"),
         ("Vue par défaut", "Default view"),
         ("Revenir à la vue de départ (double-clic sur l'image)", "Back to the starting view (double-click the image)"),

@@ -48,7 +48,12 @@ internal sealed class ModelViewer : IDisposable
     public string? Error => _model.Error;
     public PreviewModel Model => _model;
 
-    public int TriangleCount => _model.TriangleCount;
+    public int TriangleCount => ShowsLod ? _model.LodTriangleCount : _model.TriangleCount;
+
+    // Shows the lighter version made for afar (LOD) instead of the model.
+    public bool ShowLod { get; set; }
+    public bool ShowsLod => ShowLod && _model.Lod is not null;
+    public int FullTriangleCount => _model.TriangleCount;
     public int MeshCount => _model.MeshCount;
     public int TextureCount => _model.TextureCount;
     public int MissingTextureCount => MissingTextures.Count;
@@ -225,7 +230,9 @@ internal sealed class ModelViewer : IDisposable
                 imgui.UnregisterTexture(_imageId);
             _imageId = imgui.RegisterTexture(_target.View!);
         }
-        if (_model.Model is not { } model)
+        if (ShowLod)
+            _model.RequestLod();
+        if ((ShowsLod ? _model.Lod : _model.Model) is not { } model)
             return;
         DrawScene(renderer, lines, model, (float)width / height);
 
@@ -260,7 +267,7 @@ internal sealed class ModelViewer : IDisposable
         renderer.Lighting = SceneLighting.Studio(light, _camera.Forward, _camera.Right) with { ClassicAmbient = ClassicAmbient };
         renderer.CameraPosition = _camera.Position;
         renderer.VehiclePaint = PaintColors;
-        renderer.HiddenMeshes = HiddenMeshes.Count > 0 ? HiddenMeshes : null;
+        renderer.HiddenMeshes = HiddenMeshes.Count > 0 && !ShowsLod ? HiddenMeshes : null;
         renderer.HighlightedMesh = HighlightedMesh;
         renderer.BonePose = BonePose;
         try

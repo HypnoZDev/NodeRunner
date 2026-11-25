@@ -54,6 +54,47 @@ public sealed class ModelMesh
         return copy;
     }
 
+    // The same mesh made of some of its vertices (vertices[i] = index of the i-th one kept) and new triangles over them;
+    // positions (one per vertex of this mesh) when vertices were moved.
+    public ModelMesh Subset(int[] vertices, ushort[] indices, Vector3[]? positions = null)
+    {
+        static T[] Pick<T>(T[] all, int[] kept) => Array.ConvertAll(kept, i => all[i]);
+        static T[]? PickOrNull<T>(T[]? all, int[] kept) => all is null ? null : Pick(all, kept);
+        return new ModelMesh
+        {
+            Positions = Pick(positions ?? Positions, vertices),
+            Normals = Pick(Normals, vertices),
+            TexCoords = Pick(TexCoords, vertices),
+            Colors = Pick(Colors, vertices),
+            Indices = indices,
+            BoneIndices = PickOrNull(BoneIndices, vertices),
+            BoneWeights = PickOrNull(BoneWeights, vertices),
+            DiffuseTextureName = DiffuseTextureName,
+            BlendMode = BlendMode,
+            Emission = Emission,
+            VertexColored = VertexColored,
+            BakedLighting = BakedLighting,
+            ClassicPrelit = ClassicPrelit,
+            NightColors = PickOrNull(NightColors, vertices),
+            DarkeningDecal = DarkeningDecal,
+            Terrain = Terrain is { } t ? new TerrainBlend
+            {
+                LayerNames = t.LayerNames,
+                MaskName = t.MaskName,
+                Mode = t.Mode,
+                Weights = Pick(t.Weights, vertices),
+                MaskTexCoords = Pick(t.MaskTexCoords, vertices),
+            } : null,
+            ShaderHash = ShaderHash,
+            ShaderTextures = ShaderTextures,
+            DiffuseColor = DiffuseColor,
+            TintTextureName = TintTextureName,
+            TintTexCoords = PickOrNull(TintTexCoords, vertices),
+            SpecularIntensity = SpecularIntensity,
+            SpecularFalloff = SpecularFalloff,
+        };
+    }
+
     public uint DiffuseTextureHash => DiffuseTextureName is null ? 0 : Joaat.Hash(DiffuseTextureName);
 
     public MeshBlendMode BlendMode { get; init; }

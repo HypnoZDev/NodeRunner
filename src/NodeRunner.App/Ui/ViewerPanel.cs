@@ -924,6 +924,12 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
         if (Widgets.IconButton(Icons.Sun, "viewer_light", L("Lumière : réglages"), active: !Viewer.LightFollowsCamera))
             ImGui.OpenPopup("##viewer_light_popup");
         DrawLightPopup();
+        if (!_inWorkshop)
+        {
+            ImGui.SameLine(0, 2);
+            if (Widgets.IconButton(Icons.Mountain, "viewer_lod", L("Aperçu LOD : la version allégée que NodeRunner fabrique pour voir le modèle de loin"), active: Viewer.ShowLod))
+                Viewer.ShowLod = !Viewer.ShowLod;
+        }
         if (_inWorkshop)
         {
             ImGui.SameLine(0, 2);
@@ -1209,7 +1215,8 @@ internal sealed unsafe partial class ViewerPanel(AppState state)
             return;
         ImGui.AlignTextToFramePadding();
         ImGui.TextColored(UiTheme.TextMuted, L($"{Widgets.Count(Viewer.TriangleCount)} triangles · {Viewer.MeshCount} pièce(s) · {Viewer.TextureCount} texture(s)")
-            + (Viewer.MissingTextureCount > 0 ? L($", {Viewer.MissingTextureCount} introuvable(s)") : ""));
+            + (Viewer.MissingTextureCount > 0 ? L($", {Viewer.MissingTextureCount} introuvable(s)") : "")
+            + (Viewer.ShowsLod ? L($" · LOD : {100 * Viewer.TriangleCount / Math.Max(1, Viewer.FullTriangleCount)} % des {Widgets.Count(Viewer.FullTriangleCount)} triangles") : ""));
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort))
             ImGui.SetTooltip(L($"Fichier : {item.Location.Path}")
                 + (Viewer.MissingTextureCount > 0 ? L($"\nTextures introuvables : {string.Join(", ", Viewer.MissingTextures)}") : ""));
