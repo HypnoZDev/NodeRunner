@@ -123,6 +123,7 @@ internal sealed unsafe partial class MainForm
                 cloudLighting = cloudLighting.WithFlash(flash);
             }
         }
+        UpdateRayTracing(image is not null && imageOptions.Hdr);
         _modelRenderer!.Lighting = lighting;
         _modelRenderer.CameraPosition = camera.Position;
         _modelRenderer.Time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
@@ -498,16 +499,92 @@ internal sealed unsafe partial class MainForm
         // Wrapped every hour, so the time stays precise enough for the waves.
         float time = (float)(_clock.Elapsed.TotalSeconds % 3600.0);
         bool waves3D = _state.Settings.WaterWaves;
+        bool modelsShown = _state.IsLayerVisible(ModelLayer.LayerName);
         if (image is not null)
-            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, image.CopyDepth(),
-                _state.Settings.WaterReflections ? image.CopyColor() : null, new Vector4(0f, 0f, image.Width, image.Height), waves3D);
+        {
+            var depth = image.CopyDepth();
+            var viewport = new Vector4(0f, 0f, image.Width, image.Height);
+            var traced = _rayTracing is not null && modelsShown ? TraceReflections(viewProjection, lighting, time, depth, viewport, waves3D, image) : null;
+            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, depth,
+                _state.Settings.WaterReflections ? image.CopyColor() : null, viewport, waves3D, traced);
+        }
         else
             _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, _graphics!.CopyDepth(),
                 _state.Settings.WaterReflections ? _graphics.CopyColor() : null, new Vector4(scene.X, scene.Y, scene.Width, scene.Height), waves3D);
         _waterRenderer.DrawSurfaces();
-        if (_state.IsLayerVisible(ModelLayer.LayerName))
+        if (modelsShown)
             _modelLayer.DrawWater(_waterRenderer);
         _waterRenderer.End();
+    }
+
+    // Longest reflected ray followed, and how far around the camera the objects are mirrored (m).
+    private const float LongestReflectedRay = 3000f;
+    private const float MirroredRadius = 1500f;
+
+    // The ray-traced reflections on when asked for and possible (HDR image, a card with DXR 1.1), else off: the water
+    // keeps the reflections of what is on screen.
+    private void UpdateRayTracing(bool hdrImage)
+    {
+        bool wanted = _state.Settings.RayTracedReflections && _state.Settings.WaterReflections && hdrImage && !_graphics!.IsSoftware;
+        if (wanted && _rayTracing is null && _state.RayTracingProblem is null)
+        {
+            _rayTracing = RayTracedReflections.TryCreate(_graphics!.Device, _graphics.Context, out var problem);
+            if (_rayTracing is null)
+            {
+                _state.RayTracingProblem = problem ?? "?";
+                Diagnostics.ErrorLog.Add(L("Reflets en ray tracing"), _state.RayTracingProblem);
+            }
+            else
+            {
+                long budget = _graphics.VideoMemoryBudget();
+                _rayTracing.MemoryLimit = budget > 0 ? Math.Clamp(budget / 4, 256L << 20, 1536L << 20) : 1024L << 20;
+                var rays = _rayTracing;
+                _state.RayTracingInfo = () => (rays.ReadyModelCount, rays.WaitingModelCount, rays.ByteSize);
+            }
+        }
+        else if (!wanted && _rayTracing is not null)
+        {
+            StopRayTracing();
+        }
+        _modelLayer.RayGeometry = _rayTracing is not null;
+    }
+
+    private void StopRayTracing()
+    {
+        _rayTracing?.Dispose();
+        _rayTracing = null;
+        _state.RayTracingInfo = null;
+    }
+
+    // Where each water pixel's reflected ray starts and goes, then those rays followed through the objects around the
+    // camera: the colour found (null: nothing traced, the water mirrors what is on screen).
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? TraceReflections(Matrix4x4 viewProjection, SceneLighting lighting, float time,
+        Vortice.Direct3D11.ID3D11ShaderResourceView depth, Vector4 viewport, bool waves3D, SceneImage image)
+    {
+        var rays = _rayTracing!;
+        try
+        {
+            _modelLayer.AddRayInstances(rays, _state.Camera.Position, MirroredRadius);
+            var (starts, directions) = rays.Targets(image.Width, image.Height);
+            _waterRenderer!.Begin(viewProjection, _state.Camera, lighting, time, depth, null, viewport, waves3D);
+            _waterRenderer.BeginRayStarts(starts, directions);
+            _waterRenderer.DrawSurfaces();
+            _modelLayer.DrawWater(_waterRenderer);
+            _waterRenderer.End();
+            return rays.Trace(lighting, _state.Camera.Position, LongestReflectedRay, _state.Settings.Shadows);
+        }
+        catch (Exception e)
+        {
+            // Graphics card lost or out of memory: back to the reflections of what is on screen.
+            _state.RayTracingProblem = e.Message;
+            Diagnostics.ErrorLog.Add(L("Reflets en ray tracing"), e);
+            StopRayTracing();
+            return null;
+        }
+        finally
+        {
+            image.Bind(normals: false);
+        }
     }
 
     // Pieces the export will remove: collision in red, occluders in blue.

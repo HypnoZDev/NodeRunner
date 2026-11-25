@@ -888,8 +888,9 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         Prepare(model) is { } prepared ? Finish(prepared, meshTextures) : null;
 
     // The GPU buffers of a model, without its textures. Safe on any thread (the device is free-threaded): the heavy
-    // part of an upload, kept off the drawing loop.
-    public PreparedModel? Prepare(ModelData model)
+    // part of an upload, kept off the drawing loop. rayGeometry: its positions and triangles are also kept for the
+    // ray-traced reflections.
+    public PreparedModel? Prepare(ModelData model, bool rayGeometry = false)
     {
         int vertexCount = 0, indexCount = 0;
         foreach (var mesh in model.Meshes)
@@ -959,6 +960,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             (long)vertexCount * sizeof(ModelVertex) + indexCount * 2L + (skin?.Length ?? 0) * (long)sizeof(SkinVertex), skinBuffer)
         {
             BonePalette = skinned?.Palette,
+            RayGeometry = rayGeometry ? new RayGeometry(Array.ConvertAll(vertices, v => v.Position), indices) : null,
         };
     }
 
@@ -1035,6 +1037,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         {
             SkinBuffer = prepared.TakeSkinBuffer(),
             BonePalette = prepared.BonePalette,
+            RayGeometry = prepared.RayGeometry,
         };
     }
 
@@ -1485,8 +1488,24 @@ public sealed class GpuModel : IDisposable
 
     public long ByteSize { get; }
 
+    // Positions and triangles waiting to be sent to the ray tracing (dropped once there).
+    internal RayGeometry? RayGeometry { get; set; }
+
+    // Where the ray tracing keeps this model (RayTracedReflections).
+    internal object? RayState { get; set; }
+
+    internal bool IsDisposed { get; private set; }
+
+    // Ray tracing turned off: the positions and triangles still waiting are not needed anymore.
+    public void DropRayGeometry()
+    {
+        RayGeometry = null;
+        RayState = null;
+    }
+
     public void Dispose()
     {
+        IsDisposed = true;
         VertexBuffer.Dispose();
         IndexBuffer.Dispose();
         SkinBuffer?.Dispose();
@@ -1531,6 +1550,8 @@ public sealed class PreparedModel : IDisposable
     internal ID3D11Buffer? TakeSkinBuffer() => Interlocked.Exchange(ref _skinBuffer, null);
 
     internal int[]? BonePalette { get; init; }
+
+    internal RayGeometry? RayGeometry { get; init; }
 
     public void Dispose()
     {

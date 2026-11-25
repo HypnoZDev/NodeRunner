@@ -127,6 +127,10 @@ public sealed class AppSettings
     // Water mirroring the scene (not only the sky), bottom bent by the waves.
     public bool WaterReflections { get; set; } = true;
 
+    // The water's reflections followed through the 3D scene by the graphics card (ray tracing: DirectX 12, DXR 1.1),
+    // also what is off screen. Needs the HDR rendering.
+    public bool RayTracedReflections { get; set; }
+
     // The sea's surface moves with the waves of the game's water file (otherwise flat, only its look follows them).
     public bool WaterWaves { get; set; }
 
@@ -270,7 +274,7 @@ public sealed class AppSettings
         (SnapMove, SnapRotate, SnapScale, BackupMinutes, CopyFormat) = (d.SnapMove, d.SnapRotate, d.SnapScale, d.BackupMinutes, d.CopyFormat);
         (ShowSky, TimeOfDay, Fog, FogDistance) = (d.ShowSky, d.TimeOfDay, d.Fog, d.FogDistance);
         (Shadows, ShadowDistance, Anisotropy, ViewDistanceMultiplier) = (d.Shadows, d.ShadowDistance, d.Anisotropy, d.ViewDistanceMultiplier);
-        (WaterReflections, WaterWaves) = (d.WaterReflections, d.WaterWaves);
+        (WaterReflections, WaterWaves, RayTracedReflections) = (d.WaterReflections, d.WaterWaves, d.RayTracedReflections);
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
         (Bloom, BloomStrength, SurfaceDetail) = (d.Bloom, d.BloomStrength, d.SurfaceDetail);

@@ -168,6 +168,23 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     state.SaveSettings();
                 }
 
+                Widgets.Property(L("Reflets en ray tracing"), L("L'eau reflète les bâtiments, les ponts et le relief même hors de l'écran : la carte graphique suit chaque reflet dans la scène 3D (DirectX 12, ray tracing). Pour l'instant, chaque objet garde la couleur moyenne de ses textures. Demande une carte compatible (NVIDIA RTX, AMD RX 6000 ou plus récente, Intel Arc), le rendu HDR et l'eau réaliste ; prend de la mémoire vidéo. Sans : l'eau reflète ce qui est à l'écran."));
+                bool rayTraced = settings.RayTracedReflections;
+                bool rayTracingUsable = state.RayTracingProblem is null && settings.HdrRendering && settings.WaterReflections;
+                ImGui.BeginDisabled(state.RayTracingProblem is not null);
+                if (ImGui.Checkbox("##ray_traced_reflections", ref rayTraced))
+                {
+                    settings.RayTracedReflections = rayTraced;
+                    state.SaveSettings();
+                }
+                ImGui.EndDisabled();
+                if (state.RayTracingProblem is { } rayProblem)
+                    ImGui.TextColored(UiTheme.Warning, L($"Pas disponible sur ce PC ({rayProblem}) : l'eau reflète ce qui est à l'écran."));
+                else if (settings.RayTracedReflections && !rayTracingUsable)
+                    ImGui.TextColored(UiTheme.Warning, L("Demande le rendu HDR et l'eau réaliste."));
+                else if (settings.RayTracedReflections && state.RayTracingInfo?.Invoke() is var (ready, waiting, rayBytes))
+                    ImGui.TextDisabled(L($"{ready} modèles prêts, {waiting} en attente, {rayBytes >> 20} Mo"));
+
                 Widgets.Property(L("Vagues en 3D"), L("La surface de la mer bouge avec les vagues, comme dans le jeu : houle du large, mer calme dans les ports et marinas, vagues qui roulent vers les plages et écume (zones du fichier water.xml du jeu). Sans : surface plate, seul son aspect suit les vagues."));
                 bool waves = settings.WaterWaves;
                 if (ImGui.Checkbox("##water_waves", ref waves))

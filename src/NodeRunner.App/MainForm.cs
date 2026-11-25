@@ -29,6 +29,7 @@ internal sealed unsafe partial class MainForm : Form
     private CloudRenderer? _cloudRenderer;
     private PrecipitationRenderer? _precipitation;
     private WaterRenderer? _waterRenderer;
+    private RayTracedReflections? _rayTracing;
     private ShadowMaps? _shadowMaps;
     private SceneImage? _sceneImage;
     private NightLights? _nightLights;
@@ -264,6 +265,8 @@ internal sealed unsafe partial class MainForm : Form
         _precipitation = null;
         _waterRenderer?.Dispose();
         _waterRenderer = null;
+        _rayTracing?.Dispose();
+        _rayTracing = null;
         _shadowMaps?.Dispose();
         _shadowMaps = null;
         _sceneImage?.Dispose();

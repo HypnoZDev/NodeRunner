@@ -30,7 +30,8 @@ cbuffer Constants : register(b0)
     float4 Horizon;      // Also the fog colour.
     float4 Settings;     // x: 1 = fog on, y: fog distance, z: 1 = scene depth available, w: 1 = scene colour available.
     float4 Viewport;     // xy: top-left pixel of the 3D view, zw: its size.
-    float4 Options;      // x = 1: linear colours of an HDR image, y = 1: the open water moves (3D waves), z: its height.
+    float4 Options;      // x = 1: linear colours of an HDR image, y = 1: the open water moves (3D waves), z: its height,
+                         // w = 1: ray-traced reflections (RayReflection).
     float4 WaveArea;     // xy: south-west corner of the image of the wave zones, zw: 1 / its size (m); z = 0: none.
     float4 MaskArea;     // The same for the image of where the open water is inside the map.
     float4 OceanBounds;  // The map's water file (min x, min y, max x, max y): open ocean all around; empty: none.
@@ -57,6 +58,7 @@ Texture2D<float> OceanWaves : register(t7);
 Texture2D<float> ShoreWaves : register(t8);
 Texture2D<float2> RipplePattern : register(t9);
 Texture2D<float> FoamPattern : register(t10);
+Texture2D RayReflection : register(t11);
 SamplerState LinearClamp : register(s0);
 SamplerState LinearWrap : register(s1);
 
@@ -408,23 +410,15 @@ float4 ScreenReflection(float3 start, float3 r, float distance)
     return 0.0f;
 }
 
-float4 PS(PS_INPUT input) : SV_Target
+// The surface's normal: the swell's where the point came from, small ripples over it. squeeze (below 1 where the
+// surface is pressed together), height, shore and calm for the foam and the light through the crests.
+float3 SurfaceNormal(PS_INPUT input, float3 up, float footprint, out float squeeze, out float height, out float shore, out float calm)
 {
-    if (input.kind.x > 0.5f && !IsOpenWater(input.rest.xy))
-        discard;
-    float3 camera = CameraTime.xyz;
-    float3 toCamera = camera - input.world;
-    float distance = length(toCamera);
-    float3 v = toCamera / max(distance, 0.001f);
-    float len = length(input.up);
-    float3 up = len > 0.0001f ? input.up / len : float3(0.0f, 0.0f, 1.0f);
-    bool below = dot(toCamera, up) < 0.0f;
-    bool hdr = Options.x > 0.5f;
-
-    // The swell's normal where the point came from, small ripples over it.
-    float footprint = max(length(fwidth(input.rest.xy)), 0.001f);
     float3 n = up;
-    float squeeze = 1.0f, height = 0.0f, shore = 0.0f, calm = 1.0f;
+    squeeze = 1.0f;
+    height = 0.0f;
+    shore = 0.0f;
+    calm = 1.0f;
     if (input.kind.y > 0.5f)
     {
         WaveState w = WaveAt(input.rest.xy);
@@ -452,7 +446,55 @@ float4 PS(PS_INPUT input) : SV_Target
     {
         ripples = WaveSlope(input.rest.xy, CameraTime.w, footprint, input.kind.y > 0.5f ? 3 : 0) * input.waves * calm;
     }
-    n = normalize(n + float3(-ripples, 0.0f) * max(n.z, 0.2f));
+    return normalize(n + float3(-ripples, 0.0f) * max(n.z, 0.2f));
+}
+
+float3 SurfaceUp(PS_INPUT input)
+{
+    float len = length(input.up);
+    return len > 0.0001f ? input.up / len : float3(0.0f, 0.0f, 1.0f);
+}
+
+// For the ray-traced reflections: where each pixel's reflected ray leaves the water (from the camera, w = 1), and its
+// direction.
+struct RAY_STARTS { float4 start : SV_Target0; float4 direction : SV_Target1; };
+
+RAY_STARTS PSRays(PS_INPUT input)
+{
+    if (input.kind.x > 0.5f && !IsOpenWater(input.rest.xy))
+        discard;
+    // Hidden behind something drawn (reversed Z), or seen from below.
+    if (SceneDepth.Load(int3(input.pos.xy, 0)) >= input.pos.z)
+        discard;
+    float3 toCamera = CameraTime.xyz - input.world;
+    float3 up = SurfaceUp(input);
+    if (dot(toCamera, up) < 0.0f)
+        discard;
+    float squeeze, height, shore, calm;
+    float3 n = SurfaceNormal(input, up, max(length(fwidth(input.rest.xy)), 0.001f), squeeze, height, shore, calm);
+    float3 r = reflect(-normalize(toCamera), n);
+    r.z = abs(r.z);
+    RAY_STARTS o;
+    o.start = float4(input.world - CameraTime.xyz, 1.0f);
+    o.direction = float4(r, 0.0f);
+    return o;
+}
+
+float4 PS(PS_INPUT input) : SV_Target
+{
+    if (input.kind.x > 0.5f && !IsOpenWater(input.rest.xy))
+        discard;
+    float3 camera = CameraTime.xyz;
+    float3 toCamera = camera - input.world;
+    float distance = length(toCamera);
+    float3 v = toCamera / max(distance, 0.001f);
+    float3 up = SurfaceUp(input);
+    bool below = dot(toCamera, up) < 0.0f;
+    bool hdr = Options.x > 0.5f;
+
+    float footprint = max(length(fwidth(input.rest.xy)), 0.001f);
+    float squeeze, height, shore, calm;
+    float3 n = SurfaceNormal(input, up, footprint, squeeze, height, shore, calm);
     float2 slope = -n.xy / max(n.z, 0.2f);
 
     // Light received by the water body: sky all around, plus the sun from above.
@@ -510,7 +552,12 @@ float4 PS(PS_INPUT input) : SV_Target
     r.z = abs(r.z);
     float3 reflection = SkyColor(r);
     bool detailed = Settings.z > 0.5f && Settings.w > 0.5f;
-    if (detailed)
+    if (Options.w > 0.5f)
+    {
+        float4 traced = RayReflection.Load(int3(input.pos.xy - Viewport.xy, 0));
+        reflection = lerp(reflection, traced.rgb, traced.a);
+    }
+    else if (detailed)
     {
         float4 mirrored = ScreenReflection(input.world, r, distance);
         reflection = lerp(reflection, mirrored.rgb, mirrored.a);
@@ -633,6 +680,7 @@ float4 PS(PS_INPUT input) : SV_Target
     private readonly ID3D11DeviceContext _context;
     private readonly ID3D11VertexShader _vertexShader;
     private readonly ID3D11PixelShader _pixelShader;
+    private readonly ID3D11PixelShader _rayPixelShader;
     private readonly ID3D11InputLayout _inputLayout;
     private readonly ID3D11VertexShader _meshVertexShader;
     private readonly ID3D11InputLayout _meshInputLayout;
@@ -645,6 +693,7 @@ float4 PS(PS_INPUT input) : SV_Target
     private readonly ID3D11Buffer _meshConstantBuffer;
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11DepthStencilState _depthState;
+    private readonly ID3D11DepthStencilState _noDepthState;
     private readonly ID3D11BlendState _blendState;
     private readonly ID3D11SamplerState _linearClamp;
     private Constants _constants;
@@ -669,6 +718,7 @@ float4 PS(PS_INPUT input) : SV_Target
         ReadOnlyMemory<byte> vsBytecode = Compiler.Compile(ShaderSource, "VS", "water", "vs_5_0");
         _vertexShader = device.CreateVertexShader(vsBytecode.Span);
         _pixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PS", "water", "ps_5_0").Span);
+        _rayPixelShader = device.CreatePixelShader(Compiler.Compile(ShaderSource, "PSRays", "water", "ps_5_0").Span);
         _inputLayout = device.CreateInputLayout(
         [
             new InputElementDescription("POSITION", 0, Format.R32G32B32_Float, 0, 0),
@@ -712,6 +762,7 @@ float4 PS(PS_INPUT input) : SV_Target
             DepthWriteMask = DepthWriteMask.All,
             DepthFunc = ComparisonFunction.Greater,
         });
+        _noDepthState = device.CreateDepthStencilState(new DepthStencilDescription { DepthEnable = false, DepthWriteMask = DepthWriteMask.Zero });
 
         var blend = new BlendDescription();
         blend.RenderTarget[0] = new RenderTargetBlendDescription
@@ -1070,9 +1121,10 @@ float4 PS(PS_INPUT input) : SV_Target
     // buffer after the solid models (null: the water is opaque everywhere). sceneColor: copy of the picture drawn so
     // far, for reflections of the scene and the bottom bent by the waves (null: the sky only is mirrored). viewport:
     // pixel rectangle of the 3D view (x, y, width, height). time moves the waves (seconds). waves3D: the open water's
-    // surface moves with the waves (otherwise flat, only its look follows them).
+    // surface moves with the waves (otherwise flat, only its look follows them). rayReflections: what the ray tracing
+    // found along each pixel's reflected ray (RayTracedReflections.Trace), used instead of the reflections on screen.
     public void Begin(Matrix4x4 viewProjection, Camera camera, SceneLighting lighting, float time, ID3D11ShaderResourceView? sceneDepth,
-        ID3D11ShaderResourceView? sceneColor, Vector4 viewport, bool waves3D = false)
+        ID3D11ShaderResourceView? sceneColor, Vector4 viewport, bool waves3D = false, ID3D11ShaderResourceView? rayReflections = null)
     {
         _waves3D = waves3D && _openWater;
         // The grid follows the camera by quarters of a metre.
@@ -1089,7 +1141,7 @@ float4 PS(PS_INPUT input) : SV_Target
             Settings = new Vector4(lighting.FogDistance > 0f ? 1f : 0f, MathF.Max(lighting.FogDistance, 1f), sceneDepth is null ? 0f : 1f,
                 sceneColor is null ? 0f : 1f),
             Viewport = viewport,
-            Options = new Vector4(lighting.IsHdr ? 1f : 0f, _waves3D ? 1f : 0f, _oceanHeight, 0f),
+            Options = new Vector4(lighting.IsHdr ? 1f : 0f, _waves3D ? 1f : 0f, _oceanHeight, rayReflections is null ? 0f : 1f),
             WaveArea = _waveTexture is null ? Vector4.Zero : _waveArea,
             MaskArea = _maskTexture is null ? Vector4.Zero : _maskArea,
             OceanBounds = _oceanBounds,
@@ -1129,6 +1181,8 @@ float4 PS(PS_INPUT input) : SV_Target
             _context.PSSetShaderResource(5, island.View);
         if (_causticTexture is { } caustic)
             _context.PSSetShaderResource(6, caustic.View);
+        if (rayReflections is not null)
+            _context.PSSetShaderResource(11, rayReflections);
         if (_patterns is { } patterns)
         {
             for (int i = 0; i < patterns.Length; i++)
@@ -1144,6 +1198,16 @@ float4 PS(PS_INPUT input) : SV_Target
         _context.OMSetDepthStencilState(_depthState, 0);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
         _context.RSSetState(_rasterizerState);
+    }
+
+    // After Begin (with the scene's depth): the surfaces and meshes drawn next write where each pixel's reflected ray
+    // starts and where it goes, for the ray tracing, instead of the water's colour.
+    public void BeginRayStarts(ID3D11RenderTargetView starts, ID3D11RenderTargetView directions)
+    {
+        _context.OMSetRenderTargets([starts, directions], null);
+        _context.PSSetShader(_rayPixelShader);
+        _context.OMSetDepthStencilState(_noDepthState, 0);
+        _context.OMSetBlendState(null, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
     }
 
     public void DrawSurfaces()
@@ -1189,7 +1253,7 @@ float4 PS(PS_INPUT input) : SV_Target
     // The copies are written again next frame.
     public void End()
     {
-        for (uint slot = 0; slot < 11; slot++)
+        for (uint slot = 0; slot < 12; slot++)
             _context.PSUnsetShaderResource(slot);
         _context.VSUnsetShaderResource(2);
         _context.VSUnsetShaderResource(3);
@@ -1244,6 +1308,7 @@ float4 PS(PS_INPUT input) : SV_Target
         _gridVertexShader.Dispose();
         _blendState.Dispose();
         _depthState.Dispose();
+        _noDepthState.Dispose();
         _rasterizerState.Dispose();
         _constantBuffer.Dispose();
         _meshConstantBuffer.Dispose();
@@ -1251,6 +1316,7 @@ float4 PS(PS_INPUT input) : SV_Target
         _meshVertexShader.Dispose();
         _inputLayout.Dispose();
         _pixelShader.Dispose();
+        _rayPixelShader.Dispose();
         _vertexShader.Dispose();
     }
 }

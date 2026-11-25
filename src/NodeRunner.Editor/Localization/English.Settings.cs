@@ -267,5 +267,15 @@ public static partial class English
         ("Ne rien changer", "Keep as is"),
         ("Réglages d'origine remis (la carte graphique et la transparence changent au prochain démarrage).",
             "Default settings restored (the graphics card and transparency change at the next start)."),
+        ("Reflets en ray tracing",
+            "Ray-traced reflections"),
+        ("L'eau reflète les bâtiments, les ponts et le relief même hors de l'écran : la carte graphique suit chaque reflet dans la scène 3D (DirectX 12, ray tracing). Pour l'instant, chaque objet garde la couleur moyenne de ses textures. Demande une carte compatible (NVIDIA RTX, AMD RX 6000 ou plus récente, Intel Arc), le rendu HDR et l'eau réaliste ; prend de la mémoire vidéo. Sans : l'eau reflète ce qui est à l'écran.",
+            "The water mirrors buildings, bridges and terrain even off screen: the graphics card follows each reflection through the 3D scene (DirectX 12, ray tracing). For now, each object keeps the average colour of its textures. Needs a compatible card (NVIDIA RTX, AMD RX 6000 or newer, Intel Arc), HDR rendering and realistic water; uses video memory. Without: the water mirrors what is on screen."),
+        ("Pas disponible sur ce PC ({0}) : l'eau reflète ce qui est à l'écran.",
+            "Not available on this PC ({0}): the water mirrors what is on screen."),
+        ("Demande le rendu HDR et l'eau réaliste.",
+            "Needs HDR rendering and realistic water."),
+        ("{0} modèles prêts, {1} en attente, {2} Mo",
+            "{0} models ready, {1} waiting, {2} MB"),
     ];
 }

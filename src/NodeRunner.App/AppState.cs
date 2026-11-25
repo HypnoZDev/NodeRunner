@@ -37,6 +37,12 @@ internal sealed partial class AppState
 
     public (long Used, long Limit)? ModelMemory => ModelMemoryInfo?.Invoke();
 
+    // Why the ray-traced reflections cannot be used on this PC (null: they can, or were not tried yet).
+    public string? RayTracingProblem { get; set; }
+
+    // Ray-traced reflections at work: models ready, models waiting, video memory taken (bytes); null when off.
+    public Func<(int Ready, int Waiting, long Bytes)>? RayTracingInfo { get; set; }
+
     // The window shows the Windows 11 backdrop (Mica) through the interface (see Settings.Transparency).
     public bool TransparentWindow { get; set; }
 

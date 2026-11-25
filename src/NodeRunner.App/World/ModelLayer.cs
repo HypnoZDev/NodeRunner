@@ -102,6 +102,7 @@ internal sealed class ModelLayer : IDisposable
 
     private readonly List<DrawnEntity> _drawn = new();
     private readonly HashSet<MapEntity> _fallbacksDrawn = new();
+    private readonly HashSet<MapEntity> _rayFallbacks = new();
     private readonly HashSet<MapEntity> _selectedSet = new();
 
     // A model read and put on the GPU by a background thread (null if the file has none), with the texture of each
@@ -153,6 +154,30 @@ internal sealed class ModelLayer : IDisposable
     }
 
     private volatile bool _surfaces;
+
+    // Models loaded with their positions and triangles for the ray-traced reflections; turning it on loads them all
+    // again.
+    public bool RayGeometry
+    {
+        get => _rayGeometry;
+        set
+        {
+            if (value == _rayGeometry)
+                return;
+            _rayGeometry = value;
+            if (value)
+            {
+                Clear();
+                return;
+            }
+            foreach (var slot in _slots.Values)
+            {
+                slot.Model?.DropRayGeometry();
+            }
+        }
+    }
+
+    private volatile bool _rayGeometry;
 
     private static readonly Vector4 ProtectedColor = new(1f, 0.55f, 0.12f, 0.45f);
 
@@ -456,6 +481,37 @@ internal sealed class ModelLayer : IDisposable
                 renderer.DrawShadow(model, transform, lightViewProjection);
             }
             alsoCasting?.Invoke(lightViewProjection);
+        }
+    }
+
+    // The objects within radius of the camera, also those off screen (the water may mirror them), for the ray tracing.
+    public void AddRayInstances(RayTracedReflections rays, Vector3 camera, float radius)
+    {
+        double now = _clock.Elapsed.TotalSeconds;
+        var fallbacksDrawn = _rayFallbacks;
+        fallbacksDrawn.Clear();
+        for (int i = 0; i < _visible.Count; i++)
+        {
+            if (!_visible[i].IsCurrent)
+                _visible[i] = Refresh(_visible[i]);
+            var entity = _visible[i];
+            if (entity.Entity.IsDeleted || Hidden is { Count: > 0 } hidden && hidden.Contains(entity.Entity))
+                continue;
+            var slot = SlotOf(entity, now);
+            if (!slot.Loaded)
+            {
+                if (entity.Fallback is not { } fallback || fallback.Entity.IsDeleted || !fallbacksDrawn.Add(fallback.Entity))
+                    continue;
+                slot = SlotOf(fallback, now);
+                if (!slot.Loaded)
+                    continue;
+                entity = fallback;
+            }
+            if (slot.Model is not { } model || Vector3.Distance(camera, entity.SphereCenter) - entity.SphereRadius > radius)
+                continue;
+            var transform = Doors is { Count: > 0 } doors && doors.TryGetPose(entity.Entity, out var opened)
+                ? opened * entity.Transform : entity.Transform;
+            rays.Add(model, transform);
         }
     }
 
@@ -823,7 +879,7 @@ internal sealed class ModelLayer : IDisposable
                         model = ProtectedBox(location.ModelHash, boundsMin, boundsMax);
                     }
                     TextureKey?[][] keys = [];
-                    if (model is not null && (prepared = renderer.Prepare(model)) is not null && resolver is not null)
+                    if (model is not null && (prepared = renderer.Prepare(model, _rayGeometry)) is not null && resolver is not null)
                     {
                         var resolved = resolver.Resolve(location, model, errors, isOnGpu: _texturesOnGpu.ContainsKey, surfaces: _surfaces);
                         keys = new TextureKey?[resolved.Length][];

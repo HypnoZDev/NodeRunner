@@ -8,15 +8,19 @@ namespace NodeRunner.Render;
 
 public sealed class GpuTexture : IDisposable
 {
-    private GpuTexture(ID3D11ShaderResourceView view, long byteSize)
+    private GpuTexture(ID3D11ShaderResourceView view, long byteSize, System.Numerics.Vector4? averageColor)
     {
         View = view;
         ByteSize = byteSize;
+        AverageColor = averageColor;
     }
 
     internal ID3D11ShaderResourceView View { get; }
 
     public long ByteSize { get; }
+
+    // Average colour (sRGB), for the ray-traced reflections; null when not known.
+    public System.Numerics.Vector4? AverageColor { get; }
 
     // Copies a texture to the GPU as is (compressed formats stay compressed).
     public static unsafe GpuTexture? Create(ID3D11Device device, TextureData texture)
@@ -53,7 +57,7 @@ public sealed class GpuTexture : IDisposable
                 ViewDimension = ShaderResourceViewDimension.Texture2D,
                 Texture2D = new Texture2DShaderResourceView { MipLevels = (uint)levels.Count, MostDetailedMip = 0 },
             });
-            return new GpuTexture(view, levels.Sum(l => (long)l.SlicePitch));
+            return new GpuTexture(view, levels.Sum(l => (long)l.SlicePitch), TextureAverage.Of(texture, levels));
         }
     }
 

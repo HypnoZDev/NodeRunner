@@ -1219,8 +1219,10 @@ internal sealed class MainUi
                 ImGui.SetClipboardText(CodeWalkerUrl);
             Widgets.Property(L("Interface"));
             ImGui.TextWrapped("Dear ImGui (Omar Cornut) via ImGui.NET");
-            Widgets.Property("DirectX 11");
+            Widgets.Property("DirectX 11 / 12");
             ImGui.TextWrapped("Vortice.Windows (Amer Koleci)");
+            Widgets.Property("Ray tracing");
+            ImGui.TextWrapped("DirectX Shader Compiler (Microsoft, NCSA)");
             Widgets.Property(L("Icônes"));
             ImGui.TextWrapped(L("Lucide (lucide.dev, licence ISC ; icônes issues de Feather : MIT)"));
             Widgets.EndProperties();
