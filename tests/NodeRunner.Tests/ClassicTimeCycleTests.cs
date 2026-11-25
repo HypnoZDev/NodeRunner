@@ -47,4 +47,30 @@ public class ClassicTimeCycleTests
         Assert.Equal("SUNNY_SF", cycle.SunnyWeatherAt(new Vector3(-2000, 300, 30)));
         Assert.Equal(60f / 255f, cycle.Sample("SUNNY_SF", 9f).Ambient.X, 4);
     }
+
+    [Fact]
+    public void SanAndreas_TakesAMissingWeatherFromAnotherArea()
+    {
+        string Weather(string name) => $"//////////// {name}\n" + string.Join('\n', Enumerable.Repeat(Line(0, 51), 8));
+        var text = string.Join('\n', new[] { "SUNNY_LA", "RAINY_SF", "FOGGY_SF", "SANDSTORM_DESERT", "SUNNY_DESERT" }.Select(Weather));
+        var cycle = ClassicTimeCycle.Parse(text, ClassicGame.SanAndreas);
+        var losSantos = new Vector3(2495, -1680, 13);
+
+        Assert.Equal("RAINY_SF", cycle.WeatherAt(losSantos, ClassicSky.Storm));
+        Assert.Equal("FOGGY_SF", cycle.WeatherAt(losSantos, ClassicSky.Foggy));
+        Assert.Equal("SANDSTORM_DESERT", cycle.WeatherAt(new Vector3(-500, 2000, 50), ClassicSky.Foggy));
+        Assert.Equal("SUNNY_LA", cycle.WeatherAt(losSantos, ClassicSky.Cloudy));
+    }
+
+    [Fact]
+    public void ViceCity_NamesItsWeathersInTheOrderOfTheFile()
+    {
+        var values = string.Join(' ', Enumerable.Repeat(0, 52));
+        var text = string.Join('\n', Enumerable.Repeat(values, 24 * 6));
+        var cycle = ClassicTimeCycle.Parse(text, ClassicGame.ViceCity);
+
+        Assert.Equal(["SUNNY", "CLOUDY", "RAINY", "FOGGY", "EXTRASUNNY", "HURRICANE"], cycle.Weathers);
+        Assert.Equal("HURRICANE", cycle.WeatherAt(Vector3.Zero, ClassicSky.Storm));
+        Assert.Equal("SUNNY", cycle.WeatherAt(Vector3.Zero, ClassicSky.Smog));
+    }
 }

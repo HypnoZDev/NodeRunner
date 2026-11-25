@@ -14,6 +14,9 @@ internal sealed class ClassicLighting
     // How much the sun shadows darken the buildings in full day (the games have none: kept light).
     private const float ShadowStrength = 0.3f;
 
+    // Shadow darkness of the time cycles in good weather (150 of 255).
+    private const float GoodWeatherShadow = 150f / 255f;
+
     // Ambient light of the viewers (no hour there): GTA III and Vice City colours are dark without it.
     private static readonly Vector3 ViewerAmbient = new(0.35f);
 
@@ -24,7 +27,19 @@ internal sealed class ClassicLighting
 
     public static Vector3 ViewerAmbientOf(ClassicGame game) => game == ClassicGame.SanAndreas ? Vector3.Zero : ViewerAmbient;
 
-    public SceneLighting Apply(SceneLighting lighting, ClassicTimeCycle? cycle, float hour, Vector3 camera)
+    // The weather of the menu as the games have it (no snow there: grey sky).
+    public static ClassicSky SkyOf(Weather weather) => weather switch
+    {
+        Weather.ExtraSunny => ClassicSky.ExtraSunny,
+        Weather.Smog => ClassicSky.Smog,
+        Weather.Clouds or Weather.Clearing or Weather.Overcast or Weather.Snow => ClassicSky.Cloudy,
+        Weather.Foggy => ClassicSky.Foggy,
+        Weather.Rain => ClassicSky.Rainy,
+        Weather.Thunder => ClassicSky.Storm,
+        _ => ClassicSky.Sunny,
+    };
+
+    public SceneLighting Apply(SceneLighting lighting, ClassicTimeCycle? cycle, float hour, Vector3 camera, ClassicSky sky = ClassicSky.Sunny)
     {
         var game = cycle?.Game ?? ClassicGame.SanAndreas;
         float night = game == ClassicGame.SanAndreas ? NightBlend(hour) : 0f;
@@ -38,7 +53,7 @@ internal sealed class ClassicLighting
             return withoutCycle;
 
         // A change of weather (San Andreas: another area) fades in over a few seconds, as in the game.
-        var target = cycle.Sample(cycle.SunnyWeatherAt(camera), hour);
+        var target = cycle.Sample(cycle.WeatherAt(camera, sky), hour);
         double now = _clock.Elapsed.TotalSeconds;
         float step = (float)Math.Clamp(now - _last, 0.0, 0.5);
         _last = now;
@@ -48,11 +63,21 @@ internal sealed class ClassicLighting
         _cycle = cycle;
         var key = _shown.Value;
 
+        // Bad weathers: softer shadows (the game's shadow darkness, full in good weather), the sun hidden behind the
+        // clouds, and the view closed in at the game's distance in rain and fog.
+        float shadows = key.Shadow > 0f ? Math.Clamp(key.Shadow / GoodWeatherShadow, 0f, 1f) : 1f;
+        bool closed = sky is ClassicSky.Rainy or ClassicSky.Foggy or ClassicSky.Storm;
+        float sun = closed ? 0f : sky == ClassicSky.Cloudy ? 0.5f : 1f;
+        float fog = closed && key.FarClip > 1f ? (lighting.FogDistance > 0f ? MathF.Min(lighting.FogDistance, key.FarClip) : key.FarClip)
+            : lighting.FogDistance;
         return withoutCycle with
         {
             Zenith = key.SkyTop,
             Horizon = key.SkyBottom,
             ClassicAmbient = game == ClassicGame.SanAndreas ? Vector3.Zero : key.Ambient,
+            ClassicShadow = withoutCycle.ClassicShadow * shadows * sun,
+            SunDisc = lighting.SunDisc * sun,
+            FogDistance = fog,
         };
     }
 

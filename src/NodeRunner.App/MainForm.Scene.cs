@@ -76,7 +76,11 @@ internal sealed unsafe partial class MainForm
         float fogDistance = settings.Fog ? settings.FogDistance : 0f;
         var lighting = SceneLighting.ForHour(settings.TimeOfDay, fogDistance);
         if (_state.IsClassic)
-            lighting = _classicLighting.Apply(lighting, _state.Classic.TimeCycle, settings.TimeOfDay, camera.Position);
+        {
+            lighting = _classicLighting.Apply(lighting, _state.Classic.TimeCycle, settings.TimeOfDay, camera.Position,
+                ClassicLighting.SkyOf(settings.Weather));
+            fogDistance = lighting.FogDistance;
+        }
         // The scene in an image of its own (HDR light, fewer pixels) when the settings ask for it, else straight into
         // the window.
         var imageOptions = SceneOptions();
