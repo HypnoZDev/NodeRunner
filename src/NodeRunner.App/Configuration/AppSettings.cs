@@ -152,6 +152,10 @@ public sealed class AppSettings
     // Buildings, vehicles and props drawn with their relief and shine textures, shiny surfaces mirroring the sky.
     public bool SurfaceDetail { get; set; }
 
+    // The map's lamps at night (HDR only): their light on the surfaces around and their glows seen from afar; brightness.
+    public bool NightLights { get; set; }
+    public float NightLightStrength { get; set; } = 1f;
+
     // Width and height of each image of the sun's shadows (texels): 1024, 2048 or 4096.
     public int ShadowResolution { get; set; } = 2048;
 
@@ -254,6 +258,7 @@ public sealed class AppSettings
         (HdrRendering, Exposure, RenderScale, Sharpness, ShadowResolution) = (d.HdrRendering, d.Exposure, d.RenderScale, d.Sharpness, d.ShadowResolution);
         (Antialiasing, AmbientOcclusion, OcclusionStrength) = (d.Antialiasing, d.AmbientOcclusion, d.OcclusionStrength);
         (Bloom, BloomStrength, SurfaceDetail) = (d.Bloom, d.BloomStrength, d.SurfaceDetail);
+        (NightLights, NightLightStrength) = (d.NightLights, d.NightLightStrength);
         GraphicsTierChosen = false; // Chosen again for the graphics card.
         (ShowGrid, GridSpacing, GridColor) = (d.ShowGrid, d.GridSpacing, d.GridColor);
         (CollisionRadius, NavMeshRadius, EntityRadius, ProjectsFolder) = (d.CollisionRadius, d.NavMeshRadius, d.EntityRadius, d.ProjectsFolder);

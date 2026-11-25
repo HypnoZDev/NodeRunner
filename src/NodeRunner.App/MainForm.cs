@@ -29,6 +29,8 @@ internal sealed unsafe partial class MainForm : Form
     private WaterRenderer? _waterRenderer;
     private ShadowMaps? _shadowMaps;
     private SceneImage? _sceneImage;
+    private NightLights? _nightLights;
+    private readonly NightLightField _nightLightField = new();
     private object? _waterShown; // The WaterMap uploaded to _waterRenderer.
     private PickBuffer? _pickBuffer;
     private BackdropBlur? _backdropBlur;
@@ -260,6 +262,8 @@ internal sealed unsafe partial class MainForm : Form
         _shadowMaps = null;
         _sceneImage?.Dispose();
         _sceneImage = null;
+        _nightLights?.Dispose();
+        _nightLights = null;
         _pickBuffer?.Dispose();
         _placeBuffer?.Dispose();
         _state.Placing.Dispose();

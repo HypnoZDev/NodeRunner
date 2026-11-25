@@ -151,7 +151,9 @@ internal sealed unsafe partial class MainForm
         // The character of the play mode before the water: what is under the surface is seen through it.
         // The solid models also give their normals for the ambient occlusion, applied before the water and glass.
         bool occlusion = image is not null && imageOptions.AmbientOcclusion > 0;
-        if (occlusion)
+        // The map's lamps at night: their light on the solid surfaces, then their glows.
+        float nightLights = NightLightStrength(image, imageOptions, lighting, modelsEnabled);
+        if (occlusion || nightLights > 0f)
         {
             image!.Bind(normals: true);
             _modelRenderer.NormalsOutput = true;
@@ -159,10 +161,13 @@ internal sealed unsafe partial class MainForm
         void PlayerAndWater()
         {
             _state.Play.Draw(_modelRenderer, sceneViewProjection);
-            if (occlusion)
+            if (occlusion || nightLights > 0f)
             {
                 _modelRenderer.NormalsOutput = false;
-                image!.ApplyOcclusion(camera, (float)scene.Width / scene.Height);
+                if (occlusion)
+                    image!.ApplyOcclusion(camera, (float)scene.Width / scene.Height);
+                if (nightLights > 0f)
+                    _nightLights!.LightSurfaces(image!, camera, sceneViewProjection, nightLights);
             }
             DrawWater(sceneViewProjection, lighting, scene, image);
         }
@@ -201,6 +206,12 @@ internal sealed unsafe partial class MainForm
         // The object about to be placed, under the mouse.
         if (!_state.Play.IsActive)
             DrawPlacementGhost(sceneViewProjection);
+
+        if (nightLights > 0f)
+        {
+            image!.Bind(normals: false);
+            _nightLights!.DrawCoronas(image, camera, sceneViewProjection, nightLights, fogDistance);
+        }
 
         // The finished image into the window's 3D view, with its depth: the editor's lines below are hidden behind
         // the models as before.
@@ -312,6 +323,18 @@ internal sealed unsafe partial class MainForm
         DrawDeletionPreview(lines, viewProjection);
         DrawCollisionPreview(lines, viewProjection);
         DrawMarker(lines, viewProjection);
+    }
+
+    // Brightness of the map's lamps (0: not drawn): HDR image only, at night, GTA V's map.
+    private float NightLightStrength(SceneImage? image, SceneImageOptions options, SceneLighting lighting, bool modelsEnabled)
+    {
+        var settings = _state.Settings;
+        if (image is null || !options.Hdr || !settings.NightLights || !modelsEnabled || _state.IsOtherGame || lighting.NightLights < 0.01f)
+            return 0f;
+        _nightLights ??= new NightLights(_graphics!.Device, _graphics.Context);
+        if (_nightLightField.Update(_state.World.Maps, (int)settings.TimeOfDay % 24) is { } lights)
+            _nightLights.SetLights(lights);
+        return lighting.NightLights * Math.Clamp(settings.NightLightStrength, 0f, 2f);
     }
 
     // What the scene's own image does, from the display settings (software rendering: the simple rendering only).

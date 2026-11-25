@@ -735,6 +735,23 @@ internal sealed class SettingsWindow(AppState state, Action browseGameFolder, Ac
                     settings.BloomStrength = glow / 100f;
                 SaveWhenReleased();
             }
+
+            Widgets.Property(L("Lumières de nuit"), L("La nuit, les lampadaires, enseignes et fenêtres de la carte éclairent le sol et les murs autour d'eux, et toute la ville scintille au loin, comme dans le jeu (lumières lointaines des fichiers lodlights, allumées selon l'heure)."));
+            bool nightLights = settings.NightLights;
+            if (ImGui.Checkbox("##night_lights", ref nightLights))
+            {
+                settings.NightLights = nightLights;
+                state.SaveSettings();
+            }
+            if (settings.NightLights)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(-1f);
+                float lamps = settings.NightLightStrength * 100f;
+                if (ImGui.SliderFloat("##night_light_strength", ref lamps, 0f, 200f, L("Force %.0f %%")))
+                    settings.NightLightStrength = lamps / 100f;
+                SaveWhenReleased();
+            }
         }
 
         Widgets.Property(L("Relief et reflets"), L("Bâtiments, véhicules et objets avec leurs textures de relief (briques, joints, tôles) et de brillance : reflets du soleil et du ciel sur les vitres, la carrosserie, le métal. Plus de mémoire vidéo ; recharge les modèles."));

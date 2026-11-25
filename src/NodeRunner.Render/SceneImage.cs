@@ -447,6 +447,7 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
 
     private Texture? _color;
     private Texture? _normals;
+    private Texture? _albedo;
     private ID3D11Texture2D? _depth;
     private ID3D11DepthStencilView? _depthView;
     private ID3D11ShaderResourceView? _depthRead;
@@ -720,11 +721,19 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _context.PSSetConstantBuffer(0, _occlusionBuffer);
     }
 
-    // Binds the colour image (and the normals' image for the solid passes) with the depth, over the whole image.
+    // Images of the solid pass for the effects drawn over it (NightLights): colour image, depth, normals, colours of the
+    // surfaces without their light.
+    internal ID3D11RenderTargetView? ColorWrite => _color?.Write;
+    internal ID3D11ShaderResourceView? DepthRead => _depthRead;
+    internal ID3D11ShaderResourceView? NormalsRead => _normals?.Read;
+    internal ID3D11ShaderResourceView? AlbedoRead => _albedo?.Read;
+
+    // Binds the colour image (and the normals' and surface colours' images for the solid passes) with the depth, over
+    // the whole image.
     public void Bind(bool normals)
     {
         if (normals)
-            _context.OMSetRenderTargets([_color!.Write!, _normals!.Write!], _depthView);
+            _context.OMSetRenderTargets([_color!.Write!, _normals!.Write!, _albedo!.Write!], _depthView);
         else
             _context.OMSetRenderTargets(_color!.Write!, _depthView);
         _context.RSSetViewport(new Viewport(0, 0, Width, Height));
@@ -921,6 +930,7 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         Height = height;
         _color = CreateTexture(width, height, ColorFormat, target: true);
         _normals = CreateTexture(width, height, NormalFormat, target: true);
+        _albedo = CreateTexture(width, height, Format.R8G8B8A8_UNorm_SRgb, target: true);
         _depth = _device.CreateTexture2D(new Texture2DDescription
         {
             Width = (uint)width,
@@ -942,6 +952,8 @@ float4 PSApply(VS_OUTPUT input) : SV_Target
         _color = null;
         _normals?.Dispose();
         _normals = null;
+        _albedo?.Dispose();
+        _albedo = null;
         _depthCopy?.Dispose();
         _depthCopy = null;
         _colorCopy?.Dispose();

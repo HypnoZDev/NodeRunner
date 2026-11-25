@@ -167,6 +167,7 @@ float3 ToLinear(float3 c)
 // its light coming from the surroundings (the part the occlusion darkens).
 static float3 ShadedNormal = float3(0.0f, 0.0f, 1.0f);
 static float AmbientShare = 1.0f;
+static float3 SurfaceColor = 0.0f; // Its colour without the light (lit by NightLights).
 
 // The normal bent by a normal map (x and y in red and green, z rebuilt), along directions worked out from how the
 // position and the texture coordinates change from pixel to pixel: no tangents needed in the vertices.
@@ -205,6 +206,7 @@ float4 Shade(PS_INPUT input, float4 color)
             classic = ToLinear(classic) * 2.0f;
         ShadedNormal = n;
         AmbientShare = 1.0f;
+        SurfaceColor = Output.x > 0.5f ? ToLinear(color.rgb * Tint.rgb) : color.rgb * Tint.rgb;
         float far = length(input.world - CameraFog.xyz);
         float haze = FogColor.a * saturate((far - 0.25f * CameraFog.w) / (0.75f * CameraFog.w));
         haze = haze * haze * (3.0f - 2.0f * haze);
@@ -235,6 +237,7 @@ float4 Shade(PS_INPUT input, float4 color)
     light += RimColor.rgb * saturate(dot(n, RimDirection.xyz)) * edge * edge;
     ShadedNormal = n;
     AmbientShare = dot(ambient, 1.0f) / max(dot(light, 1.0f), 0.0001f);
+    SurfaceColor = color.rgb * Tint.rgb;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * (Output.x > 0.5f ? Output.y : 1.4f));
     // Characters' shine: highlights of the key light, as bright as the red of the specular map (squared) says, as
@@ -341,14 +344,15 @@ float4 PSTranslucent(PS_INPUT input) : SV_Target
     return color;
 }
 
-// Solid passes also giving the second image of the ambient occlusion: the normal (0 to 1) and the share of the light
-// coming from the surroundings.
-struct PS_TWO { float4 color : SV_Target0; float4 normal : SV_Target1; };
+// Solid passes also giving the images of the effects drawn over them (SceneImage.Bind): the normal (0 to 1) and the
+// share of the light coming from the surroundings (ambient occlusion), the surface's colour (night lights).
+struct PS_TWO { float4 color : SV_Target0; float4 normal : SV_Target1; float4 albedo : SV_Target2; };
 PS_TWO WithNormal(float4 color)
 {
     PS_TWO output;
     output.color = color;
     output.normal = float4(ShadedNormal * 0.5f + 0.5f, saturate(AmbientShare));
+    output.albedo = float4(SurfaceColor, 1.0f);
     return output;
 }
 

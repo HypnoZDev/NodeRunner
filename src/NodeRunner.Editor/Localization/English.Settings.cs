@@ -41,6 +41,8 @@ public static partial class English
         ("Normale", "Normal"),
         ("Halo lumineux", "Glow"),
         ("Relief et reflets", "Relief and reflections"),
+        ("La nuit, les lampadaires, enseignes et fenêtres de la carte éclairent le sol et les murs autour d'eux, et toute la ville scintille au loin, comme dans le jeu (lumières lointaines des fichiers lodlights, allumées selon l'heure).",
+            "At night, the map's street lamps, signs and windows light the ground and the walls around them, and the whole city glitters in the distance, as in the game (distant lights of the lodlights files, lit by the hour)."),
         ("Bâtiments, véhicules et objets avec leurs textures de relief (briques, joints, tôles) et de brillance : reflets du soleil et du ciel sur les vitres, la carrosserie, le métal. Plus de mémoire vidéo ; recharge les modèles.",
             "Buildings, vehicles and props with their relief (bricks, joints, sheet metal) and shine textures: the sun and the sky mirrored by windows, bodywork, metal. More video memory; reloads the models."),
         ("Vagues en 3D", "3D waves"),
