@@ -789,9 +789,11 @@ public sealed class DrawableReader : IModelReader
     // Simple shapes inside trees only cast the foliage's shadow in the game (white balls if drawn).
     // Normal-only decals only bend the lighting of what is under them; their colour slot holds the normal map (purple
     // patches if drawn).
+    // Fur grass is a stack of see-through shells in the game, over a ground that already has the right colour: drawn
+    // as a plain surface, it covers that ground with another green up close.
     private static readonly HashSet<uint> HiddenShaders = new[]
     {
-        "mirror_default", "mirror_decal", "mirror_crack", "trees_shadow_proxy", "decal_normal_only",
+        "mirror_default", "mirror_decal", "mirror_crack", "trees_shadow_proxy", "decal_normal_only", "grass_fur", "grass_fur_mask",
     }.Select(Joaat.Hash).ToHashSet();
 
     // Shaders without texture, coloured by the vertex colours.
