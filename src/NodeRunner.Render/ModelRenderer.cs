@@ -37,6 +37,7 @@ cbuffer Frame : register(b0)
     float4 SkyTop;        // Colour of the sky overhead (mirrored by shiny surfaces).
     float4 FogSun;        // Fog colour added towards the sun (sky worked out from the air), along SkySun.
     float4 SkySun;        // xyz: direction of the sun (even below the horizon).
+    float4 Weather;       // x: how wet the surfaces are (rain, 0 to 1).
 };
 cbuffer Object : register(b2)
 {
@@ -182,6 +183,7 @@ float3 FogTowards(float3 world)
 static float3 ShadedNormal = float3(0.0f, 0.0f, 1.0f);
 static float AmbientShare = 1.0f;
 static float3 SurfaceColor = 0.0f; // Its colour without the light (lit by NightLights).
+static float WetMirror = 1.0f;     // How much a wet surface mirrors the sky (little for leaves and grass).
 
 // The normal bent by a normal map (x and y in red and green, z rebuilt), along directions worked out from how the
 // position and the texture coordinates change from pixel to pixel: no tangents needed in the vertices.
@@ -196,6 +198,13 @@ float3 Relief(float3 n, float3 world, float2 uv)
     float3 b = dp2perp * duv1.y + dp1perp * duv2.y;
     float scale = rsqrt(max(max(dot(t, t), dot(b, b)), 1e-20f));
     return normalize(t * scale * bump.x - b * scale * bump.y + n * bump.z);
+}
+
+// Colour of the sky seen along a mirrored direction (the ground below the horizon).
+float3 MirroredSky(float3 mirrored)
+{
+    return mirrored.z >= 0.0f ? lerp(FogColor.rgb, SkyTop.rgb, saturate(mirrored.z * 1.6f))
+        : lerp(FogColor.rgb, GroundAmbient.rgb * 0.5f, saturate(-mirrored.z * 4.0f));
 }
 
 // Lit colour; alpha straight from the colour.
@@ -251,6 +260,13 @@ float4 Shade(PS_INPUT input, float4 color)
     light += RimColor.rgb * saturate(dot(n, RimDirection.xyz)) * edge * edge;
     ShadedNormal = n;
     AmbientShare = dot(ambient, 1.0f) / max(dot(light, 1.0f), 0.0001f);
+    // Rain: water soaks into what faces the sky (darker) and lies on it (mirrors the sky), most on flat ground, a
+    // little on walls it runs down.
+    float3 geometric = len > 0.0001f ? input.normal / len : float3(0, 0, 1);
+    float wet = Weather.x * lerp(0.3f, 1.0f, saturate(geometric.z * 1.5f));
+    if (Emission.w > 0.5f)
+        wet *= 0.4f;
+    color.rgb *= 1.0f - (Output.x > 0.5f ? 0.6f : 0.35f) * wet;
     SurfaceColor = color.rgb * Tint.rgb;
     // Own light: at least the texture colour, brighter than the surroundings at night.
     float3 lit = color.rgb * Tint.rgb * max(light, Emission.x * (Output.x > 0.5f ? Output.y : 1.4f));
@@ -270,14 +286,23 @@ float4 Shade(PS_INPUT input, float4 color)
         // indoors (where the light around is darker than the sky's).
         if (Surface.y > 1.5f)
         {
-            float3 mirrored = reflect(-toCamera, n);
-            float3 skyColor = mirrored.z >= 0.0f ? lerp(FogColor.rgb, SkyTop.rgb, saturate(mirrored.z * 1.6f))
-                : lerp(FogColor.rgb, GroundAmbient.rgb * 0.5f, saturate(-mirrored.z * 4.0f));
             float facing = 1.0f - saturate(dot(n, toCamera));
             float fresnel = 0.04f + 0.96f * facing * facing * facing * facing * facing;
             float open = saturate(dot(ambient, 1.0f) / max(dot(lerp(GroundAmbient.rgb, SkyAmbient.rgb, sky), 1.0f), 0.0001f));
-            lit += skyColor * (fresnel * s.r * saturate(Surface.z) * 0.45f * open);
+            lit += MirroredSky(reflect(-toCamera, n)) * (fresnel * s.r * saturate(Surface.z) * 0.45f * open);
         }
+    }
+    if (wet > 0.0f)
+    {
+        // The water film fills the relief: smoother than the surface under it. Less in nooks and indoors.
+        float3 w = normalize(lerp(n, geometric, wet));
+        // Sheets seen from behind (grass, leaves) are not mirrors.
+        float front = dot(w, toCamera);
+        wet *= saturate(front * 8.0f) * WetMirror;
+        float facing = 1.0f - saturate(front);
+        float fresnel = 0.03f + 0.97f * facing * facing * facing * facing * facing;
+        float open = Emission.y > 0.5f ? saturate(dot(input.color.rgb, 0.667f)) : 1.0f;
+        lit = lerp(lit, MirroredSky(reflect(-toCamera, w)), fresnel * wet * 0.8f * open);
     }
 
     // Distance fog, thicker towards the horizon colour; none on the first quarter of the distance.
@@ -337,6 +362,7 @@ float4 PSTerrain(PS_INPUT input) : SV_Target
 float4 PSCutout(PS_INPUT input) : SV_Target
 {
     FaceCamera(input);
+    WetMirror = 0.1f;
     float4 color = Shade(input);
     clip(color.a - 0.33f);
     return float4(color.rgb, 1.0f);
@@ -444,6 +470,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         public Vector4 SkyTop;
         public Vector4 FogSun;
         public Vector4 SkySun;
+        public Vector4 Weather;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1186,6 +1213,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 SkyTop = new Vector4(Lighting.Zenith, 0f),
                 FogSun = new Vector4(Lighting.FogSun, 0f),
                 SkySun = new Vector4(Lighting.Sun, 0f),
+                Weather = new Vector4(Lighting.Wetness, 0f, 0f, 0f),
             };
             var frameMap = _context.Map(_frameBuffer, 0, MapMode.WriteDiscard);
             Unsafe.Write((void*)frameMap.DataPointer, frame);

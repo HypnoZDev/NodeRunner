@@ -140,12 +140,15 @@ public readonly record struct SceneLighting
     // Sky turned grey by the weather (0 to 1), also for the sky drawn.
     public float Grey { get; init; }
 
+    // Rain on the surfaces (0 dry to 1 soaked): darker, mirroring the sky.
+    public float Wetness { get; init; }
+
     // The weather's light (after ForHdr and WithPhysicalSky): less sun through the clouds, more light from the bright
     // grey sky, greyer colours, fog nearer.
     public SceneLighting WithWeather(CloudWeather weather)
     {
         float grey = Math.Clamp(weather.Grey, 0f, 1f), sun = Math.Clamp(weather.Sun, 0f, 1f);
-        if (grey <= 0f && sun >= 1f && weather.Fog >= 1f)
+        if (grey <= 0f && sun >= 1f && weather.Fog >= 1f && weather.Wet <= 0f)
             return this;
         float skyGrey = float.Lerp(Luminance(Zenith), Luminance(Horizon), 0.7f);
         Vector3 Dull(Vector3 c, float luminance) => Vector3.Lerp(c, new Vector3(luminance), grey);
@@ -159,6 +162,7 @@ public readonly record struct SceneLighting
             FogSun = FogSun * sun * (1f - grey),
             FogDistance = FogDistance * Math.Clamp(weather.Fog, 0.05f, 1f),
             Grey = grey,
+            Wetness = Math.Clamp(weather.Wet, 0f, 1f),
         };
         if (IsHdr)
             result = result with { Adaptation = Math.Clamp(MathF.Pow(DayKey / MathF.Max(Key(result), 1e-3f), 0.45f), 1f, 3.5f) };
