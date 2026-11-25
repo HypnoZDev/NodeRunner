@@ -226,6 +226,14 @@ internal sealed unsafe partial class MainForm
             image!.Bind(normals: false);
             _nightLights!.DrawCoronas(image, camera, sceneViewProjection, nightLights, fogDistance);
         }
+        // Rain or snow falling around the camera (the first trilogy keeps its own weathers).
+        if (!_state.IsClassic && settings.Weather is Weather.Rain or Weather.Thunder or Weather.Snow)
+        {
+            image?.Bind(normals: false);
+            _precipitation ??= new PrecipitationRenderer(_graphics!.Device, _graphics.Context);
+            _precipitation.Draw(settings.Weather, weather, lighting, camera, sceneViewProjection, image?.Height ?? scene.Height,
+                settings.CloudQuality <= 1 ? 0.5f : 1f);
+        }
         if (image is not null && imageOptions.Hdr && settings.SunRays && settings.ShowSky && lighting.Sun.Z > -0.02f)
         {
             // Sunlight through the air: warmer when low.
