@@ -689,6 +689,56 @@ internal sealed class MainUi
     // Projects, additions and exports are for GTA V (FiveM resources).
     private static string Gta5OnlyTip => L("GTA V seulement : dans ce jeu, la carte se consulte sans être modifiée.");
 
+    private const double BrandSweepEvery = 7.0, BrandSweepLength = 1.1;
+    private double _brandSweep = 1.5 - BrandSweepEvery;
+
+    // Brand monogram: NR, then S in the accent colour (Unbounded bold, as the logo). The S breathes softly and a
+    // sheen crosses the letters now and then (or when the mouse comes over them); at rest the logo is unchanged.
+    private unsafe void DrawBrand()
+    {
+        double time = ImGui.GetTime();
+        ImGui.PushFont(UiTheme.BrandFont);
+        float brandY = (ImGui.GetWindowHeight() - ImGui.GetTextLineHeight()) * 0.5f - 7f;
+        ImGui.SetCursorPos(new Vector2(ImGui.GetCursorPosX() + 6f, brandY));
+        var drawList = ImGui.GetWindowDrawList();
+        int first = drawList.VtxBuffer.Size;
+        ImGui.TextUnformatted("NR");
+        var min = ImGui.GetItemRectMin();
+        ImGui.SameLine(0, 0);
+        float breath = 0.5f - 0.5f * MathF.Cos((float)(time * Math.Tau / 3.4));
+        ImGui.TextColored(Vector4.Lerp(UiTheme.Accent, new Vector4(1f, 1f, 1f, UiTheme.Accent.W), 0.22f * breath), "S");
+        var max = ImGui.GetItemRectMax();
+        bool hovered = ImGui.IsMouseHoveringRect(min, max);
+        ImGui.PopFont();
+
+        double since = time - _brandSweep;
+        if (since >= BrandSweepEvery || hovered && since > BrandSweepLength + 0.4)
+            (_brandSweep, since) = (time, 0);
+        if (since >= BrandSweepLength)
+            return;
+
+        // Slanted band of light moving left to right, eased in and out.
+        float p = (float)(since / BrandSweepLength);
+        p = p * p * (3f - 2f * p);
+        float band = ImGui.GetFontSize() * 0.8f, slant = 0.35f;
+        float centre = min.X - band + p * (max.X - min.X + band * 2f + (max.Y - min.Y) * slant);
+        var vertices = (ImDrawVert*)drawList.VtxBuffer.Data;
+        for (int i = first; i < drawList.VtxBuffer.Size; i++)
+        {
+            ref var v = ref vertices[i];
+            float d = MathF.Abs(v.pos.X + (v.pos.Y - min.Y) * slant - centre) / band;
+            if (d >= 1f)
+                continue;
+            float k = (1f - d) * (1f - d) * 0.8f;
+            uint c = v.col;
+            uint r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
+            r += (uint)((255 - r) * k);
+            g += (uint)((255 - g) * k);
+            b += (uint)((255 - b) * k);
+            v.col = (c & 0xFF000000) | (b << 16) | (g << 8) | r;
+        }
+    }
+
     private void DrawMenuBar()
     {
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(ImGui.GetStyle().FramePadding.X, MenuBarPaddingY));
@@ -698,14 +748,7 @@ internal sealed class MainUi
             return;
         WindowChrome.Begin(ImGui.GetWindowPos(), ImGui.GetWindowSize());
 
-        // Brand monogram: NR, then S in the accent colour (Unbounded bold, as the logo).
-        ImGui.PushFont(UiTheme.BrandFont);
-        float brandY = (ImGui.GetWindowHeight() - ImGui.GetTextLineHeight()) * 0.5f - 7f;
-        ImGui.SetCursorPos(new Vector2(ImGui.GetCursorPosX() + 6f, brandY));
-        ImGui.TextUnformatted("NR");
-        ImGui.SameLine(0, 0);
-        ImGui.TextColored(UiTheme.Accent, "S");
-        ImGui.PopFont();
+        DrawBrand();
         ImGui.SameLine(0, 18f);
 
         if (Menu(L("Fichier")))
