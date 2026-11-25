@@ -45,6 +45,9 @@ public static class ScriptedMapVariants
             : IsNamedAlternative(name, names, OriginalHouses) || IsNewMansion(name, names)).ToHashSet();
         // Blocks only casting the sun's shadow in the game (e.g. hei_shadowsunmesh_kt1_08), never seen.
         hidden.UnionWith(names.Where(name => name.Contains("shadowsunmesh") || name.Contains("shadowmesh")));
+        // Stand-ins of a whole building loaded around an owned business (e.g. hei_dt1_11_impexpproxy_a): drawn over the
+        // real building otherwise.
+        hidden.UnionWith(names.Where(name => name.Contains("proxy")));
         // Placeholders only shown within a few metres (e.g. dt1_05_fib_reflection): their parent LOD, a low-detail mesh
         // of the whole city made for a cutscene's reflections, would stand in for them from everywhere.
         hidden.UnionWith(maps.Where(m => m.Map.Entities.Count > 0 && m.Map.Entities.All(e => e.LodDistance is > 0f and <= PlaceholderDistance))
