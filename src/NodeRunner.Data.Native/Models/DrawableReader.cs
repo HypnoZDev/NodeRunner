@@ -569,6 +569,7 @@ public sealed class DrawableReader : IModelReader
         VertexColored = mesh.VertexColored,
         TintTextureName = mesh.TintTextureName,
         TintTexCoords = mesh.TintTexCoords,
+        PaletteTextureName = mesh.PaletteTextureName,
         ShaderHash = mesh.ShaderHash,
         ShaderTextures = mesh.ShaderTextures,
         DiffuseColor = mesh.DiffuseColor,
@@ -796,6 +797,7 @@ public sealed class DrawableReader : IModelReader
     // Shaders without texture, coloured by the vertex colours.
     private static readonly uint VertexColorShader = Joaat.Hash("cpv_only");
     private static readonly uint TintSampler = Joaat.Hash("DiffuseHfSampler");
+    private static readonly uint PaletteSampler = Joaat.Hash("TintPaletteSampler");
 
     // Presets of the tree and bush shaders (hash of the file name).
     private static readonly HashSet<uint> TreePresets = TreePresetNames.Select(n => Joaat.Hash(n + ".sps")).ToHashSet();
@@ -979,6 +981,7 @@ public sealed class DrawableReader : IModelReader
             VertexColored = hasColors && shader?.Name == VertexColorShader,
             TintTextureName = tintName,
             TintTexCoords = tintCoords,
+            PaletteTextureName = shader?.Textures.GetValueOrDefault(PaletteSampler),
             ShaderHash = shader?.Name ?? 0,
             ShaderTextures = shader?.Textures ?? (IReadOnlyDictionary<uint, string>)new Dictionary<uint, string>(),
             DiffuseColor = shader is not null && shader.Vectors.TryGetValue(DiffuseColorParameter, out var diffuse) ? diffuse : null,
@@ -1420,6 +1423,7 @@ public sealed class DrawableReader : IModelReader
         VertexColored = mesh.VertexColored,
         TintTextureName = mesh.TintTextureName,
         TintTexCoords = mesh.TintTexCoords,
+        PaletteTextureName = mesh.PaletteTextureName,
         ShaderHash = mesh.ShaderHash,
         ShaderTextures = mesh.ShaderTextures,
         DiffuseColor = mesh.DiffuseColor,

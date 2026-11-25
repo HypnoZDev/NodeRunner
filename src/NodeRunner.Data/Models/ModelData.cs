@@ -90,6 +90,7 @@ public sealed class ModelMesh
             DiffuseColor = DiffuseColor,
             TintTextureName = TintTextureName,
             TintTexCoords = PickOrNull(TintTexCoords, vertices),
+            PaletteTextureName = PaletteTextureName,
             SpecularIntensity = SpecularIntensity,
             SpecularFalloff = SpecularFalloff,
         };
@@ -148,15 +149,25 @@ public sealed class ModelMesh
 
     public Vector2[]? TintTexCoords { get; init; }
 
+    // Tint palette of the _tnt shaders (TintPaletteSampler): the colour texture is multiplied by the palette's column
+    // given by the vertex colour's blue (first row).
+    public string? PaletteTextureName { get; init; }
+
+    public bool HasPalette => PaletteTextureName is not null && Terrain is null && TintTextureName is null && !IsCharacter;
+
+    // A tint palette always comes last.
     public IReadOnlyList<string?> TextureNames => Terrain is not null ? [DiffuseTextureName, .. Terrain.TextureNames]
         : TintTextureName is not null ? [DiffuseTextureName, TintTextureName]
         : IsCharacter ? [DiffuseTextureName, NormalTextureName, SpecularTextureName]
+        : HasPalette ? [DiffuseTextureName, PaletteTextureName]
         : [DiffuseTextureName];
 
     // TextureNames, plus the relief and shine textures of every other mesh that has them (buildings, vehicles, props).
     public IReadOnlyList<string?> TextureNamesWithSurface => Terrain is null && TintTextureName is null && !IsCharacter
         && (NormalTextureName is not null || SpecularTextureName is not null)
-        ? [DiffuseTextureName, NormalTextureName, SpecularTextureName] : TextureNames;
+        ? HasPalette ? [DiffuseTextureName, NormalTextureName, SpecularTextureName, PaletteTextureName]
+            : [DiffuseTextureName, NormalTextureName, SpecularTextureName]
+        : TextureNames;
 
     // Shine set by the shader (specularIntensityMult, specularFalloffMult): how bright and how tight the highlights of
     // the specular map are.

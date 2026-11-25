@@ -412,7 +412,10 @@ float4 Shade(PS_INPUT input)
     float4 color = ColorTexture.Sample(ColorSampler, input.uv);
     if (Terrain.z > 0.5f)
         color.rgb *= input.color.rgb;
-    if (Terrain.w > 0.5f)
+    // Terrain.w = 2: tint palette (_tnt shaders), the column picked by the vertex colour's blue.
+    if (Terrain.w > 1.5f)
+        color.rgb *= Layer1.Load(int3(min(input.color.b * 255.0f + 0.5f, 255.0f), 0, 0)).rgb;
+    else if (Terrain.w > 0.5f)
         color.rgb *= Layer1.Sample(ColorSampler, input.maskUv).rgb;
     return Shade(input, color);
 }
@@ -916,7 +919,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             ranges.Add(new PreparedModel.Range(m, x, mesh.Indices.Length, v, mesh.BlendMode, mesh.Emission, terrain is not null,
                 terrain?.Mode ?? TerrainBlendMode.VertexOnly, mesh.VertexColored, VehiclePaints.SlotOf(mesh.DiffuseColor),
                 terrain is null && mesh.TintTextureName is not null, mesh.ClassicPrelit ? 2 : mesh.BakedLighting ? 1 : 0, mesh.DarkeningDecal, mesh.IsCharacter,
-                new Vector2(mesh.SpecularIntensity, mesh.SpecularFalloff)));
+                new Vector2(mesh.SpecularIntensity, mesh.SpecularFalloff), mesh.HasPalette));
             for (int i = 0; i < mesh.Positions.Length; i++)
             {
                 vertices[v++] = new ModelVertex(mesh.Positions[i], mesh.Normals[i], mesh.TexCoords[i], mesh.Colors[i],
@@ -1024,6 +1027,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
         {
             var r = prepared.Ranges[i];
             var textures = r.Mesh < meshTextures.Count ? meshTextures[r.Mesh] : [];
+            // The tint palette comes last (ModelMesh.TextureNames).
+            var palette = r.Palette && textures.Length > 1 ? textures[^1] : null;
+            if (r.Palette)
+                textures = textures[..Math.Max(textures.Length - 1, 0)];
             var texture = textures.Length > 0 ? textures[0] : null;
             // Relief and shine textures: characters always, other meshes when loaded with them (TextureNamesWithSurface).
             bool surface = !r.Terrain && !r.Tinted;
@@ -1031,7 +1038,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             parts[i] = new GpuModel.Part(r.FirstIndex, r.IndexCount, r.BaseVertex, texture, r.BlendMode, r.Emission, layers,
                 r.TerrainMode, r.VertexColored, r.PaintSlot, r.Mesh, r.Tinted && textures.Length > 1 ? textures[1] : null, r.BakedLighting,
                 r.DarkeningDecal, r.Character, surface && textures.Length > 1 ? textures[1] : null,
-                surface && textures.Length > 2 ? textures[2] : null, r.Shine);
+                surface && textures.Length > 2 ? textures[2] : null, r.Shine, palette);
         }
         return new GpuModel(prepared.TakeVertexBuffer(), prepared.TakeIndexBuffer(), parts, prepared.TriangleCount, prepared.ByteSize)
         {
@@ -1236,9 +1243,10 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             }
             else
             {
-                SetMesh(emission, part.BakedLighting, part.DarkeningDecal, part.Character, new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is null ? 0f : 1f));
-                if (part.TintTexture is not null)
-                    _context.PSSetShaderResource(1, part.TintTexture.View);
+                SetMesh(emission, part.BakedLighting, part.DarkeningDecal, part.Character,
+                    new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is not null ? 1f : part.Palette is not null ? 2f : 0f));
+                if ((part.TintTexture ?? part.Palette) is { } second)
+                    _context.PSSetShaderResource(1, second.View);
             }
             SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine, part.Character);
             SetColorTexture(baseTexture);
@@ -1455,7 +1463,7 @@ public sealed class GpuModel : IDisposable
     internal readonly record struct Part(int FirstIndex, int IndexCount, int BaseVertex, GpuTexture? Texture, MeshBlendMode BlendMode,
         MeshEmission Emission, GpuTexture?[]? Layers, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot,
         int Mesh, GpuTexture? TintTexture, int BakedLighting, bool DarkeningDecal, bool Character, GpuTexture? NormalTexture = null,
-        GpuTexture? SpecularTexture = null, Vector2 Shine = default);
+        GpuTexture? SpecularTexture = null, Vector2 Shine = default, GpuTexture? Palette = null);
 
     internal GpuModel(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, Part[] parts, int triangleCount, long byteSize)
     {
@@ -1518,7 +1526,7 @@ public sealed class PreparedModel : IDisposable
 {
     internal readonly record struct Range(int Mesh, int FirstIndex, int IndexCount, int BaseVertex, MeshBlendMode BlendMode,
         MeshEmission Emission, bool Terrain, TerrainBlendMode TerrainMode, bool VertexColored, VehiclePaintSlot PaintSlot, bool Tinted,
-        int BakedLighting, bool DarkeningDecal, bool Character, Vector2 Shine);
+        int BakedLighting, bool DarkeningDecal, bool Character, Vector2 Shine, bool Palette = false);
 
     private ID3D11Buffer? _vertexBuffer;
     private ID3D11Buffer? _indexBuffer;
