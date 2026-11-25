@@ -153,10 +153,11 @@ public sealed class ModelMesh
     // given by the vertex colour's blue (first row).
     public string? PaletteTextureName { get; init; }
 
-    public bool HasPalette => PaletteTextureName is not null && Terrain is null && TintTextureName is null && !IsCharacter;
+    public bool HasPalette => PaletteTextureName is not null && TintTextureName is null && !IsCharacter;
 
     // A tint palette always comes last.
-    public IReadOnlyList<string?> TextureNames => Terrain is not null ? [DiffuseTextureName, .. Terrain.TextureNames]
+    public IReadOnlyList<string?> TextureNames => Terrain is not null
+        ? HasPalette ? [DiffuseTextureName, .. Terrain.TextureNames, PaletteTextureName] : [DiffuseTextureName, .. Terrain.TextureNames]
         : TintTextureName is not null ? [DiffuseTextureName, TintTextureName]
         : IsCharacter ? [DiffuseTextureName, NormalTextureName, SpecularTextureName]
         : HasPalette ? [DiffuseTextureName, PaletteTextureName]

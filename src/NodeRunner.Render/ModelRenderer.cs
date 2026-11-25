@@ -63,6 +63,7 @@ Texture2D Layer3 : register(t3);
 Texture2D BlendMask : register(t4);
 Texture2D NormalTexture : register(t6);
 Texture2D SpecularTexture : register(t7);
+Texture2D Palette : register(t8);
 SamplerState ColorSampler : register(s0);
 
 // Sun shadows (see ShadowMaps): one depth image per slice of the view, seen from the sun.
@@ -83,7 +84,7 @@ struct VS_INPUT
 struct PS_INPUT
 {
     float4 pos : SV_POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 color : COLOR0; float3 world : TEXCOORD1;
-    float4 weights : COLOR1; float2 maskUv : TEXCOORD2;
+    float4 weights : COLOR1; float2 maskUv : TEXCOORD2; float3 palette : COLOR2;
 };
 
 PS_INPUT VS(VS_INPUT input)
@@ -97,6 +98,9 @@ PS_INPUT VS(VS_INPUT input)
     output.color = input.color;
     output.weights = input.weights;
     output.maskUv = input.maskUv;
+    // Terrain.w = 2: tint palette (_tnt shaders), the column picked by the vertex colour's blue. Read per vertex: the
+    // columns between two vertices may hold unrelated colours.
+    output.palette = Terrain.w > 1.5f ? Palette.Load(int3(min(input.color.b * 255.0f + 0.5f, 255.0f), 0, 0)).rgb : 1.0f;
     return output;
 }
 
@@ -412,9 +416,8 @@ float4 Shade(PS_INPUT input)
     float4 color = ColorTexture.Sample(ColorSampler, input.uv);
     if (Terrain.z > 0.5f)
         color.rgb *= input.color.rgb;
-    // Terrain.w = 2: tint palette (_tnt shaders), the column picked by the vertex colour's blue.
     if (Terrain.w > 1.5f)
-        color.rgb *= Layer1.Load(int3(min(input.color.b * 255.0f + 0.5f, 255.0f), 0, 0)).rgb;
+        color.rgb *= input.palette;
     else if (Terrain.w > 0.5f)
         color.rgb *= Layer1.Sample(ColorSampler, input.maskUv).rgb;
     return Shade(input, color);
@@ -452,6 +455,8 @@ float4 PSTerrain(PS_INPUT input) : SV_Target
     // Terrain.z: each layer laid over the previous ones by its own weight (x, y, z), as GTA IV does.
     float4 color = Terrain.z > 0.5f ? lerp(lerp(lerp(c0, c1, w.x), c2, w.y), c3, w.z)
         : lerp(lerp(c0, c1, w.b), lerp(c2, c3, w.b), w.g);
+    if (Terrain.w > 1.5f)
+        color.rgb *= input.palette;
     return float4(Shade(input, color).rgb, 1.0f);
 }
 
@@ -1236,7 +1241,7 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
                 var mask = part.Layers![3];
                 bool useMask = mask is not null && part.TerrainMode != TerrainBlendMode.VertexOnly;
                 SetMesh(emission, part.BakedLighting, false, part.Character, new Vector4(useMask ? 1f : 0f, part.TerrainMode == TerrainBlendMode.MaskOnly ? 1f : 0f,
-                    part.TerrainMode == TerrainBlendMode.Layered ? 1f : 0f, 0f));
+                    part.TerrainMode == TerrainBlendMode.Layered ? 1f : 0f, part.Palette is not null ? 2f : 0f));
                 for (int l = 0; l < 3; l++)
                     _context.PSSetShaderResource((uint)l + 1, (part.Layers[l] ?? baseTexture).View);
                 _context.PSSetShaderResource(4, (mask ?? baseTexture).View);
@@ -1245,9 +1250,11 @@ uint PSPickTranslucent(PS_INPUT input) : SV_Target
             {
                 SetMesh(emission, part.BakedLighting, part.DarkeningDecal, part.Character,
                     new Vector4(0f, 0f, part.VertexColored ? 1f : 0f, part.TintTexture is not null ? 1f : part.Palette is not null ? 2f : 0f));
-                if ((part.TintTexture ?? part.Palette) is { } second)
-                    _context.PSSetShaderResource(1, second.View);
+                if (part.TintTexture is not null)
+                    _context.PSSetShaderResource(1, part.TintTexture.View);
             }
+            if (part.Palette is not null)
+                _context.VSSetShaderResource(8, part.Palette.View);
             SetSurface(part.NormalTexture, part.SpecularTexture, part.Shine, part.Character);
             SetColorTexture(baseTexture);
             FlushConstants();
