@@ -441,6 +441,113 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
     return float4(Mask.SampleLevel(LinearClamp, input.uv, 0).rgb * RayColor.rgb * SunPosition.z, 0.0f);
 }";
 
+    // Reflections in wet ground and puddles: from each wet pixel (how much it mirrors: alpha of the surface colours'
+    // image), a ray along the mirrored direction through the depth image; where it goes behind a surface, that
+    // surface's colour, blended over the sky the pixel mirrored so far. Only what is on screen can be mirrored.
+    private const string ReflectSource = @"
+cbuffer Constants : register(b0)
+{
+    float4x4 ViewRotation; // World directions -> camera's (rotation only).
+    float4 Projection;     // x, y: scale of the projection, z: near plane (m).
+    float4 Size;           // xy: size of the images.
+    float4 Settings;       // x: frame number (turns the starts of the rays).
+};
+Texture2D<float> Depth : register(t0);
+Texture2D Normals : register(t1);
+Texture2D Albedo : register(t2);
+Texture2D Scene : register(t3);
+SamplerState LinearClamp : register(s0);
+
+struct VS_OUTPUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float3 ViewPoint(float2 uv, float depth)
+{
+    float distance = Projection.z / max(depth, 1e-7f);
+    float2 ndc = (uv * 2.0f - 1.0f) * float2(1.0f, -1.0f);
+    return float3(ndc.x * distance / Projection.x, ndc.y * distance / Projection.y, -distance);
+}
+
+float2 ImageAt(float3 s)
+{
+    float2 ndc = float2(s.x * Projection.x, s.y * Projection.y) / -s.z;
+    return ndc * float2(0.5f, -0.5f) + 0.5f;
+}
+
+// Distance of the surface seen at uv (far away for the sky).
+float SceneDistance(float2 uv)
+{
+    float depth = Depth.Load(int3(clamp(uv * Size.xy, 0.0f, Size.xy - 1.0f), 0));
+    return depth > 0.0f ? Projection.z / depth : 1e9f;
+}
+
+float4 PSReflect(VS_OUTPUT input) : SV_Target
+{
+    int3 pixel = int3(input.pos.xy, 0);
+    float mirror = Albedo.Load(pixel).a;
+    float4 normal = Normals.Load(pixel);
+    float depth = Depth.Load(pixel);
+    if (mirror < 0.01f || depth <= 0.0f || dot(normal.xyz, 1.0f) <= 0.0f)
+        discard;
+    float3 p = ViewPoint(input.uv, depth);
+    float3 n = normalize(mul(ViewRotation, float4(normal.xyz * 2.0f - 1.0f, 0.0f)).xyz);
+    float3 r = reflect(normalize(p), n);
+    // Rays coming back towards the camera would need what is behind it.
+    float away = saturate((0.4f - r.z) * 2.5f);
+    if (away <= 0.0f)
+        discard;
+
+    float noise = frac(52.9829189f * frac(dot(input.pos.xy + Settings.x * 5.588238f, float2(0.06711056f, 0.00583715f))));
+    float stride = 0.1f + 0.01f * -p.z;
+    float3 s = p + r * (stride * noise);
+    float3 previous = s;
+    float2 hit = -1.0f;
+    [loop] for (int i = 0; i < 40; i++)
+    {
+        previous = s;
+        s += r * stride;
+        stride *= 1.12f;
+        if (s.z >= -Projection.z)
+            break;
+        float2 uv = ImageAt(s);
+        if (any(uv < 0.0f) || any(uv > 1.0f))
+            break;
+        float behind = -s.z - SceneDistance(uv);
+        if (behind > 0.0f)
+        {
+            // Behind a surface, not just passing behind a thin thing far in front of the ray: found, then refined.
+            if (behind < max(stride * 2.0f, 0.5f))
+            {
+                float3 a = previous, b = s;
+                [unroll] for (int k = 0; k < 5; k++)
+                {
+                    float3 m = (a + b) * 0.5f;
+                    if (-m.z - SceneDistance(ImageAt(m)) > 0.0f)
+                        b = m;
+                    else
+                        a = m;
+                }
+                hit = ImageAt(b);
+            }
+            break;
+        }
+    }
+    if (hit.x < 0.0f)
+        discard;
+    // Faded towards the edges of the image (what is past them is unknown).
+    float2 edge = min(hit, 1.0f - hit);
+    float fade = saturate(min(edge.x, edge.y) * 12.0f) * away;
+    return float4(Scene.SampleLevel(LinearClamp, hit, 0).rgb, mirror * fade);
+}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ReflectConstants
+    {
+        public Matrix4x4 ViewRotation;
+        public Vector4 Projection;
+        public Vector4 Size;
+        public Vector4 Settings;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct RaysConstants
     {
@@ -492,6 +599,9 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
     private readonly ID3D11BlendState _opaque;
     private readonly ID3D11BlendState _multiply;
     private readonly ID3D11BlendState _add;
+    private readonly ID3D11BlendState _mix;
+    private readonly ID3D11PixelShader _reflectPixelShader;
+    private readonly ID3D11Buffer _reflectBuffer;
     private readonly ID3D11PixelShader _bloomDownPixelShader;
     private readonly ID3D11PixelShader _bloomUpPixelShader;
     private readonly ID3D11Buffer _bloomBuffer;
@@ -595,6 +705,22 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
             RenderTargetWriteMask = ColorWriteEnable.All,
         };
         _add = device.CreateBlendState(add);
+        var mix = new BlendDescription();
+        mix.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            BlendEnable = true,
+            SourceBlend = Blend.SourceAlpha,
+            DestinationBlend = Blend.InverseSourceAlpha,
+            BlendOperation = BlendOperation.Add,
+            SourceBlendAlpha = Blend.Zero,
+            DestinationBlendAlpha = Blend.One,
+            BlendOperationAlpha = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteEnable.All,
+        };
+        _mix = device.CreateBlendState(mix);
+        _reflectPixelShader = device.CreatePixelShader(Compiler.Compile(ReflectSource, "PSReflect", "reflect", "ps_5_0").Span);
+        _reflectBuffer = device.CreateBuffer(new BufferDescription(
+            (uint)sizeof(ReflectConstants), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
         _bloomDownPixelShader = device.CreatePixelShader(Compiler.Compile(BloomSource, "PSDown", "bloom", "ps_5_0").Span);
         _bloomUpPixelShader = device.CreatePixelShader(Compiler.Compile(BloomSource, "PSUp", "bloom", "ps_5_0").Span);
         _bloomBuffer = device.CreateBuffer(new BufferDescription(
@@ -789,6 +915,45 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
         Unsafe.Write((void*)map.DataPointer, constants);
         _context.Unmap(_occlusionBuffer, 0);
         _context.PSSetConstantBuffer(0, _occlusionBuffer);
+    }
+
+    // Mirrors what is on screen in the wet surfaces drawn so far (with the normals' image bound, see Bind; their
+    // surface colours' alpha says how much they mirror), then binds the colour image alone again. camera: the camera of
+    // ViewProjection.
+    public void AddWetReflections(Camera camera, float aspectRatio)
+    {
+        var copy = CopyColor();
+        var projection = camera.Projection(aspectRatio);
+        var map = _context.Map(_reflectBuffer, 0, MapMode.WriteDiscard);
+        Unsafe.Write((void*)map.DataPointer, new ReflectConstants
+        {
+            ViewRotation = Matrix4x4.CreateLookAt(Vector3.Zero, camera.Forward, Vector3.UnitZ),
+            Projection = new Vector4(projection.M11, projection.M22, camera.NearPlane, 0f),
+            Size = new Vector4(Width, Height, 0f, 0f),
+            Settings = new Vector4(Options.Antialiasing ? _frame : 0f, 0f, 0f, 0f),
+        });
+        _context.Unmap(_reflectBuffer, 0);
+
+        _context.OMSetRenderTargets(_color!.Write!);
+        _context.RSSetViewport(new Viewport(0, 0, Width, Height));
+        _context.IASetInputLayout(null);
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        _context.VSSetShader(_fullVertexShader);
+        _context.GSSetShader(null);
+        _context.PSSetShader(_reflectPixelShader);
+        _context.PSSetConstantBuffer(0, _reflectBuffer);
+        _context.PSSetSampler(0, _linearClamp);
+        _context.OMSetDepthStencilState(_noDepth, 0);
+        _context.RSSetState(_rasterizerState);
+        _context.OMSetBlendState(_mix, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
+        _context.PSSetShaderResource(0, _depthRead!);
+        _context.PSSetShaderResource(1, _normals!.Read);
+        _context.PSSetShaderResource(2, _albedo!.Read);
+        _context.PSSetShaderResource(3, copy);
+        _context.Draw(3, 0);
+        for (uint slot = 0; slot < 4; slot++)
+            _context.PSUnsetShaderResource(slot);
+        Bind(normals: false);
     }
 
     // Images of the solid pass for the effects drawn over it (NightLights): colour image, depth, normals, colours of the
@@ -1139,6 +1304,9 @@ float4 PSAddRays(VS_OUTPUT input) : SV_Target
         _resolveBuffer.Dispose();
         _multiply.Dispose();
         _add.Dispose();
+        _mix.Dispose();
+        _reflectPixelShader.Dispose();
+        _reflectBuffer.Dispose();
         _bloomDownPixelShader.Dispose();
         _bloomUpPixelShader.Dispose();
         _bloomBuffer.Dispose();

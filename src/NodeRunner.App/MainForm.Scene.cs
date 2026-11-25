@@ -174,7 +174,9 @@ internal sealed unsafe partial class MainForm
         bool occlusion = image is not null && imageOptions.AmbientOcclusion > 0;
         // The map's lamps at night: their light on the solid surfaces, then their glows.
         float nightLights = NightLightStrength(image, imageOptions, lighting, modelsEnabled);
-        if (occlusion || nightLights > 0f)
+        // Wet ground mirroring the buildings and lamps on screen (with the effects of the high qualities).
+        bool wetReflections = image is not null && imageOptions.Hdr && lighting.Wetness > 0f && modelsEnabled && !_graphics!.IsSoftware;
+        if (occlusion || nightLights > 0f || wetReflections)
         {
             image!.Bind(normals: true);
             _modelRenderer.NormalsOutput = true;
@@ -182,13 +184,17 @@ internal sealed unsafe partial class MainForm
         void PlayerAndWater()
         {
             _state.Play.Draw(_modelRenderer, sceneViewProjection);
-            if (occlusion || nightLights > 0f)
+            if (occlusion || nightLights > 0f || wetReflections)
             {
                 _modelRenderer.NormalsOutput = false;
                 if (occlusion)
                     image!.ApplyOcclusion(camera, (float)scene.Width / scene.Height);
                 if (nightLights > 0f)
                     _nightLights!.LightSurfaces(image!, camera, sceneViewProjection, nightLights);
+                if (wetReflections)
+                    image!.AddWetReflections(camera, (float)scene.Width / scene.Height);
+                else
+                    image!.Bind(normals: false);
             }
             DrawWater(sceneViewProjection, lighting, scene, image);
         }

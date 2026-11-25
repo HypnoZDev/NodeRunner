@@ -184,6 +184,7 @@ static float3 ShadedNormal = float3(0.0f, 0.0f, 1.0f);
 static float AmbientShare = 1.0f;
 static float3 SurfaceColor = 0.0f; // Its colour without the light (lit by NightLights).
 static float WetMirror = 1.0f;     // How much a wet surface mirrors the sky (little for leaves and grass).
+static float WetReflect = 0.0f;    // How much it mirrors what is around (the reflections drawn over it, SceneImage).
 
 // The normal bent by a normal map (x and y in red and green, z rebuilt), along directions worked out from how the
 // position and the texture coordinates change from pixel to pixel: no tangents needed in the vertices.
@@ -364,7 +365,9 @@ float4 Shade(PS_INPUT input, float4 color)
         float facing = 1.0f - saturate(front);
         float fresnel = lerp(0.03f, 0.06f, puddle) + 0.9f * facing * facing * facing * facing * facing;
         float open = Emission.y > 0.5f ? saturate(dot(input.color.rgb, 0.667f)) : 1.0f;
-        lit = lerp(lit, MirroredSky(reflect(-toCamera, w)), fresnel * lerp(wet * 0.8f, 1.0f, puddle) * open);
+        WetReflect = fresnel * lerp(wet * 0.8f, 1.0f, puddle) * open;
+        lit = lerp(lit, MirroredSky(reflect(-toCamera, w)), WetReflect);
+        ShadedNormal = w;
         lit += SkyTop.rgb * (crests * 0.25f * open);
     }
 
@@ -455,7 +458,7 @@ PS_TWO WithNormal(float4 color)
     PS_TWO output;
     output.color = color;
     output.normal = float4(ShadedNormal * 0.5f + 0.5f, saturate(AmbientShare));
-    output.albedo = float4(SurfaceColor, 1.0f);
+    output.albedo = float4(SurfaceColor, WetReflect);
     return output;
 }
 
