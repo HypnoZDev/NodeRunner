@@ -310,6 +310,41 @@ internal sealed class MainUi
 
     public bool ExitRequested { get; set; }
 
+    // Another game to open: NodeRunner closes (asking about unsaved changes) and starts again on it.
+    public Configuration.GameKind? RestartIntoGame { get; set; }
+
+    // File > Change game: every game found on this computer. Within the trilogy the map is swapped in place.
+    private void DrawGameSwitch()
+    {
+        var games = new List<(Configuration.GameKind Kind, string Name)>();
+        if (_state.Game is not null)
+            games.Add((Configuration.GameKind.Gta5, "GTA V"));
+        if (_state.Gta4Folder is not null)
+            games.Add((Configuration.GameKind.Gta4, "GTA IV"));
+        foreach (var classic in _state.ClassicFolders.Keys.Order())
+            games.Add((Configuration.GameKinds.Kind(classic), NodeRunner.Data.Installation.ClassicInstallLocator.DisplayName(classic)));
+        if (!ImGui.BeginMenu(L($"{Icons.Globe}  Changer de jeu"), games.Count > 1 && !_state.Play.IsActive))
+            return;
+        foreach (var (kind, name) in games)
+        {
+            bool current = kind == _state.ActiveGame;
+            if (!ImGui.MenuItem(name, null, current, !current))
+                continue;
+            if (_state.IsClassic && Configuration.GameKinds.Classic(kind) is not null)
+                _state.GameSwitchRequest = kind;
+            else if (_state.Online.Blocks() is { } blocked)
+                _state.Notify(blocked, warning: true);
+            else
+                RestartIntoGame = kind;
+        }
+        if (games.Any(g => g.Kind != _state.ActiveGame && !(_state.IsClassic && Configuration.GameKinds.Classic(g.Kind) is not null)))
+        {
+            ImGui.Separator();
+            ImGui.TextDisabled(L("NodeRunner redémarre sur le jeu choisi."));
+        }
+        ImGui.EndMenu();
+    }
+
     // Set by the UI to save the modified map files (asks for a folder first if none is set); handled by the main
     // form.
     public bool SaveRequested { get; set; }
@@ -777,6 +812,7 @@ internal sealed class MainUi
             if (!_state.Features.Gta5Exports && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled | ImGuiHoveredFlags.DelayShort))
                 ImGui.SetTooltip(Gta5OnlyTip);
             ImGui.Separator();
+            DrawGameSwitch();
             if (ImGui.MenuItem(L("Quitter")))
                 ExitRequested = true;
             ImGui.EndMenu();

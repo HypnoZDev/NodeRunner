@@ -31,6 +31,8 @@ internal sealed class ProjectWindow(AppState state, Action chooseLocation)
 
     public void Close() => _open = false;
 
+    public bool IsOpen => _open;
+
     public void Draw()
     {
         if (!_open)

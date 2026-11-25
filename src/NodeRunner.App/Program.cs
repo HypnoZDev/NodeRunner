@@ -12,10 +12,19 @@ internal static class Program
 
     public const string Author = "Inside Rockstar";
 
+    // "--game Gta4": opens that game at once, without the choice of the start-up screen (File > Change game).
+    public const string GameArgument = "--game";
+
     private static AppState? _state;
 
+    private static GameKind? RequestedGame(string[] args)
+    {
+        int at = Array.FindIndex(args, a => a.Equals(GameArgument, StringComparison.OrdinalIgnoreCase));
+        return at >= 0 && at + 1 < args.Length && Enum.TryParse<GameKind>(args[at + 1], ignoreCase: true, out var game) ? game : null;
+    }
+
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
         // Errors escaping a window event or a thread: our own message and report instead of the raw .NET dialog.
@@ -48,6 +57,9 @@ internal static class Program
                 games.Add(GameKind.Gta5);
             if (state.Gta4Folder is not null)
                 games.Add(GameKind.Gta4);
+            var requested = RequestedGame(args);
+            if (requested?.Classic() is { } requestedClassic && state.ClassicFolders.ContainsKey(requestedClassic))
+                settings.LastClassicGame = requested.Value;
             if (state.ClassicFolders.Count > 0)
             {
                 var classic = settings.LastClassicGame.Classic() is { } last && state.ClassicFolders.ContainsKey(last)
@@ -83,7 +95,10 @@ internal static class Program
                     settings.LastGame = chosen;
                     state.SaveSettings();
                 }
-                bool offer = games.Count > 1;
+                bool direct = requested is { } chosenGame && games.Contains(chosenGame);
+                if (direct)
+                    game = requested!.Value;
+                bool offer = games.Count > 1 && !direct;
                 if (!offer)
                     Start(game);
                 using var splash = new SplashForm(state.World, state.Gta4, state.Classic, games, main.PreloadModels, game, settings.Gta4Episode,

@@ -292,6 +292,35 @@ internal sealed unsafe partial class MainForm : Form
             _imguiContext = IntPtr.Zero;
         }
         base.OnFormClosed(e);
+        if (_restartGame is { } game)
+            StartAgainOn(game);
+    }
+
+    // File > Change game: settings and camera are saved, then a new copy opens straight on that game.
+    private GameKind? _restartGame;
+
+    private void StartAgainOn(GameKind game)
+    {
+        _state.Settings.LastGame = game;
+        if (game.Classic() is not null)
+            _state.Settings.LastClassicGame = game;
+        _state.SaveSettings();
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(Application.ExecutablePath)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = AppContext.BaseDirectory,
+            };
+            start.ArgumentList.Add(Program.GameArgument);
+            start.ArgumentList.Add(game.ToString());
+            System.Diagnostics.Process.Start(start);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            MessageBox.Show(L($"NodeRunner n'a pas pu redémarrer : {ex.Message}\nRelancez-le à la main."), Program.Name,
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void OnApplicationIdle(object? sender, EventArgs e)

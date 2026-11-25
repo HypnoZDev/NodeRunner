@@ -23,9 +23,21 @@ internal sealed unsafe partial class MainForm
             _ui.ExitRequested = true;
         }
 
+        if (_ui.RestartIntoGame is { } nextGame)
+        {
+            _ui.RestartIntoGame = null;
+            _restartGame = nextGame;
+            Close();
+            // Closing cancelled: forget the restart, unless the "New project" window saves then closes NodeRunner.
+            if (!IsDisposed && !_ui.ProjectWindow.IsOpen)
+                _restartGame = null;
+            return;
+        }
+
         if (_ui.ExitRequested)
         {
             _ui.ExitRequested = false;
+            _restartGame = null;
             Close();
             return;
         }
