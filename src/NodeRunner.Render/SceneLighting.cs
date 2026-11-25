@@ -173,6 +173,23 @@ public readonly record struct SceneLighting
         return result;
     }
 
+    // A flash of lightning (0 none, about 1 the brightest): bluish white light from the whole sky, for an instant (the
+    // eyes have no time to get used to it: Adaptation kept).
+    public SceneLighting WithFlash(float flash)
+    {
+        if (flash <= 0f)
+            return this;
+        // Against the night's brighter exposure (Adaptation), so a flash looks alike at any hour.
+        var light = new Vector3(0.8f, 0.85f, 1f) * (flash * (IsHdr ? 0.6f / MathF.Max(Adaptation, 1f) : 0.3f));
+        return this with
+        {
+            SkyAmbient = SkyAmbient + light * 1.2f,
+            GroundAmbient = GroundAmbient + light * 0.4f,
+            Zenith = Zenith + light * 1.5f,
+            Horizon = Horizon + light * 1.5f,
+        };
+    }
+
     // Height of the sky's horizon colour (radians), just above the lowest height of the sky drawn (SkyRenderer).
     private const float HorizonHeight = 0.09f;
 

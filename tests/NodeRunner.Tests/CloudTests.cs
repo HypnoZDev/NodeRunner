@@ -41,4 +41,21 @@ public class CloudTests
         Assert.True(storm.Grey > 0.5f);
         Assert.True(CloudWeather.For(Weather.Thunder).Coverage > CloudWeather.For(Weather.ExtraSunny).Coverage);
     }
+
+    [Fact]
+    public void Lightning_FlashesNowAndThen()
+    {
+        var flashes = Enumerable.Range(0, 600 * 50).Select(i => Lightning.Flash(i / 50.0)).ToArray();
+        Assert.All(flashes, f => Assert.InRange(f, 0f, 1.2f));
+        // About one flash in two periods of 7 s, each lasting well under a second.
+        int starts = flashes.Where((f, i) => f > 0.3f && (i == 0 || flashes[i - 1] <= 0f)).Count();
+        Assert.InRange(starts, 25, 80);
+        Assert.InRange(flashes.Count(f => f > 0.05f) / 50.0, 2.0, 60.0);
+        Assert.Equal(Lightning.Flash(123.45), Lightning.Flash(123.45));
+
+        var storm = SceneLighting.ForHour(13f, 4000f).WithWeather(CloudWeather.For(Weather.Thunder));
+        var lit = storm.WithFlash(1f);
+        Assert.True(lit.SkyAmbient.X > storm.SkyAmbient.X && lit.Zenith.Z > storm.Zenith.Z);
+        Assert.Equal(storm, storm.WithFlash(0f));
+    }
 }

@@ -95,6 +95,12 @@ internal sealed unsafe partial class MainForm
         if (!_state.IsClassic)
         {
             lighting = lighting.WithWeather(weather);
+            if (settings.Weather == Weather.Thunder)
+            {
+                float flash = Lightning.Flash(_clock.Elapsed.TotalSeconds);
+                lighting = lighting.WithFlash(flash);
+                cloudLighting = cloudLighting.WithFlash(flash);
+            }
             fogDistance = lighting.FogDistance;
             if (image is not null && imageOptions.Hdr)
                 imageOptions = imageOptions with { Adaptation = lighting.Adaptation };
