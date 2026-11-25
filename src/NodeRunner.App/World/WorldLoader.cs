@@ -392,6 +392,7 @@ internal sealed class WorldLoader : IDisposable
 
             progress.Report(L("Lecture de l'eau..."));
             var water = WaterMap.Load(files);
+            WaterLookReader.Load(files, water);
             if (!Publish(generation, () => Water = water))
                 return;
 

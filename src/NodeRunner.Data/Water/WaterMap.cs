@@ -65,6 +65,13 @@ public readonly record struct WaterCalming(float MinX, float MaxX, float MinY, f
 // A zone of water.xml where waves roll in towards the shore: their size (Amplitude, about metres) and the way they go.
 public readonly record struct WaterWave(float MinX, float MaxX, float MinY, float MaxY, float Amplitude, Vector2 Direction);
 
+// Colour of deep water at each place (the game's waterfog images): Rgba (4 bytes per texel, north row first) covers
+// Area (min x, min y, max x, max y).
+public sealed record WaterColorMap(int Width, int Height, byte[] Rgba, Vector4 Area);
+
+// A tiling grey pattern (one byte per texel), such as the light patterns on the bottom under shallow water.
+public sealed record WaterPattern(int Width, int Height, byte[] Values);
+
 // Water surfaces of the map, read from the game's water.xml (and the Cayo Perico one): flat rectangles and triangles,
 // and the zones where the waves are calmer or roll in towards the shore.
 public sealed class WaterMap
@@ -86,6 +93,11 @@ public sealed class WaterMap
 
     // Height of the open ocean (Vice City's sea is 6 m up).
     public float OceanHeight { get; set; }
+
+    // Colour of the water per place: the main map first, then Cayo Perico's (empty: one colour everywhere).
+    public List<WaterColorMap> ColorMaps { get; } = [];
+
+    public WaterPattern? Caustics { get; set; }
 
     public List<string> Errors { get; } = [];
 

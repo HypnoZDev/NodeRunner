@@ -34,6 +34,9 @@ cbuffer Constants : register(b0)
     float4 MaskArea;     // The same for the image of where the open water is inside the map.
     float4 OceanBounds;  // The map's water file (min x, min y, max x, max y): open ocean all around; empty: none.
     float4 GridCenter;   // xy: centre of the grid of the open water.
+    float4 ColorArea;    // xy: north-west corner of the game's water colour image, zw: 1 / its size (m, y negative); z = 0: none.
+    float4 IslandArea;   // The same for Cayo Perico's image.
+    float4 Caustics;     // x = 1: light pattern on the bottom available.
 };
 // Water meshes of the models (pools, fountains, streams): placement and wave strength of the model drawn.
 cbuffer MeshConstants : register(b1)
@@ -45,7 +48,11 @@ Texture2D<float> SceneDepth : register(t0);
 Texture2D SceneColor : register(t1);
 Texture2D WaveTexture : register(t2);
 Texture2D<float> WaterMask : register(t3);
+Texture2D WaterColors : register(t4);
+Texture2D IslandColors : register(t5);
+Texture2D<float> CausticPattern : register(t6);
 SamplerState LinearClamp : register(s0);
+SamplerState LinearWrap : register(s1);
 
 struct VS_INPUT { float3 pos : POSITION; float waves : TEXCOORD0; };
 struct VS_MESH_INPUT { float3 pos : POSITION; float3 normal : NORMAL; };
@@ -239,6 +246,27 @@ float Noise(float2 p)
     return lerp(lerp(Hash(i), Hash(i + float2(1.0f, 0.0f)), f.x), lerp(Hash(i + float2(0.0f, 1.0f)), Hash(i + float2(1.0f, 1.0f)), f.x), f.y);
 }
 
+// Colour of deep water at p from the game's images (Cayo Perico's wins inside its area, blended at its edges).
+float3 WaterTint(float2 p)
+{
+    float3 tint = WaterColors.SampleLevel(LinearClamp, (p - ColorArea.xy) * ColorArea.zw, 0).rgb;
+    if (IslandArea.z != 0.0f)
+    {
+        float2 uv = (p - IslandArea.xy) * IslandArea.zw;
+        float2 inside = saturate(min(uv, 1.0f - uv) * 12.0f);
+        tint = lerp(tint, IslandColors.SampleLevel(LinearClamp, uv, 0).rgb, inside.x * inside.y);
+    }
+    return tint;
+}
+
+// Light gathered on the bottom under shallow water by the waves (two drifting layers of the game's pattern).
+float CausticLight(float2 p, float t)
+{
+    float a = CausticPattern.SampleLevel(LinearWrap, p * 0.24f + float2(t * 0.021f, t * 0.013f), 0);
+    float b = CausticPattern.SampleLevel(LinearWrap, float2(p.y, -p.x) * 0.19f - float2(t * 0.017f, -t * 0.011f), 0);
+    return (a + b) * 0.5f;
+}
+
 float3 SkyColor(float3 ray)
 {
     float3 horizon = Horizon.rgb, zenith = Zenith.rgb;
@@ -345,6 +373,17 @@ float4 PS(PS_INPUT input) : SV_Target
     // Light received by the water body: sky all around, plus the sun from above.
     float3 light = SkyAmbient.rgb * 1.3f + SunColor.rgb * saturate(SunDirection.z) * 0.9f;
     float3 deepColor = float3(0.012f, 0.060f, 0.080f), shallowColor = float3(0.050f, 0.190f, 0.180f);
+    // Light lost per metre of water crossed. On the map's water, the game's colour for the place, and the water as
+    // clear as it says: brownish = muddy (lakes, rivers); red goes first in clear water, blue in muddy water.
+    bool tinted = input.kind.y > 0.5f && ColorArea.z != 0.0f;
+    float3 absorb = 0.30f;
+    if (tinted)
+    {
+        float3 tint = WaterTint(input.rest.xy);
+        float murk = saturate((tint.r - tint.b) * 12.0f + 0.6f);
+        absorb = lerp(0.09f, 0.45f, murk) * (1.0f + (1.0f - tint / max(max(tint.r, tint.g), max(tint.b, 0.02f))) * 1.5f);
+        deepColor = tint * 0.6f;
+    }
     if (hdr)
     {
         deepColor = pow(deepColor, 2.2f) * 2.0f;
@@ -358,20 +397,23 @@ float4 PS(PS_INPUT input) : SV_Target
 
     // Water thickness along the view ray, from the depth of what is behind (reversed Z: depth = near / view depth).
     float thickness = 1000.0f;
+    float behindRatio = 1e4f; // Distance to what is behind the water, over the distance to the water.
     if (Settings.z > 0.5f)
     {
         float sceneDepth = SceneDepth.Load(int3(input.pos.xy, 0));
         float near = SunDirection.w;
         float waterView = near / max(input.pos.z, 1e-9f);
         float sceneView = sceneDepth > 0.0f ? near / sceneDepth : 1e7f;
+        behindRatio = sceneView / max(waterView, 0.001f);
         thickness = max(sceneView - waterView, 0.0f) * distance / max(waterView, 0.001f);
     }
     float vertical = thickness * abs(dot(v, up)); // Depth below the surface, roughly.
     float edge = saturate(vertical * 4.0f);
 
     // See-through when shallow, then the water's own colour.
-    float opacity = 1.0f - exp(-thickness * 0.30f);
-    float3 body = lerp(shallow, deep, 1.0f - exp(-thickness * 0.12f));
+    float3 transmit = exp(-thickness * absorb);
+    float opacity = 1.0f - dot(transmit, 1.0f / 3.0f);
+    float3 body = tinted ? deep : lerp(shallow, deep, 1.0f - exp(-thickness * 0.12f));
     // Sunlight passing through the crests of the waves, seen against the sun: a lighter green-blue.
     float3 through = (hdr ? float3(0.02f, 0.12f, 0.1f) : float3(0.1f, 0.3f, 0.28f)) * SunColor.rgb
         * pow(saturate(dot(-v, SunDirection.xyz) * 0.5f + 0.5f), 4.0f) * saturate(height * 1.5f + 0.2f);
@@ -401,12 +443,13 @@ float4 PS(PS_INPUT input) : SV_Target
     float3 foamColor = light * 0.85f;
 
     // Premultiplied alpha: the reflection is opaque, the body as opaque as the water is thick.
-    float3 color = reflection * fresnel + body * (1.0f - fresnel) * opacity + glint * edge;
+    float3 color = reflection * fresnel + body * (1.0f - fresnel) * (1.0f - transmit) + glint * edge;
     float alpha = saturate(fresnel + (1.0f - fresnel) * opacity);
     color = lerp(color, foamColor, foam);
     alpha = lerp(alpha, 1.0f, foam);
 
-    // The bottom seen through the water, bent by the waves (not where something in front of the water would show).
+    // The bottom seen through the water, bent by the waves (not where something in front of the water would show),
+    // each colour dimmed as much as the water absorbs it, with the light gathered by the waves on it in the sun.
     if (detailed && alpha < 0.999f)
     {
         float2 bend = slope * float2(1.0f, -1.0f) * min(thickness, 4.0f) * Viewport.w * 0.012f / max(distance * 0.05f, 1.0f);
@@ -414,7 +457,17 @@ float4 PS(PS_INPUT input) : SV_Target
         float waterDepth = input.pos.z;
         if (SceneDepth.Load(int3(pixel, 0)) >= waterDepth)
             pixel = int2(input.pos.xy);
-        color += SceneColor.Load(int3(pixel, 0)).rgb * (1.0f - alpha);
+        float3 bottom = SceneColor.Load(int3(pixel, 0)).rgb;
+        if (Caustics.x > 0.5f && behindRatio < 1e3f)
+        {
+            float3 ground = camera + (input.world - camera) * behindRatio;
+            float under = input.world.z - ground.z;
+            float strength = saturate(under * 2.0f) * exp(-under * 0.15f) * saturate(1.0f - distance / 200.0f)
+                * saturate((0.25f - footprint) * 10.0f) * saturate(SunDirection.z * 3.0f) * SunColor.a;
+            if (strength > 0.0f)
+                bottom *= 1.0f + CausticLight(ground.xy, CameraTime.w) * 1.5f * strength;
+        }
+        color += bottom * transmit * (1.0f - fresnel) * (1.0f - foam);
         alpha = 1.0f;
     }
 
@@ -443,6 +496,9 @@ float4 PS(PS_INPUT input) : SV_Target
         public Vector4 MaskArea;
         public Vector4 OceanBounds;
         public Vector4 GridCenter;
+        public Vector4 ColorArea;
+        public Vector4 IslandArea;
+        public Vector4 Caustics;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -506,7 +562,9 @@ float4 PS(PS_INPUT input) : SV_Target
     // (3D waves: the grid shows the rest).
     private (ID3D11Buffer? Buffer, int Count) _allSurfaces, _inlandSurfaces;
     private (ID3D11Texture2D Texture, ID3D11ShaderResourceView View)? _waveTexture, _maskTexture;
-    private Vector4 _waveArea, _maskArea, _oceanBounds;
+    private (ID3D11Texture2D Texture, ID3D11ShaderResourceView View)? _colorTexture, _islandTexture, _causticTexture;
+    private Vector4 _waveArea, _maskArea, _oceanBounds, _colorArea, _islandArea;
+    private readonly ID3D11SamplerState _linearWrap;
     private float _oceanHeight;
     private bool _openWater;
     private bool _waves3D;
@@ -582,6 +640,15 @@ float4 PS(PS_INPUT input) : SV_Target
             AddressU = TextureAddressMode.Clamp,
             AddressV = TextureAddressMode.Clamp,
             AddressW = TextureAddressMode.Clamp,
+            ComparisonFunc = ComparisonFunction.Never,
+            MaxLOD = float.MaxValue,
+        });
+        _linearWrap = device.CreateSamplerState(new SamplerDescription
+        {
+            Filter = Filter.MinMagMipLinear,
+            AddressU = TextureAddressMode.Wrap,
+            AddressV = TextureAddressMode.Wrap,
+            AddressW = TextureAddressMode.Wrap,
             ComparisonFunc = ComparisonFunction.Never,
             MaxLOD = float.MaxValue,
         });
@@ -667,6 +734,20 @@ float4 PS(PS_INPUT input) : SV_Target
 
         CreateMask(water.Quads.Where(AtSeaLevel).ToList());
         CreateWaveZones(water);
+        if (water.ColorMaps.Count > 0)
+            (_colorTexture, _colorArea) = CreateColorMap(water.ColorMaps[0]);
+        if (water.ColorMaps.Count > 1)
+            (_islandTexture, _islandArea) = CreateColorMap(water.ColorMaps[1]);
+        if (water.Caustics is { } caustics)
+            _causticTexture = CreateTexture(caustics.Width, caustics.Height, Format.R8_UNorm, caustics.Values, 1);
+    }
+
+    // The image's first row is the north edge: sampled from the north-west corner, y going south.
+    private ((ID3D11Texture2D, ID3D11ShaderResourceView), Vector4) CreateColorMap(WaterColorMap map)
+    {
+        var area = map.Area;
+        var texture = CreateTexture(map.Width, map.Height, Format.R8G8B8A8_UNorm, map.Rgba, 4);
+        return (texture, new Vector4(area.X, area.W, 1f / (area.Z - area.X), -1f / (area.W - area.Y)));
     }
 
     private (ID3D11Buffer?, int) CreateSurfaces(List<WaterVertex> vertices)
@@ -867,6 +948,9 @@ float4 PS(PS_INPUT input) : SV_Target
             MaskArea = _maskTexture is null ? Vector4.Zero : _maskArea,
             OceanBounds = _oceanBounds,
             GridCenter = new Vector4(center, 0f, 0f),
+            ColorArea = _colorTexture is null ? Vector4.Zero : _colorArea,
+            IslandArea = _islandTexture is null ? Vector4.Zero : _islandArea,
+            Caustics = new Vector4(_causticTexture is null ? 0f : 1f, 0f, 0f, 0f),
         };
         var map = _context.Map(_constantBuffer, 0, MapMode.WriteDiscard);
         Unsafe.Write((void*)map.DataPointer, _constants);
@@ -892,8 +976,15 @@ float4 PS(PS_INPUT input) : SV_Target
         }
         if (_maskTexture is { } mask)
             _context.PSSetShaderResource(3, mask.View);
+        if (_colorTexture is { } colors)
+            _context.PSSetShaderResource(4, colors.View);
+        if (_islandTexture is { } island)
+            _context.PSSetShaderResource(5, island.View);
+        if (_causticTexture is { } caustic)
+            _context.PSSetShaderResource(6, caustic.View);
         _context.VSSetSampler(0, _linearClamp);
         _context.PSSetSampler(0, _linearClamp);
+        _context.PSSetSampler(1, _linearWrap);
         _context.GSSetShader(null);
         _context.OMSetDepthStencilState(_depthState, 0);
         _context.OMSetBlendState(_blendState, new Color4(0f, 0f, 0f, 0f), uint.MaxValue);
@@ -943,7 +1034,7 @@ float4 PS(PS_INPUT input) : SV_Target
     // The copies are written again next frame.
     public void End()
     {
-        for (uint slot = 0; slot < 4; slot++)
+        for (uint slot = 0; slot < 7; slot++)
             _context.PSUnsetShaderResource(slot);
         _context.VSUnsetShaderResource(2);
         _context.VSUnsetShaderResource(3);
@@ -967,6 +1058,15 @@ float4 PS(PS_INPUT input) : SV_Target
             mask.Texture.Dispose();
         }
         _maskTexture = null;
+        foreach (var look in new[] { _colorTexture, _islandTexture, _causticTexture })
+        {
+            if (look is { } t)
+            {
+                t.View.Dispose();
+                t.Texture.Dispose();
+            }
+        }
+        _colorTexture = _islandTexture = _causticTexture = null;
         _openWater = false;
     }
 
@@ -974,6 +1074,7 @@ float4 PS(PS_INPUT input) : SV_Target
     {
         DisposeSurfaces();
         _linearClamp.Dispose();
+        _linearWrap.Dispose();
         _gridVertices.Dispose();
         _gridIndices.Dispose();
         _gridInputLayout.Dispose();
