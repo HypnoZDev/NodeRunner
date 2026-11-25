@@ -793,6 +793,25 @@ internal sealed class ExportWindow(AppState state, Action chooseFolder, Action c
     private void Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target) =>
         Export(maps, pathAreas, target, out _);
 
+    public bool HasChanges => state.MapsToExport.Count > 0 || state.PathAreasToSave.Count > 0 || state.ScenarioRegionsToSave.Count > 0
+        || state.InteriorFilesToExport.Count > 0 || state.CollisionEdits.Files.Count > 0 || !state.OccluderEdits.IsEmpty || state.ProjectFileCount > 0;
+
+    // The FiveM export, straight into a resource folder of the live-link server, with a fresh check (the collision and
+    // occluder files unticked here stay out). Text: what was exported, or why it failed.
+    public bool ExportForLink(string target, ExportChecker.Result check, out string text)
+    {
+        bool solo = _solo;
+        string name = _name;
+        _solo = false;
+        _name = Path.GetFileName(Path.TrimEndingDirectorySeparator(target));
+        _check = check;
+        bool done = Export(state.MapsToExport, state.PathAreasToSave, target, out _);
+        text = _result?.Text ?? "";
+        _solo = solo;
+        _name = _open ? name : _name;
+        return done;
+    }
+
     private bool Export(IReadOnlyList<MapData> maps, IReadOnlyList<int> pathAreas, string target, out string summary)
     {
         _resultInstalled = false;

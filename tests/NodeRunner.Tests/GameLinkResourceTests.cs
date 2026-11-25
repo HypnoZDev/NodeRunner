@@ -27,6 +27,44 @@ public class GameLinkResourceTests
     }
 
     [Fact]
+    public void Map_resources_are_found_or_put_next_to_the_link()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "nr-link-" + Guid.NewGuid().ToString("N"));
+        string server = Path.Combine(root, "server");
+        try
+        {
+            string mine = Path.Combine(server, "resources", "[maps]", "[city]", "my_map");
+            Directory.CreateDirectory(mine);
+            File.WriteAllText(Path.Combine(mine, "fxmanifest.lua"), "fx_version 'cerulean'");
+            File.WriteAllText(Path.Combine(server, "server.cfg"), "ensure chat\n");
+            GameLinkResource.Install(server);
+
+            Assert.Equal(mine, GameLinkResource.MapFolder(server, "my_map"));
+            GameLinkResource.StartWithServer(server, mine, "my_map");
+            Assert.Empty(GameLinkResource.ConfigMaps(File.ReadAllText(Path.Combine(server, "server.cfg"))));
+
+            string fresh = GameLinkResource.MapFolder(server, "new_map");
+            Assert.Equal(Path.Combine(server, "resources", GameLinkResource.CategoryFolder, "new_map"), fresh);
+            GameLinkResource.StartWithServer(server, fresh, "new_map");
+            GameLinkResource.StartWithServer(server, fresh, "new_map");
+            string config = File.ReadAllText(Path.Combine(server, "server.cfg"));
+            Assert.Equal(["new_map"], GameLinkResource.ConfigMaps(config));
+            Assert.Contains("command.ensure allow", config);
+
+            // Updating the link keeps the maps it starts.
+            GameLinkResource.Install(server);
+            Assert.Equal(["new_map"], GameLinkResource.ConfigMaps(File.ReadAllText(Path.Combine(server, "server.cfg"))));
+            GameLinkResource.Uninstall(server);
+            Assert.Equal("ensure chat\n", File.ReadAllText(Path.Combine(server, "server.cfg")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Installs_finds_and_uninstalls_on_a_server_folder()
     {
         string root = Path.Combine(Path.GetTempPath(), "nr-link-" + Guid.NewGuid().ToString("N"));

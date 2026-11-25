@@ -68,7 +68,7 @@ internal sealed class MainUi
         GameLink = new GameLinkWindow(state);
         GameLinkWindow.UpdateInstalled(state.Settings.GameLinkServer);
         state.Link.Start();
-        GameLink.Attach();
+        GameLink.Attach(_exportWindow);
         _shortcutsWindow = new ShortcutsWindow(state);
         _welcomeWindow = new WelcomeWindow(state, this, _shortcutsWindow.Toggle);
         _toolbar = new Toolbar(state, DrawToolbarProjectMenu,() => BrowseGameFolderRequested = true, _searchPalette.Open, () => SaveRequested = true, _exportWindow.Open, _onlineWindow.Toggle)

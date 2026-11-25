@@ -215,6 +215,9 @@ public sealed class AppSettings
     // FiveM server folder (server.cfg + resources) where the live link resource is installed.
     public string? GameLinkServer { get; set; }
 
+    // Ctrl+S also exports into the server and reloads the map there, while the game is connected.
+    public bool GameLinkSendOnSave { get; set; } = true;
+
     public bool ShowGrid { get; set; } = true;
 
     // Metres between two grid lines; 0 = automatic (10 m near the ground, 100 m high up).

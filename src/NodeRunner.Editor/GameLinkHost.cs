@@ -106,6 +106,13 @@ public sealed class GameLinkHost : IDisposable
             ["h"] = heading,
         });
 
+    // Has the server reload a resource (after an export into it).
+    public void Restart(string resource)
+    {
+        if (FiveMResource.IsValidName(resource))
+            _commands.Enqueue(new JsonObject { ["type"] = "restart", ["resource"] = resource });
+    }
+
     // What the game must show instead of the server's objects (GameLinkPreview.Items); sent once per revision, and again
     // to a player who did not get it.
     public void SetPreview(int revision, JsonArray items)

@@ -73,7 +73,8 @@ internal sealed unsafe partial class MainForm
         if (_ui.SaveRequested)
         {
             _ui.SaveRequested = false;
-            SaveMaps();
+            if (SaveMaps())
+                _ui.GameLink.Saved();
         }
 
         if (_ui.BrowseGameFolderRequested)

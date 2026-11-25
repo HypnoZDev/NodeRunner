@@ -23,9 +23,16 @@ internal sealed class GameLinkWindow(AppState state)
     private DateTime _pushedAt;
     private int _previewCount;
 
+    private ExportWindow? _export;
+    private Task<World.ExportChecker.Result>? _sending;
+    private (string Server, string Folder, string Name)? _sendTarget;
+    private string? _sendText;
+    private bool _sendFailed;
+
     // Follows the edits from the start, so that the preview knows what the game showed before them.
-    public void Attach()
+    public void Attach(ExportWindow export)
     {
+        _export = export;
         var history = state.History;
         history.Added += edit => _preview.Observe(edit, undone: false);
         history.Redone += edit => _preview.Observe(edit, undone: false);
@@ -33,6 +40,91 @@ internal sealed class GameLinkWindow(AppState state)
     }
 
     public bool FolderRequested { get; set; }
+
+    // Ctrl+S done: the export goes to the server too, when asked and the game is there.
+    public void Saved()
+    {
+        if (state.Settings.GameLinkSendOnSave && state.Link.IsConnected && Server is not null)
+            Send();
+    }
+
+    // Exports the project into the server's resource (checked first, in the background), then has the server reload it.
+    public void Send()
+    {
+        if (_sending is not null || _export is null)
+            return;
+        if (state.Online.IsGuest)
+        {
+            Report(L("Session Online : seul l'hôte exporte le projet."), failed: true);
+            return;
+        }
+        if (Server is not { } server || GameLinkResource.StateOf(server) == GameLinkResource.State.NotInstalled)
+        {
+            Report(L("Installe d'abord le lien sur ton serveur (Outils > Lien avec le jeu)."), failed: true);
+            return;
+        }
+        if (!_export.HasChanges)
+        {
+            Report(L("Rien à envoyer : aucune modification dans le projet."), failed: true);
+            return;
+        }
+        string name = state.ExportResourceName;
+        if (!FiveMResource.IsValidName(name))
+        {
+            Report(L($"Nom de ressource invalide : « {name} » (Fichier > Exporter)."), failed: true);
+            return;
+        }
+        string folder = GameLinkResource.MapFolder(server, name);
+        if (World.ResourceExporter.Inspect(folder) == World.ResourceExporter.TargetState.Foreign)
+        {
+            Report(L($"Le serveur a déjà une ressource « {name} » qui n'a pas été créée par NodeRunner : change le nom dans Fichier > Exporter."), failed: true);
+            return;
+        }
+        var input = World.ExportChecker.Prepare(state) with { ResourceName = name };
+        var world = state.World;
+        _sendTarget = (server, folder, name);
+        _sendText = L($"{Icons.LoaderCircle}  Envoi de « {name} » au serveur...");
+        _sendFailed = false;
+        _sending = Task.Run(() => World.ExportChecker.Run(input, world));
+    }
+
+    private void FinishSend()
+    {
+        if (_sending is not { IsCompleted: true } sending || _sendTarget is not { } target || _export is null)
+            return;
+        _sending = null;
+        _sendTarget = null;
+        if (!sending.IsCompletedSuccessfully)
+        {
+            Report(L($"Échec de la vérification avant l'envoi : {sending.Exception?.GetBaseException().Message}"), failed: true);
+            return;
+        }
+        if (!_export.ExportForLink(target.Folder, sending.Result, out string text))
+        {
+            Report(text, failed: true);
+            return;
+        }
+        try
+        {
+            GameLinkResource.StartWithServer(target.Server, target.Folder, target.Name);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Report(L($"Exporté, mais server.cfg n'a pas pu être modifié : {e.Message}"), failed: true);
+            return;
+        }
+        state.Link.Restart(target.Name);
+        // The server now streams what NodeRunner shows: nothing left to preview.
+        _preview.Reset();
+        _previewDirty = true;
+        Report(L($"{Icons.Check}  « {target.Name} » envoyée au serveur et rechargée en jeu."), failed: false);
+    }
+
+    private void Report(string text, bool failed)
+    {
+        (_sendText, _sendFailed) = (text, failed);
+        state.Notify(text, warning: failed);
+    }
 
     public void Open()
     {
@@ -104,6 +196,7 @@ internal sealed class GameLinkWindow(AppState state)
     {
         Follow();
         UpdatePreview();
+        FinishSend();
         if (!_open)
             return;
         if (_search is { IsCompleted: true })
@@ -358,7 +451,31 @@ internal sealed class GameLinkWindow(AppState state)
         {
             ImGui.SameLine();
             Widgets.Hint(L($"{_previewCount} objet(s) changé(s) en jeu"));
-            Widgets.Hint(L("Les props qui ne sont pas dans le jeu (ceux de ton projet) et les objets des intérieurs ne sont pas encore montrés."), wrap: true);
+            Widgets.Hint(L("Les props qui ne sont pas dans le jeu (ceux de ton projet) et les objets des intérieurs apparaissent à l'envoi au serveur."), wrap: true);
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.BeginDisabled(_sending is not null);
+        if (Widgets.PrimaryButton(L($"{Icons.Package}  Envoyer au serveur")))
+            Send();
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.DelayShort | ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(L($"Exporte le projet dans la ressource « {state.ExportResourceName} » du serveur (comme Fichier > Exporter)\npuis la recharge : props du projet, collisions, occlusion, tout est là pour de vrai."));
+        ImGui.SameLine();
+        bool onSave = state.Settings.GameLinkSendOnSave;
+        if (ImGui.Checkbox(L("À chaque Ctrl+S"), ref onSave))
+        {
+            state.Settings.GameLinkSendOnSave = onSave;
+            state.SaveSettings();
+        }
+        if (_sendText is not null)
+        {
+            if (_sendFailed)
+                ImGui.TextColored(UiTheme.Error, _sendText);
+            else
+                ImGui.TextColored(_sending is null ? UiTheme.Success : UiTheme.TextMuted, _sendText);
         }
     }
 

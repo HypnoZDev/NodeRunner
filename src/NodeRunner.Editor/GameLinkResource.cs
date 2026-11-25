@@ -10,7 +10,7 @@ public static class GameLinkResource
 {
     public const string ResourceName = "noderunner-link";
     public const string CategoryFolder = "[noderunner]";
-    public const int Version = 3;
+    public const int Version = 4;
 
     public const string ConfigFileName = "server.cfg";
     public const string ResourcesFolderName = "resources";
@@ -131,17 +131,103 @@ public static class GameLinkResource
 
     public static bool HasConfigBlock(string config) => config.Contains(ConfigBegin, StringComparison.Ordinal);
 
-    // server.cfg with the link's block (replaced when already there, added at the end otherwise).
-    public static string AddToConfig(string config)
+    // server.cfg with the link's block (replaced when already there, added at the end otherwise). The map resources it
+    // starts keep their place; the link may run "refresh" and "ensure" to restart them after an export.
+    public static string AddToConfig(string config, IEnumerable<string>? maps = null)
     {
         string newline = config.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        string block = string.Join(newline, ConfigBegin, $"ensure {ResourceName}", ConfigEnd);
+        var lines = new List<string>
+        {
+            ConfigBegin,
+            $"add_ace resource.{ResourceName} command.refresh allow",
+            $"add_ace resource.{ResourceName} command.ensure allow",
+            $"ensure {ResourceName}",
+        };
+        lines.AddRange((maps ?? ConfigMaps(config)).Distinct(StringComparer.Ordinal).Select(map => $"ensure {map}"));
+        lines.Add(ConfigEnd);
+        string block = string.Join(newline, lines);
         string without = RemoveFromConfig(config);
         if (without.Length > 0 && !without.EndsWith('\n'))
             without += newline;
         if (without.Length > 0)
             without += newline;
         return without + block + newline;
+    }
+
+    // Map resources started by the link's block.
+    public static List<string> ConfigMaps(string config)
+    {
+        var maps = new List<string>();
+        int begin = config.IndexOf(ConfigBegin, StringComparison.Ordinal);
+        if (begin < 0)
+            return maps;
+        int end = config.IndexOf(ConfigEnd, begin, StringComparison.Ordinal);
+        string block = config[begin..(end < 0 ? config.Length : end)];
+        foreach (string line in block.Split('\n'))
+        {
+            string text = line.Trim();
+            if (!text.StartsWith("ensure ", StringComparison.Ordinal))
+                continue;
+            string name = text[7..].Trim();
+            if (name != ResourceName && FiveMResource.IsValidName(name))
+                maps.Add(name);
+        }
+        return maps;
+    }
+
+    // The folder of a resource of the server (anywhere under resources/, [categories] included), or null.
+    public static string? FindResource(string server, string name)
+    {
+        var budget = new Budget(4000);
+        return Find(Path.Combine(server, ResourcesFolderName), 5);
+
+        string? Find(string folder, int depth)
+        {
+            string[] children;
+            try
+            {
+                children = Directory.GetDirectories(folder);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+            foreach (string child in children)
+            {
+                if (!budget.Take())
+                    return null;
+                string childName = Path.GetFileName(child);
+                if (File.Exists(Path.Combine(child, FiveMResource.ManifestFileName)) || File.Exists(Path.Combine(child, "__resource.lua")))
+                {
+                    if (string.Equals(childName, name, StringComparison.OrdinalIgnoreCase))
+                        return child;
+                    continue;
+                }
+                if (depth > 1 && !childName.StartsWith('.') && Find(child, depth - 1) is { } found)
+                    return found;
+            }
+            return null;
+        }
+    }
+
+    // Where a map resource is exported on the server: where it already is, or next to the link resource.
+    public static string MapFolder(string server, string name) =>
+        FindResource(server, name) ?? Path.Combine(server, ResourcesFolderName, CategoryFolder, name);
+
+    // Has the server start a map resource exported next to the link resource (one the mapper put elsewhere is left
+    // to their own server.cfg).
+    public static void StartWithServer(string server, string folder, string name)
+    {
+        string ours = Path.GetFullPath(Path.Combine(server, ResourcesFolderName, CategoryFolder)) + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(folder).StartsWith(ours, StringComparison.OrdinalIgnoreCase))
+            return;
+        string config = Path.Combine(server, ConfigFileName);
+        string text = File.ReadAllText(config);
+        var maps = ConfigMaps(text);
+        if (maps.Contains(name, StringComparer.Ordinal))
+            return;
+        maps.Add(name);
+        SafeFile.WriteAllText(config, AddToConfig(text, maps));
     }
 
     // server.cfg without the link's block (and the blank line put before it), the rest untouched.
@@ -375,6 +461,10 @@ public static class GameLinkResource
             end
         end)
 
+        RegisterNetEvent('noderunner-link:reloaded', function(resource)
+            notify('~b~NodeRunner Studio~s~ : ' .. tostring(resource) .. ' rechargée / reloaded')
+        end)
+
         RegisterNetEvent('noderunner-link:teleport', function(c)
             local ped = PlayerPedId()
             local target = ped
@@ -441,6 +531,12 @@ public static class GameLinkResource
                         local reply = json.decode(body)
                         if type(reply) == 'table' and type(reply.commands) == 'table' then
                             for _, command in ipairs(reply.commands) do
+                                if command.type == 'restart' and type(command.resource) == 'string'
+                                    and command.resource:match('^[%w_%-]+$') then
+                                    ExecuteCommand('refresh')
+                                    ExecuteCommand('ensure ' .. command.resource)
+                                    TriggerClientEvent('noderunner-link:reloaded', -1, command.resource)
+                                end
                                 if allowed[command.type] then
                                     TriggerClientEvent('noderunner-link:' .. command.type, tonumber(command.player) or -1, command)
                                 end
