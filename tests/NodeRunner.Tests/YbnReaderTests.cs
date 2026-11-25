@@ -42,6 +42,27 @@ public class YbnReaderTests
     }
 
     [Fact]
+    public void AddedTriangles_AreWrittenOutsideTheOldExtentWithTheirMaterial()
+    {
+        var source = Build();
+        var before = YbnReader.Read(source)!;
+        var added = new NodeRunner.Data.Collisions.PlacedTriangle(0, new Vector3(5, 5, 2), new Vector3(7, 5, 2), new Vector3(5, 8, 2), 33,
+            NodeRunner.Data.Collisions.CollisionFlags.Stairs);
+        var (data, _) = YbnReader.Edit(source, 0, new HashSet<int>(), new Dictionary<int, byte>(), added: [added]);
+        var mesh = YbnReader.Read(data)!;
+
+        Assert.Equal(before.TriangleCount + 1, mesh.TriangleCount);
+        int t = Enumerable.Range(0, mesh.TriangleCount).Single(i => mesh.Materials[i] == 33);
+        var corners = new[] { mesh.Vertices[mesh.Indices[t * 3]], mesh.Vertices[mesh.Indices[t * 3 + 1]], mesh.Vertices[mesh.Indices[t * 3 + 2]] };
+        foreach (var expected in new[] { added.A, added.B, added.C })
+            Assert.Contains(corners, c => Vector3.Distance(c, expected) < 0.01f);
+        Assert.Equal(NodeRunner.Data.Collisions.CollisionFlags.Stairs, mesh.FlagsOf(t));
+        Assert.True(mesh.BoundsMax.X >= 7f - 0.01f && mesh.BoundsMax.Y >= 8f - 0.01f);
+        // The old triangles are still where they were.
+        Assert.Contains(mesh.Vertices, v => Vector3.Distance(v, new Vector3(101, 0, 0)) < 0.01f);
+    }
+
+    [Fact]
     public void RemovePolygons_KeepsTheOthersWithAValidTree()
     {
         var data = YbnReader.RemovePolygons(Build(), new HashSet<int> { 1 });

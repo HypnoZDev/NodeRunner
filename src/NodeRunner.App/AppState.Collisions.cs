@@ -90,6 +90,36 @@ internal sealed partial class AppState
             Apply(new CollisionMoveEdit(CollisionEdits, description, moves));
     }
 
+    // New collision surfaces being drawn with clicks (null: clicks select).
+    public World.CollisionDrawTool? CollisionDraw { get; set; }
+
+    // Takes a corner of the surface being drawn under the ray (world space); the finished surface is added to its file
+    // and selected.
+    public void AddCollisionCorner(World.CollisionLayer layer, System.Numerics.Vector3 origin, System.Numerics.Vector3 direction)
+    {
+        if (CollisionDraw is not { } tool)
+            return;
+        if (!tool.Add(layer, origin, direction))
+        {
+            Notify(tool.Corners.Count == 0 ? L("Clique d'abord sur une surface de collision existante : elle choisit le fichier et le matériau.")
+                : L("Aucun point ici : vise une surface, ou la hauteur du 1er coin."), warning: true);
+            return;
+        }
+        if (!tool.IsComplete)
+            return;
+        string path = tool.Path!;
+        int first = CollisionEdits.AddedCount(path);
+        var edit = tool.Finish(CollisionEdits, Camera.Position, tool.Quad ? L("ajouter un rectangle de collision") : L("ajouter un triangle de collision"));
+        if (edit.Triangles.Count == 0)
+        {
+            Notify(L("Coins alignés : aucune surface ajoutée."), warning: true);
+            return;
+        }
+        Apply(edit);
+        SelectCollision(edit.Polygons(first), CollisionSelectMode.Replace);
+        NotifyUndoable(L($"Surface de collision ajoutée à {Path.GetFileName(path)}"));
+    }
+
     // Switches one option (CollisionFlags) on or off for the selected polygons. flags: their options as shown and the
     // game's own (CollisionLayer.FlagsOf).
     public void SetSelectedCollisionFlag(IReadOnlyDictionary<CollisionPolygon, (ushort Shown, ushort Game)> flags, ushort flag, bool on, string name)

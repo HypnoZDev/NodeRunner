@@ -121,6 +121,23 @@ public sealed class CollisionFlagsEdit : IEdit
     }
 }
 
+// Triangles added by hand to one collision file (file space).
+public sealed class CollisionAddEdit(CollisionEdits edits, string description, string path, IReadOnlyList<CollisionTriangle> triangles) : IEdit
+{
+    public string Description { get; } = description;
+    public MapEntity? Subject => null;
+    public string Path { get; } = path;
+    public IReadOnlyList<CollisionTriangle> Triangles { get; } = triangles;
+
+    // Numbers the triangles get (after Redo): to select them.
+    public IEnumerable<CollisionPolygon> Polygons(int firstIndex) =>
+        Enumerable.Range(firstIndex, Triangles.Count).Select(i => new CollisionPolygon(Path, CollisionFileEdit.AddedBase + i));
+
+    public void Redo() => edits.AddTriangles(Path, Triangles);
+
+    public void Undo() => edits.RemoveLastTriangles(Path, Triangles.Count);
+}
+
 // Door-sized openings cut through collision files (one per file, in the file's space).
 public sealed class CollisionOpeningEdit(CollisionEdits edits, string description, IReadOnlyList<(string Path, CollisionOpening Opening)> openings) : IEdit
 {

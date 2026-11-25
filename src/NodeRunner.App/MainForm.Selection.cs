@@ -64,6 +64,15 @@ internal sealed unsafe partial class MainForm
                 _state.StopPlacement();
                 return;
             }
+            // Escape while drawing collision surfaces: the corners placed go, then the drawing stops.
+            if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.CollisionDraw is { } drawing)
+            {
+                if (drawing.Corners.Count > 0)
+                    drawing.Corners.Clear();
+                else
+                    _state.CollisionDraw = null;
+                return;
+            }
             // Escape during a drag puts the object back (TransformGizmo) instead of deselecting.
             if (e.KeyCode == Keys.Escape && !ImGui.GetIO().WantCaptureKeyboard && _state.OpeningTool is not null)
             {
@@ -83,7 +92,7 @@ internal sealed unsafe partial class MainForm
 
     private void DrawCollisionRectangle()
     {
-        if (_collisionDragStart is not { } start || !IsDrag(start, _collisionDragCurrent))
+        if (_collisionDragStart is not { } start || !IsDrag(start, _collisionDragCurrent) || _state.CollisionDraw is not null)
             return;
         var a = new Vector2(Math.Min(start.X, _collisionDragCurrent.X), Math.Min(start.Y, _collisionDragCurrent.Y)) / UiTheme.Scale;
         var b = new Vector2(Math.Max(start.X, _collisionDragCurrent.X), Math.Max(start.Y, _collisionDragCurrent.Y)) / UiTheme.Scale;
@@ -101,6 +110,13 @@ internal sealed unsafe partial class MainForm
         if (_collisionPickRequest is not var (a, b, control))
             return;
         _collisionPickRequest = null;
+        // Drawing new surfaces: a click puts a corner, a drag does nothing.
+        if (_state.CollisionDraw is not null)
+        {
+            if (!IsDrag(a, b))
+                AddDrawnCorner(scene, b);
+            return;
+        }
         var viewProjection = _state.Camera.ViewProjection((float)scene.Width / scene.Height);
         var viewport = new Vector2(scene.Width, scene.Height);
         var origin = new Vector2(scene.X, scene.Y);

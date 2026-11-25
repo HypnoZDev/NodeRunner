@@ -40,6 +40,9 @@ internal sealed class CollisionProperties(AppState state, CollisionLayer layer)
                 + L("Pour ouvrir un passage à tous, modifie aussi la version Véhicules."), wrap: true);
         }
 
+        if (Widgets.Section(L("Ajouter des surfaces"), "collision_add"))
+            DrawAdding();
+
         var selection = state.SelectedCollision;
         if (selection.Count == 0)
         {
@@ -102,6 +105,26 @@ internal sealed class CollisionProperties(AppState state, CollisionLayer layer)
         ImGui.SameLine();
         if (Widgets.Button(L("Désélectionner")))
             state.SelectCollision([], CollisionSelectMode.Replace);
+    }
+
+    // Drawing new surfaces with clicks in the 3D view (CollisionDrawTool).
+    private void DrawAdding()
+    {
+        var drawing = state.CollisionDraw;
+        if (drawing is null)
+        {
+            if (Widgets.Button(L($"{Icons.Plus}  Triangle"), L("3 clics dans la vue 3D : les 3 coins du triangle.")))
+                state.CollisionDraw = new CollisionDrawTool(quad: false);
+            ImGui.SameLine();
+            if (Widgets.Button(L($"{Icons.Plus}  Rectangle"), L("4 clics dans la vue 3D : les 4 coins, dans l'ordre du tour.")))
+                state.CollisionDraw = new CollisionDrawTool(quad: true);
+            Widgets.Hint(L("Le 1er coin se pose sur une collision existante : il choisit le fichier et le matériau. Les suivants peuvent être dans le vide, à la hauteur du 1er. Les coins s'aimantent aux coins proches."), wrap: true);
+            return;
+        }
+        Widgets.Hint(drawing.Quad ? L($"Rectangle : coin {drawing.Corners.Count + 1} sur 4. Échap : effacer les coins posés, puis arrêter.")
+            : L($"Triangle : coin {drawing.Corners.Count + 1} sur 3. Échap : effacer les coins posés, puis arrêter."), wrap: true);
+        if (Widgets.Button(L("Arrêter de dessiner")))
+            state.CollisionDraw = null;
     }
 
     // One box per option (CollisionFlags), in the game's order; ticked when every selected surface has it, shown as

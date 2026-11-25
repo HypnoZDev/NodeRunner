@@ -107,12 +107,13 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     }
 
     public byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials,
-        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null)
+        IReadOnlyList<CollisionMove> moves, IReadOnlyList<Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null,
+        IReadOnlyList<PlacedTriangle>? added = null)
     {
         if (_files.ReadFile(path) is not { } data)
             return null;
         var header = _files.GetResourceHeader(path) ?? throw new InvalidDataException($"{path} n'est pas une ressource.");
-        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves, openings, flags);
+        var (content, systemFlags) = Edit(data, header.SystemFlags, removed, materials, moves, openings, flags, added);
         return ResourceFile.Write(header with { SystemFlags = systemFlags }, content);
     }
 
@@ -121,7 +122,7 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
     // other).
     public static (byte[] Content, uint SystemFlags) Edit(byte[] data, uint systemFlags, IReadOnlySet<int> removed,
         IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove>? moves = null, IReadOnlyList<Opening>? openings = null,
-        IReadOnlyDictionary<int, ushort>? flags = null)
+        IReadOnlyDictionary<int, ushort>? flags = null, IReadOnlyList<PlacedTriangle>? added = null)
     {
         var copy = (byte[])data.Clone();
         flags ??= new Dictionary<int, ushort>();
@@ -149,6 +150,8 @@ public sealed class YbnReader : ICollisionReader, ICollisionWriter
             int polygon = 0;
             new BoundsFile(copy).Remove(0, cut, ref polygon);
         }
+        if (added is { Count: > 0 })
+            copy = BoundsFile.AddTriangles(copy, added);
 
         int pagesSize = Archives.ResourcePages.Size(systemFlags);
         if (copy.Length <= pagesSize)

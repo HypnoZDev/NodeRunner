@@ -421,6 +421,7 @@ internal sealed unsafe partial class MainForm : Form
         ImGui.NewFrame();
         _ui.Draw();
         DrawCollisionRectangle();
+        DrawCollisionDrawing();
         ImGui.Render();
         _input.UpdateCursor();
 

@@ -391,6 +391,95 @@ internal sealed class CollisionLayer : IDisposable
         return _materials = result;
     }
 
+    // The nearest loaded surface along a ray (world space): its file, where that file is shown (an interior's), the point
+    // hit, the polygon and its material; null when the ray hits nothing.
+    public (string Path, Matrix4x4 Placement, Vector3 Point, int Polygon, byte Material)? RayHit(Vector3 origin, Vector3 direction)
+    {
+        (string, Matrix4x4, Vector3, int, byte)? best = null;
+        float nearest = float.MaxValue;
+        foreach (var (file, meshes) in _loaded)
+        {
+            if (meshes.Shown is not { } shown || !RayHitsBox(origin, direction, shown.BoundsMin, shown.BoundsMax, nearest))
+                continue;
+            for (int t = 0; t < shown.TriangleCount; t++)
+            {
+                var a = shown.Vertices[shown.Indices[t * 3]];
+                var b = shown.Vertices[shown.Indices[t * 3 + 1]];
+                var c = shown.Vertices[shown.Indices[t * 3 + 2]];
+                if (RayTriangle(origin, direction, a, b, c) is not { } distance || distance >= nearest)
+                    continue;
+                nearest = distance;
+                int polygon = t < shown.Polygons.Count ? shown.Polygons[t] : -1;
+                best = (file.Path, file.IsInterior ? file.Transform : Matrix4x4.Identity, origin + direction * distance, polygon, shown.Materials[t]);
+            }
+        }
+        return best;
+    }
+
+    // The loaded collision corner nearest to point within radius (metres), else null.
+    public Vector3? NearestCorner(Vector3 point, float radius)
+    {
+        Vector3? best = null;
+        float nearest = radius * radius;
+        foreach (var meshes in _loaded.Values)
+        {
+            if (meshes.Shown is not { } shown || Vector3.DistanceSquared(Vector3.Clamp(point, shown.BoundsMin, shown.BoundsMax), point) > nearest)
+                continue;
+            foreach (var v in shown.Vertices)
+            {
+                float d = Vector3.DistanceSquared(v, point);
+                if (d < nearest)
+                {
+                    nearest = d;
+                    best = v;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static bool RayHitsBox(Vector3 origin, Vector3 direction, Vector3 min, Vector3 max, float within)
+    {
+        float from = 0f, to = within;
+        for (int k = 0; k < 3; k++)
+        {
+            if (MathF.Abs(direction[k]) < 1e-9f)
+            {
+                if (origin[k] < min[k] || origin[k] > max[k])
+                    return false;
+                continue;
+            }
+            float t0 = (min[k] - origin[k]) / direction[k], t1 = (max[k] - origin[k]) / direction[k];
+            from = MathF.Max(from, MathF.Min(t0, t1));
+            to = MathF.Min(to, MathF.Max(t0, t1));
+            if (from > to)
+                return false;
+        }
+        return true;
+    }
+
+    // Distance along the ray to the triangle (both faces), null when it misses.
+    private static float? RayTriangle(Vector3 origin, Vector3 direction, Vector3 a, Vector3 b, Vector3 c)
+    {
+        var e1 = b - a;
+        var e2 = c - a;
+        var p = Vector3.Cross(direction, e2);
+        float det = Vector3.Dot(e1, p);
+        if (MathF.Abs(det) < 1e-9f)
+            return null;
+        float inverse = 1f / det;
+        var s = origin - a;
+        float u = Vector3.Dot(s, p) * inverse;
+        if (u < 0f || u > 1f)
+            return null;
+        var q = Vector3.Cross(s, e1);
+        float v = Vector3.Dot(direction, q) * inverse;
+        if (v < 0f || u + v > 1f)
+            return null;
+        float distance = Vector3.Dot(e2, q) * inverse;
+        return distance > 0f ? distance : null;
+    }
+
     private Dictionary<CollisionPolygon, (ushort Shown, ushort Game)>? _flags;
     private (int Selection, int Shown) _flagsVersion = (-1, -1);
 

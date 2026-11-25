@@ -14,13 +14,13 @@ internal static class CollisionFileSaver
         MapFileSaver.Report report)
     {
         var files = new Dictionary<string, (HashSet<int> Removed, Dictionary<int, byte> Materials, List<CollisionMove> Moves, List<Data.Models.Opening> Openings,
-            Dictionary<int, ushort> Flags)>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<int, ushort> Flags, List<PlacedTriangle> Added)>(StringComparer.OrdinalIgnoreCase);
         foreach (var (path, edit) in edits.Files)
-            files[path] = ([.. edit.Removed], new(edit.Materials), [.. edit.Moves], [.. edit.Openings.Select(o => o.Value)], new(edit.Flags));
+            files[path] = ([.. edit.Removed], new(edit.Materials), [.. edit.Moves], [.. edit.Openings.Select(o => o.Value)], new(edit.Flags), [.. edit.AddedNow()]);
         foreach (var cut in cuts)
         {
             if (!files.TryGetValue(cut.File.Path, out var file))
-                files[cut.File.Path] = file = ([], [], [], [], []);
+                files[cut.File.Path] = file = ([], [], [], [], [], []);
             file.Removed.UnionWith(cut.Polygons);
         }
         if (files.Count == 0)
@@ -32,12 +32,12 @@ internal static class CollisionFileSaver
         }
 
         Directory.CreateDirectory(folder);
-        foreach (var (path, (removed, materials, moves, openings, flags)) in files)
+        foreach (var (path, (removed, materials, moves, openings, flags, added)) in files)
         {
             string name = Path.GetFileName(path);
             try
             {
-                if (catalog.Edit(path, removed, materials, moves, openings, flags) is not { } bytes)
+                if (catalog.Edit(path, removed, materials, moves, openings, flags, added) is not { } bytes)
                 {
                     report.Errors.Add(L($"{name} : fichier du jeu introuvable"));
                     continue;

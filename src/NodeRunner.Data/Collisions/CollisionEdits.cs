@@ -58,6 +58,25 @@ public sealed record CollisionOpening(float[] Bottom, float[] Normal, float Widt
     private static Vector3 At(float[] v) => v.Length == 3 ? new(v[0], v[1], v[2]) : Vector3.UnitY;
 }
 
+// A triangle added by hand to a collision file: its corners (file space, 9 floats), material and options.
+public sealed record CollisionTriangle(float[] Corners, byte Material, ushort Flags)
+{
+    public static CollisionTriangle Of(Vector3 a, Vector3 b, Vector3 c, byte material, ushort flags) =>
+        new([a.X, a.Y, a.Z, b.X, b.Y, b.Z, c.X, c.Y, c.Z], material, flags);
+
+    [JsonIgnore]
+    public Vector3 A => Corner(0);
+    [JsonIgnore]
+    public Vector3 B => Corner(1);
+    [JsonIgnore]
+    public Vector3 C => Corner(2);
+
+    private Vector3 Corner(int k) => Corners.Length == 9 ? new(Corners[k * 3], Corners[k * 3 + 1], Corners[k * 3 + 2]) : Vector3.Zero;
+}
+
+// An added triangle as it is now (moved, its material and options changed since), numbered like a polygon.
+public readonly record struct PlacedTriangle(int Number, Vector3 A, Vector3 B, Vector3 C, byte Material, ushort Flags);
+
 // Changes made by hand to one collision file: polygons moved, removed and given new materials, numbered as in the game's
 // file (CollisionMesh.Polygons), so they can be applied again to the original at any time; then openings cut through it.
 public sealed class CollisionFileEdit
@@ -76,10 +95,37 @@ public sealed class CollisionFileEdit
     // Cut after every other change, in the order they were made.
     public List<CollisionOpening> Openings { get; init; } = [];
 
-    [JsonIgnore]
-    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Flags.Count == 0 && Moves.Count == 0 && Openings.Count == 0;
+    // Added after everything else; the polygon number of the i-th one is AddedBase + i (removed, moved, given another
+    // material or other options by number like the file's own polygons).
+    public List<CollisionTriangle> Added { get; init; } = [];
 
-    public CollisionFileEdit Copy() => new() { Removed = [.. Removed], Materials = new(Materials), Flags = new(Flags), Moves = [.. Moves], Openings = [.. Openings] };
+    public const int AddedBase = 1 << 30;
+
+    // The added triangles as they are now, without those removed.
+    public IEnumerable<PlacedTriangle> AddedNow()
+    {
+        for (int i = 0; i < Added.Count; i++)
+        {
+            int number = AddedBase + i;
+            if (Removed.Contains(number))
+                continue;
+            var t = Added[i];
+            var (a, b, c) = (t.A, t.B, t.C);
+            foreach (var move in Moves)
+            {
+                if (Array.IndexOf(move.Polygons, number) < 0)
+                    continue;
+                var m = move.Transform;
+                (a, b, c) = (Vector3.Transform(a, m), Vector3.Transform(b, m), Vector3.Transform(c, m));
+            }
+            yield return new PlacedTriangle(number, a, b, c, Materials.GetValueOrDefault(number, t.Material), Flags.GetValueOrDefault(number, t.Flags));
+        }
+    }
+
+    [JsonIgnore]
+    public bool IsEmpty => Removed.Count == 0 && Materials.Count == 0 && Flags.Count == 0 && Moves.Count == 0 && Openings.Count == 0 && Added.Count == 0;
+
+    public CollisionFileEdit Copy() => new() { Removed = [.. Removed], Materials = new(Materials), Flags = new(Flags), Moves = [.. Moves], Openings = [.. Openings], Added = [.. Added] };
 
     // The mesh as the game will see it: polygons moved, removed ones left out, new materials applied, openings cut (the
     // pieces left around them have no polygon number). withMoves false: the mesh is already moved (read from the moved
@@ -89,7 +135,42 @@ public sealed class CollisionFileEdit
         var result = ApplyChanges(mesh, withMoves);
         foreach (var opening in Openings)
             result = Cut(result, opening.Value);
-        return result;
+        return Append(result, AddedNow().ToList());
+    }
+
+    private static CollisionMesh Append(CollisionMesh mesh, List<PlacedTriangle> added)
+    {
+        if (added.Count == 0)
+            return mesh;
+        var vertices = mesh.Vertices.ToList();
+        var indices = mesh.Indices.ToList();
+        var materials = mesh.Materials.ToList();
+        var flags = Enumerable.Range(0, mesh.TriangleCount).Select(mesh.FlagsOf).ToList();
+        var polygons = mesh.Polygons.Count == mesh.TriangleCount ? mesh.Polygons.ToList() : Enumerable.Repeat(-1, mesh.TriangleCount).ToList();
+        var (min, max) = (mesh.BoundsMin, mesh.BoundsMax);
+        foreach (var t in added)
+        {
+            foreach (var v in (ReadOnlySpan<Vector3>)[t.A, t.B, t.C])
+            {
+                indices.Add(vertices.Count);
+                vertices.Add(v);
+                min = Vector3.Min(min, v);
+                max = Vector3.Max(max, v);
+            }
+            materials.Add(t.Material);
+            flags.Add(t.Flags);
+            polygons.Add(t.Number);
+        }
+        return new CollisionMesh
+        {
+            BoundsMin = min,
+            BoundsMax = max,
+            Vertices = vertices,
+            Indices = indices,
+            Materials = materials,
+            Polygons = polygons,
+            Flags = flags,
+        };
     }
 
     private static CollisionMesh Cut(CollisionMesh mesh, Models.Opening opening)
@@ -232,6 +313,22 @@ public sealed class CollisionEdits
             edit.Flags.Remove(polygon);
         Changed(path);
     }
+
+    public void AddTriangles(string path, IEnumerable<CollisionTriangle> triangles)
+    {
+        Get(path).Added.AddRange(triangles);
+        Changed(path);
+    }
+
+    // The last count triangles added to the file are taken back.
+    public void RemoveLastTriangles(string path, int count)
+    {
+        if (_files.TryGetValue(path, out var edit))
+            edit.Added.RemoveRange(Math.Max(0, edit.Added.Count - count), Math.Min(count, edit.Added.Count));
+        Changed(path);
+    }
+
+    public int AddedCount(string path) => _files.TryGetValue(path, out var edit) ? edit.Added.Count : 0;
 
     public ushort? FlagsOf(string path, int polygon) =>
         _files.TryGetValue(path, out var edit) && edit.Flags.TryGetValue(polygon, out ushort f) ? f : null;

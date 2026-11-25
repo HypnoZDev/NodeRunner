@@ -330,7 +330,8 @@ internal sealed partial class BoundsFile
     }
 
     // The geometry's arrays with the new corners and polygons, appended (WithAppended), and room for its search tree.
-    private void WriteGrown(Part part, Corners grown, List<NewPolygon> added, int removedCount)
+    // refit: the new corners may lie outside the geometry's extent, every corner is quantized again around the new one.
+    private void WriteGrown(Part part, Corners grown, List<NewPolygon> added, int removedCount, bool refit = false)
     {
         int o = part.Offset;
         var points = grown.Points;
@@ -339,11 +340,27 @@ internal sealed partial class BoundsFile
             throw new InvalidDataException("Placement d'un morceau de collision non inversible.");
         var quantum = Vec3(o + QuantumOffset);
         var center = Vec3(o + CenterOffset);
+        if (refit)
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var p in shrunk is null ? points : points.Concat(shrunk))
+            {
+                var local = Vector3.Transform(p, toLocal);
+                min = Vector3.Min(min, local);
+                max = Vector3.Max(max, local);
+            }
+            center = (min + max) / 2;
+            quantum = Vector3.Max((max - min) / 2 / QuantizedRange, new Vector3(1e-6f));
+            WriteVec3(o + QuantumOffset, quantum);
+            WriteVec3(o + CenterOffset, center);
+        }
         byte[] Quantized(IReadOnlyList<Vector3> all, int from)
         {
             var bytes = new byte[all.Count * 6];
-            _data.AsSpan(from, part.Points.Length * 6).CopyTo(bytes);
-            for (int v = part.Points.Length; v < all.Count; v++)
+            int kept = refit ? 0 : part.Points.Length;
+            _data.AsSpan(from, kept * 6).CopyTo(bytes);
+            for (int v = kept; v < all.Count; v++)
             {
                 var q = Vector3.Clamp((Vector3.Transform(all[v], toLocal) - center) / quantum, new Vector3(-QuantizedRange), new Vector3(QuantizedRange));
                 BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(v * 6), (short)MathF.Round(q.X));

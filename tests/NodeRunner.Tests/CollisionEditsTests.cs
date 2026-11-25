@@ -67,6 +67,34 @@ public sealed class CollisionEditsTests
     }
 
     [Fact]
+    public void Added_triangles_are_numbered_saved_and_edited_like_the_others()
+    {
+        var edits = new CollisionEdits();
+        edits.AddTriangles("a.ybn", [CollisionTriangle.Of(new(0, 0, 5), new(1, 0, 5), new(0, 1, 5), 4, 0),
+            CollisionTriangle.Of(new(0, 0, 6), new(1, 0, 6), new(0, 1, 6), 4, 0)]);
+        int first = CollisionFileEdit.AddedBase, second = CollisionFileEdit.AddedBase + 1;
+        edits.SetMaterial("a.ybn", first, 20);
+        edits.SetFlags("a.ybn", first, CollisionFlags.NotClimbable);
+        edits.AddMove("a.ybn", CollisionMove.Of([first], Matrix4x4.CreateTranslation(0, 0, 1)));
+
+        var back = CollisionEdits.FromJson(edits.ToJson());
+        var mesh = back.Apply("a.ybn", Mesh());
+
+        Assert.Equal(5, mesh.TriangleCount);
+        Assert.Equal([0, 1, -1, first, second], mesh.Polygons);
+        Assert.Equal((byte)20, mesh.Materials[3]);
+        Assert.Equal(CollisionFlags.NotClimbable, mesh.Flags[3]);
+        Assert.Equal(6f, mesh.Vertices[mesh.Indices[9]].Z);
+        Assert.Equal(6f, mesh.BoundsMax.Z);
+
+        back.SetRemoved("a.ybn", [first], removed: true);
+        Assert.Equal([second], back.Apply("a.ybn", Mesh()).Polygons.Skip(3));
+        back.RemoveLastTriangles("a.ybn", 2);
+        back.SetRemoved("a.ybn", [first], removed: false);
+        Assert.Equal(3, back.Apply("a.ybn", Mesh()).TriangleCount);
+    }
+
+    [Fact]
     public void Moves_are_saved_and_move_the_shared_corners()
     {
         var edits = new CollisionEdits();

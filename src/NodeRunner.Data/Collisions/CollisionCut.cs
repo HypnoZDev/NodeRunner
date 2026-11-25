@@ -14,9 +14,9 @@ public interface ICollisionWriter
 
     // The game's file with new materials and options (CollisionFlags) for some polygons, polygons moved, without the
     // removed ones (all numbered as in Polygons), then with door-sized openings cut through it (file space), as a
-    // complete .ybn file; null if the file does not exist.
+    // complete .ybn file, with triangles added at the end; null if the file does not exist.
     byte[]? Edit(string path, IReadOnlySet<int> removed, IReadOnlyDictionary<int, byte> materials, IReadOnlyList<CollisionMove> moves,
-        IReadOnlyList<Models.Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null);
+        IReadOnlyList<Models.Opening>? openings = null, IReadOnlyDictionary<int, ushort>? flags = null, IReadOnlyList<PlacedTriangle>? added = null);
 
     // The file's collision with these polygons moved, as it will be written (polygons keep their numbers).
     CollisionMesh? ReadMoved(string path, IReadOnlyList<CollisionMove> moves);

@@ -232,6 +232,10 @@ public class OnlineEditTests
             (new("y.ybn", 2), (ushort)0, (ushort)0)], CollisionFlags.ShootThrough, true, "on tire à travers");
         flagsEdit.Redo();
         Share(flagsEdit);
+        var addEdit = new CollisionAddEdit(a.Collisions, "ajouter un triangle de collision", "y.ybn",
+            [CollisionTriangle.Of(new(1, 2, 3), new(4, 5, 6), new(7, 8, 10), 9, CollisionFlags.NoDecal)]);
+        addEdit.Redo();
+        Share(addEdit);
         var collisionMove = new CollisionMoveEdit(a.Collisions, "déplacer des surfaces de collision",
             [("y.ybn", CollisionMove.Of([1, 2], Matrix4x4.CreateRotationZ(0.5f) * Matrix4x4.CreateTranslation(1, 2, 3)))]);
         collisionMove.Redo();
