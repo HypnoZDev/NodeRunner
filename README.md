@@ -1,191 +1,176 @@
-# NodeRunner Studio
+<h1 align="center">NodeRunner Studio</h1>
 
-**Français** · [English](README.en.md)
-
-**La carte de GTA V en 3D, pour la regarder, la comprendre et la modifier. Gratuit, portable, pensé pour le mapping FiveM.**
+<p align="center"><strong>Construisez votre Los Santos.</strong><br>Créez, modifiez, explorez et testez vos mappings GTA V dans un seul studio 3D.</p>
 
 <p align="center">
-  <a href="https://github.com/HypnoZDev/NodeRunner/releases/download/v2.0.2/NodeRunner-2.0.2-win-x64.zip">
-    <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-NodeRunner%20Studio%20pour%20Windows-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio pour Windows">
-  </a>
-  <br>
-  <sub>Windows 10 / 11 64 bits · ZIP portable, rien à installer · <a href="https://github.com/HypnoZDev/NodeRunner/releases">toutes les versions</a></sub>
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/latest"><img src="https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-WINDOWS-4C8DFF?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger NodeRunner Studio"></a>
 </p>
+<p align="center">
+  <a href="https://github.com/HypnoZDev/NodeRunner/releases/latest"><img src="https://img.shields.io/github/v/release/HypnoZDev/NodeRunner?label=Version&color=4C8DFF" alt="Dernière version"></a>
+  <img src="https://img.shields.io/badge/FiveM-Mapping-F40552" alt="Mapping FiveM">
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4" alt="Windows 10 et 11">
+  <img src="https://img.shields.io/badge/Prix-Gratuit-2EA44F" alt="Gratuit">
+  <img src="https://img.shields.io/badge/Statut-B%C3%AAta-E3B341" alt="Bêta">
+</p>
+<p align="center"><strong>Français</strong> · <a href="README.en.md">English</a> · <a href="https://github.com/HypnoZDev/NodeRunner/releases">Historique des versions</a></p>
 
-![NodeRunner Studio : le centre-ville de Los Santos, un objet sélectionné et les pathnodes affichés](docs/images/vue-ville.webp)
+![NodeRunner Studio — éditeur 3D au cœur de Los Santos](docs/images/vue-ville.webp)
 
-Si vous avez déjà fait du mapping pour un serveur FiveM, vous connaissez la routine : chercher le bon YMAP dans
-CodeWalker, ajuster un Z au centimètre pour qu'un objet ne flotte pas, recalculer les extents, monter le dossier `stream`
-et le `fxmanifest.lua` à la main... puis découvrir en jeu un mur invisible là où on a supprimé un bâtiment.
+**Imaginez :** vous ouvrez GTA V dans NodeRunner, vous déplacez un bâtiment, créez un intérieur, posez votre mobilier à la souris et retirez les collisions gênantes. Vous appuyez sur Play pour parcourir votre création à pied. Puis vous la retrouvez directement dans FiveM grâce au lien avec votre serveur de test.
 
-NodeRunner Studio est né de là. C'est un éditeur de carte qui s'occupe de ces corvées à votre place, avec un vrai moteur
-3D (ombres, eau, ciel selon l'heure) pour voir la carte telle qu'elle est.
+Moins d'allers-retours entre les outils. Moins de manipulations manuelles. Plus de temps pour créer.
 
-> NodeRunner Studio est en **bêta** et évolue vite. Il est déjà utilisable pour de vrais projets, mais gardez une copie
-> de vos ressources avant d'exporter par-dessus.
-
----
-
-## Ce qu'il sait faire
-
-**Explorer la carte**
-- Toute la carte de GTA V en 3D, avec les vrais modèles, textures, intérieurs (MLO), niveaux de détail, eau, ombres du
-  soleil et cycle jour / nuit.
-- La carte telle qu'elle était après n'importe quel DLC, en version FiveM / multijoueur ou solo.
-- Une recherche `Ctrl+K` qui trouve tout : un objet, un YMAP, un type, un hash (`0x...`) ou des coordonnées collées
-  depuis un script (`vector3(...)`, `vector4(...)`).
-- Des calques pour voir ce qui est normalement invisible : pathnodes (trafic), navmesh (piétons), points de scénario,
-  collisions, salles et portails des intérieurs.
-- Un **explorateur d'archives** : tous les fichiers du jeu (archives RPF, DLC compris) en arborescence, recherche par
-  nom, modèle ouvert dans la visionneuse, YMAP retrouvé sur la carte, fichiers texte affichés, extraction sur le disque.
-- **Simulation de vie** : sur chaque point de scénario, le piéton, l'animal ou le véhicule que le jeu y mettrait à
-  l'heure affichée, animé, avec l'objet qu'il tient (cigarette, téléphone...).
-- En bonus, **GTA IV** et ses épisodes : Liberty City en 3D (modèles, textures, intérieurs, eau, routes), en lecture
-  seule.
-- Et la **trilogie d'origine** (versions PC d'origine de **GTA III**, **Vice City** et **San Andreas**) : la carte en
-  3D en lecture seule, avec niveaux de détail, eau, collisions, intérieurs, véhicules et la lumière de chaque jeu selon
-  l'heure.
-
-![Les intérieurs (MLO) vus de l'extérieur, avec leurs salles et leur mobilier](docs/images/vue-interieurs.webp)
-
-**Modifier**
-- Cliquez sur un objet, déplacez-le, tournez-le ou changez sa taille avec les poignées 3D (Ctrl pour aller par crans).
-- **Poser au sol** en une touche (Fin) : l'objet se pose sur la vraie collision du jeu, intérieurs compris.
-- Sélection multiple, copier / coller (`Ctrl+C` / `Ctrl+V`), annuler / rétablir sans limite, et un panneau
-  **Historique** pour revenir d'un clic à n'importe quelle modification.
-- Ajout de n'importe quel objet du jeu, choisi dans la visionneuse de modèles (qui montre aussi les véhicules).
-- **Suppression propre** : l'objet part avec ses niveaux de détail, sa collision et ses boîtes d'occlusion. Plus de mur
-  invisible ni de bâtiment fantôme au loin. Un aperçu montre tout ce qui va partir avant de confirmer.
-- **Modifier les collisions** (outil 5) : cliquez sur une surface ou tracez un rectangle, puis supprimez-la (ouvrir un
-  passage, retirer un mur invisible) ou changez son matériau (herbe, sable, métal...). Exporté dans la ressource FiveM.
-- **Portes** : sélectionner toutes les portes d'un bâtiment, les supprimer ou les cacher par script, copier leur
-  configuration pour qb-doorlock, voir comment elles s'ouvrent (arc, réglages du jeu), les remplacer par une autre porte
-  recalée dans l'encadrement, et vérifier les portes oubliées ou en double avant l'export.
-- Entity sets des intérieurs (mobilier des appartements, bunkers, clubs...) à afficher en direct, avec les lignes de
-  script prêtes à copier.
-- **Intérieurs (MLO)** : objets, salles, portails et entity sets modifiables, nouvel intérieur, intérieur placé ou
-  dupliqué ailleurs sur la carte, avec son **audio** (occlusion du son entre les salles, écho, son de fond) généré à
-  l'export. **Santé de l'intérieur** : portails mal reliés ou mal formés, objets rangés dans aucune salle, modèles
-  introuvables, salles sans portail.
-- **Véhicules garés** (car generators), **zones de timecycle** et **lumières LOD** : affichés, modifiables, ajoutés ou
-  supprimés.
-- **Occlusion** : boîtes et modèles d'occlusion visibles, modifiables, créés automatiquement autour d'un bâtiment.
-- **Routes (pathnodes)** : réglages des nœuds (vitesse, trafic, autoroute...), nombre de voies, ajout et suppression de
-  nœuds et de liens.
-- **Points de scénario** : modifiés, déplacés, ajoutés ou supprimés (type, horaires, probabilité, modèles...), avec
-  leurs chaînes et leurs ensembles.
-
-**Modifier un modèle 3D : l'Atelier**
-- Un onglet à côté de la carte, le modèle en grand : retirer un morceau (logo, affiche), le déplacer, le tourner, le
-  dupliquer, ajouter un cube ou un plan, remplacer une texture par une image (.png, .jpg, .dds) ou réduire sa taille.
-- **Ouvrir un bâtiment** (expérimental) : percer une porte dans un mur dessiné, collision comprise, avec une pièce
-  simple derrière.
-
-**Personnages et cinématiques**
-- **Visionneuse de personnages** : les 1 119 piétons et animaux du jeu, avec toutes les animations du jeu.
-- **Visionneuse de cinématiques** : les cinématiques du jeu jouées sur la carte, à leur place, avec la caméra du film.
-
-**Mode Play : la carte à hauteur de joueur**
-- Un bouton **Play** (`Alt+P`) et vous marchez sur la carte avec un personnage du jeu, en plein écran : course, sprint,
-  marche, saut, **escalade** des murets et des toits bas, **nage** en mer, dans les canaux et les piscines, avec les
-  animations du jeu (départs, arrêts, demi-tours).
-- Les murs, les objets et vos props l'arrêtent, et la carte est montrée comme le jeu, sans ce que cachent les
-  occluders : de quoi repérer un passage bloqué ou un bâtiment qui disparaît avant d'exporter. `Échap` pour revenir.
-
-**Vos props et vos mappings**
-- **Bibliothèque de props** partagée par tous vos projets : packs (dossier ou .zip) avec vignettes, favoris, et
-  placement en glissant le prop dans la vue 3D.
-- **Prop depuis une image** (Créer) : un insigne, un logo devient une plaque en 3D avec relief et collision, ronde
-  ou rectangulaire selon l'image, ajoutée à la bibliothèque.
-- Import d'un mapping (dossier, .zip, .oiv) et des fichiers exportés par **Sollumz** ou CodeWalker en XML (`.ydr.xml`,
-  `.ytd.xml`, `.ybn.xml`, `.ytyp.xml`, `.ymap.xml`) : convertis automatiquement.
-- **Dossier Sollumz surveillé** : chaque nouvel export depuis Blender arrive dans le projet et la carte se recharge seule.
-- **Rapport d'import** : après chaque import, NodeRunner vérifie que les YMAP, types, modèles et textures se trouvent les
-  uns les autres, et liste ce qui manque ou n'a pas pu être converti.
-
-**À plusieurs (Online, bêta)**
-- Jusqu'à 5 personnes sur le même projet avec un code `NRS-XXXX` : chacun voit les modifications, la sélection et la
-  caméra des autres en direct. L'hôte enregistre.
-
-**Exporter vers FiveM**
-- Un bouton, et votre ressource est prête : `fxmanifest.lua`, dossier `stream`, boîtes des YMAP recalculées.
-- Avant l'export, NodeRunner vérifie si une autre ressource de votre serveur modifie déjà les mêmes fichiers (le fameux
-  conflit où la dernière ressource chargée gagne sans prévenir).
-- Positions copiées en un clic au format Lua (`vector3` / `vector4` avec le cap), JSON ou C#.
-- Un projet par ressource : vos modifications sont enregistrées dans leur dossier et reprises à la prochaine ouverture,
-  et plusieurs projets peuvent être ouverts ensemble.
-- Avant l'export, vérification des routes, des points de scénario et du navmesh (point en l'air, lien cassé, bâtiment
-  posé là où marchent les piétons...).
-- Après l'export, la ressource est vérifiée comme FiveM la lira (`fxmanifest.lua`, fichiers en double dans `stream`,
-  fichiers trop gros, liens entre fichiers). **Outils > Vérifier une ressource FiveM** fait de même pour n'importe quel
-  dossier, sans lancer le jeu.
-- **Pack solo** : le même projet exporté en `dlc.rpf` pour le mode histoire, installé dans le dossier `mods` du jeu.
-
-**À votre façon**
-- Interface en **français ou en anglais** (automatique selon la langue de Windows), changée en direct.
-- Réglages pour tous les PC : qualité, images par seconde, carte graphique, mémoire vidéo, caméra (sensibilité, champ de
-  vision, ZQSD / WASD), crans des poignées, couleur d'accent, copie de secours automatique des modifications.
-- **Raccourcis clavier modifiables** (Paramètres > Raccourcis), avec un préréglage CodeWalker, et des **signets de
-  caméra** (`Ctrl+Maj+1` à `9` pour enregistrer une vue, `Ctrl+1` à `9` pour y revenir).
+> **NodeRunner Studio 2.0 — le mapping prend une nouvelle dimension.** Gratuit pour un usage non commercial, portable, sans installation et disponible en français et en anglais.
 
 ---
 
-## Télécharger
+## Les nouveautés qui changent votre workflow
 
-**[Télécharger la dernière version (ZIP)](https://github.com/HypnoZDev/NodeRunner/releases/download/v2.0.2/NodeRunner-2.0.2-win-x64.zip)**
-· les autres versions sont sur la page [Releases](https://github.com/HypnoZDev/NodeRunner/releases).
-
-1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip`.
-2. Décompressez-le où vous voulez (Bureau, clé USB...). Rien à installer, pas même .NET.
-3. Lancez `NodeRunner.exe`.
-
-NodeRunner trouve tout seul votre installation de GTA V (Steam, Epic Games ou Rockstar Games Launcher). Sinon, il vous
-demande le dossier. Un écran de démarrage s'affiche le temps de charger la carte.
-
-**Il vous faut :**
-- Windows 10 ou 11 en 64 bits ;
-- une carte graphique compatible DirectX 11 ;
-- GTA V installé sur le PC. NodeRunner est développé sur la version « Legacy » ; la version « Enhanced » est reconnue
-  mais pas encore testée de bout en bout.
-
-## Premiers pas
-
-| Pour... | Faites... |
+| | |
 | :--- | :--- |
-| Regarder autour | maintenir le clic droit et bouger la souris |
-| Se déplacer | `Z` `Q` `S` `D` (ou `W` `A` `S` `D`, ou les flèches), `Shift` pour aller plus vite |
+| **🎮 Votre mapping, directement dans FiveM**<br>Reliez NodeRunner à votre serveur local de développement. Suivez la caméra du jeu, téléportez votre personnage et prévisualisez les modifications en direct. Exportez et rechargez la ressource depuis l'éditeur. | **🚶 Testez votre création en mode Play**<br>Marchez, courez, sautez, nagez et escaladez avec un personnage de GTA V. Les collisions et l'occlusion permettent de repérer les passages bloqués et les objets qui disparaissent. |
+| **🌅 Un nouveau moteur 3D**<br>HDR, TAA, occlusion ambiante, lumières nocturnes, ciel réaliste, météo, vagues et surfaces mouillées. Reflets ray tracing sur les GPU compatibles. | **🏗️ Des LOD générés à l'export**<br>Les gros objets éligibles ajoutés à votre mapping peuvent recevoir automatiquement un modèle simplifié et les liens LOD correspondants. |
+| **🧩 Votre atelier de props**<br>Créez un prop avec relief et collision depuis une image, modifiez un modèle ou ses textures, puis enregistrez-le comme un nouveau prop. | **🔁 Blender, Sollumz et CodeWalker**<br>Importez des XML compatibles et surveillez un dossier d'export Blender. Exportez aussi les assets du jeu en XML, avec leurs textures DDS, pour poursuivre le travail dans vos outils préférés. |
+| **👥 Mappez à plusieurs**<br>Jusqu'à cinq personnes sur un projet, avec modifications, sélections et caméras synchronisées. Rejoignez la session avec un code. | **🛡️ Exportez avec des vérifications**<br>Détectez les conflits entre ressources, les dépendances manquantes, les erreurs MLO et les fichiers trop volumineux avant ou après l'export. |
+
+<p align="center"><a href="https://github.com/HypnoZDev/NodeRunner/releases/tag/v2.0.0"><strong>Découvrir toutes les nouveautés de la 2.0 →</strong></a></p>
+
+## Du premier prop au mapping en jeu
+
+| 1. Explorer | 2. Construire | 3. Tester | 4. Déployer |
+| :--- | :--- | :--- | :--- |
+| Trouvez un YMAP, un modèle, un hash ou des coordonnées avec `Ctrl+K`. | Placez vos props, éditez vos MLO, routes et collisions. | Parcourez votre création avec le mode Play ou Game Link. | Exportez une ressource FiveM et contrôlez ses dépendances. |
+
+### Un vrai atelier pour vos intérieurs
+
+![Salles, portails et mobilier des intérieurs MLO dans NodeRunner](docs/images/vue-interieurs.webp)
+
+Créez un MLO, dupliquez un intérieur ailleurs sur la carte, gérez ses salles, ses portails, son mobilier et ses entity sets. Configurez son audio et inspectez les erreurs de structure avant l'export.
+
+**Un bâtiment fermé ?** L'outil expérimental *Ouvrir un bâtiment* peut découper une ouverture dans le modèle et sa collision, avec une pièce simple derrière. Vous pouvez ensuite affiner la création dans l'atelier.
+
+## Tout ce dont un mapper a besoin, au même endroit
+
+<details open>
+<summary><strong>🗺️ Explorer et modifier la carte</strong></summary>
+
+- Toute la carte GTA V, modèles et textures du jeu, DLC, niveaux de détail et mode solo ou multijoueur.
+- Sélection multiple, transformations 3D, crans, copier/coller, annuler/rétablir et historique des modifications.
+- Placement à la souris sur le sol, un toit, une table ou un mur ; rotation à la molette et alignement sur les collisions.
+- Suppression assistée des objets avec aperçu des LOD, collisions et occlusions concernés.
+- Calques YMAP, collisions, navmesh, routes, scénarios, intérieurs et autres éléments techniques.
+- Visionneuse de modèles, véhicules, personnages, animations et cinématiques ; recherche, favoris et accès aux instances sur la carte.
+- Explorateur d'archives RPF : recherche, lecture et extraction des fichiers de votre installation.
+
+</details>
+
+<details>
+<summary><strong>🏢 MLO, collisions, portes et occlusion</strong></summary>
+
+- Création, placement et duplication d'intérieurs ; édition des salles, portails, entités et entity sets.
+- Audio des intérieurs : ambiance, écho, occlusion entre salles et données générées à l'export.
+- Diagnostic de santé des MLO : portails invalides, salles sans portail, modèles manquants et autres incohérences.
+- Édition YBN : sélection, suppression, matériaux, flags de surface et ajout de triangles ou rectangles.
+- Occlusion : visualisation, modification, création assistée de boîtes et aperçu de ce qu'elles masquent.
+- Portes : remplacement, arc d'ouverture, vérifications, scripts FiveM et configuration qb-doorlock à copier.
+
+</details>
+
+<details>
+<summary><strong>🚦 Routes, scénarios et vie du monde</strong></summary>
+
+- Édition des routes YND : nœuds, liens, voies, vitesse et trafic.
+- Création et modification des points de scénario, horaires, probabilités, chaînes et ensembles.
+- Car generators, zones de timecycle et lumières LOD modifiables.
+- Visualisation et vérification du navmesh YNV (édition YNV pas encore disponible).
+- Simulation de vie sur les points de scénario ; lecture des enregistrements de véhicules YVR.
+- Visionneuse AWC avec écoute, forme d'onde et export WAV ; visualisation des zones audio.
+
+</details>
+
+<details>
+<summary><strong>🛠️ Atelier de modèles, bibliothèque et outils externes</strong></summary>
+
+- Retirez, déplacez, dupliquez ou ajoutez des morceaux de modèles ; remplacez ou redimensionnez les textures.
+- Créez un nouveau prop indépendant sans remplacer son modèle d'origine dans le jeu.
+- Générez des plaques ou logos 3D avec relief et collision à partir d'une image.
+- Bibliothèque de props partagée, packs ZIP/dossiers, miniatures, catégories, favoris et glisser-déposer.
+- Import de mappings FiveM et de packages OIV compatibles ; rapport d'import et dépendances manquantes.
+- Import XML compatible Sollumz / CodeWalker : YDR, YTD, YBN, YTYP et YMAP.
+- Export XML : YDR, YDD, YFT, YTD, YBN, YMAP et YTYP, avec DDS selon le type de ressource.
+- Dossier Sollumz surveillé pour recharger les nouveaux exports Blender dans le projet.
+
+</details>
+
+<details>
+<summary><strong>📦 Export, validation et collaboration</strong></summary>
+
+- Ressource FiveM : génération du `fxmanifest.lua`, dossier `stream`, recalcul des extents et LOD automatiques pour les objets éligibles.
+- Vérifications pré-export : conflits entre ressources, routes, scénarios, navmesh et intérieurs.
+- Vérifications post-export : fichiers manquants, doublons, dépendances et ressources trop volumineuses.
+- Vérification d'une ressource FiveM existante, indépendamment du projet ouvert.
+- Export solo en `dlc.rpf`, projets multiples, copie des positions en Lua/JSON/C#.
+- Online en bêta : cinq participants maximum, l'hôte enregistre ; sélections et caméras synchronisées.
+- Copie de secours des modifications, raccourcis personnalisables et mise à jour automatique.
+
+</details>
+
+<details>
+<summary><strong>🌦️ Rendu 3D et autres GTA</strong></summary>
+
+- Éclairage HDR, anticrénelage TAA, occlusion ambiante, bloom, ombres et lumières nocturnes.
+- Météo, nuages volumétriques, pluie, neige, orages, surfaces mouillées et eau animée.
+- Reflets ray tracing DXR en option sur matériel compatible (couleur moyenne des textures dans les reflets à ce stade).
+- Quatre préréglages graphiques, résolution de rendu, netteté et réglages de caméra.
+- GTA IV et ses épisodes, GTA III, Vice City et San Andreas d'origine sur PC : exploration **en lecture seule**.
+
+</details>
+
+---
+
+## Télécharger et commencer
+
+**[⬇ Télécharger la dernière version de NodeRunner Studio](https://github.com/HypnoZDev/NodeRunner/releases/latest)**
+
+1. Téléchargez le fichier `NodeRunner-x.y.z-win-x64.zip` depuis la dernière release.
+2. Décompressez-le dans un dossier de votre choix.
+3. Lancez `NodeRunner.exe`. Le studio détecte votre installation GTA V ou vous demande son emplacement.
+
+Aucune installation de .NET supplémentaire n'est nécessaire. Les mises à jour peuvent ensuite être lancées depuis NodeRunner ; enregistrez toujours vos modifications avant.
+
+| Configuration | Prérequis |
+| :--- | :--- |
+| Système | Windows 10 ou 11, 64 bits |
+| Graphismes | Carte compatible DirectX 11 ; DXR facultatif pour les reflets ray tracing |
+| Jeu | Votre propre installation de GTA V (Steam, Epic ou Rockstar Games Launcher) |
+| Compatibilité | Legacy : version de développement principale. Enhanced : détecté, pas entièrement validé. |
+
+### Les raccourcis à connaître
+
+| Action | Raccourci par défaut |
+| :--- | :--- |
+| Recherche globale | `Ctrl+K` |
+| Regarder / se déplacer | Clic droit + souris / `ZQSD` ou `WASD` |
 | Monter / descendre | `Espace` ou `E` / `C` |
-| Sélectionner un objet | clic gauche (`Ctrl` + clic pour en ajouter) |
-| Changer d'outil | `1` sélection, `2` déplacer, `3` tourner, `4` échelle |
-| Poser l'objet au sol | `Fin` |
-| Chercher n'importe quoi | `Ctrl+K` |
-| Marcher sur la carte | `Alt+P` (mode Play), `Échap` pour revenir |
+| Sélectionner, déplacer, tourner, mettre à l'échelle | `1` / `2` / `3` / `4` |
+| Poser au sol | `Fin` |
+| Mode Play | `Alt+P`, puis `Échap` pour revenir |
 | Enregistrer | `Ctrl+S` |
 
-Ensuite : **Fichier > Exporter en ressource FiveM**, choisissez le dossier `resources` de votre serveur, ajoutez la ligne
-`ensure` affichée dans votre `server.cfg`, et c'est en jeu.
+Les raccourcis sont modifiables, avec un préréglage CodeWalker. Pour exporter : **Fichier > Exporter en ressource FiveM**, sélectionnez le dossier `resources` de votre serveur et ajoutez la ligne `ensure` proposée dans `server.cfg`. Pour Game Link, utilisez **Outils > Lien avec le jeu (FiveM)** sur votre serveur local de test.
 
----
+> [!IMPORTANT]
+> NodeRunner Studio est en bêta. Gardez une sauvegarde indépendante de vos projets et ressources, puis testez vos exports en jeu avant déploiement. Les modèles Enhanced, tissus et vitres destructibles ne sont pas entièrement pris en charge par l'export XML. Le mode Play est disponible pour GTA V ; il ne remplace pas une validation dans FiveM.
 
-## Ce que NodeRunner ne fait pas
+## Une question, un bug, une idée ?
 
-- **Rien pour GTA Online.** Solo et FiveM uniquement, aucun contournement d'anti-triche.
-- **Aucun fichier du jeu n'est fourni.** Le logiciel lit uniquement votre propre installation de GTA V.
-- **Pas de version payante.** NodeRunner Studio est gratuit, sans fonctions réservées aux donateurs ni accès anticipé.
+Le studio évolue grâce aux retours des mappeurs. [Signalez un bug ou proposez une fonctionnalité](https://github.com/HypnoZDev/NodeRunner/issues). Pour un problème sur la carte, indiquez la version de NodeRunner, votre version du jeu, la position et une capture d'écran. Retrouvez les changements détaillés dans les [releases](https://github.com/HypnoZDev/NodeRunner/releases) et le [cahier des charges](docs/cahier-des-charges.md).
 
-## Et ensuite ?
+Si NodeRunner vous aide à créer vos mappings, une étoile sur GitHub et le partage de cette page aident le projet à se faire connaître.
 
-Au programme : fusion des ressources en conflit, calques des lumières et de l'occlusion, et un mode cinématique pour
-tourner des vidéos de la carte (format vertical compris). Le détail est dans le [cahier des charges](docs/cahier-des-charges.md).
+## Compiler depuis les sources
 
-Un bug, une idée ? Ouvrez une [issue](https://github.com/HypnoZDev/NodeRunner/issues), avec une capture d'écran et la
-position (bouton « Copier la position » du panneau Propriétés) si c'est un souci sur la carte.
-
----
-
-## Compiler soi-même
-
-Il faut le [SDK .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) et Git.
+Avec le [SDK .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) et Git :
 
 ```powershell
 git clone https://github.com/HypnoZDev/NodeRunner.git
@@ -193,42 +178,16 @@ cd NodeRunner
 dotnet run --project src/NodeRunner.App
 ```
 
-Pour fabriquer le ZIP portable : `./build/publish.ps1`.
+Pour produire le ZIP portable : `./build/publish.ps1`.
 
----
+## Licence et crédits
 
-## Licence
+NodeRunner Studio est créé par **Inside Rockstar**. Le logiciel est gratuit, sans fonctionnalités payantes ou réservées aux donateurs. Son code est publié pour la transparence sous licence [PolyForm Strict 1.0.0](LICENSE.md) : utilisation non commerciale uniquement ; pas de redistribution, vente ou publication de versions modifiées sans autorisation. Le nom NodeRunner Studio et le logo NRS appartiennent à Inside Rockstar. Pour partager le logiciel, partagez cette page.
 
-NodeRunner Studio est **gratuit**, et son code est publié ici pour la transparence. Il est sous licence
-[PolyForm Strict 1.0.0](LICENSE.md) :
+Aucun fichier du jeu n'est fourni. NodeRunner lit les fichiers de votre installation avec son propre code. Destiné au mode histoire et à FiveM, il ne propose rien pour GTA Online ni de contournement d'anti-triche.
 
-- vous pouvez lire le code et utiliser le logiciel gratuitement, pour tout usage non commercial (mapping, serveur FiveM
-  communautaire, études, loisirs) ;
-- vous ne pouvez pas le redistribuer, le vendre, ni en publier une version modifiée sans l'accord de l'auteur.
+Merci à **dexyfex**, aux contributeurs de [CodeWalker](https://github.com/dexyfex/CodeWalker) et à la communauté du modding GTA V pour leur travail de documentation des formats.
 
-Pour partager NodeRunner Studio, partagez le lien de cette page.
+Bibliothèques et ressources utilisées : Dear ImGui (Omar Cornut, MIT), ImGui.NET (Eric Mellino, MIT), Vortice.Windows (Amer Koleci, MIT), DirectX Shader Compiler (Microsoft, University of Illinois / NCSA), Lucide (ISC, icônes issues de Feather par Cole Bemis, MIT), et Unbounded (The Unbounded Project Authors, SIL Open Font License 1.1). Les licences des polices sont jointes dans `src/NodeRunner.App/Assets/Fonts/`.
 
-Le nom **NodeRunner Studio** et le logo **NRS** appartiennent à **Inside Rockstar** et ne peuvent pas être réutilisés
-pour un autre projet.
-
----
-
-## Crédits
-
-NodeRunner Studio est créé par **Inside Rockstar**.
-
-Merci à **dexyfex** et aux contributeurs de **CodeWalker** (https://github.com/dexyfex/CodeWalker), et plus largement
-à la communauté du modding de GTA V, dont le travail de documentation des formats du jeu a rendu ce projet possible.
-NodeRunner lit les fichiers du jeu avec son propre code.
-
-Également utilisés :
-- **Dear ImGui** (Omar Cornut, licence MIT) via **ImGui.NET** (Eric Mellino, licence MIT) pour l'interface ;
-- **Vortice.Windows** (Amer Koleci, licence MIT) pour DirectX 11 et 12 et le son (XAudio2) ;
-- **DirectX Shader Compiler** (Microsoft, licence University of Illinois / NCSA) pour les reflets en ray tracing ;
-- **Lucide** (lucide.dev, licence ISC ; icônes issues de Feather par Cole Bemis, licence MIT) pour les icônes ;
-- la police **Unbounded** (The Unbounded Project Authors, SIL Open Font License 1.1) pour le logo.
-
-Les licences des polices sont jointes dans `src/NodeRunner.App/Assets/Fonts/`.
-
-> NodeRunner Studio et Inside Rockstar ne sont affiliés ni à Rockstar Games ni à Take-Two Interactive.
-> Grand Theft Auto et GTA sont des marques de Take-Two Interactive.
+> NodeRunner Studio et Inside Rockstar ne sont affiliés ni à Rockstar Games ni à Take-Two Interactive. Grand Theft Auto et GTA sont des marques de Take-Two Interactive.
